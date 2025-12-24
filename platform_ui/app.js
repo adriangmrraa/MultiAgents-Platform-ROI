@@ -21,6 +21,8 @@ function detectApiBase() {
 
     if (hostname.includes('platform-ui')) {
         apiHostname = hostname.replace('platform-ui', 'orchestrator-service');
+    } else if (hostname.includes('-frontend')) {
+        apiHostname = hostname.replace('-frontend', '-orchestrator');
     } else if (hostname.startsWith('ui.')) {
         apiHostname = hostname.replace('ui.', 'api.');
     } else {
