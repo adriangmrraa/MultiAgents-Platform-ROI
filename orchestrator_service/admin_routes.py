@@ -167,7 +167,7 @@ async def bootstrap():
     services = [r["category"] for r in cred_rows]
     
     return {
-        "version": "1.2.0 (Pointe Coach)",
+        "version": "1.2.0 (Platform AI Solutions)",
         "tenants_count": tenants,
         "last_inbound_at": last_inbound,
         "last_outbound_at": last_outbound,
