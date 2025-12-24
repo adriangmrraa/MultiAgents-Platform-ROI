@@ -1,4 +1,4 @@
-from fastapi import Request, HTTPException, Depends
+from fastapi import Request, HTTPException, Depends, Header
 from sqlalchemy import select
 from structlog import get_logger
 
@@ -8,6 +8,30 @@ from app.schemas.tenant import TenantInternal
 from app.middleware.tenant_context import tenant_context
 
 logger = get_logger()
+
+async def get_current_tenant_header(
+    x_tenant_id: str = Header(...), 
+    db: AsyncSession = Depends(get_db)
+) -> TenantInternal:
+    """
+    Resolves the tenant based on the X-Tenant-ID header.
+    Fail-Fast for missing or invalid tenants.
+    """
+    if not x_tenant_id.isdigit():
+        raise HTTPException(status_code=400, detail="Invalid X-Tenant-ID header")
+
+    result = await db.execute(select(Tenant).where(Tenant.id == int(x_tenant_id)))
+    tenant_orm = result.scalar_one_or_none()
+
+    if not tenant_orm:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    if not tenant_orm.is_active:
+        raise HTTPException(status_code=403, detail="Tenant is inactive")
+
+    tenant_data = TenantInternal.model_validate(tenant_orm)
+    tenant_context.set(tenant_data)
+    return tenant_data
 
 async def get_current_tenant_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> TenantInternal:
     """
