@@ -97,6 +97,16 @@ class ToolError(BaseModel):
     retryable: bool
     details: Optional[Dict[str, Any]] = None
 
+class SimpleEvent:
+    def __init__(self, from_num, text, msg_id):
+        self.from_number = from_num
+        self.text = text
+        self.event_id = msg_id
+        self.customer_name = from_num # Fallback
+        self.event_type = "message"
+        self.media = [] # TODO: Parse media
+        self.correlation_id = str(uuid.uuid4())
+
 # FastAPI App
 from contextlib import asynccontextmanager
 from utils import encrypt_password, decrypt_password
@@ -121,6 +131,7 @@ migration_steps = [
         store_catalog_knowledge TEXT,
         tiendanube_store_id TEXT,
         tiendanube_access_token TEXT,
+        system_prompt_template TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
     );
@@ -1092,17 +1103,6 @@ async def chat_endpoint(
         text_body = msg_data.get("text", {}).get("body", "")
         message_id = msg_data.get("id")
         
-        # Simple wrapper to match expected 'event' attributes
-        class SimpleEvent:
-            def __init__(self, from_num, text, msg_id):
-                self.from_number = from_num
-                self.text = text
-                self.event_id = msg_id
-                self.customer_name = from_num # Fallback
-                self.event_type = "message"
-                self.media = [] # TODO: Parse media
-                self.correlation_id = str(uuid.uuid4())
-        
         event = SimpleEvent(from_number, text_body, message_id)
     except Exception as e:
         logger.warning("payload_parse_failed", error=str(e))
@@ -1248,55 +1248,40 @@ async def chat_endpoint(
 
 
 
-    # --- 4. Invoke Remote Agent (Nexus v3) ---
-    # Fetch History for Context Injection
-    history_rows = await db.pool.fetch("""
-        SELECT role, content FROM chat_messages 
-        WHERE conversation_id = $1 
-        ORDER BY created_at ASC LIMIT 10
-    """, conv_id)
-
-    # Construct System Prompt (Extracted from Protocol Omega Specs)
-    sys_template = tenant.system_prompt_template or "Eres un asistente virtual amable."
-    sys_template = sys_template.replace("{STORE_NAME}", tenant.store_name)
-    sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", tenant.store_catalog_knowledge or "Sin catálogo.")
-    sys_template = sys_template.replace("{STORE_DESCRIPTION}", tenant.store_description or "")
-    sys_template = sys_template.replace("{STORE_URL}", "#") 
+    # --- 4. Invoke Remote Agent (Nexus v3) with Smart Buffering ---
     
-    # History for Remote Agent (Protocol Omega Format)
-    remote_history = []
-    for h in history_rows:
-        remote_history.append({"role": h['role'], "content": h['content'] or ""})
+    # 4.1. Debounce Logic
+    buffer_key = f"buffer:{event.from_number}"
+    pending_key = f"pending:{event.from_number}"
+    
+    if event.text:
+        redis_client.rpush(buffer_key, event.text)
+        redis_client.expire(buffer_key, 60)
 
-    # Prepare Package for Agent Service (Nexus v3 Payload)
-    agent_request = {
-        "tenant_id": tenant.id,
-        "store_name": tenant.store_name,
-        "user_input": content,
-        "chat_history": remote_history,
-        "system_prompt": sys_template,
-        "openai_api_key": tenant.openai_api_key.get_secret_value() if tenant.openai_api_key else OPENAI_API_KEY,
-        "tiendanube_store_id": tenant.tiendanube_store_id,
-        "tiendanube_access_token": tenant.tiendanube_access_token.get_secret_value() if tenant.tiendanube_access_token else None,
-        "tiendanube_service_url": TIENDANUBE_SERVICE_URL,
-        "internal_api_token": INTERNAL_SECRET_KEY
-    }
+    if redis_client.get(pending_key):
+        return OrchestratorResult(status="buffered", send=False, text="Aguarda...")
 
-    try:
-        if NEXUS_V3_ENABLED:
-            logger.info("nexus_v3_routing", agent_url=AGENT_SERVICE_URL)
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.post(f"{AGENT_SERVICE_URL}/v1/agent/execute", json=agent_request)
-                if resp.status_code != 200:
-                    raise Exception(f"Agent Service Error: {resp.text}")
-                
-                agent_result = resp.json()
-                output = agent_result["output"]
-        else:
-            # Fallback to local execution if V3 disabled (Legacy V2)
-            # This is where the old monolithic code would go
-            logger.info("nexus_v2_fallback_active")
-            output = "Nexus v3 is disabled. Local agent not fully restored yet."
+    redis_client.setex(pending_key, 5, "active")
+    
+    async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name):
+        await asyncio.sleep(2)
+        try:
+            messages_raw = redis_client.lrange(buffer_key, 0, -1)
+            redis_client.delete(buffer_key)
+            redis_client.delete(pending_key)
+            if not messages_raw: return
+            combined_text = "\n".join([m.decode('utf-8') for m in messages_raw])
+            await execute_agent_v3_logic(from_num, t_id, c_id, corr_id, combined_text, customer_name)
+        except Exception as e:
+            logger.error("buffer_processing_failed", error=str(e))
+
+    background_tasks.add_task(process_buffer_task, event.from_number, tenant_id, conv_id, correlation_id, event.customer_name)
+    
+    return OrchestratorResult(status="ok", send=False, text="Debouncing...", meta={"correlation_id": correlation_id})
+
+
+
+
             
         # --- Handle Special Markers (Handoff) ---
         if isinstance(output, str) and "HUMAN_HANDOFF_REQUESTED:" in output:
@@ -1342,25 +1327,107 @@ async def chat_endpoint(
             except:
                 raw_output_str = str(output)
 
-        await db.pool.execute("""
-            INSERT INTO chat_messages (
-                id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number
-            ) VALUES (
-                $1, (SELECT tenant_id FROM chat_conversations WHERE id=$2), $2, 'assistant', $3, $4, NOW(), $5
-            )
-        """, uuid.uuid4(), conv_id, raw_output_str, correlation_id, event.from_number)
-        
-        # Track Usage
-        await db.pool.execute("UPDATE tenants SET total_tool_calls = total_tool_calls + 1 WHERE bot_phone_number = $1", event.from_number)
 
-        return OrchestratorResult(
-            status="ok", 
-            send=True, 
-            messages=final_messages,
-            meta={"correlation_id": correlation_id}
-        )
+
+async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id, content, customer_name):
+    """
+    Handles the actual long-running agent execution and response delivery.
+    """
+    try:
+        # 1. Fetch Tenant Context
+        tenant_row = await db.pool.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
+        if not tenant_row:
+            logger.error("tenant_not_found_on_execution", tenant_id=tenant_id)
+            return
+
+        # 2. Fetch History for Context
+        history_rows = await db.pool.fetch("""
+            SELECT role, content FROM chat_messages 
+            WHERE conversation_id = $1 
+            ORDER BY created_at ASC LIMIT 10
+        """, conv_id)
+
+        remote_history = [{"role": h['role'], "content": h['content'] or ""} for h in history_rows]
+
+        # 3. Construct System Prompt
+        sys_template = tenant_row.get("system_prompt_template") or GLOBAL_SYSTEM_PROMPT or "Eres un asistente virtual amable."
+        sys_template = sys_template.replace("{STORE_NAME}", tenant_row['store_name'])
+        sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", tenant_row['store_catalog_knowledge'] or "Sin catálogo.")
+        sys_template = sys_template.replace("{STORE_DESCRIPTION}", tenant_row['store_description'] or "")
+        
+        # 4. Prepare Agent Payload
+        agent_request = {
+            "tenant_id": tenant_id,
+            "message": content,
+            "history": remote_history,
+            "context": {
+                "store_name": tenant_row['store_name'],
+                "system_prompt": sys_template
+            },
+            "credentials": {
+                "openai_api_key": decrypt_password(tenant_row['openai_api_key_enc']) if tenant_row.get('openai_api_key_enc') else OPENAI_API_KEY,
+                "tiendanube_store_id": tenant_row['tiendanube_store_id'],
+                "tiendanube_access_token": decrypt_password(tenant_row['tiendanube_access_token_enc']) if tenant_row.get('tiendanube_access_token_enc') else None
+            },
+            "internal_secret": INTERNAL_SECRET_KEY
+        }
+
+        # 5. Call Agent Service
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                f"{AGENT_SERVICE_URL}/v1/agent/execute", 
+                json=agent_request,
+                headers={"X-Internal-Secret": INTERNAL_SECRET_KEY}
+            )
+            resp.raise_for_status()
+            agent_result = resp.json()
             
+            # 6. Deliver and Persist Response
+            final_messages = agent_result.get("messages", [])
+            
+            for msg_obj in final_messages:
+                text_content = msg_obj.get("text", "")
+                if "HUMAN_HANDOFF_REQUESTED:" in text_content:
+                    reason = text_content.split("HUMAN_HANDOFF_REQUESTED:")[1].strip()
+                    await trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, customer_name)
+                    continue
+                
+                # Persist Agent Response
+                await db.pool.execute("""
+                    INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number)
+                    VALUES ($1, $2, $3, 'assistant', $4, $5, NOW(), $6)
+                """, uuid.uuid4(), tenant_id, conv_id, text_content, correlation_id, from_number)
+                
+                logger.info("agent_response_persisted", from_number=from_number)
+
+        # Track Usage
+        await db.pool.execute("UPDATE tenants SET total_tool_calls = total_tool_calls + 1 WHERE id = $1", tenant_id)
+
     except Exception as e:
-        logger.error("agent_execution_failed", error=str(e))
-        await log_db("error", "agent_crash", f"Agent failed for {event.from_number}: {str(e)}", {"trace": str(e)})
-        return OrchestratorResult(status="error", send=False, text="Error processing request")
+        logger.error("agent_execution_failed", error=str(e), tenant_id=tenant_id)
+
+async def trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, customer_name):
+    """Refactored version of handoff trigger for background execution."""
+    logger.info("triggering_human_handoff", from_number=from_number, reason=reason)
+    lockout_date = datetime(2099, 12, 31)
+    await db.pool.execute("""
+        UPDATE chat_conversations SET human_override_until = $1, status = 'human_override'
+        WHERE id = $2
+    """, lockout_date, conv_id)
+    
+    await db.pool.execute("""
+        INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, created_at)
+        VALUES ($1, $2, $3, 'system', $4, NOW())
+    """, uuid.uuid4(), tenant_id, conv_id, f"Solicitud de derivación humana: {reason}")
+    
+    logger.info("notifying_admins_of_handoff", tenant_id=tenant_id, customer=customer_name)
+
+# --- Repair: Add system_prompt_template if missing ---
+migration_steps.append("""
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tenants' AND column_name='system_prompt_template') THEN
+        ALTER TABLE tenants ADD COLUMN system_prompt_template TEXT;
+    END IF;
+END $$;
+""")

@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 pydantic
+pydantic-settings
 httpx
 tenacity
 structlog
@@ -11,5 +12,4 @@ langchain-openai==0.0.5
 langchain-community==0.0.13
 python-dotenv
 prometheus-client
-httpx
 requests
