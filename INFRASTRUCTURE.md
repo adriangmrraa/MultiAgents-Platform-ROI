@@ -33,4 +33,45 @@ In the Hetzner Cloud Console, apply a Firewall to your VPS with the following ru
 
 ## 📈 Monitoring & Health
 *   **Health Checks**: EasyPanel should monitor `/health` on all services.
-*   **Auto-Restart**: Set a restart policy to `always` or `on-failure` for critical workers like the WhatsApp service.
+*   **Auto-Restart**: Set a restart policy to `always` or `on-failure`.
+
+## ⚙️ Environment Variables (Reference)
+
+Ensure these are set in the **Environment** tab of each service in EasyPanel.
+
+### 1. Global / Shared
+| Variable | Value / Purpose |
+| :--- | :--- |
+| `INTERNAL_API_TOKEN` | Secure token for inter-service calls. **MUST MATCH ALL.** |
+| `REDIS_URL` | `redis://redis:6379/0` (Internal link) |
+| `POSTGRES_DSN` | `postgresql+asyncpg://postgres:pass@db:5432/db` |
+
+### 2. Service Specific
+
+#### 📦 orchestrator_service (Port 8000)
+- `ADMIN_TOKEN`: Secret for dashboard login.
+- `AGENT_SERVICE_URL`: `http://agent_service:8001`
+- `WHATSAPP_SERVICE_URL`: `http://whatsapp_service:8002`
+- `TIENDANUBE_SERVICE_URL`: `http://tiendanube_service:8003`
+- `OPENAI_API_KEY`: Global fallback API key.
+- `CORS_ALLOWED_ORIGINS`: `https://your-ui-domain.com`
+
+#### 🧠 agent_service (Port 8001)
+- `OPENAI_API_KEY`: Required for the AI Brain.
+- `TIENDANUBE_SERVICE_URL`: `http://tiendanube_service:8003`
+
+#### 💬 whatsapp_service (Port 8002)
+- `ORCHESTRATOR_SERVICE_URL`: `http://orchestrator_service:8000`
+- `YCLOUD_WEBHOOK_SECRET`: From YCloud portal for security.
+
+#### 🛒 tiendanube_service (Port 8003)
+- `TIENDANUBE_API_KEY`: Global credentials if applicable.
+
+#### 💻 platform_ui (Port 80)
+- `API_BASE`: `https://api.your-domain.com` (Your Orchestrator URL)
+- `ADMIN_TOKEN`: Matches the Orchestrator admin token.
+
+---
+
+> [!TIP]
+> **Container Ports**: In the "Domains" section of each service in EasyPanel, make sure the **Container Port** matches the ports listed above (e.g., 8000 for orchestrator).
