@@ -5,6 +5,13 @@ from typing import List, Tuple, Optional
 
 POSTGRES_DSN = os.getenv("POSTGRES_DSN")
 
+# Sanitize for asyncpg (must not have +asyncpg)
+if POSTGRES_DSN:
+    if "+asyncpg" in POSTGRES_DSN:
+        POSTGRES_DSN = POSTGRES_DSN.replace("+asyncpg", "")
+    elif POSTGRES_DSN.startswith("postgres://"):
+        POSTGRES_DSN = POSTGRES_DSN.replace("postgres://", "postgresql://", 1)
+
 class Database:
     def __init__(self):
         self.pool: Optional[asyncpg.Pool] = None

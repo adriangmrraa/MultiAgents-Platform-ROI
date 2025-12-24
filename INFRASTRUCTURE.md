@@ -57,12 +57,13 @@ Ensure these are set in the **Environment** tab of each service in EasyPanel.
 - `CORS_ALLOWED_ORIGINS`: `https://your-ui-domain.com`
 
 #### 🧠 agent_service (Port 8001)
-- `OPENAI_API_KEY`: Required for the AI Brain.
 - `TIENDANUBE_SERVICE_URL`: `http://tiendanube_service:8003`
+- *Nota: Recibe el OpenAI Key dinámicamente desde el Orchestrator.*
 
 #### 💬 whatsapp_service (Port 8002)
 - `ORCHESTRATOR_SERVICE_URL`: `http://orchestrator_service:8000`
 - `YCLOUD_WEBHOOK_SECRET`: From YCloud portal for security.
+- `OPENAI_API_KEY`: **Requerido para Transcripción de Audio (Whisper).**
 
 #### 🛒 tiendanube_service (Port 8003)
 - `TIENDANUBE_API_KEY`: Global credentials if applicable.
