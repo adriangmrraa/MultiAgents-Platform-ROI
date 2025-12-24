@@ -1,3 +1,4 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr, field_validator
 from typing import Any
 from dotenv import load_dotenv
