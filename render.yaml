@@ -1,6 +1,6 @@
 services:
   # ==========================================
-  # 1. Orchestrator Service (Python/FastAPI)
+  # 1. Orchestrator Service (Python/FasstAPI)
   # ==========================================
   - type: web
     name: orchestrator-service
