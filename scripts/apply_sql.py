@@ -1,45 +1,80 @@
+#!/usr/bin/env python3
+"""
+Script de Migración de Base de Datos para Antigravity Omega.
+Ejecutado automáticamente por Render durante la fase 'preDeployCommand'.
+"""
+
 import os
 import sys
+import logging
 import psycopg2
-from urllib.parse import urlparse
 
-def apply_sql_file(file_path):
-    dsn = os.getenv("POSTGRES_DSN") or os.getenv("DATABASE_URL")
-    if not dsn:
-        print("[ERROR] No POSTGRES_DSN or DATABASE_URL found.")
+# Configuración de Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
+
+def get_db_connection():
+    """
+    Establece una conexión segura a la base de datos PostgreSQL.
+    """
+    database_url = os.environ.get('POSTGRES_DSN') or os.environ.get('DATABASE_URL')
+    
+    if not database_url:
+        logger.critical("Error Fatal: La variable de entorno DATABASE_URL no está definida.")
         sys.exit(1)
 
-    print(f"[INFO] Connecting to database...")
     try:
-        conn = psycopg2.connect(dsn)
-        conn.autocommit = True
-        cursor = conn.cursor()
+        # Render requiere SSL para conexiones externas
+        conn = psycopg2.connect(database_url, sslmode='require')
+        return conn
     except Exception as e:
-        print(f"[ERROR] Connection failed: {e}")
+        logger.error(f"Error conectando a la base de datos: {e}")
         sys.exit(1)
 
-    print(f"[INFO] Reading SQL script: {file_path}")
+def apply_sql_script(conn, file_path):
+    """
+    Ejecuta un archivo SQL dentro de una transacción.
+    """
+    if not os.path.exists(file_path):
+        logger.warning(f"Script no encontrado: {file_path}. Saltando.")
+        return
+
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            sql_content = f.read()
+        with conn.cursor() as cur:
+            logger.info(f"Aplicando script: {file_path}")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                sql_content = f.read()
             
-        print(f"[INFO] Executing SQL script...")
-        cursor.execute(sql_content)
-        print(f"[SUCCESS] Script {file_path} executed successfully.")
-        
-    except FileNotFoundError:
-        print(f"[ERROR] File not found: {file_path}")
-        sys.exit(1)
+            # Ejecutar contenido completo
+            cur.execute(sql_content)
+            logger.info(f"Éxito: {file_path} completado.")
+        conn.commit()
     except Exception as e:
-        print(f"[ERROR] SQL Execution failed: {e}")
+        conn.rollback()
+        logger.error(f"Fallo en {file_path}: {e}")
         sys.exit(1)
+
+def main():
+    logger.info("Iniciando Utilidad de Actualización de Base de Datos Antigravity Omega...")
+    
+    conn = get_db_connection()
+    
+    try:
+        # 1. Definir los scripts a ejecutar en sesión
+        # Primero el particionamiento (Nexus Protocol)
+        apply_sql_script(conn, "scripts/migration_nexus_partitioning.sql")
+        
+        # 2. Otros scripts si fueran necesarios
+        # apply_sql_script(conn, "scripts/other_migration.sql")
+        
     finally:
-        cursor.close()
-        conn.close()
+        if conn:
+            conn.close()
+            logger.info("Conexión a base de datos cerrada.")
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python apply_sql.py <path_to_sql_file>")
-        sys.exit(1)
-    
-    apply_sql_file(sys.argv[1])
+    main()

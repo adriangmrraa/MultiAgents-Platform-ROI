@@ -21,7 +21,7 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-          type: redis
+          type: keyvalue
           name: nexus-cache
           property: connectionString
       - key: WHATSAPP_SERVICE_URL
@@ -54,7 +54,7 @@ services:
           property: url
       - key: REDIS_URL
         fromService:
-          type: redis
+          type: keyvalue
           name: nexus-cache
           property: connectionString
       - key: INTERNAL_API_TOKEN
@@ -86,10 +86,11 @@ services:
           property: url
 
   # ==========================================
-  # 4. Platform UI (Static Site)
+  # 4. Platform UI (Static Site Remediation)
   # ==========================================
-  - type: static_site
+  - type: web
     name: platform-ui
+    runtime: static
     region: oregon
     buildCommand: "cd frontend_react && npm install && npm run build"
     staticPublishPath: "./frontend_react/dist"
@@ -101,9 +102,9 @@ services:
           property: url
 
   # ==========================================
-  # 5. Redis Cache (Private)
+  # 5. Redis Cache (Key Value - Valkey 8)
   # ==========================================
-  - type: redis
+  - type: keyvalue
     name: nexus-cache
     region: oregon
     plan: starter

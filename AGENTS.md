@@ -1,10 +1,12 @@
-# 🤖 AGENTS.md: La Guía Suprema para el Mantenimiento del Proyecto
+# 🤖 MultiAgents-Platform-ROI: Guía Suprema de Mantenimiento
 
-Este documento es el manual de instrucciones definitivo para cualquier IA (LLM) que necesite modificar o extender este sistema. Sigue estas reglas y descripciones técnicas para evitar regresiones y errores fatales.
+Este documento es el manual definitivo para cualquier IA (LLM) que necesite operar en este sistema. El proyecto ha evolucionado de un prototipo monousuario a una plataforma **Multi-Tenant de Comercial Conversacional** con arquitectura **Nexus**.
 
 ---
 
-## 🏗️ Arquitectura de Microservicios
+## 🏗️ Arquitectura de Microservicios (Deployment Omega)
+
+El sistema opera bajo el **Protocolo Omega**, desplegado de forma declarativa mediante `render.yaml`.
 
 ### 📡 Core Intelligence (Orchestrator)
 El cerebro central es `orchestrator_service`. Gestiona la lógica de la IA, el ruteo administrativo y la base de datos principal.
@@ -13,7 +15,10 @@ El cerebro central es `orchestrator_service`. Gestiona la lógica de la IA, el r
 Ubica en `whatsapp_service`. Se encarga de la integración cruda con YCloud/Meta, envío de archivos y detección de **Echoes** (mensajes enviados desde el móvil físico).
 
 ### 🎨 Control (Platform UI)
-El dashboard administrativo en `platform_ui`. Es una aplicación **Vanilla JS**. No usa frameworks complejos, por lo que la gestión del estado global es manual y crítica.
+El dashboard administrativo en `platform_ui`. Es una aplicación **Vanilla JS** (legacy) / **React** (v2). En Render se despliega como `type: web` con `runtime: static`. No usa frameworks complejos en el core original, la gestión del estado es crítica.
+
+### 🛡️ MCP Server (Advanced Context)
+El sistema soporta el **Model Context Protocol (MCP)** para permitir que agentes de IA externos consulten el contexto operacional (logs, estado de despliegue) de forma segura.
 
 ---
 
@@ -27,6 +32,7 @@ El dashboard administrativo en `platform_ui`. Es una aplicación **Vanilla JS**.
     *   `tenant_id` es **PRIMARY KEY** y **FOREIGN KEY** (1:1 con tenants).
 4.  **`credentials`**: Almacén de API Keys.
     *   `scope`: `global` (general) vs `tenant` (específico).
+5.  **`nexus-cache` (KeyValue)**: Motor Valkey 8 para persistencia in-memory y colas. En Blueprints se define como `type: keyvalue`.
 
 ---
 
