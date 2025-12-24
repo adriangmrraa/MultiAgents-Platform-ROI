@@ -6,7 +6,7 @@ services:
     name: orchestrator-service
     env: python
     region: oregon
-    plan: standard
+    plan: starter
     numInstances: 2
     buildCommand: "pip install -r orchestrator_service/requirements.txt"
     preDeployCommand: "python scripts/apply_sql.py"
@@ -38,7 +38,7 @@ services:
     name: whatsapp-service
     env: python
     region: oregon
-    plan: standard
+    plan: starter
     numInstances: 2
     buildCommand: "pip install -r whatsapp_service/requirements.txt"
     startCommand: "cd whatsapp_service && gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
@@ -102,6 +102,6 @@ services:
 databases:
   - name: nexus-db
     region: oregon
-    plan: standard
+    plan: starter
     databaseName: nexus_protocol
     user: nexus_admin

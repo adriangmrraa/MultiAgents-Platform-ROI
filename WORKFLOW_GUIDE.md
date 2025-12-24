@@ -1,31 +1,22 @@
-# 🤝 Guía de Flujo de Trabajo y Operaciones (PointCoach)
+# 🤝 Guía de Operaciones (MultiAgents-Platform-ROI)
 
-Este documento detalla los **procedimientos operativos** para mantener, desplegar y configurar el proyecto. Es la guía práctica que acompaña a la documentación técnica de `COMPLETE_PROJECT_DOCS.md`.
-
----
-
-## 1. 🔄 El Ciclo de Desarrollo (Dev Loop)
-
-Para cualquier cambio en el código, sigue este protocolo estricto:
-
-1.  **Planificación**:
-    *   Siempre crea/actualiza un `implementation_plan.md` antes de tocar código.
-    *   Espera aprobación del usuario si el cambio es riesgoso o complejo.
-2.  **Ejecución**:
-    *   Realiza cambios atómicos. Si tocas Backend y Frontend, hazlo en pasos separados si es posible.
-    *   Mantén `task.md` actualizado.
-3.  **Verificación**:
-    *   No asumas que funciona. Verifica logs (`/view-logs` en UI) o respuestas de API.
-    *   Si rompes la UI, la prioridad #1 es arreglarla.
-4.  **Entrega**:
-    *   Haz commit (`git commit`) con mensajes descriptivos.
-    *   Actualiza `walkthrough.md` con lo logrado.
+Este documento detalla los **procedimientos operativos** para mantener, desplegar y escalar la plataforma ROI. 
 
 ---
 
-## 2. 🚀 Guía de Despliegue (EasyPanel)
+## 1. 🚀 Estrategias de Despliegue
 
-El proyecto se despliega automáticamente vía GitHub -> EasyPanel.
+### A. Despliegue en Render (Actual)
+1.  **Blueprints**: El archivo `render.yaml` es la autoridad. Los cambios se aplican automáticamente vía GitHub.
+2.  **Secretos**: Configurar en el Dashboard -> Environment Groups.
+
+### B. Despliegue en VPS (Escalabilidad Recomendada)
+Para reducir costos x20 y mejorar rendimiento:
+1.  **Arquitectura**: VPS en **Hetzner**.
+2.  **Orquestador**: **Coolify** o **EasyPanel**.
+3.  **Docker**: El proyecto ya está dockerizado. Basta con apuntar a este repositorio en Coolify.
+
+---
 
 **Pasos para desplegar cambios:**
 1.  Hacer commit y push a `main`:

@@ -4,7 +4,14 @@ Este documento es el manual definitivo para cualquier IA (LLM) que necesite oper
 
 ---
 
-## 🏗️ Arquitectura de Microservicios (Deployment Omega)
+## 🧱 Guardrails Arquitectónicos (Strategic Decisión)
+
+### 1. Serverful vs Serverless (Por qué NO Vercel para el Core)
+**Criterio Inmutable:** El `orchestrator_service` y el `whatsapp_service` deben ejecutarse en entornos **Serverful** (Contenedores 24/7).
+*   **Razón**: OpenAI y los agentes de IA tienen latencias variables que exceden los límites de las Serverless Functions. Además, la persistencia de webhooks requiere respuestas inmediatas y persistencia de estado que las funciones efímeras no garantizan de forma nativa para este proyecto.
+
+### 2. Soberanía de Datos y Tráfico
+A medida que el tráfico de Media (Audios/Imágenes) crezca, se recomienda migrar de **Render** a **Hetzner + Coolify** para evitar costos prohibitivos de ancho de banda.
 
 El sistema opera bajo el **Protocolo Omega**, desplegado de forma declarativa mediante `render.yaml`.
 
