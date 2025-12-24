@@ -2,12 +2,13 @@
 
 Este proyecto implementa un agente de chat para WhatsApp que interactúa con la plataforma de e-commerce Tienda Nube, utilizando una arquitectura de microservicios con LangChain.
 
-## Arquitectura
+## Arquitectura Nexus v3 (Decentralized)
 
-- **whatsapp_service**: Maneja webhooks de WhatsApp (ycloud), verifica firmas y reenvía mensajes al orquestador.
-- **orchestrator_service**: Contiene el agente LangChain, gestiona memoria, dedupe y orquesta tools.
-- **platform_ui**: Dashboard administrativo (React) para gestionar tenants, credenciales y analizar métricas.
-- **tiendanube_service**: Expone tools para interactuar con la API de Tienda Nube.
+- **whatsapp_service**: Maneja webhooks de WhatsApp (YCloud/Meta), verifica firmas y reenvía mensajes al controlador de tráfico.
+- **orchestrator_service (Traffic Controller)**: Gestiona la persistencia, el historial de chat, la soberanía de datos (Protocolo Omega) y el ruteo hacia la inteligencia.
+- **agent_service (Cognitive Brain)**: Servicio independiente y apátrida que ejecuta la lógica de IA (LangChain) y herramientas dinámicas.
+- **platform_ui**: Dashboard administrativo para gestionar tenants, credenciales y supervisión humana.
+- **tiendanube_service**: Expone herramientas de catálogo para el agente de forma segura.
 
 ## Requisitos
 

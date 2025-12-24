@@ -6,6 +6,7 @@ from typing import List, Optional, Any, Dict
 from fastapi import APIRouter, Header, HTTPException, Depends, Request, Response
 from pydantic import BaseModel
 import httpx
+import redis
 from db import db
 
 # Configuration
@@ -574,7 +575,25 @@ async def delete_tenant(identifier: str):
                 # 4. Tenant
                 await conn.execute("DELETE FROM tenants WHERE id = $1", tenant_id)
                 
-        return {"status": "ok", "deleted_id": tenant_id, "message": "Tenant deleted successfully"}
+        # 5. Redis Cleanup (Outside SQL transaction, following Protocol Omega)
+        try:
+            REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
+            redis_client = redis.from_url(REDIS_URL)
+            
+            # Delete tenant-specific keys (e.g., conversation state, locks)
+            # Scan for keys matching the tenant pattern
+            cursor = 0
+            while True:
+                cursor, keys = redis_client.scan(cursor=cursor, match=f"tenant:{tenant_id}:*", count=100)
+                if keys:
+                    redis_client.delete(*keys)
+                if cursor == 0:
+                    break
+        except Exception as redis_err:
+            # Non-blocking error for Redis cleanup
+            print(f"Warning: Redis cleanup failed for tenant {tenant_id}: {redis_err}")
+
+        return {"status": "success", "message": f"Tenant {tenant_id} and all related data deleted successfully."}
         
     except Exception as e:
         print(f"Error deleting tenant {tenant_id}: {e}")

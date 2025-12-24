@@ -4,7 +4,7 @@ import uuid
 import structlog
 from typing import Any, Dict, List, Optional, Literal
 from fastapi import FastAPI, HTTPException, Header, Depends, Body
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -42,9 +42,9 @@ class AgentThinkRequest(BaseModel):
     chat_history: List[Dict[str, str]] 
     system_prompt: str
     openai_api_key: str
-    # Context for tools
+    # Protocol Omega: Context passed dynamically
     tiendanube_store_id: Optional[str] = None
-    tiendanube_access_token: Optional[str] = None
+    tiendanube_access_token: Optional[SecretStr] = None
     tiendanube_service_url: str = "http://tiendanube_service:8002"
     internal_api_token: str
     mcp_url: Optional[str] = None
@@ -181,13 +181,13 @@ async def derivhumano(reason: str):
 async def health():
     return {"status": "ok", "service": "agent_service"}
 
-@app.post("/think")
-async def think(request: AgentThinkRequest):
-    logger.info("agent_thinking_start", tenant_id=request.tenant_id, store=request.store_name)
+@app.post("/v1/agent/execute")
+async def execute_agent(request: AgentThinkRequest):
+    logger.info("agent_execution_start", tenant_id=request.tenant_id, store=request.store_name)
     
-    # 0. Hydrate Context for Tools
+    # 0. Hydrate Context for Tools (Protocol Omega)
     ctx.store_id = request.tiendanube_store_id or ""
-    ctx.token = request.tiendanube_access_token or ""
+    ctx.token = request.tiendanube_access_token.get_secret_value() if request.tiendanube_access_token else ""
     ctx.service_url = request.tiendanube_service_url
     ctx.internal_token = request.internal_api_token
 

@@ -60,9 +60,11 @@ POSTGRES_DSN = os.getenv("POSTGRES_DSN")
 GLOBAL_TN_STORE_ID = os.getenv("TIENDANUBE_STORE_ID") or os.getenv("GLOBAL_TN_STORE_ID")
 GLOBAL_TN_ACCESS_TOKEN = os.getenv("TIENDANUBE_ACCESS_TOKEN") or os.getenv("GLOBAL_TN_ACCESS_TOKEN")
 
-# Service URLs (Nexus v3 Decentralized)
+# Service URLs & Feature Flags (Nexus v3 Decentralized Architecture)
+NEXUS_V3_ENABLED = os.getenv("NEXUS_V3_ENABLED", "true").lower() == "true"
 AGENT_SERVICE_URL = os.getenv("AGENT_SERVICE_URL", "http://agent_service:8001")
 TIENDANUBE_SERVICE_URL = os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8002")
+INTERNAL_SECRET_KEY = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY")
 
 # Global Fallback Content (only used if DB has no specific tenant config)
 GLOBAL_STORE_DESCRIPTION = os.getenv("GLOBAL_STORE_DESCRIPTION")
@@ -1077,27 +1079,35 @@ async def chat_endpoint(
     # ... (Rest of deduplication logic) ...
     # Instead of "bot_phone_number = ...", we utilize 'tenant'.
     
-    # Extract User Phone (Sender)
-    # Meta/YCloud structure
-    user_phone = None
-    message_text = ""
+    # 2. Protocol Omega: Resolve context from tenant
+    tenant_id = tenant.id
+    
+    # Parse payload into a consistent event object
+    # This handles the complexity of YCloud/Meta payloads
     try:
         entry = payload.get("entry", [])[0]
         change = entry["changes"][0]["value"]
         msg_data = change.get("messages", [])[0]
-        user_phone = msg_data.get("from")
-        message_text = msg_data.get("text", {}).get("body", "")
-    except:
-        # Fallback or Log
-        pass
+        from_number = msg_data.get("from")
+        text_body = msg_data.get("text", {}).get("body", "")
+        message_id = msg_data.get("id")
         
-    if not user_phone:
-         return OrchestratorResult(status="ignore", send=False, text="No user phone found")
-         
-    # Proceed to Agent Execution
-    # We must pass 'tenant' schema to the executor or trust the ContextVar.
-    # The 'run_agent' function will call 'get_agent_executable'.
-    
+        # Simple wrapper to match expected 'event' attributes
+        class SimpleEvent:
+            def __init__(self, from_num, text, msg_id):
+                self.from_number = from_num
+                self.text = text
+                self.event_id = msg_id
+                self.customer_name = from_num # Fallback
+                self.event_type = "message"
+                self.media = [] # TODO: Parse media
+                self.correlation_id = str(uuid.uuid4())
+        
+        event = SimpleEvent(from_number, text_body, message_id)
+    except Exception as e:
+        logger.warning("payload_parse_failed", error=str(e))
+        return OrchestratorResult(status="ignore", send=False, text="Unsupported payload structure")
+
     # message deduplication logic...
     event_id = event.event_id
     if redis_client.get(f"processed:{event_id}"):
@@ -1107,9 +1117,8 @@ async def chat_endpoint(
     
     # --- 1. Conversation & Lockout Management ---
     channel = "whatsapp"
-    tenant_id = tenant_ctx.id
     
-    # Try to find existing conversation using tenant_id from context
+    # Try to find existing conversation using tenant_id from Protocol Omega
     conv = await db.pool.fetchrow("""
         SELECT id, tenant_id, status, human_override_until 
         FROM chat_conversations 
@@ -1121,6 +1130,7 @@ async def chat_endpoint(
     
     if conv:
         conv_id = conv['id']
+        # Protocol Omega: Strict lockout check
         if conv['human_override_until'] and conv['human_override_until'] > datetime.now().astimezone():
             is_locked = True
     else:
@@ -1132,7 +1142,7 @@ async def chat_endpoint(
             ) VALUES (
                 $1, $2, $3, $4, $5, 'open', NOW(), NOW()
             ) RETURNING id
-        """, new_conv_id, tenant_id, channel, event.from_number, event.customer_name or event.from_number)
+        """, new_conv_id, tenant_id, channel, event.from_number, event.from_number)
 
     # --- 2. Handle Echoes (Human Messages from App) ---
     is_echo = False
@@ -1239,40 +1249,54 @@ async def chat_endpoint(
 
 
     # --- 4. Invoke Remote Agent (Nexus v3) ---
-    # Construct System Prompt (Extracted from old get_agent_executable)
+    # Fetch History for Context Injection
+    history_rows = await db.pool.fetch("""
+        SELECT role, content FROM chat_messages 
+        WHERE conversation_id = $1 
+        ORDER BY created_at ASC LIMIT 10
+    """, conv_id)
+
+    # Construct System Prompt (Extracted from Protocol Omega Specs)
     sys_template = tenant.system_prompt_template or "Eres un asistente virtual amable."
     sys_template = sys_template.replace("{STORE_NAME}", tenant.store_name)
     sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", tenant.store_catalog_knowledge or "Sin catálogo.")
     sys_template = sys_template.replace("{STORE_DESCRIPTION}", tenant.store_description or "")
-    sys_template = sys_template.replace("{STORE_URL}", "#") # TODO: Add real Store URL if available
+    sys_template = sys_template.replace("{STORE_URL}", "#") 
     
-    # History for Remote Agent
+    # History for Remote Agent (Protocol Omega Format)
     remote_history = []
     for h in history_rows:
         remote_history.append({"role": h['role'], "content": h['content'] or ""})
 
-    # Prepare Package for Agent Service
+    # Prepare Package for Agent Service (Nexus v3 Payload)
     agent_request = {
         "tenant_id": tenant.id,
         "store_name": tenant.store_name,
         "user_input": content,
         "chat_history": remote_history,
         "system_prompt": sys_template,
-        "openai_api_key": tenant.openai_key.get_secret_value() if tenant.openai_key else OPENAI_API_KEY,
-        "tiendanube_store_id": tenant.tiendanube_creds.store_id if tenant.tiendanube_creds else None,
-        "tiendanube_access_token": tenant.tiendanube_creds.access_token.get_secret_value() if tenant.tiendanube_creds else None,
+        "openai_api_key": tenant.openai_api_key.get_secret_value() if tenant.openai_api_key else OPENAI_API_KEY,
+        "tiendanube_store_id": tenant.tiendanube_store_id,
+        "tiendanube_access_token": tenant.tiendanube_access_token.get_secret_value() if tenant.tiendanube_access_token else None,
         "tiendanube_service_url": TIENDANUBE_SERVICE_URL,
-        "internal_api_token": INTERNAL_API_TOKEN.get_secret_value() if INTERNAL_API_TOKEN else ""
+        "internal_api_token": INTERNAL_SECRET_KEY
     }
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(f"{AGENT_SERVICE_URL}/think", json=agent_request)
-            if resp.status_code != 200:
-                raise Exception(f"Agent Service Error: {resp.text}")
-            
-            agent_result = resp.json()
-            output = agent_result["output"]
+        if NEXUS_V3_ENABLED:
+            logger.info("nexus_v3_routing", agent_url=AGENT_SERVICE_URL)
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(f"{AGENT_SERVICE_URL}/v1/agent/execute", json=agent_request)
+                if resp.status_code != 200:
+                    raise Exception(f"Agent Service Error: {resp.text}")
+                
+                agent_result = resp.json()
+                output = agent_result["output"]
+        else:
+            # Fallback to local execution if V3 disabled (Legacy V2)
+            # This is where the old monolithic code would go
+            logger.info("nexus_v2_fallback_active")
+            output = "Nexus v3 is disabled. Local agent not fully restored yet."
             
         # --- Handle Special Markers (Handoff) ---
         if isinstance(output, str) and "HUMAN_HANDOFF_REQUESTED:" in output:
