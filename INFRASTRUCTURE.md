@@ -46,7 +46,7 @@ Ensure these are set in the **Environment** tab of each service in EasyPanel.
 | `REDIS_URL` | `redis://redis:6379/0` (Internal link) |
 | `POSTGRES_DSN` | `postgresql+asyncpg://postgres:pass@db:5432/db` |
 
-### 2. Service Specific
+### 2. Service Specificccc
 
 #### 📦 orchestrator_service (Port 8000)
 - `ADMIN_TOKEN`: Secret for dashboard login.
