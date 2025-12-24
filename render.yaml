@@ -1,0 +1,114 @@
+services:
+  # ==========================================
+  # 1. Orchestrator Service (Core Brain)
+  # ==========================================
+  - type: web
+    name: orchestrator-service
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port 10000"
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: POSTGRES_DSN
+        fromDatabase:
+          name: nexus-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: nexus-cache
+          property: connectionString
+      - key: RELAY_SERVICE_URL
+        fromService:
+          type: web
+          name: whatsapp-service
+          property: url
+      # Secrets (Sync False)
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: INTERNAL_API_TOKEN
+        generateValue: true
+
+  # ==========================================
+  # 2. WhatsApp Service (Relay)
+  # ==========================================
+  - type: web
+    name: whatsapp-service
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port 10000"
+    healthCheckPath: /health
+    envVars:
+      - key: ORCHESTRATOR_URL
+        fromService:
+          type: web
+          name: orchestrator-service
+          property: url
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: nexus-cache
+          property: connectionString
+      # Secrets
+      - key: INTERNAL_API_TOKEN
+        fromService:
+          type: web
+          name: orchestrator-service
+          envVarKey: INTERNAL_API_TOKEN
+      - key: YCLOUD_API_KEY
+        sync: false
+      - key: YCLOUD_WEBHOOK_SECRET
+        sync: false
+
+  # ==========================================
+  # 3. BFF Service (Frontend Gateway)
+  # ==========================================
+  - type: web
+    name: bff-service
+    env: node
+    region: oregon
+    plan: starter
+    buildCommand: "cd bff_service && npm install"
+    startCommand: "cd bff_service && node server.js"
+    healthCheckPath: /health
+    envVars:
+      - key: ORCHESTRATOR_URL
+        fromService:
+          type: web
+          name: orchestrator-service
+          property: url
+
+  # ==========================================
+  # 4. Frontend (Static Site via Vite)
+  # ==========================================
+  - type: static
+    name: platform-ui
+    env: static
+    region: oregon
+    buildCommand: "cd frontend_react && npm install && npm run build"
+    staticPublishPath: "./frontend_react/dist"
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: bff-service
+          property: url
+
+databases:
+  - name: nexus-db
+    region: oregon
+    plan: starter # Upgrade to 'standard' for production HA
+    databaseName: nexus_protocol
+    user: nexus_admin
+
+- type: redis
+  name: nexus-cache
+  region: oregon
+  plan: starter # Upgrade for persistence
+  maxmemoryPolicy: allkeys-lru
