@@ -1,6 +1,41 @@
 # 🤝 Guía de Operaciones (Platform AI Solutions)
 
-Este documento detalla los **procedimientos operativos** para mantener, desplegar y escalar la plataforma. 
+Este documento detalla los **procedimientos operativos** para mantener, desplegar y escalar la plataforma de inteligencia artificial.
+
+---
+
+## 1. 🐣 Conceptos Básicos para Principiantes
+
+Si eres nuevo en este proyecto, estos son los términos clave que debes conocer:
+
+*   **Tenant (Inquilino)**: Es cada cliente o tienda individual que usa el bot. El sistema es "Multi-tenant", lo que significa que un solo servidor puede manejar muchas tiendas diferentes al mismo tiempo.
+*   **Orchestrator (Orquestador)**: Es el "cerebro logístico". Decide a dónde van los mensajes, guarda el historial del chat y maneja la base de datos.
+*   **Agent (Agente)**: Es la "inteligencia pura". No guarda nada, solo recibe información y genera una respuesta inteligente usando IA.
+*   **Handoff (Derivación)**: Es el proceso de "apagar" la IA para que un humano pueda hablar directamente con el cliente.
+
+---
+
+## 2. 🔑 Generación de Llaves de Seguridad
+
+Para variables como `ENCRYPTION_KEY` o `ADMIN_TOKEN`, necesitas crear una cadena de texto larga y aleatoria. Aquí tienes cómo hacerlo si no tienes herramientas técnicas avanzadas:
+
+### Opción A: Usando PowerShell (Windows)
+Si estás en Windows, abre una terminal y pega esto:
+```powershell
+-join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | % {[char]$_})
+```
+
+### Opción B: Usando Python (Cualquier sistema)
+Si tienes Python instalado, ejecuta esto:
+```python
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+### Opción C: Generador Online
+Usa cualquier sitio web de confianza como [1Password Password Generator](https://1password.com/password-generator/) configurado para generar una cadena de 32 a 64 caracteres.
+
+> [!WARNING]
+> Una vez que elijas una `ENCRYPTION_KEY` y guardes tu primer cliente, **NUNCA la cambies**, o no podrás volver a leer sus datos.
 
 ---
 
