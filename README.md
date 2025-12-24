@@ -1,4 +1,4 @@
-# Pointe Coach Microservices
+# Platform AI Solutions
 
 Este proyecto implementa un agente de chat para WhatsApp que interactúa con la plataforma de e-commerce Tienda Nube, utilizando una arquitectura de microservicios con LangChain.
 
