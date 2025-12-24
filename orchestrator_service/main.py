@@ -332,6 +332,7 @@ migration_steps = [
         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS from_number VARCHAR(128);
         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS message_type VARCHAR(32) DEFAULT 'text';
         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS media_id UUID;
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT '{}';
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Schema repair failed for chat_messages';
     END $$;
@@ -1280,55 +1281,6 @@ async def chat_endpoint(
     return OrchestratorResult(status="ok", send=False, text="Debouncing...", meta={"correlation_id": correlation_id})
 
 
-
-
-            
-        # --- Handle Special Markers (Handoff) ---
-        if isinstance(output, str) and "HUMAN_HANDOFF_REQUESTED:" in output:
-            reason = output.split("HUMAN_HANDOFF_REQUESTED:")[1].strip()
-            # Execute handoff logic locally in Orchestrator (as it has DB access)
-            handoff_msg = await derivhumano(reason=reason, contact_name=event.customer_name, contact_phone=event.from_number)
-            final_messages = [OrchestratorMessage(text=handoff_msg)]
-        else:
-            # Standard Processing (Reuse existing smart parsing logic if needed, 
-            # though agent_service should ideally return clean objects)
-            final_messages = []
-            # (Parsing logic simplified for the transition)
-            if isinstance(output, str):
-                 # Try to parse if it's JSON string
-                 try:
-                     parsed = json.loads(output)
-                     if "messages" in parsed:
-                         final_messages = [OrchestratorMessage(**m) for m in parsed["messages"]]
-                     else:
-                         final_messages = [OrchestratorMessage(text=output)]
-                 except:
-                     final_messages = [OrchestratorMessage(text=output)]
-            elif isinstance(output, dict):
-                 if "messages" in output:
-                     final_messages = [OrchestratorMessage(**m) for m in output["messages"]]
-                 else:
-                     final_messages = [OrchestratorMessage(text=json.dumps(output))]
-            else:
-                 final_messages = [OrchestratorMessage(text=str(output))]
-
-
-        # Store Assistant Response
-        raw_output_str = ""
-        if isinstance(output, str):
-            raw_output_str = output
-        else:
-            try:
-                # If output is OrchestratorResponse or similar
-                if hasattr(output, 'dict'):
-                    raw_output_str = json.dumps(output.dict(), ensure_ascii=False)
-                else:
-                    raw_output_str = json.dumps(output, ensure_ascii=False)
-            except:
-                raw_output_str = str(output)
-
-
-
 async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id, content, customer_name):
     """
     Handles the actual long-running agent execution and response delivery.
@@ -1393,10 +1345,11 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                     continue
                 
                 # Persist Agent Response
+                metadata = msg_obj.get("metadata", {})
                 await db.pool.execute("""
-                    INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number)
-                    VALUES ($1, $2, $3, 'assistant', $4, $5, NOW(), $6)
-                """, uuid.uuid4(), tenant_id, conv_id, text_content, correlation_id, from_number)
+                    INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number, meta)
+                    VALUES ($1, $2, $3, 'assistant', $4, $5, NOW(), $6, $7)
+                """, uuid.uuid4(), tenant_id, conv_id, text_content, correlation_id, from_number, json.dumps(metadata))
                 
                 logger.info("agent_response_persisted", from_number=from_number)
 

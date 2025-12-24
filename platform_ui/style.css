@@ -3233,3 +3233,86 @@ input:checked+.slider:before {
     height: 12px;
     border-radius: 3px;
 }
+/* --- Nexus v3 Dashboard Enhancements --- */
+
+/* Red/Green Status Pulses */
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+    70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.chat-status-indicator.status-auto {
+    background: #22c55e !important;
+    animation: pulse-green 2s infinite;
+}
+
+.chat-status-indicator.status-locked {
+    background: #ef4444 !important;
+    animation: pulse-red 2s infinite;
+}
+
+/* Thinking Log Toggle */
+.thinking-log-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-glass);
+    border-radius: 6px;
+    cursor: pointer;
+    margin-left: 8px;
+    font-size: 14px;
+    transition: var(--transition);
+}
+
+.thinking-log-toggle:hover {
+    background: rgba(124, 77, 255, 0.2);
+    border-color: var(--accent);
+    transform: scale(1.1);
+}
+
+.message-label {
+    display: flex;
+    align-items: center;
+}
+
+/* Thinking Log Modal Content */
+#thinking-log-content {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    font-family: monospace;
+    white-space: pre-wrap;
+    color: var(--text-secondary);
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--border-glass);
+}
+
+.thought-step {
+    border-left: 2px solid var(--accent);
+    padding-left: 15px;
+    margin-bottom: 20px;
+}
+
+.thought-type {
+    color: var(--accent);
+    font-weight: bold;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.thought-text {
+    color: var(--text-primary);
+}
+

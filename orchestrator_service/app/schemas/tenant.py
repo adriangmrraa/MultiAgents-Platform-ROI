@@ -28,6 +28,7 @@ class TenantRead(TenantBase):
 
 class TenantInternal(TenantRead):
     """Internal schema including secrets for the Agent Logic."""
+    system_prompt_template: Optional[str] = None
     tiendanube_store_id: Optional[str] = None
     tiendanube_access_token: Optional[SecretStr] = None
     openai_api_key: Optional[SecretStr] = None

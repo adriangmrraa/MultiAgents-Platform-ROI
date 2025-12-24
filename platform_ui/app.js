@@ -3227,6 +3227,35 @@ window.configureTool = configureTool;
 window.deleteTool = deleteTool;
 window.loadYCloudConfig = loadYCloudConfig;
 window.testTenantConnection = testTenantConnection;
+async function loadAssistedGMVReport() {
+    const list = document.getElementById('assisted-gmv-list');
+    list.innerHTML = '<tr><td colspan="4" class="chat-loading">Procesando datos de ventas...</td></tr>';
+
+    try {
+        const report = await adminFetch('/admin/reports/assisted-gmv?days=30');
+        if (!report.details || report.details.length === 0) {
+            list.innerHTML = '<tr><td colspan="4" class="empty-row">No se encontraron ventas asistidas en el periodo.</td></tr>';
+            return;
+        }
+
+        list.innerHTML = report.details.map(d => `
+            <tr>
+                <td>${d.store}</td>
+                <td>${d.customer}</td>
+                <td><strong>${d.orders_count}</strong></td>
+                <td style="color: var(--success); font-weight: bold;">$${d.estimated_gmv.toLocaleString()}</td>
+            </tr>
+        `).join('');
+
+        showNotification(true, 'Reporte Generado', `Se identificaron ${report.summary.total_assisted_conversations} conversaciones asistidas.`);
+    } catch (err) {
+        console.error("Error generating GMV report:", err);
+        list.innerHTML = `<tr><td colspan="4" class="chat-error">Error: ${err.message}</td></tr>`;
+    }
+}
+
+window.loadAssistedGMVReport = loadAssistedGMVReport;
+
 // --- Chats View Logic (Human-in-the-Loop) ---
 
 let chatsCache = [];
@@ -3282,6 +3311,7 @@ async function loadChats() {
             if (existing) {
                 if (existing.innerHTML !== innerHTML || existing.classList.contains('active') !== isActive) {
                     existing.innerHTML = innerHTML;
+                    // Ensure BOTH chat-item and active/inactive status and pulse animations work together
                     existing.className = `chat-item ${isActive ? 'active' : ''}`;
                 }
             } else {
@@ -3477,14 +3507,22 @@ function createBubbleElement(msg, container) {
 
     const timeStr = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // Meta Label / Icon
-    let metaLabel = '';
-    if (isHuman) metaLabel = 'Agente Humano';
-    if (isAssistant) metaLabel = 'IA Assistant';
-    if (isUser) metaLabel = '';
+    // Meta Label / Icon + Thinking Log Toggle if applicable
+    let thinkingToggle = '';
+    // if (msg.meta && msg.meta.reasoning) { // Backend to be updated
+    if (isAssistant && msg.content && !isHuman) { // Temporary: Show for all assistant messages to test UI
+        thinkingToggle = `
+            <button class="thinking-log-toggle" onclick="showThinkingLog('${msg.id}')" title="Ver razonamiento">
+                🧠
+            </button>
+        `;
+    }
 
     div.innerHTML = `
-        ${metaLabel ? `<div class="message-label">${metaLabel}</div>` : ''}
+        <div class="message-label">
+            ${metaLabel ? `<span>${metaLabel}</span>` : ''}
+            ${thinkingToggle}
+        </div>
         <div class="bubble-content">
             ${contentHtml}
         </div>
@@ -3493,6 +3531,41 @@ function createBubbleElement(msg, container) {
 
     container.appendChild(div);
 }
+
+// --- Nexus v3 Dashboard Helpers ---
+
+async function showThinkingLog(messageId) {
+    const modal = document.getElementById('thinking-log-modal');
+    const content = document.getElementById('thinking-log-content');
+    content.innerHTML = '<div class="chat-loading">Cargando razonamiento...</div>';
+    openModal('thinking-log-modal');
+
+    try {
+        // In the future, we will fetch this from the message meta
+        // For now, let's simulate or fallback to generic info
+        // const msg = await adminFetch(`/admin/messages/${messageId}`);
+        // let reasoning = msg.meta?.reasoning || [];
+
+        // Mocking reasoning steps for demonstration
+        let reasoning = [
+            { type: 'thought', text: 'El usuario pregunta por el estado de su pedido.' },
+            { type: 'tool', text: 'Llamando a herramienta orders(q="1234")' },
+            { type: 'observation', text: 'Pedido #1234: Despachado el 22/12.' },
+            { type: 'thought', text: 'Informar al usuario que su pedido ya fue enviado.' }
+        ];
+
+        content.innerHTML = reasoning.map(step => `
+            <div class="thought-step">
+                <div class="thought-type">${step.type}</div>
+                <div class="thought-text">${step.text}</div>
+            </div>
+        `).join('');
+    } catch (err) {
+        content.innerHTML = `<div class="chat-error">Error al cargar: ${err.message}</div>`;
+    }
+}
+
+window.showThinkingLog = showThinkingLog;
 
 async function toggleHumanOverride() {
     if (!activeChatId) return;

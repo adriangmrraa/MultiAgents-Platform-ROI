@@ -525,6 +525,33 @@
                             </table>
                         </div>
                     </div>
+
+                    <!-- Assisted GMV Report Section -->
+                    <div class="table-section glass" style="margin-top: 30px;">
+                        <div class="view-header" style="margin-bottom: 20px;">
+                            <h3 style="margin: 0;">💰 Reporte de Ventas Asistidas (GMV)</h3>
+                            <button class="btn-primary" onclick="loadAssistedGMVReport()"
+                                style="font-size: 13px; padding: 8px 16px;">Generar Reporte</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Tienda</th>
+                                        <th>Cliente</th>
+                                        <th>Ventas</th>
+                                        <th>GMV Est. (ARS)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="assisted-gmv-list">
+                                    <tr>
+                                        <td colspan="4" class="empty-row">Haz clic en "Generar Reporte" para ver las
+                                            ventas asistidas por la IA.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -1233,6 +1260,25 @@
             <p id="notification-message">Operación completada correctamente.</p>
             <div class="modal-footer" style="justify-content: center;">
                 <button class="btn-primary" onclick="closeModal('notification-modal')">Aceptar</button>
+            </div>
+        </div>
+    </div>
+    <!-- Thinking Log Modal (Caja Negra) -->
+    <div id="thinking-log-modal" class="modal-overlay" onclick="handleModalClick(event)">
+        <div class="modal glass">
+            <div class="modal-header"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0;">🧠 Chain of Thought (Thinking Log)</h2>
+                <button class="btn-secondary" style="padding: 5px 15px;"
+                    onclick="closeModal('thinking-log-modal')">×</button>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">Secuencia de razonamiento y uso de
+                herramientas del Agente.</p>
+            <div id="thinking-log-content">
+                <!-- Log content will be injected here -->
+            </div>
+            <div style="margin-top: 25px; text-align: right;">
+                <button class="btn-secondary" onclick="closeModal('thinking-log-modal')">Cerrar</button>
             </div>
         </div>
     </div>

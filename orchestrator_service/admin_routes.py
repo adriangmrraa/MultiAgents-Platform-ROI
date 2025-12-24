@@ -1090,3 +1090,61 @@ async def meta_status():
     """Check WhatsApp compatibility status."""
     return {"connected": True, "provider": "ycloud"}
 
+# --- Reports ---
+
+@router.get("/reports/assisted-gmv")
+async def report_assisted_gmv(tenant_id: Optional[int] = None, days: int = 30, x_admin_token: str = Header(None)):
+    await verify_admin_token(x_admin_token)
+    
+    # 1. Get all conversations that have Assistant messages in the last X days
+    date_limit = datetime.now() - timedelta(days=days)
+    
+    q_convs = """
+        SELECT DISTINCT c.id, c.external_user_id, c.tenant_id, t.store_name
+        FROM chat_conversations c
+        JOIN chat_messages m ON c.id = m.conversation_id
+        JOIN tenants t ON c.tenant_id = t.id
+        WHERE m.role = 'assistant' AND c.last_message_at >= $1
+    """
+    if tenant_id:
+        q_convs += " AND c.tenant_id = $2"
+        convs = await db.pool.fetch(q_convs, date_limit, tenant_id)
+    else:
+        convs = await db.pool.fetch(q_convs, date_limit)
+
+    report_data = {
+        "summary": {
+            "total_assisted_conversations": len(convs),
+            "period_days": days,
+            "total_estimated_gmv": 0.0,
+            "currency": "ARS" # Default
+        },
+        "details": []
+    }
+
+    # 2. For each conversation, we should theoretically check Tienda Nube for orders
+    # However, to avoid heavy API rate limits, we'll provide a placeholder logic 
+    # or look for 'intent=order_confirmation' in 'meta' if we had it.
+    
+    for conv in convs:
+        # Mocking GMV calculation for now: 
+        # In a real scenario, this would call Tiendanube API per customer phone
+        assisted_value = 0.0
+        order_count = 0
+        
+        # Placeholder: If message content contains "Gracias por tu compra", count as success
+        q_success = "SELECT COUNT(*) FROM chat_messages WHERE conversation_id = $1 AND content ILIKE '%Gracias por tu compra%'"
+        count = await db.pool.fetchval(q_success, conv['id'])
+        if count > 0:
+            assisted_value = 15000.0 * count # Mock value
+            order_count = count
+
+        report_data["details"].append({
+            "store": conv['store_name'],
+            "customer": conv['external_user_id'],
+            "orders_count": order_count,
+            "estimated_gmv": assisted_value
+        })
+        report_data["summary"]["total_estimated_gmv"] += assisted_value
+
+    return report_data
