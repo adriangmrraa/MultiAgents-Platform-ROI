@@ -1,6 +1,6 @@
 # Infrastructure: Hetzner & EasyPanel (Nexus v3)
 
-This document outlines the recommended security and networking configurations for deploying the Agente JS ecosystem in a production environment using **Hetzner Cloud** and **EasyPanel**.
+This document outlines the recommended security and networking configurations for deploying the **Platform AI Solutions** ecosystem in a production environment using **Hetzner Cloud** and **EasyPanel**.
 
 ## 🛡️ Network Isolation
 
@@ -46,7 +46,7 @@ Ensure these are set in the **Environment** tab of each service in EasyPanel.
 | `REDIS_URL` | `redis://redis:6379/0` (Internal link) |
 | `POSTGRES_DSN` | `postgresql+asyncpg://postgres:pass@db:5432/db` |
 
-### 2. Service Specificccc
+### 2. Service Specific
 
 #### 📦 orchestrator_service (Port 8000)
 - `ADMIN_TOKEN`: Secret for dashboard login.
@@ -54,6 +54,7 @@ Ensure these are set in the **Environment** tab of each service in EasyPanel.
 - `WHATSAPP_SERVICE_URL`: `http://whatsapp_service:8002`
 - `TIENDANUBE_SERVICE_URL`: `http://tiendanube_service:8003`
 - `OPENAI_API_KEY`: Global fallback API key.
+- `ENCRYPTION_KEY`: **CRÍTICO**. Se usa para cifrar credenciales de tenants.
 - `CORS_ALLOWED_ORIGINS`: `https://your-ui-domain.com`
 
 #### 🧠 agent_service (Port 8001)

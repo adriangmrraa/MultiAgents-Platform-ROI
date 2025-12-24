@@ -1,6 +1,6 @@
-# 🤝 Guía de Operaciones (MultiAgents-Platform-ROI)
+# 🤝 Guía de Operaciones (Platform AI Solutions)
 
-Este documento detalla los **procedimientos operativos** para mantener, desplegar y escalar la plataforma ROI. 
+Este documento detalla los **procedimientos operativos** para mantener, desplegar y escalar la plataforma. 
 
 ---
 
@@ -9,7 +9,7 @@ Este documento detalla los **procedimientos operativos** para mantener, desplega
 Esta es la ruta recomendada para escalabilidad y ahorro de costos. Sigue estos pasos para un despliegue limpio:
 
 ### Paso 1: Crear el Proyecto
-1.  En EasyPanel, haz clic en **"Create Project"** y nómbralo `multiagents`.
+1.  En EasyPanel, haz clic en **"Create Project"** y nómbralo `platform-ai`.
 
 ### Paso 2: Crear los Servicios de Infraestructura
 1.  **PostgreSQL**: Ve a "Services" -> "Add Service" -> **App** (o usa el template de Postgres). 
@@ -18,32 +18,30 @@ Esta es la ruta recomendada para escalabilidad y ahorro de costos. Sigue estos p
 2.  **Redis**: Añade un servicio tipo **App** con la imagen `redis:alpine`.
 
 ### Paso 3: Desplegar los Microservicios (Apps)
-Para cada uno de los 4 microservicios, añade un servicio tipo **App** -> **GitHub**:
+Para cada uno de los 5 microservicios base, añade un servicio tipo **App** -> **GitHub**:
 1.  Conecta tu repositorio.
 2.  **Configuración de Carpeta (Docker Context)**:
     *   Para `orchestrator`: Docker Source Path = `./orchestrator_service`.
-    *   Para `agent-core`: Docker Source Path = `./agent_service`.
+    *   Para `agent-service`: Docker Source Path = `./agent_service`.
     *   Para `tiendanube`: Docker Source Path = `./tiendanube_service`.
     *   Para `whatsapp`: Docker Source Path = `./whatsapp_service`.
-    *   Para `bff`: Docker Source Path = `./bff_service`.
-    *   Para `frontend`: Docker Source Path = `./frontend_react`.
+    *   Para `ui`: Docker Source Path = `./platform_ui`.
 
 ### Paso 4: Variables de Entorno y Networking
 EasyPanel asigna nombres de host automáticos dentro del proyecto. Configura las variables en cada App:
 
 *   **Orchestrator**:
-    *   `POSTGRES_DSN`: `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}`
+    *   `POSTGRES_DSN`: `postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}`
     *   `REDIS_URL`: `redis://redis:6379`
-    *   `AGENT_SERVICE_URL`: `http://agent-core:8001`
-    *   `TIENDANUBE_SERVICE_URL`: `http://tiendanube:8002`
+    *   `AGENT_SERVICE_URL`: `http://agent-service:8001`
+    *   `TIENDANUBE_SERVICE_URL`: `http://tiendanube:8003`
     *   `WHATSAPP_SERVICE_URL`: `http://whatsapp:8002`
-*   **Agent Core**:
-    *   `OPENAI_API_KEY`: Tu clave global.
-    *   `INTERNAL_API_TOKEN`: Debe coincidir con el del Orchestrator.
-*   **BFF**:
-    *   `ORCHESTRATOR_URL`: `http://orchestrator:8000`
-*   **Frontend**:
-    *   `VITE_API_BASE_URL`: La URL pública (`https://bff...`) de tu App del BFF.
+    *   `ENCRYPTION_KEY`: Una cadena larga y aleatoria para proteger los tokens de los clientes.
+*   **Agent Service**:
+    *   `OPENAI_API_KEY`: Clave global (fallback).
+    *   `INTERNAL_API_TOKEN`: Token compartido.
+*   **UI (Frontend)**:
+    *   `API_BASE`: La URL pública (`https://api...`) del Orchestrator.
 
 ---
 

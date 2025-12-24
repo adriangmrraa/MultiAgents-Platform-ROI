@@ -4,11 +4,11 @@ Este proyecto implementa un agente de chat para WhatsApp que interactúa con la 
 
 ## Arquitectura Nexus v3 (Decentralized)
 
-- **whatsapp_service**: Maneja webhooks de WhatsApp (YCloud/Meta), verifica firmas y reenvía mensajes al controlador de tráfico.
-- **orchestrator_service (Traffic Controller)**: Gestiona la persistencia, el historial de chat, la soberanía de datos (Protocolo Omega) y el ruteo hacia la inteligencia.
-- **agent_service (Cognitive Brain)**: Servicio independiente y apátrida que ejecuta la lógica de IA (LangChain) y herramientas dinámicas.
-- **platform_ui**: Dashboard administrativo para gestionar tenants, credenciales y supervisión humana.
-- **tiendanube_service**: Expone herramientas de catálogo para el agente de forma segura.
+- **whatsapp_service**: Maneja webhooks de WhatsApp (YCloud/Meta), verifica firmas y reenvía mensajes al controlador de tráfico. (Puerto Local: 8002)
+- **orchestrator_service (Traffic Controller)**: Gestiona la persistencia, el historial de chat, la soberanía de datos (Protocolo Omega) y el ruteo hacia la inteligencia. (Puerto Local: 8000)
+- **agent_service (Cognitive Brain)**: Servicio independiente y apátrida que ejecuta la lógica de IA (LangChain) y herramientas dinámicas. (Puerto Local: 8001)
+- **tiendanube_service**: Expone herramientas de catálogo para el agente de forma segura. (Puerto Local: 8003)
+- **platform_ui**: Dashboard administrativo para gestionar tenants, credenciales y supervisión humana. (Puerto Local: 80)
 
 ## Requisitos
 
@@ -32,8 +32,10 @@ docker-compose up --build
 
 Los servicios estarán disponibles en:
 - orchestrator_service: http://localhost:8000
-- tiendanube_service: http://localhost:8001
+- agent_service: http://localhost:8001
 - whatsapp_service: http://localhost:8002
+- tiendanube_service: http://localhost:8003
+- platform_ui: http://localhost:80
 - Postgres: localhost:5432
 
 ## Tests
