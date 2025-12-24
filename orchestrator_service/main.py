@@ -60,6 +60,10 @@ POSTGRES_DSN = os.getenv("POSTGRES_DSN")
 GLOBAL_TN_STORE_ID = os.getenv("TIENDANUBE_STORE_ID") or os.getenv("GLOBAL_TN_STORE_ID")
 GLOBAL_TN_ACCESS_TOKEN = os.getenv("TIENDANUBE_ACCESS_TOKEN") or os.getenv("GLOBAL_TN_ACCESS_TOKEN")
 
+# Service URLs (Nexus v3 Decentralized)
+AGENT_SERVICE_URL = os.getenv("AGENT_SERVICE_URL", "http://agent_service:8001")
+TIENDANUBE_SERVICE_URL = os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8002")
+
 # Global Fallback Content (only used if DB has no specific tenant config)
 GLOBAL_STORE_DESCRIPTION = os.getenv("GLOBAL_STORE_DESCRIPTION")
 GLOBAL_CATALOG_KNOWLEDGE = os.getenv("GLOBAL_CATALOG_KNOWLEDGE")
@@ -1243,134 +1247,70 @@ async def chat_endpoint(
 
 
 
-    # --- 4. Invoke Agent (Unified PostgreSQL Memory) ---
+    # --- 4. Invoke Remote Agent (Nexus v3) ---
+    # Construct System Prompt (Extracted from old get_agent_executable)
+    sys_template = tenant.system_prompt_template or "Eres un asistente virtual amable."
+    sys_template = sys_template.replace("{STORE_NAME}", tenant.store_name)
+    sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", tenant.store_catalog_knowledge or "Sin catálogo.")
+    sys_template = sys_template.replace("{STORE_DESCRIPTION}", tenant.store_description or "")
+    sys_template = sys_template.replace("{STORE_URL}", "#") # TODO: Add real Store URL if available
     
-    # Load History from PostgreSQL
-    history_rows = await db.pool.fetch("""
-        SELECT role, content 
-        FROM chat_messages 
-        WHERE conversation_id = $1 
-        ORDER BY created_at ASC 
-        LIMIT 20
-    """, conv_id)
-    
-    chat_history = []
+    # History for Remote Agent
+    remote_history = []
     for h in history_rows:
-        if h['role'] == 'user':
-            chat_history.append(HumanMessage(content=h['content'] or ""))
-        elif h['role'] in ['assistant', 'human_supervisor']:
-            chat_history.append(AIMessage(content=h['content'] or ""))
-    
-    # Dynamic Agent Loading
-    tenant_lookup = event.to_number or event.from_number
-    executor = await get_agent_executable(tenant_phone=tenant_lookup)
-    
-    # Set Conversation Context for Tools
-    current_conversation_id.set(conv_id)
-    current_customer_phone.set(event.from_number)
-    
+        remote_history.append({"role": h['role'], "content": h['content'] or ""})
+
+    # Prepare Package for Agent Service
+    agent_request = {
+        "tenant_id": tenant.id,
+        "store_name": tenant.store_name,
+        "user_input": content,
+        "chat_history": remote_history,
+        "system_prompt": sys_template,
+        "openai_api_key": tenant.openai_key.get_secret_value() if tenant.openai_key else OPENAI_API_KEY,
+        "tiendanube_store_id": tenant.tiendanube_creds.store_id if tenant.tiendanube_creds else None,
+        "tiendanube_access_token": tenant.tiendanube_creds.access_token.get_secret_value() if tenant.tiendanube_creds else None,
+        "tiendanube_service_url": TIENDANUBE_SERVICE_URL,
+        "internal_api_token": INTERNAL_API_TOKEN.get_secret_value() if INTERNAL_API_TOKEN else ""
+    }
+
     try:
-        inputs = {"input": event.text, "chat_history": chat_history}
-        result = await executor.ainvoke(inputs)
-        output = result["output"] 
-        
-        # --- Smart Output Processing (Layer 2) ---
-        final_messages = []
-        
-        # Case A: Strict Pydantic Object
-        if isinstance(output, OrchestratorResponse):
-            final_messages = output.messages
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(f"{AGENT_SERVICE_URL}/think", json=agent_request)
+            if resp.status_code != 200:
+                raise Exception(f"Agent Service Error: {resp.text}")
             
-        # Case B: Dict (JSON) but might have wrong keys
-        elif isinstance(output, dict):
-            # 1. Correct Format
-            if "messages" in output and isinstance(output["messages"], list):
-                 final_messages = [OrchestratorMessage(**m) for m in output["messages"]]
-            # 2. "message" or "response" single key (Common Hallucination)
-            elif "message" in output:
-                 final_messages = [OrchestratorMessage(text=str(output["message"]), part=1, total=1)]
-            elif "response" in output:
-                 final_messages = [OrchestratorMessage(text=str(output["response"]), part=1, total=1)]
-            elif "answer" in output:
-                 final_messages = [OrchestratorMessage(text=str(output["answer"]), part=1, total=1)]
-            else:
-                 # Fallback: Dump the whole dict as text provided it's not internal weirdness
-                 # Check if it has 'part', 'total', 'text' at root (Flattened)
-                 if "text" in output:
-                     final_messages = [OrchestratorMessage(text=str(output["text"]), part=output.get("part", 1), total=output.get("total", 1))]
-                 else:
-                     # Last resort: Stringify
-                     final_messages = [OrchestratorMessage(text=json.dumps(output, ensure_ascii=False), part=1, total=1)]
-                     
-        # Case C: String (maybe JSON string)
-        elif isinstance(output, str):
-            try:
-                # Try to parse string as JSON first
-                # Multi-pass decoding to handle double-encoded JSON strings
-                parsed = output
-                for _ in range(3):
-                    if isinstance(parsed, str):
-                        cleaned = parsed.strip()
-                        # Clean Markdown if present
-                        if cleaned.startswith("```json"): cleaned = cleaned[7:].split("```")[0]
-                        if cleaned.startswith("```"): cleaned = cleaned[3:].split("```")[0]
-                        
-                        try:
-                            parsed = json.loads(cleaned)
-                        except json.JSONDecodeError:
-                            # Handle common LLM hallucinations like trailing backslashes/quotes
-                            # e.g. }\" or }\ 
-                            cleaned_harden = re.sub(r'\\"?\s*$', '', cleaned.strip())
-                            try:
-                                parsed = json.loads(cleaned_harden)
-                            except:
-                                # If direct parse fails, try regex extraction for embedded JSON
-                                match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-                                if match:
-                                    try: parsed = json.loads(match.group(0))
-                                    except: break
-                                else:
-                                    break
-                    else:
-                        break
-                
-                parsed_json = parsed
-                
-                # Recursively apply Case B logic
-                if isinstance(parsed_json, dict):
-                    if "messages" in parsed_json and isinstance(parsed_json["messages"], list):
-                        final_messages = []
-                        for m in parsed_json["messages"]:
-                            # Support both imageUrl and image_url, text or content
-                            txt = m.get("text") or m.get("content")
-                            img = m.get("imageUrl") or m.get("image_url")
-                            final_messages.append(OrchestratorMessage(text=txt, imageUrl=img))
-                    elif "message" in parsed_json:
-                        final_messages = [OrchestratorMessage(text=str(parsed_json["message"]))]
-                    elif "text" in parsed_json:
-                        final_messages = [OrchestratorMessage(text=str(parsed_json["text"]))]
-                    else:
-                        # If keys are unknown, try to use it as list or fallback
-                        final_messages = [OrchestratorMessage(text=json.dumps(parsed_json, ensure_ascii=False))]
-                elif isinstance(parsed_json, list):
-                     # If the LLM returned a direct list of messages
-                     final_messages = []
-                     for m in parsed_json:
-                        if isinstance(m, dict):
-                            txt = m.get("text") or m.get("content")
-                            img = m.get("imageUrl") or m.get("image_url")
-                            final_messages.append(OrchestratorMessage(text=txt, imageUrl=img))
-                else:
-                    final_messages = [OrchestratorMessage(text=output)]
-            except Exception as parse_err:
-                logger.debug("output_not_json", error=str(parse_err))
-                # Fallback: if it looked like JSON but failed to parse deeply, send as text
-                # But if it starts with { "messages": ... } and failed, we should try a cleaner regex extraction maybe?
-                # For now, let's just return the raw text to be safe
-                final_messages = [OrchestratorMessage(text=output)]
-                
+            agent_result = resp.json()
+            output = agent_result["output"]
+            
+        # --- Handle Special Markers (Handoff) ---
+        if isinstance(output, str) and "HUMAN_HANDOFF_REQUESTED:" in output:
+            reason = output.split("HUMAN_HANDOFF_REQUESTED:")[1].strip()
+            # Execute handoff logic locally in Orchestrator (as it has DB access)
+            handoff_msg = await derivhumano(reason=reason, contact_name=event.customer_name, contact_phone=event.from_number)
+            final_messages = [OrchestratorMessage(text=handoff_msg)]
         else:
-            final_messages = [OrchestratorMessage(text=str(output))]
+            # Standard Processing (Reuse existing smart parsing logic if needed, 
+            # though agent_service should ideally return clean objects)
+            final_messages = []
+            # (Parsing logic simplified for the transition)
+            if isinstance(output, str):
+                 # Try to parse if it's JSON string
+                 try:
+                     parsed = json.loads(output)
+                     if "messages" in parsed:
+                         final_messages = [OrchestratorMessage(**m) for m in parsed["messages"]]
+                     else:
+                         final_messages = [OrchestratorMessage(text=output)]
+                 except:
+                     final_messages = [OrchestratorMessage(text=output)]
+            elif isinstance(output, dict):
+                 if "messages" in output:
+                     final_messages = [OrchestratorMessage(**m) for m in output["messages"]]
+                 else:
+                     final_messages = [OrchestratorMessage(text=json.dumps(output))]
+            else:
+                 final_messages = [OrchestratorMessage(text=str(output))]
 
 
         # Store Assistant Response

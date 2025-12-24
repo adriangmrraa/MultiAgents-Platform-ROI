@@ -4,39 +4,41 @@ Este documento detalla los **procedimientos operativos** para mantener, desplega
 
 ---
 
-## 1. 🚀 Estrategias de Despliegue
+## 2. 🚀 Guía de Despliegue en EasyPanel (Hetzner/VPS)
 
-### A. Despliegue en Render (Actual)
-1.  **Blueprints**: El archivo `render.yaml` es la autoridad. Los cambios se aplican automáticamente vía GitHub.
-2.  **Secretos**: Configurar en el Dashboard -> Environment Groups.
+Esta es la ruta recomendada para escalabilidad y ahorro de costos. Sigue estos pasos para un despliegue limpio:
 
-### B. Despliegue en VPS (Escalabilidad Recomendada)
-Para reducir costos x20 y mejorar rendimiento:
-1.  **Arquitectura**: VPS en **Hetzner**.
-2.  **Orquestador**: **Coolify** o **EasyPanel**.
-3.  **Docker**: El proyecto ya está dockerizado. Basta con apuntar a este repositorio en Coolify.
+### Paso 1: Crear el Proyecto
+1.  En EasyPanel, haz clic en **"Create Project"** y nómbralo `multiagents`.
+
+### Paso 2: Crear los Servicios de Infraestructura
+1.  **PostgreSQL**: Ve a "Services" -> "Add Service" -> **App** (o usa el template de Postgres). 
+    *   Si usas "App", usa la imagen `postgres:13`.
+    *   Configura las variables: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`.
+2.  **Redis**: Añade un servicio tipo **App** con la imagen `redis:alpine`.
+
+### Paso 3: Desplegar los Microservicios (Apps)
+Para cada uno de los 4 microservicios, añade un servicio tipo **App** -> **GitHub**:
+1.  Conecta tu repositorio.
+2.  **Configuración de Carpeta (Docker Context)**:
+    *   Para `orchestrator`: Docker Source Path = `./orchestrator_service`.
+    *   Para `whatsapp`: Docker Source Path = `./whatsapp_service`.
+    *   Para `bff`: Docker Source Path = `./bff_service`.
+    *   Para `frontend`: Docker Source Path = `./frontend_react`.
+
+### Paso 4: Variables de Entorno y Networking
+EasyPanel asigna nombres de host automáticos dentro del proyecto. Configura las variables en cada App:
+
+*   **Orchestrator**:
+    *   `POSTGRES_DSN`: `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}`
+    *   `REDIS_URL`: `redis://redis:6379`
+    *   `WHATSAPP_SERVICE_URL`: `http://whatsapp:8002`
+*   **BFF**:
+    *   `ORCHESTRATOR_URL`: `http://orchestrator:8000`
+*   **Frontend**:
+    *   `VITE_API_BASE_URL`: La URL pública (`https://bff...`) de tu App del BFF.
 
 ---
-
-**Pasos para desplegar cambios:**
-1.  Hacer commit y push a `main`:
-    ```bash
-    git add .
-    git commit -m "feat: nueva funcionalidad"
-    git push origin main
-    ```
-2.  EasyPanel detectará el push y construirá las imágenes Docker.
-3.  **Verificación**:
-    *   Ve a la URL de tu proyecto.
-    *   Si hay error 500/502, revisa los logs en la consola de EasyPanel.
-
-**Variables de Entorno Críticas (EasyPanel):**
-Asegúrate de que estas variables estén definidas en la sección "Environment" de EasyPanel para el servicio `orchestrator`:
-*   `DATABASE_URL`: Conexión a Postgres.
-*   `REDIS_URL`: Conexión a Redis.
-*   `OPENAI_API_KEY`: Clave global (fallback).
-*   `TIENDANUBE_API_KEY` / `TIENDANUBE_STORE_ID`: (Opcional si se usa modo multi-tenant en BD).
-*   `MCP_URL`: URL del webhook de n8n.
 
 ---
 

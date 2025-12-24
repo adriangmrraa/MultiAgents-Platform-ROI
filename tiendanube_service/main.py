@@ -10,9 +10,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TIENDANUBE_API_KEY = os.getenv("TIENDANUBE_API_KEY")
-TIENDANUBE_USER_AGENT = os.getenv("TIENDANUBE_USER_AGENT", "Langchain-Agent (lala.com)")
+# ...
+TIENDANUBE_USER_AGENT = os.getenv("TIENDANUBE_USER_AGENT", "Nexus-MultiTenant-Service (Nexus v3)")
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
-TIENDANUBE_STORE_ID = "6873259"
+
+# Removed hardcoded TIENDANUBE_STORE_ID
 
 import structlog
 import time
@@ -104,13 +106,19 @@ class ToolResponse(BaseModel):
 
 # Request Models
 class ProductSearch(BaseModel):
+    store_id: str
+    access_token: str
     q: str = Field(..., description="Search query for products.")
 
 class ProductCategorySearch(BaseModel):
+    store_id: str
+    access_token: str
     category: str = Field(..., description="Product category.")
     keyword: str = Field(..., description="Keyword to refine the search.")
 
 class OrderSearch(BaseModel):
+    store_id: str
+    access_token: str
     q: str = Field(..., description="Search query for orders (usually order number).")
 
 class Email(BaseModel):
@@ -145,10 +153,15 @@ def handle_generic_error(e: Exception) -> ToolError:
 
 @app.post("/tools/productsq", response_model=ToolResponse)
 def productsq(search: ProductSearch, token: str = Depends(verify_token)):
-    url = f"https://api.tiendanube.com/v1/{TIENDANUBE_STORE_ID}/products"
+    url = f"https://api.tiendanube.com/v1/{search.store_id}/products"
+    headers = {
+        "Authentication": f"bearer {search.access_token}",
+        "User-Agent": TIENDANUBE_USER_AGENT,
+        "Content-Type": "application/json",
+    }
     params = {"q": search.q, "per_page": 20}
     try:
-        response = requests.get(url, headers=def_headers, params=params, timeout=10)
+        response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
         return ToolResponse(ok=True, data=response.json())
     except requests.exceptions.HTTPError as e:
@@ -158,11 +171,16 @@ def productsq(search: ProductSearch, token: str = Depends(verify_token)):
 
 @app.post("/tools/productsq_category", response_model=ToolResponse)
 def productsq_category(search: ProductCategorySearch, token: str = Depends(verify_token)):
-    url = f"https://api.tiendanube.com/v1/{TIENDANUBE_STORE_ID}/products"
+    url = f"https://api.tiendanube.com/v1/{search.store_id}/products"
+    headers = {
+        "Authentication": f"bearer {search.access_token}",
+        "User-Agent": TIENDANUBE_USER_AGENT,
+        "Content-Type": "application/json",
+    }
     query = f"{search.category} {search.keyword}"
     params = {"q": query, "per_page": 20}
     try:
-        response = requests.get(url, headers=def_headers, params=params, timeout=10)
+        response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
         return ToolResponse(ok=True, data=response.json())
     except requests.exceptions.HTTPError as e:
@@ -170,12 +188,21 @@ def productsq_category(search: ProductCategorySearch, token: str = Depends(verif
     except Exception as e:
         return ToolResponse(ok=False, error=handle_generic_error(e))
 
+class GenericTenantRequest(BaseModel):
+    store_id: str
+    access_token: str
+
 @app.post("/tools/productsall", response_model=ToolResponse)
-def productsall(token: str = Depends(verify_token)):
-    url = f"https://api.tiendanube.com/v1/{TIENDANUBE_STORE_ID}/products"
+def productsall(req: GenericTenantRequest, token: str = Depends(verify_token)):
+    url = f"https://api.tiendanube.com/v1/{req.store_id}/products"
+    headers = {
+        "Authentication": f"bearer {req.access_token}",
+        "User-Agent": TIENDANUBE_USER_AGENT,
+        "Content-Type": "application/json",
+    }
     params = {"per_page": 25}
     try:
-        response = requests.get(url, headers=def_headers, params=params, timeout=10)
+        response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
         return ToolResponse(ok=True, data=response.json())
     except requests.exceptions.HTTPError as e:
@@ -184,11 +211,16 @@ def productsall(token: str = Depends(verify_token)):
         return ToolResponse(ok=False, error=handle_generic_error(e))
 
 @app.post("/tools/cupones_list", response_model=ToolResponse)
-def cupones_list(token: str = Depends(verify_token)):
-    url = f"https://api.tiendanube.com/v1/{TIENDANUBE_STORE_ID}/coupons"
+def cupones_list(req: GenericTenantRequest, token: str = Depends(verify_token)):
+    url = f"https://api.tiendanube.com/v1/{req.store_id}/coupons"
+    headers = {
+        "Authentication": f"bearer {req.access_token}",
+        "User-Agent": TIENDANUBE_USER_AGENT,
+        "Content-Type": "application/json",
+    }
     params = {"per_page": 25}
     try:
-        response = requests.get(url, headers=def_headers, params=params, timeout=10)
+        response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
         return ToolResponse(ok=True, data=response.json())
     except requests.exceptions.HTTPError as e:
@@ -198,10 +230,15 @@ def cupones_list(token: str = Depends(verify_token)):
 
 @app.post("/tools/orders", response_model=ToolResponse)
 def orders(search: OrderSearch, token: str = Depends(verify_token)):
-    url = f"https://api.tiendanube.com/v1/{TIENDANUBE_STORE_ID}/orders"
+    url = f"https://api.tiendanube.com/v1/{search.store_id}/orders"
+    headers = {
+        "Authentication": f"bearer {search.access_token}",
+        "User-Agent": TIENDANUBE_USER_AGENT,
+        "Content-Type": "application/json",
+    }
     params = {"q": search.q}
     try:
-        response = requests.get(url, headers=def_headers, params=params, timeout=10)
+        response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
         return ToolResponse(ok=True, data=response.json())
     except requests.exceptions.HTTPError as e:
