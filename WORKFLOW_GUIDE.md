@@ -22,6 +22,8 @@ Para cada uno de los 4 microservicios, añade un servicio tipo **App** -> **GitH
 1.  Conecta tu repositorio.
 2.  **Configuración de Carpeta (Docker Context)**:
     *   Para `orchestrator`: Docker Source Path = `./orchestrator_service`.
+    *   Para `agent-core`: Docker Source Path = `./agent_service`.
+    *   Para `tiendanube`: Docker Source Path = `./tiendanube_service`.
     *   Para `whatsapp`: Docker Source Path = `./whatsapp_service`.
     *   Para `bff`: Docker Source Path = `./bff_service`.
     *   Para `frontend`: Docker Source Path = `./frontend_react`.
@@ -32,7 +34,12 @@ EasyPanel asigna nombres de host automáticos dentro del proyecto. Configura las
 *   **Orchestrator**:
     *   `POSTGRES_DSN`: `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}`
     *   `REDIS_URL`: `redis://redis:6379`
+    *   `AGENT_SERVICE_URL`: `http://agent-core:8001`
+    *   `TIENDANUBE_SERVICE_URL`: `http://tiendanube:8002`
     *   `WHATSAPP_SERVICE_URL`: `http://whatsapp:8002`
+*   **Agent Core**:
+    *   `OPENAI_API_KEY`: Tu clave global.
+    *   `INTERNAL_API_TOKEN`: Debe coincidir con el del Orchestrator.
 *   **BFF**:
     *   `ORCHESTRATOR_URL`: `http://orchestrator:8000`
 *   **Frontend**:

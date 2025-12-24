@@ -103,289 +103,255 @@ from admin_routes import router as admin_router, sync_environment
 from app.core.database import AsyncSessionLocal, engine
 from app.core.init_data import init_db
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup: Connect to DB and Hydrate
-    try:
-        # Create Tables (if using raw SQL or Alembic we skip this, but for dev MVP we can keep existing logic or rely on hydration)
-        # Existing logic might rely on db.py raw connections.
-        # We adhere to the new plan: Hydrate via SQLAlchemy.
-        
-        # 1. Ensure Legacy DB Pool (db.py) is connected for legacy parts
-        if not POSTGRES_DSN:
-             logger.error("missing_postgres_dsn")
-        else:
-             await db.connect() 
-             
-        # 2. Universal Schema Creation (SQLAlchemy)
-        # This replaces the raw SQL migration steps over time.
-        # For now, we ensure OUR new tables exist.
-        from app.models.base import Base
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-             
-        # 3. Hydrate Tenants (New Architecture)
-        async with AsyncSessionLocal() as session:
-            await init_db(session)
-            
-        logger.info("startup_complete")
-        
-    except Exception as e:
-        logger.error("startup_failed", error=str(e))
-        
-    yield
-    
-    # Shutdown
-    await db.disconnect()
-    await engine.dispose()
-        # --- Auto-Migration for EasyPanel ---
-        # Since the db/ folder isn't copied to the container, we inline the critical schema here.
-        # Migration Steps - Executed Sequentially
-        migration_steps = [
-            # 1. Tenants Table
-            """
-            CREATE TABLE IF NOT EXISTS tenants (
-                id SERIAL PRIMARY KEY,
-                store_name TEXT NOT NULL,
-                bot_phone_number TEXT UNIQUE NOT NULL,
-                owner_email TEXT,
-                store_location TEXT,
-                store_website TEXT,
-                store_description TEXT,
-                store_catalog_knowledge TEXT,
-                tiendanube_store_id TEXT,
-                tiendanube_access_token TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            """,
-            # 1b. Pre-clean Handoff Config (Drop if broken)
-            """
-            DO $$
-            BEGIN
-                -- If table exists but lacks PK (broken state from previous edits), drop it to allow fresh creation.
-                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tenant_human_handoff_config') 
-                   AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tenant_human_handoff_config_pkey') THEN
-                   
-                   DROP TABLE tenant_human_handoff_config CASCADE;
-                END IF;
-            END $$;
-            """,
-            # 1c. Tenant Human Handoff Config (Final Spec + Consistency)
-            """
-            CREATE TABLE IF NOT EXISTS tenant_human_handoff_config (
-                tenant_id INTEGER PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
-                enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                destination_email TEXT NOT NULL,
-                handoff_instructions TEXT, 
-                handoff_message TEXT,
-                smtp_host TEXT NOT NULL,
-                smtp_port INTEGER NOT NULL,
-                smtp_security TEXT NOT NULL DEFAULT 'SSL', -- SSL | STARTTLS | NONE
-                smtp_username TEXT NOT NULL,
-                smtp_password_encrypted TEXT NOT NULL,
-                triggers JSONB NOT NULL DEFAULT '{}',
-                email_context JSONB NOT NULL DEFAULT '{}',
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            );
-            """,
-            # 2. Credentials Table
-            """
-            CREATE TABLE IF NOT EXISTS credentials (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                value TEXT NOT NULL,
-                category TEXT,
-                scope TEXT DEFAULT 'global',
-                tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
-                description TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW(),
-                CONSTRAINT unique_name_scope UNIQUE(name, scope)
-            );
-            """,
-            # 3. Credentials Repair (DO block)
-            """
-            DO $$ 
-            BEGIN 
-                -- Check for updated_at column
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='updated_at') THEN
-                    ALTER TABLE credentials ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
-                END IF;
+# --- Auto-Migration for EasyPanel (Raw SQL Steps) ---
+# Since the db/ folder isn't copied to the container, we inline critical schema here.
+migration_steps = [
+    # 1. Tenants Table
+    """
+    CREATE TABLE IF NOT EXISTS tenants (
+        id SERIAL PRIMARY KEY,
+        store_name TEXT NOT NULL,
+        bot_phone_number TEXT UNIQUE NOT NULL,
+        owner_email TEXT,
+        store_location TEXT,
+        store_website TEXT,
+        store_description TEXT,
+        store_catalog_knowledge TEXT,
+        tiendanube_store_id TEXT,
+        tiendanube_access_token TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    """,
+    # 1b. Pre-clean Handoff Config
+    """
+    DO $$
+    BEGIN
+        -- If table exists but lacks PK (broken state from previous edits), drop it to allow fresh creation.
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tenant_human_handoff_config') 
+           AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tenant_human_handoff_config_pkey') THEN
+           
+           DROP TABLE tenant_human_handoff_config CASCADE;
+        END IF;
+    END $$;
+    """,
+    # 1c. Tenant Human Handoff Config (Final Spec + Consistency)
+    """
+    CREATE TABLE IF NOT EXISTS tenant_human_handoff_config (
+        tenant_id INTEGER PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        destination_email TEXT NOT NULL,
+        handoff_instructions TEXT, 
+        handoff_message TEXT,
+        smtp_host TEXT NOT NULL,
+        smtp_port INTEGER NOT NULL,
+        smtp_security TEXT NOT NULL DEFAULT 'SSL', -- SSL | STARTTLS | NONE
+        smtp_username TEXT NOT NULL,
+        smtp_password_encrypted TEXT NOT NULL,
+        triggers JSONB NOT NULL DEFAULT '{}',
+        email_context JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    );
+    """,
+    # 2. Credentials Table
+    """
+    CREATE TABLE IF NOT EXISTS credentials (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        value TEXT NOT NULL,
+        category TEXT,
+        scope TEXT DEFAULT 'global',
+        tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+        description TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT unique_name_scope UNIQUE(name, scope)
+    );
+    """,
+    # 3. Credentials Repair (DO block)
+    """
+    DO $$ 
+    BEGIN 
+        -- Check for updated_at column
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='updated_at') THEN
+            ALTER TABLE credentials ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+        END IF;
 
-                -- Check for UNIQUE constraint (name, scope)
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint 
-                    WHERE conname = 'unique_name_scope' AND conrelid = 'credentials'::regclass
-                ) THEN
-                    BEGIN
-                        ALTER TABLE credentials ADD CONSTRAINT unique_name_scope UNIQUE(name, scope);
-                    EXCEPTION WHEN others THEN
-                        RAISE NOTICE 'Could not add unique constraint to credentials - likely duplicates exist';
-                    END;
-                END IF;
-            END $$;
-            """,
-            # 4. PGCryto Extension
-            """
-            DO $$
+        -- Check for UNIQUE constraint (name, scope)
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'unique_name_scope' AND conrelid = 'credentials'::regclass
+        ) THEN
             BEGIN
-                CREATE EXTENSION IF NOT EXISTS pgcrypto;
-            EXCEPTION WHEN OTHERS THEN
-                RAISE NOTICE 'Could not create extension pgcrypto - assuming it exists or not needed if manually handling UUIDs';
-            END $$;
-            """,
-            # 5. Chat Conversations
-            """
-            CREATE TABLE IF NOT EXISTS chat_conversations (
-                id UUID PRIMARY KEY,
-                tenant_id INTEGER REFERENCES tenants(id),
-                channel VARCHAR(32) NOT NULL, 
-                external_user_id VARCHAR(128) NOT NULL,
-                display_name VARCHAR(255),
-                avatar_url TEXT,
-                status VARCHAR(32) NOT NULL DEFAULT 'open',
-                human_override_until TIMESTAMPTZ,
-                last_message_at TIMESTAMPTZ,
-                last_message_preview TEXT,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                UNIQUE (channel, external_user_id) 
-            );
-            """,
-            # 6. Chat Conversations Repair
-            """
-            DO $$
-            BEGIN
-                ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_message_preview TEXT;
-                ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMPTZ;
-                ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS avatar_url TEXT;
-                ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS human_override_until TIMESTAMPTZ;
-            EXCEPTION WHEN OTHERS THEN
-                RAISE NOTICE 'Schema repair failed for chat_conversations';
-            END $$;
-            """,
-            # 7. Chat Conversations Constraint
-            """
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chat_conversations_tenant_channel_user_key') THEN
-                     ALTER TABLE chat_conversations ADD CONSTRAINT chat_conversations_tenant_channel_user_key UNIQUE (tenant_id, channel, external_user_id);
-                END IF;
-            EXCEPTION WHEN OTHERS THEN
-                 RAISE NOTICE 'Could not constraint unique chat_conversations';
-            END $$;
-            """,
-            # 8. Chat Media
-            """
-            CREATE TABLE IF NOT EXISTS chat_media (
-                id UUID PRIMARY KEY,
-                tenant_id INTEGER, 
-                channel VARCHAR(32) NOT NULL,
-                provider_media_id VARCHAR(128),
-                media_type VARCHAR(32) NOT NULL,
-                mime_type VARCHAR(64),
-                file_name VARCHAR(255),
-                file_size INTEGER,
-                storage_url TEXT NOT NULL,
-                preview_url TEXT,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            """,
-            # 9. Chat Messages
-            """
-            CREATE TABLE IF NOT EXISTS chat_messages (
-                id UUID PRIMARY KEY,
-                tenant_id INTEGER, 
-                conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
-                role VARCHAR(32) NOT NULL,
-                message_type VARCHAR(32) NOT NULL DEFAULT 'text',
-                content TEXT,
-                media_id UUID REFERENCES chat_media(id),
-                human_override BOOLEAN NOT NULL DEFAULT false,
-                sent_by_user_id TEXT, 
-                sent_from VARCHAR(64),
-                sent_context VARCHAR(64),
-                ycloud_message_id VARCHAR(128),
-                provider_status VARCHAR(32),
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            """,
-            # 9b. Chat Messages Repair (Comprehensive Repair to avoid missing columns and fix legacy ID type)
-            """
-            DO $$
-            BEGIN
-                -- If ID is integer (legacy), we must drop it and recreate correctly
-                IF (SELECT data_type FROM information_schema.columns WHERE table_name = 'chat_messages' AND column_name = 'id') != 'uuid' THEN
-                    DROP TABLE IF EXISTS chat_messages CASCADE;
-                END IF;
-            EXCEPTION WHEN OTHERS THEN
-                RAISE NOTICE 'Could not check/drop chat_messages';
-            END $$;
-            """,
-            # Re-create if dropped (Duplicate of step 9 basically, but safe)
-            """
-            CREATE TABLE IF NOT EXISTS chat_messages (
-                id UUID PRIMARY KEY,
-                tenant_id INTEGER, 
-                conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
-                role VARCHAR(32) NOT NULL,
-                message_type VARCHAR(32) NOT NULL DEFAULT 'text',
-                content TEXT,
-                media_id UUID REFERENCES chat_media(id),
-                human_override BOOLEAN NOT NULL DEFAULT false,
-                sent_by_user_id TEXT, 
-                sent_from VARCHAR(64),
-                sent_context VARCHAR(64),
-                ycloud_message_id VARCHAR(128),
-                provider_status VARCHAR(32),
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                correlation_id TEXT,
-                from_number VARCHAR(128)
-            );
-            """,
-            # Ensure columns in case table existed but was missing those
-            """
-            DO $$
-            BEGIN
-                ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS correlation_id TEXT;
-                ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS from_number VARCHAR(128);
-                ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS message_type VARCHAR(32) DEFAULT 'text';
-                ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS media_id UUID;
-            EXCEPTION WHEN OTHERS THEN
-                RAISE NOTICE 'Schema repair failed for chat_messages';
-            END $$;
-            """,
-            # 10. System Events
-            """
-            CREATE TABLE IF NOT EXISTS system_events (
-                id SERIAL PRIMARY KEY,
-                level VARCHAR(16) NOT NULL, -- info, warn, error
-                event_type VARCHAR(64) NOT NULL, -- http_request, tool_use, system
-                message TEXT,
-                metadata JSONB,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            """,
-            # 11. Indexes
-            "CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages (conversation_id, created_at);",
-            "CREATE INDEX IF NOT EXISTS idx_chat_conversations_tenant ON chat_conversations (tenant_id, updated_at DESC);",
-            "CREATE INDEX IF NOT EXISTS idx_chat_messages_media ON chat_messages (media_id);",
-            
-            # 12. Advanced Features Columns
-            """
-            DO $$
-            BEGIN
-                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tokens_used BIGINT DEFAULT 0;
-                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tool_calls BIGINT DEFAULT 0;
-            END $$;
-            """,
-            
-            # 13. Update Prompt
-            """
-            UPDATE tenants 
-            SET system_prompt_template = 'Eres el asistente virtual de {STORE_NAME}.
+                ALTER TABLE credentials ADD CONSTRAINT unique_name_scope UNIQUE(name, scope);
+            EXCEPTION WHEN others THEN
+                RAISE NOTICE 'Could not add unique constraint to credentials - likely duplicates exist';
+            END;
+        END IF;
+    END $$;
+    """,
+    # 4. PGCryto Extension
+    """
+    DO $$
+    BEGIN
+        CREATE EXTENSION IF NOT EXISTS pgcrypto;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Could not create extension pgcrypto';
+    END $$;
+    """,
+    # 5. Chat Conversations
+    """
+    CREATE TABLE IF NOT EXISTS chat_conversations (
+        id UUID PRIMARY KEY,
+        tenant_id INTEGER REFERENCES tenants(id),
+        channel VARCHAR(32) NOT NULL, 
+        external_user_id VARCHAR(128) NOT NULL,
+        display_name VARCHAR(255),
+        avatar_url TEXT,
+        status VARCHAR(32) NOT NULL DEFAULT 'open',
+        human_override_until TIMESTAMPTZ,
+        last_message_at TIMESTAMPTZ,
+        last_message_preview TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (channel, external_user_id) 
+    );
+    """,
+    # 6. Chat Conversations Repair
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_message_preview TEXT;
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMPTZ;
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS human_override_until TIMESTAMPTZ;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Schema repair failed for chat_conversations';
+    END $$;
+    """,
+    # 7. Chat Conversations Constraint
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chat_conversations_tenant_channel_user_key') THEN
+             ALTER TABLE chat_conversations ADD CONSTRAINT chat_conversations_tenant_channel_user_key UNIQUE (tenant_id, channel, external_user_id);
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+         RAISE NOTICE 'Could not constraint unique chat_conversations';
+    END $$;
+    """,
+    # 8. Chat Media
+    """
+    CREATE TABLE IF NOT EXISTS chat_media (
+        id UUID PRIMARY KEY,
+        tenant_id INTEGER, 
+        channel VARCHAR(32) NOT NULL,
+        provider_media_id VARCHAR(128),
+        media_type VARCHAR(32) NOT NULL,
+        mime_type VARCHAR(64),
+        file_name VARCHAR(255),
+        file_size INTEGER,
+        storage_url TEXT NOT NULL,
+        preview_url TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    """,
+    # 9. Chat Messages
+    """
+    CREATE TABLE IF NOT EXISTS chat_messages (
+        id UUID PRIMARY KEY,
+        tenant_id INTEGER, 
+        conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+        role VARCHAR(32) NOT NULL,
+        message_type VARCHAR(32) NOT NULL DEFAULT 'text',
+        content TEXT,
+        media_id UUID REFERENCES chat_media(id),
+        human_override BOOLEAN NOT NULL DEFAULT false,
+        sent_by_user_id TEXT, 
+        sent_from VARCHAR(64),
+        sent_context VARCHAR(64),
+        ycloud_message_id VARCHAR(128),
+        provider_status VARCHAR(32),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        correlation_id TEXT,
+        from_number VARCHAR(128)
+    );
+    """,
+    # 9b. Chat Messages Repair (Comprehensive Repair to avoid missing columns and fix legacy ID type)
+    """
+    DO $$
+    BEGIN
+        -- If ID is integer (legacy), we must drop it and recreate correctly
+        IF (SELECT data_type FROM information_schema.columns WHERE table_name = 'chat_messages' AND column_name = 'id') != 'uuid' THEN
+            DROP TABLE IF EXISTS chat_messages CASCADE;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Could not check/drop chat_messages';
+    END $$;
+    """,
+    # Re-create if dropped (Duplicate of step 9 basically, but safe)
+    """
+    CREATE TABLE IF NOT EXISTS chat_messages (
+        id UUID PRIMARY KEY,
+        tenant_id INTEGER, 
+        conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+        role VARCHAR(32) NOT NULL,
+        message_type VARCHAR(32) NOT NULL DEFAULT 'text',
+        content TEXT,
+        media_id UUID REFERENCES chat_media(id),
+        human_override BOOLEAN NOT NULL DEFAULT false,
+        sent_by_user_id TEXT, 
+        sent_from VARCHAR(64),
+        sent_context VARCHAR(64),
+        ycloud_message_id VARCHAR(128),
+        provider_status VARCHAR(32),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        correlation_id TEXT,
+        from_number VARCHAR(128)
+    );
+    """,
+    # Ensure columns in case table existed but was missing those
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS correlation_id TEXT;
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS from_number VARCHAR(128);
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS message_type VARCHAR(32) DEFAULT 'text';
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS media_id UUID;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Schema repair failed for chat_messages';
+    END $$;
+    """,
+    # 10. System Events
+    """
+    CREATE TABLE IF NOT EXISTS system_events (
+        id SERIAL PRIMARY KEY,
+        level VARCHAR(16) NOT NULL, -- info, warn, error
+        event_type VARCHAR(64) NOT NULL, -- http_request, tool_use, system
+        message TEXT,
+        metadata JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    """,
+    # 11. Indexes
+    "CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages (conversation_id, created_at);",
+    "CREATE INDEX IF NOT EXISTS idx_chat_conversations_tenant ON chat_conversations (tenant_id, updated_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_chat_messages_media ON chat_messages (media_id);",
+    
+    # 12. Advanced Features Columns
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tokens_used BIGINT DEFAULT 0;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tool_calls BIGINT DEFAULT 0;
+    END $$;
+    """,
+    
+    # 13. Update Prompt
+    """
+    UPDATE tenants 
+    SET system_prompt_template = 'Eres el asistente virtual de {STORE_NAME}.
 
 REGLAS CRÍTICAS DE RESPUESTA:
 1. SALIDA: Responde SIEMPRE con el formato JSON de OrchestratorResponse (una lista de objetos "messages").
@@ -411,9 +377,27 @@ CONTEXTO DE LA TIENDA:
 {STORE_DESCRIPTION}
 CATALOGO:
 {STORE_CATALOG_KNOWLEDGE}'
-            WHERE store_name = 'Pointe Coach' OR id = 39;
-            """
-        ]
+    WHERE store_name = 'Pointe Coach' OR id = 39;
+    """
+]
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Connect to DB and Hydrate
+    try:
+        # 1. Ensure Legacy DB Pool (db.py) is connected
+        if not POSTGRES_DSN:
+             logger.error("missing_postgres_dsn")
+        else:
+             await db.connect() 
+             
+        # 2. Universal Schema Creation (SQLAlchemy)
+        from app.models.base import Base
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+             
+        # 3. Auto-Migration for EasyPanel
+        # We use the global migration_steps defined at module level
         
         # Execute migration steps sequentially
         for i, step in enumerate(migration_steps):
@@ -421,10 +405,16 @@ CATALOGO:
                 if step.strip():
                     await db.pool.execute(step)
             except Exception as step_err:
-                logger.error(f"migration_step_failed_ignored", step_index=i, error=str(step_err))
+                logger.debug(f"migration_step_ignored", index=i, error=str(step_err))
                 # We continue despite errors to try to apply as much as possible
         
         logger.info("db_migrations_applied")
+        
+        # 4. Hydrate Data (SQLAlchemy session)
+        async with AsyncSessionLocal() as session:
+            await init_db(session)
+            
+        logger.info("startup_complete")
         
     except Exception as e:
         logger.error("startup_critical_error", error=str(e), dsn_preview=POSTGRES_DSN[:15] if POSTGRES_DSN else "None")
@@ -436,9 +426,10 @@ CATALOGO:
     
     yield
     
-    # Shutdown: Disconnect DB
+    # Shutdown
     await db.disconnect()
-    logger.info("db_disconnected")
+    await engine.dispose()
+    logger.info("shutdown_complete")
 
 # FastAPI App Initialization
 app = FastAPI(

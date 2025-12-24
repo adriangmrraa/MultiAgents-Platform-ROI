@@ -13,13 +13,13 @@ Este documento es el manual definitivo para cualquier IA (LLM) que necesite oper
 ### 2. Soberanía de Datos y Tráfico
 A medida que el tráfico de Media (Audios/Imágenes) crezca, se recomienda migrar de **Render** a **Hetzner + Coolify** para evitar costos prohibitivos de ancho de banda.
 
-El sistema opera bajo el **Protocolo Omega**, desplegado de forma declarativa mediante `render.yaml`.
+El sistema opera bajo el **Protocolo Omega** (Multi-Tenancy) y la arquitectura **Nexus v3** (Decentralized Brain).
 
-### 📡 Core Intelligence (Orchestrator)
-El cerebro central es `orchestrator_service`. Gestiona la lógica de la IA, el ruteo administrativo y la base de datos principal.
+### 📡 Traffic Controller (Orchestrator)
+El `orchestrator_service` actúa como el casco del portaaviones. Gestiona la base de datos, los webhooks de entrada, la persistencia de mensajes y el ruteo administrativo. **Ya no procesa la IA directamente.**
 
-### 📱 Percepción (WhatsApp Service)
-Ubica en `whatsapp_service`. Se encarga de la integración cruda con YCloud/Meta, envío de archivos y detección de **Echoes** (mensajes enviados desde el móvil físico).
+### 🧠 Core Intelligence (Agent Service)
+Ubicado en `agent_service`. Es el cerebro descentralizado. Recibe contexto del orquestador, razona usando LangChain y OpenAI, y ejecuta herramientas (Tools) de forma apátrida (stateless).
 
 ### 🎨 Control (Platform UI)
 El dashboard administrativo en `platform_ui`. Es una aplicación **Vanilla JS** (legacy) / **React** (v2). En Render se despliega como `type: web` con `runtime: static`. No usa frameworks complejos en el core original, la gestión del estado es crítica.
