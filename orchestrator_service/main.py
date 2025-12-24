@@ -1,4 +1,9 @@
 import os
+from dotenv import load_dotenv
+
+# Initialize Early (Protocol Omega: Env loading MUST happen before any module initialization)
+load_dotenv()
+
 import json
 import hashlib
 import time
@@ -23,7 +28,6 @@ from pydantic import BaseModel, Field
 # --- Imports ---
 from app.core.tenant import TenantContext
 from app.api.deps import get_current_tenant_webhook, get_current_tenant_header
-from dotenv import load_dotenv
 
 # --- Dynamic Context ---
 tenant_store_id: ContextVar[Optional[str]] = ContextVar("tenant_store_id", default=None)
@@ -31,9 +35,6 @@ tenant_access_token: ContextVar[Optional[str]] = ContextVar("tenant_access_token
 current_tenant_id: ContextVar[Optional[int]] = ContextVar("current_tenant_id", default=None)
 current_conversation_id: ContextVar[Optional[uuid.UUID]] = ContextVar("current_conversation_id", default=None)
 current_customer_phone: ContextVar[Optional[str]] = ContextVar("current_customer_phone", default=None)
-
-# Initialize earlys
-load_dotenv()
 
 try:
     from langchain.agents import AgentExecutor, create_openai_functions_agent
