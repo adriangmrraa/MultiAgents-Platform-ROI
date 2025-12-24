@@ -25,10 +25,7 @@ services:
           name: nexus-cache
           property: connectionString
       - key: WHATSAPP_SERVICE_URL
-        fromService:
-          type: web
-          name: whatsapp-service
-          property: url
+        value: "http://whatsapp-service" # Discovery interno via hostname
       - key: OPENAI_API_KEY
         sync: false
       - key: INTERNAL_API_TOKEN
@@ -48,10 +45,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: ORCHESTRATOR_URL
-        fromService:
-          type: web
-          name: orchestrator-service
-          property: url
+        value: "http://orchestrator-service"
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -80,10 +74,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: ORCHESTRATOR_URL
-        fromService:
-          type: web
-          name: orchestrator-service
-          property: url
+        value: "http://orchestrator-service"
 
   # ==========================================
   # 4. Platform UI (Static Site Remediation)
@@ -91,15 +82,12 @@ services:
   - type: web
     name: platform-ui
     runtime: static
-    region: oregon
+    # region: oregon # Removido: sitios estáticos no tienen región
     buildCommand: "cd frontend_react && npm install && npm run build"
     staticPublishPath: "./frontend_react/dist"
     envVars:
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: bff-service
-          property: url
+        sync: false # Configurar manualmente en el dashboard con la URL pública del BFF
 
   # ==========================================
   # 5. Redis Cache (Key Value - Valkey 8)
@@ -109,6 +97,7 @@ services:
     region: oregon
     plan: starter
     maxmemoryPolicy: allkeys-lru
+    ipAllowList: [] # Requerido para Blueprints
 
 databases:
   - name: nexus-db
