@@ -1,14 +1,17 @@
 services:
   # ==========================================
-  # 1. Orchestrator Service (Core Brain)
+  # 1. Orchestrator Service (Python/FastAPI)
   # ==========================================
   - type: web
     name: orchestrator-service
     env: python
     region: oregon
-    plan: starter
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "uvicorn main:app --host 0.0.0.0 --port 10000"
+    plan: standard
+    numInstances: 2
+    # No rootDir to keep access to /scripts
+    buildCommand: "pip install -r orchestrator_service/requirements.txt"
+    preDeployCommand: "python scripts/apply_sql.py"
+    startCommand: "cd orchestrator_service && gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
@@ -22,27 +25,27 @@ services:
           type: redis
           name: nexus-cache
           property: connectionString
-      - key: RELAY_SERVICE_URL
+      - key: WHATSAPP_SERVICE_URL
         fromService:
           type: web
           name: whatsapp-service
           property: url
-      # Secrets (Sync False)
       - key: OPENAI_API_KEY
         sync: false
       - key: INTERNAL_API_TOKEN
         generateValue: true
 
   # ==========================================
-  # 2. WhatsApp Service (Relay)
+  # 2. WhatsApp Service (Relevo)
   # ==========================================
   - type: web
     name: whatsapp-service
     env: python
     region: oregon
-    plan: starter
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "uvicorn main:app --host 0.0.0.0 --port 10000"
+    plan: standard
+    numInstances: 2
+    buildCommand: "pip install -r whatsapp_service/requirements.txt"
+    startCommand: "cd whatsapp_service && gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
     healthCheckPath: /health
     envVars:
       - key: ORCHESTRATOR_URL
@@ -55,7 +58,6 @@ services:
           type: redis
           name: nexus-cache
           property: connectionString
-      # Secrets
       - key: INTERNAL_API_TOKEN
         fromService:
           type: web
@@ -67,7 +69,7 @@ services:
         sync: false
 
   # ==========================================
-  # 3. BFF Service (Frontend Gateway)
+  # 3. BFF Service (Node.js)
   # ==========================================
   - type: web
     name: bff-service
@@ -85,7 +87,7 @@ services:
           property: url
 
   # ==========================================
-  # 4. Frontend (Static Site via Vite)
+  # 4. Platform UI (Static)
   # ==========================================
   - type: static
     name: platform-ui
@@ -103,12 +105,12 @@ services:
 databases:
   - name: nexus-db
     region: oregon
-    plan: starter # Upgrade to 'standard' for production HA
+    plan: standard # HA ready
     databaseName: nexus_protocol
     user: nexus_admin
 
 - type: redis
   name: nexus-cache
   region: oregon
-  plan: starter # Upgrade for persistence
+  plan: starter
   maxmemoryPolicy: allkeys-lru
