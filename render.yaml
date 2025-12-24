@@ -102,15 +102,18 @@ services:
           name: bff-service
           property: url
 
+  # ==========================================
+  # 5. Redis Cache (Private)
+  # ==========================================
+  - type: redis
+    name: nexus-cache
+    region: oregon
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+
 databases:
   - name: nexus-db
     region: oregon
     plan: standard # HA ready
     databaseName: nexus_protocol
     user: nexus_admin
-
-- type: redis
-  name: nexus-cache
-  region: oregon
-  plan: starter
-  maxmemoryPolicy: allkeys-lru
