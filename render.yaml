@@ -1,6 +1,6 @@
 services:
   # ==========================================
-  # 1. Orchestrator Service (Python/FasstAPI)
+  # 1. Orchestrator Service (Python/FastAPI)
   # ==========================================
   - type: web
     name: orchestrator-service
@@ -8,7 +8,6 @@ services:
     region: oregon
     plan: standard
     numInstances: 2
-    # No rootDir to keep access to /scripts
     buildCommand: "pip install -r orchestrator_service/requirements.txt"
     preDeployCommand: "python scripts/apply_sql.py"
     startCommand: "cd orchestrator_service && gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
@@ -87,11 +86,10 @@ services:
           property: url
 
   # ==========================================
-  # 4. Platform UI (Static)
+  # 4. Platform UI (Static Site)
   # ==========================================
-  - type: static
+  - type: static_site
     name: platform-ui
-    env: static
     region: oregon
     buildCommand: "cd frontend_react && npm install && npm run build"
     staticPublishPath: "./frontend_react/dist"
@@ -114,6 +112,6 @@ services:
 databases:
   - name: nexus-db
     region: oregon
-    plan: standard # HA ready
+    plan: standard
     databaseName: nexus_protocol
     user: nexus_admin
