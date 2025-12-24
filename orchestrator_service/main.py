@@ -9,11 +9,12 @@ import redis
 import structlog
 import httpx
 import smtplib
+import asyncio
 from email.mime.text import MIMEText
 from email.utils import formatdate
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union, Literal
-from fastapi import FastAPI, HTTPException, Header, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Header, Depends, status, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from contextvars import ContextVar
