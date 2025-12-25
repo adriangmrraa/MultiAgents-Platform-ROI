@@ -1182,8 +1182,10 @@ async def log_db(level: str, event_type: str, message: str, meta: dict = None):
     """Fire and forget log to system_events."""
     try:
         if db.pool:
+            # Schema uses: severity, event_type, message, payload, occurred_at
+            # We map 'level' -> 'severity' and 'meta' -> 'payload'
             await db.pool.execute(
-                "INSERT INTO system_events (level, event_type, message, metadata, created_at) VALUES ($1, $2, $3, $4, NOW())",
+                "INSERT INTO system_events (severity, event_type, message, payload, occurred_at) VALUES ($1, $2, $3, $4, NOW())",
                 level, event_type, message, json.dumps(meta) if meta else "{}"
             )
     except Exception as e:

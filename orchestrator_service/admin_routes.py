@@ -1489,15 +1489,16 @@ async def delete_credential(cred_id: int):
 async def get_logs(limit: int = 50):
     """Get system logs (telemetry)."""
     try:
-        # We need to cast created_at to string or handled by Pydantic
+        # We need to cast occurred_at to string or handled by Pydantic
+        # Schema has 'severity' and 'occurred_at'
         rows = await db.pool.fetch("""
             SELECT 
-                created_at as timestamp, 
+                occurred_at as timestamp, 
                 severity as level, 
                 message, 
                 event_type as source 
             FROM system_events 
-            ORDER BY id DESC 
+            ORDER BY occurred_at DESC 
             LIMIT $1
         """, limit)
         # Convert datetime to ISO string
@@ -1518,8 +1519,9 @@ async def delete_credential(cred_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/diagnostics/healthz", dependencies=[Depends(verify_admin_token)])
+@router.get("/diagnostics/healthz")
 async def healthz():
+    # Public Endpoint for EasyPanel Health Checks
     # Check Database
     try:
         await db.pool.execute("SELECT 1")
@@ -1579,9 +1581,9 @@ async def console_events(limit: int = 50):
     """Unified event log for the Console view. Derived from system_events."""
     query = """
     SELECT 
-        id, level, event_type, message, metadata, created_at
+        id, severity as level, event_type, message, payload as metadata, occurred_at as created_at
     FROM system_events 
-    ORDER BY created_at DESC 
+    ORDER BY occurred_at DESC 
     LIMIT $1
     """
     try:
