@@ -19,7 +19,7 @@ Este documento es el manual operativo para el despliegue, mantenimiento y uso di
 *   **Trigger**: Usuario pide hablar con humano o Agente detecta frustración/incertidumbre.
 *   **Acción**: `trigger_handoff` (Admin Ops).
 
----
+---0----
 
 ## 1. Alta de Nuevos Clientes (Onboarding)
 
