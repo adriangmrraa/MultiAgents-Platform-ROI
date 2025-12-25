@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # Infrastructure
     POSTGRES_DSN: str = "postgresql+asyncpg://postgres:password@postgres:5432/pointcoach"
     REDIS_URL: str = "redis://redis:6379/0"
-    CORS_ALLOWED_ORIGINS: list[str] = ["*"]  # Configurable list
+    CORS_ALLOWED_ORIGINS: Any = ["*"]  # Configurable string or list
     BOT_PHONE_NUMBER: str | None = None
     
     # Security
