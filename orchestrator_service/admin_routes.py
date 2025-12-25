@@ -1876,35 +1876,81 @@ async def get_telemetry_events(
      # --- Nexus v3.2 Engine Endpoints (Protocol Omega) ---
 
 @router.post("/engine/ignite", dependencies=[Depends(verify_admin_token)])
+@router.post("/engine/ignite", dependencies=[Depends(verify_admin_token)])
 async def ignite_engine(request: Request):
     """
     Ignite the Business Engine (Agents Start).
+    Performs 'Consolidation Phase' Onboarding:
+    1. Receives Credentials & Store Info.
+    2. Encrypts Secrets (At-Rest Encryption).
+    3. Upserts Tenant (Auto-Registration).
+    4. Triggers Starters.
     """
-    # 1. Get Context (Tenant)
-    # MVP: Single Tenant Mode via ENV or Headers
-    # Ideal: request.state.tenant_id
-    tenant_id = "1" # Default bootstrap tenant
+    try:
+        payload = await request.json()
+    except:
+        payload = {}
+        
+    # 1. Parsing & Validation
+    tenant_id_phone = payload.get("tenant_id") or payload.get("bot_phone_number")
+    store_name = payload.get("store_name")
+    tn_store_id = payload.get("tiendanube_store_id")
+    tn_access_token = payload.get("tiendanube_access_token")
     
-    # Context Hydration (SSOT)
-    t = await db.pool.fetchrow("SELECT * FROM tenants WHERE id = $1", int(tenant_id))
-    if not t: raise HTTPException(404, "Tenant not found")
+    if not tenant_id_phone or not store_name:
+         # Fallback to defaults only if debugging (MVP) but practically we need these.
+         if not tenant_id_phone: # Strict requirement
+            raise HTTPException(400, "Missing 'tenant_id' (Phone Number) or 'store_name'.")
     
-    # Decrypt Keys
-    openai_key = decrypt_password(t['openai_api_key']) if t.get('openai_api_key') else os.getenv("OPENAI_API_KEY")
+    # 2. Credential Encryption (Security)
+    encrypted_token = None
+    if tn_access_token:
+        encrypted_token = encrypt_password(tn_access_token)
+        
+    # 3. Tenant Upsert (Auto-Healing / Onboarding)
+    # We use bot_phone_number as the unique key for conflict resolution
+    q_upsert = """
+        INSERT INTO tenants (
+            store_name, bot_phone_number, 
+            tiendanube_store_id, tiendanube_access_token,
+            updated_at
+        )
+        VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (bot_phone_number) 
+        DO UPDATE SET 
+            store_name = EXCLUDED.store_name,
+            tiendanube_store_id = CASE WHEN EXCLUDED.tiendanube_store_id <> '' THEN EXCLUDED.tiendanube_store_id ELSE tenants.tiendanube_store_id END,
+            tiendanube_access_token = CASE WHEN EXCLUDED.tiendanube_access_token IS NOT NULL THEN EXCLUDED.tiendanube_access_token ELSE tenants.tiendanube_access_token END,
+            updated_at = NOW()
+        RETURNING id, tiendanube_store_id, tiendanube_access_token
+    """
+    
+    row = await db.pool.fetchrow(q_upsert, store_name, tenant_id_phone, tn_store_id, encrypted_token)
+    real_tenant_id_int = row['id']
+    
+    # 4. Context Hydration for Engine
+    # We prefer the Freshly updated values
+    final_tn_token = decrypt_password(row['tiendanube_access_token']) if row['tiendanube_access_token'] else None
     
     context = {
-        "store_name": t['store_name'],
-        "store_website": t['store_website'],
+        "store_name": store_name,
+        "store_website": f"https://{tn_store_id}.mytiendanube.com", # Default guess, agent will refine
         "credentials": {
-            "tiendanube_store_id": t['tiendanube_store_id'],
-            "tiendanube_access_token": t['tiendanube_access_token']
+            "tiendanube_store_id": row['tiendanube_store_id'],
+            "tiendanube_access_token": final_tn_token
         }
     }
     
-    # 2. Ignite
-    engine = NexusEngine(tenant_id, context)
+    # 5. Ignite
+    # We pass the INTEGER ID to the engine (or string if Engine supports it, let's keep it robust)
+    engine = NexusEngine(str(real_tenant_id_int), context)
     result = await engine.ignite()
-    return result
+    
+    return {
+        "status": "ignited", 
+        "tenant_int_id": real_tenant_id_int, 
+        "engine_result": result
+    }
 
 @router.get("/engine/assets/{tenant_id}", dependencies=[Depends(verify_admin_token)])
 @safe_db_call

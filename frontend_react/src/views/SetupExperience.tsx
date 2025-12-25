@@ -46,6 +46,87 @@ const AssetCard = ({ title, icon: Icon, children }: any) => (
     </div>
 );
 
+// --- Specialized Asset Blocks ---
+
+const BrandingBlock = ({ data }: { data: any }) => (
+    <div className="space-y-4">
+        <div>
+            <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">Palette</h4>
+            <div className="flex gap-2">
+                {data.colors?.map((c: string, i: number) => (
+                    <div key={i} className="w-12 h-12 rounded-full border border-white/10 shadow-lg transition-transform hover:scale-110" style={{ backgroundColor: c }} title={c} />
+                ))}
+            </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+            <div>
+                <h4 className="text-xs font-bold text-slate-500 uppercase">Archetype</h4>
+                <p className="text-cyan-400 font-mono">{data.identity?.archetype}</p>
+            </div>
+            <div>
+                <h4 className="text-xs font-bold text-slate-500 uppercase">Fonts</h4>
+                <p className="text-white font-mono text-xs">{data.typography?.primary} / {data.typography?.secondary}</p>
+            </div>
+        </div>
+    </div>
+);
+
+const ScriptBlock = ({ data }: { data: any }) => (
+    <div className="space-y-3 font-mono text-xs text-slate-300">
+        <div className="bg-slate-900/50 p-3 rounded border-l-2 border-cyan-500">
+            <h4 className="font-bold text-cyan-400 mb-1">Welcome Message</h4>
+            <p>"{data.welcome_message}"</p>
+        </div>
+        <div className="bg-slate-900/50 p-3 rounded border-l-2 border-purple-500">
+            <h4 className="font-bold text-purple-400 mb-1">Closing Hook</h4>
+            <p>"{data.closing_hook}"</p>
+        </div>
+    </div>
+);
+
+const VisualGrid = ({ data }: { data: any }) => (
+    <div className="grid grid-cols-2 gap-2">
+        {data.social_posts?.map((post: any, i: number) => (
+            <div key={i} className="bg-slate-800 rounded p-2 text-xs relative overflow-hidden group">
+                <div className="aspect-square bg-slate-700 flex items-center justify-center mb-2">
+                    <Image size={24} className="text-slate-500" />
+                </div>
+                <p className="font-bold text-white truncate">{post.caption}</p>
+                <p className="text-slate-500 text-[10px]">{post.prompt}</p>
+            </div>
+        ))}
+    </div>
+);
+
+const RoiBlock = ({ data }: { data: any }) => (
+    <div className="grid grid-cols-2 gap-4 text-center">
+        <div className="bg-slate-800/50 p-2 rounded">
+            <div className="text-xs text-slate-500">Revenue (30d)</div>
+            <div className="text-green-400 font-bold text-lg">{data.projected_revenue_30d}</div>
+        </div>
+        <div className="bg-slate-800/50 p-2 rounded">
+            <div className="text-xs text-slate-500">Growth</div>
+            <div className="text-purple-400 font-bold text-lg">{data.growth_factor}</div>
+        </div>
+        <div className="col-span-2 text-xs text-slate-400 font-mono">
+            Break Even: {data.break_even_point}
+        </div>
+    </div>
+);
+
+const renderAssetContent = (asset: any) => {
+    const type = asset.type || asset.asset_type;
+    const data = asset.content || asset.data;
+
+    switch (type) {
+        case 'branding': return <BrandingBlock data={data} />;
+        case 'scripts': return <ScriptBlock data={data} />;
+        case 'visuals': return <VisualGrid data={data} />;
+        case 'roi': return <RoiBlock data={data} />;
+        default: return <pre className="text-[10px] text-slate-500 overflow-x-auto">{JSON.stringify(data, null, 2)}</pre>;
+    }
+};
+
 export const SetupExperience: React.FC = () => {
     const { fetchApi } = useApi();
     const [step, setStep] = useState<'connect' | 'igniting' | 'dashboard'>('connect');
@@ -57,7 +138,8 @@ export const SetupExperience: React.FC = () => {
     const [formData, setFormData] = useState({
         store_name: '',
         bot_phone_number: '',
-        tiendanube_store_id: ''
+        tiendanube_store_id: '',
+        tiendanube_access_token: ''
     });
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -70,10 +152,9 @@ export const SetupExperience: React.FC = () => {
     const handleConnect = async () => {
         setStep('igniting');
 
-        // 1. Ignite the Engine
         try {
             // A. Trigger Ignition (Fire and Forget)
-            const payload = { ...formData, tenant_id: formData.bot_phone_number }; // Using phone as temporary tenant_id
+            const payload = { ...formData, tenant_id: formData.bot_phone_number };
             await fetchApi('/api/engine/ignite', { method: 'POST', body: payload });
 
             // B. Connect to Stream (BFF)
@@ -84,8 +165,20 @@ export const SetupExperience: React.FC = () => {
                 setLogs(prev => [...prev, ">> SYSTEM: Secure Link Established. Protocol Omega Active."]);
             };
 
-            evtSource.onmessage = (event) => {
-                // Heartbeat or generic
+            const handleAsset = (e: any, type: string) => {
+                try {
+                    const content = JSON.parse(e.data);
+                    // Use functional update to check for duplicates based on asset_type
+                    setAssets(prev => {
+                        // Avoid adding duplicates if strict mode fires twice or re-renders
+                        if (prev.some(a => a.type === type || a.asset_type === type)) return prev;
+                        // Normalize structure
+                        const normalized = { type: type, content: content.content || content.data || content };
+                        return [...prev, normalized];
+                    });
+                    setLogs(prev => [...prev, `>> ASSET: ${type.toUpperCase()} Generated Successfully.`]);
+                    setPercent(prev => Math.min(prev + 25, 100));
+                } catch (err) { console.error(err); }
             };
 
             evtSource.addEventListener("log", (e: any) => {
@@ -93,33 +186,14 @@ export const SetupExperience: React.FC = () => {
                 setLogs(prev => [...prev, `[${log.event_type}] ${log.message}`]);
             });
 
-            evtSource.addEventListener("branding", (e: any) => {
-                const asset = JSON.parse(e.data);
-                setAssets(prev => [...prev, asset]);
-                setLogs(prev => [...prev, ">> ASSET: Branding Manual Generated."]);
-                setPercent(prev => Math.min(prev + 25, 100));
+            evtSource.addEventListener("branding", (e: any) => handleAsset(e, "branding"));
+            evtSource.addEventListener("scripts", (e: any) => handleAsset(e, "scripts"));
+            evtSource.addEventListener("visuals", (e: any) => handleAsset(e, "visuals"));
+            evtSource.addEventListener("roi", (e: any) => handleAsset(e, "roi"));
+            evtSource.addEventListener("rag", (e: any) => {
+                setLogs(prev => [...prev, ">> RAG: Knowledge Base Vectorized."]);
+                setPercent(prev => 100);
             });
-            evtSource.addEventListener("script", (e: any) => {
-                const asset = JSON.parse(e.data);
-                setAssets(prev => [...prev, asset]);
-                setLogs(prev => [...prev, ">> ASSET: Sales Scripts Hydrated."]);
-                setPercent(prev => Math.min(prev + 25, 100));
-            });
-            evtSource.addEventListener("visuals", (e: any) => {
-                const asset = JSON.parse(e.data);
-                setAssets(prev => [...prev, asset]);
-                setLogs(prev => [...prev, ">> ASSET: Visual Concepts Rendered."]);
-                setPercent(prev => Math.min(prev + 25, 100));
-            });
-            evtSource.addEventListener("roi", (e: any) => {
-                const asset = JSON.parse(e.data);
-                setAssets(prev => [...prev, asset]);
-                setLogs(prev => [...prev, ">> ASSET: ROI Analysis Verified."]);
-                setPercent(prev => Math.min(prev + 25, 100));
-            });
-
-            // Auto transition to dashboard logic if needed, but staying in igniting to show progress is better.
-            // setStep('dashboard'); // Optional later
 
         } catch (e: any) {
             console.error(e);
@@ -157,6 +231,32 @@ export const SetupExperience: React.FC = () => {
                                 placeholder="54911..."
                             />
                         </div>
+
+                        {/* Tienda Nube Credentials (Consolidation Phase) */}
+                        <div className="form-group border-t border-slate-800 pt-4 mt-4">
+                            <label className="text-sm text-cyan-400 font-bold mb-2 block">Tienda Nube Connection</label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs text-slate-500">Store ID</label>
+                                    <input
+                                        className="w-full bg-slate-800 border-none rounded p-3 text-white text-sm"
+                                        value={formData.tiendanube_store_id}
+                                        onChange={e => setFormData({ ...formData, tiendanube_store_id: e.target.value })}
+                                        placeholder="123456"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-500">Access Token</label>
+                                    <input
+                                        type="password"
+                                        className="w-full bg-slate-800 border-none rounded p-3 text-white text-sm"
+                                        value={formData['tiendanube_access_token'] || ''}
+                                        onChange={e => setFormData({ ...formData, tiendanube_access_token: e.target.value } as any)}
+                                        placeholder="Key..."
+                                    />
+                                </div>
+                            </div>
+                        </div>
                         <button
                             onClick={handleConnect}
                             className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-3 rounded mt-6 transition-all"
@@ -192,17 +292,8 @@ export const SetupExperience: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 mt-8">
                             {/* Render Assets */}
                             {assets.map((a, i) => (
-                                <AssetCard key={i} title={a.asset_type?.toUpperCase() || 'ASSET'} icon={CheckCircle}>
-                                    <pre style={{
-                                        background: 'rgba(0,0,0,0.3)',
-                                        padding: '10px',
-                                        borderRadius: '8px',
-                                        overflowX: 'auto',
-                                        fontSize: '12px',
-                                        color: '#94a3b8'
-                                    }}>
-                                        {JSON.stringify(a.content || a, null, 2)}
-                                    </pre>
+                                <AssetCard key={i} title={(a.type || a.asset_type)?.toUpperCase() || 'ASSET'} icon={CheckCircle}>
+                                    {renderAssetContent(a)}
                                 </AssetCard>
                             ))}
                         </div>
