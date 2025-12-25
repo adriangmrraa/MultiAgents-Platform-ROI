@@ -4,7 +4,7 @@ Este documento es el manual operativo para el despliegue, mantenimiento y uso di
     
 ### 3. Onboarding Ultra-Rápido & Business Ignition (v3.2)
 *El "Manual de Vuelo" para el despliegue automático de valor.*
-     
+        
 1.  **Conexión (The Trigger)**: Usuario conecta Tienda Nube.
 2.  **Escaneo Multimodal**: El sistema "lee" la tienda (API) y el sitio web (HTML) para entender el ADN de la marca.
 3.  **Activación Paralela**: Se disparan los 5 Iniciadores de Negocio simultáneamente:
