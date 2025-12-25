@@ -518,6 +518,7 @@ async def lifespan(app: FastAPI):
         from app.models.tenant import Tenant
         from app.models.chat import ChatConversation, ChatMessage, ChatMedia
         from app.models.customer import Customer # Fixes "Phantom Table" issue
+        from app.models.agent import Agent # Nexus v3 Agent Support
         
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -1421,8 +1422,28 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
 
         remote_history = [{"role": h['role'], "content": h['content'] or ""} for h in history_rows]
 
-        # 3. Construct System Prompt
-        sys_template = tenant_row.get("system_prompt_template") or GLOBAL_SYSTEM_PROMPT or "Eres un asistente virtual amable."
+        # 2b. Fetch Active Agent (Nexus v3)
+        agent_row = await db.pool.fetchrow("SELECT * FROM agents WHERE tenant_id = $1 AND is_active = TRUE ORDER BY updated_at DESC LIMIT 1", tenant_id)
+        
+        # 3. Construct System Prompt & Config
+        if agent_row:
+            # Prio 1: Agent Config
+            raw_prompt = agent_row['system_prompt_template']
+            enabled_tools = json.loads(agent_row['enabled_tools']) if agent_row['enabled_tools'] else []
+            model_config = {
+                "provider": agent_row['model_provider'],
+                "version": agent_row['model_version'],
+                "temperature": agent_row['temperature'],
+                "config": json.loads(agent_row['config']) if agent_row['config'] else {}
+            }
+        else:
+            # Prio 2: Tenant Config (Legacy / Fallback)
+            raw_prompt = tenant_row.get("system_prompt_template") or GLOBAL_SYSTEM_PROMPT or "Eres un asistente virtual amable."
+            enabled_tools = ["search_specific_products"] # Default set
+            model_config = {"provider": "openai", "version": "gpt-4o"}
+
+        # Variable Injection
+        sys_template = raw_prompt
         sys_template = sys_template.replace("{STORE_NAME}", tenant_row['store_name'])
         sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", tenant_row['store_catalog_knowledge'] or "Sin catálogo.")
         sys_template = sys_template.replace("{STORE_DESCRIPTION}", tenant_row['store_description'] or "")
@@ -1435,6 +1456,10 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             "context": {
                 "store_name": tenant_row['store_name'],
                 "system_prompt": sys_template
+            },
+            "agent_config": {
+                "tools": enabled_tools,
+                "model": model_config
             },
             "credentials": {
                 "openai_api_key": decrypt_password(tenant_row['openai_api_key_enc']) if tenant_row.get('openai_api_key_enc') else OPENAI_API_KEY,
@@ -1496,12 +1521,28 @@ async def trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, cust
     
     logger.info("notifying_admins_of_handoff", tenant_id=tenant_id, customer=customer_name)
 
-# --- Repair: Add system_prompt_template if missing ---
+# --- Repair: Add System Prompt + Agent Columns per "Agente Soberano" Spec ---
 migration_steps.append("""
 DO $$
 BEGIN
+    -- Tenants
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tenants' AND column_name='system_prompt_template') THEN
         ALTER TABLE tenants ADD COLUMN system_prompt_template TEXT;
+    END IF;
+
+    -- Agents (Schema Drift Prevention)
+    -- Just in case table exists but lacks new V3 spec columns
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='agents') THEN
+        ALTER TABLE agents ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'sales';
+        ALTER TABLE agents ADD COLUMN IF NOT EXISTS temperature FLOAT DEFAULT 0.3;
+        ALTER TABLE agents ALTER COLUMN whatsapp_number DROP NOT NULL;
+        ALTER TABLE agents ALTER COLUMN system_prompt_template SET NOT NULL;
+        
+        -- Remove legacy unique constraint if we are allowing multiple agents per number? 
+        -- Or keep it unique? The guide implies 1 agent per number.
+        -- We'll keep unique but only if not null. 
+        -- If constraint exists on (whatsapp_number), we might need to recreate it as partial or leave it.
+        -- For now, let's assume standard unique is fine if not null.
     END IF;
 END $$;
 """)

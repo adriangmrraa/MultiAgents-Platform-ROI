@@ -579,282 +579,302 @@
 
                 <!-- Human Handoff Configuration -->
                 <div class="handoff-config-section glass" style="margin-top: 30px; padding: 30px;">
-                    <div class="section-header"
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
-                        <div>
-                            <h2 style="color: var(--accent); margin-bottom: 5px;">🤝 Derivación a Humano (derivhumano)
-                            </h2>
-                            <p style="color: var(--text-secondary); font-size: 14px;">Define cuándo la IA debe ceder el
-                                control al equipo humano y cómo debe notificar.</p>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="handoff-enabled" onchange="toggleHandoffUI()">
-                            <span class="slider round"></span>
-                        </label>
-                    </div>
-
-                    <div id="handoff-form-container"
-                        style="opacity: 0.5; pointer-events: none; transition: var(--transition);">
-                        <!-- Granular Policy Rules -->
-                        <div class="policy-grid"
-                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
-                            <div class="policy-box glass" style="padding: 20px;">
-                                <h3 style="font-size: 15px; margin-bottom: 15px; color: var(--accent);">🎯 ¿Cuándo
-                                    Derivar? (Policy)</h3>
-                                <div class="checkbox-group" style="display: flex; flex-direction: column; gap: 10px;">
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" id="rule-fitting"> Solicitud de Fitting / Asesora / Turno
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" id="rule-reclamo"> Reclamos o tono negativo
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" id="rule-dolor"> Dolor / Lesión / Incomodidad
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" id="rule-talle"> Ambigüedad de talle no resuelta
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" id="rule-especial"> Coordinación especial / Retiros
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="policy-box glass" style="padding: 20px;">
-                                <h3 style="font-size: 15px; margin-bottom: 15px; color: var(--accent-secondary);">✉️
-                                    ¿Qué incluir en el Email?</h3>
-                                <div class="checkbox-group" style="display: flex; flex-direction: column; gap: 10px;">
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" id="ctx-name" checked> Nombre del usuario
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" id="ctx-phone" checked> Teléfono / WhatsApp ID
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" id="ctx-history"> Resumen de últimos mensajes
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" id="ctx-id"> Conversation ID & Timestamp
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                            <div class="form-group full">
-                                <label>Instrucciones Adicionales (AI Instructions)</label>
-                                <textarea id="handoff-instructions" rows="3"
-                                    placeholder="Instrucciones específicas adicionales para el agente..."></textarea>
-                            </div>
-                            <div class="form-group">
-                                <label>Email de Destino (Recepción)</label>
-                                <input type="email" id="handoff-target-email" placeholder="ejemplo@correo.com">
-                            </div>
-                            <div class="form-group">
-                                <label>Mensaje al Cliente (Feedback)</label>
-                                <input type="text" id="handoff-message"
-                                    placeholder="Te derivo con una persona del equipo...">
-                            </div>
-                        </div>
-
-                        <!-- SMTP Config Box -->
-                        <div class="smtp-config-box glass"
-                            style="margin-top: 30px; padding: 25px; border: 1px solid rgba(255,255,255,0.05);">
-                            <h3 style="font-size: 15px; margin-bottom: 20px; color: var(--accent);">⚙️ Configuración
-                                SMTP (Admin)</h3>
-                            <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                                <div class="form-group">
-                                    <label>Host SMTP</label>
-                                    <input type="text" id="smtp-host" placeholder="smtp.ejemplo.com">
-                                </div>
-                                <div class="form-group">
-                                    <label>Puerto SMTP</label>
-                                    <input type="number" id="smtp-port" placeholder="465">
-                                </div>
-                                <div class="form-group">
-                                    <label>Seguridad (Security)</label>
-                                    <select id="smtp-security">
-                                        <option value="SSL">SSL (Recom. 465)</option>
-                                        <option value="STARTTLS">STARTTLS (Recom. 587)</option>
-                                        <option value="NONE">NONE</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label>Usuario SMTP</label>
-                                    <input type="text" id="smtp-user" placeholder="usuario@ejemplo.com">
-                                </div>
-                                <div class="form-group">
-                                    <label>Contraseña SMTP</label>
-                                    <input type="password" id="smtp-pass" placeholder="********">
-                                    <small style="color: var(--text-secondary); font-size: 11px;">Escribe para
-                                        cambiarla, deja ******** para mantener.</small>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div style="margin-top: 30px; text-align: right;">
-                            <select id="handoff-tenant-select"
-                                style="background: var(--bg-card); color: white; border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px;">
-                                <option value="">Seleccionar Tenant...</option>
-                            </select>
-                            <button class="btn btn-primary" onclick="saveHandoffSettings()">
-                                <span>💾 Guardar Configuración de Derivación</span>
-                            </button>
-                        </div>
-                    </div>
+                    <!-- ... existing handoff content ... -->
+                    <!-- collapsed for brevity in prompt context only, actual replacement must match file -->
                 </div>
             </section>
 
-            <!-- New view: Consola -->
-            <section id="view-console" class="view">
+            <!-- New view: Agents (Nexus v3) -->
+            <section id="view-agents" class="view">
                 <div class="view-header">
-                    <h1 class="view-title">Consola del Sistema</h1>
-                    <div class="console-controls">
-                        <button class="btn-secondary" onclick="clearConsole()">🗑️ Limpiar</button>
-                        <button class="btn-secondary" onclick="toggleAutoScroll()">📜 Auto-scroll</button>
-                        <button class="btn-primary" onclick="startConsoleStreaming()">▶️ Iniciar Streaming</button>
-                        <button class="btn-secondary" onclick="stopConsoleStreaming()">⏸️ Detener</button>
-                    </div>
+                    <h1 class="view-title">Gestión de Agentes IA</h1>
+                    <button class="btn-primary" onclick="openModal('agent-modal')">+ Nuevo Agente</button>
                 </div>
-                <div class="console-filters glass">
-                    <div class="filter-group">
-                        <label>Filtro por Severidad:</label>
-                        <select id="severity-filter" onchange="applyConsoleFilters()">
-                            <option value="">Todas</option>
-                            <option value="debug">Debug</option>
-                            <option value="info">Info</option>
-                            <option value="warn">Warning</option>
-                            <option value="error">Error</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>Filtro por Tipo:</label>
-                        <input type="text" id="type-filter" placeholder="Ej: message.incoming"
-                            onkeyup="applyConsoleFilters()">
-                    </div>
-                    <div class="filter-group">
-                        <label>Buscar:</label>
-                        <input type="text" id="search-filter" placeholder="Buscar en eventos..."
-                            onkeyup="applyConsoleFilters()">
-                    </div>
-                </div>
-                <div class="console-container glass">
-                    <div class="console-output" id="console-output">
-                        <!-- Real-time events will appear here -->
-                        <div class="console-welcome">
-                            <div class="welcome-icon">💻</div>
-                            <h3>Consola del Sistema CodExy</h3>
-                            <p>Haz clic en "Iniciar Streaming" para ver eventos en tiempo real del sistema.</p>
-                            <div class="console-tips">
-                                <strong>Tips de Debug:</strong>
-                                <ul>
-                                    <li>📱 <strong>WhatsApp:</strong> Eventos de mensajes entrantes/salientes</li>
-                                    <li>🤖 <strong>IA:</strong> Procesamiento de respuestas del agente</li>
-                                    <li>🛠️ <strong>Herramientas:</strong> Llamadas a APIs externas</li>
-                                    <li>⚠️ <strong>Errores:</strong> Problemas y excepciones</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
 
-            <!-- Welcome / Connect View -->
-            <section id="view-welcome" class="view active">
-                <div class="welcome-container">
-                    <h1 class="view-title">Bienvenido a CodExy</h1>
-                    <p class="welcome-description">Verifica la conexión y configura tu bot de WhatsApp para Tienda Nube.
+                <div class="glass" style="margin-bottom: 20px; padding: 15px; border-left: 4px solid var(--accent);">
+                    <h4 style="margin: 0 0 10px 0;">🧠 Protocolo Omega Activo</h4>
+                    <p style="font-size: 0.9em; color: #aaa; margin: 0;">Los agentes se inyectan dinámicamente en el
+                        <code>agent_service</code>. Configura aquí los prompts y herramientas.
                     </p>
+                </div>
 
-                    <div class="welcome-cards">
-                        <!-- Card 1: Conectar API -->
-                        <div class="welcome-card glass">
-                            <div class="card-icon">🔗</div>
-                            <h3>Conectar API</h3>
-                            <p>Verifica la conexión con el orquestador</p>
-                            <div class="card-status" id="api-status">Pendiente</div>
-                            <button class="btn-primary" onclick="connectInstance()">Conectar</button>
-                        </div>
-
-                        <!-- Card 2: Webhook URL -->
-                        <div class="welcome-card glass">
-                            <div class="card-icon">📡</div>
-                            <h3>Webhook URL</h3>
-                            <p>URL para configurar en YCloud</p>
-                            <div class="webhook-display">
-                                <code id="webhook-url-display">Cargando...</code>
-                                <button class="btn-secondary" onclick="copyWebhookUrl()">Copiar</button>
-                            </div>
-                            <button class="btn-secondary" onclick="verifyWebhook()">Verificar Entrada</button>
-                        </div>
-
-                        <!-- Card 3: Checklist -->
-                        <div class="welcome-card glass">
-                            <div class="card-icon">✅</div>
-                            <h3>Estado de Configuración</h3>
-                            <div class="checklist">
-                                <div class="check-item" id="check-tenant">
-                                    <span class="check-status">❌</span> Tienda configurada
-                                </div>
-                                <div class="check-item" id="check-tiendanube">
-                                    <span class="check-status">❌</span> Tienda Nube conectada
-                                </div>
-                                <div class="check-item" id="check-openai">
-                                    <span class="check-status">❌</span> OpenAI configurado
-                                </div>
-                                <div class="check-item" id="check-ycloud">
-                                    <span class="check-status">⭕</span> WhatsApp YCloud ok
-                                </div>
-                                <div class="check-item" id="check-meta">
-                                    <span class="check-status">⭕</span> WhatsApp Meta API ok
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="welcome-actions">
-                        <button class="btn-primary" onclick="startSetupWizard()">Comenzar Configuración</button>
-                    </div>
+                <div class="tools-table-container glass">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>WhatsApp</th>
+                                <th>Tenant</th>
+                                <th>Modelo</th>
+                                <th>Estado</th>
+                                <th>Herramientas</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="agents-list">
+                            <!-- JS populated -->
+                            <tr>
+                                <td colspan="7" class="empty-row">Cargando agentes...</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </section>
+            <div class="policy-box glass" style="padding: 20px;">
+                <h3 style="font-size: 15px; margin-bottom: 15px; color: var(--accent);">🎯 ¿Cuándo
+                    Derivar? (Policy)</h3>
+                <div class="checkbox-group" style="display: flex; flex-direction: column; gap: 10px;">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="rule-fitting"> Solicitud de Fitting / Asesora / Turno
+                    </label>
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="rule-reclamo"> Reclamos o tono negativo
+                    </label>
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="rule-dolor"> Dolor / Lesión / Incomodidad
+                    </label>
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="rule-talle"> Ambigüedad de talle no resuelta
+                    </label>
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="rule-especial"> Coordinación especial / Retiros
+                    </label>
+                </div>
+            </div>
+            <div class="policy-box glass" style="padding: 20px;">
+                <h3 style="font-size: 15px; margin-bottom: 15px; color: var(--accent-secondary);">✉️
+                    ¿Qué incluir en el Email?</h3>
+                <div class="checkbox-group" style="display: flex; flex-direction: column; gap: 10px;">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="ctx-name" checked> Nombre del usuario
+                    </label>
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="ctx-phone" checked> Teléfono / WhatsApp ID
+                    </label>
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="ctx-history"> Resumen de últimos mensajes
+                    </label>
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="ctx-id"> Conversation ID & Timestamp
+                    </label>
+                </div>
+            </div>
+    </div>
 
-            <!-- Setup Wizard View - Session-Based for Self-Hosted -->
-            <section id="view-setup" class="view">
-                <div class="setup-container">
-                    <h1 class="view-title">Asistente de Despliegue - CodExy</h1>
-                    <p class="welcome-description">Verificaremos tu infraestructura antes de configurar WhatsApp y Meta.
-                        Esto garantiza que todo funcione correctamente en tu entorno self-hosted.</p>
+    <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div class="form-group full">
+            <label>Instrucciones Adicionales (AI Instructions)</label>
+            <textarea id="handoff-instructions" rows="3"
+                placeholder="Instrucciones específicas adicionales para el agente..."></textarea>
+        </div>
+        <div class="form-group">
+            <label>Email de Destino (Recepción)</label>
+            <input type="email" id="handoff-target-email" placeholder="ejemplo@correo.com">
+        </div>
+        <div class="form-group">
+            <label>Mensaje al Cliente (Feedback)</label>
+            <input type="text" id="handoff-message" placeholder="Te derivo con una persona del equipo...">
+        </div>
+    </div>
 
-                    <!-- Dynamic content loaded by JavaScript -->
-                    <div id="setup-content">
-                        <div class="setup-loading">
-                            <div class="progress-spinner"></div>
-                            <h3>Iniciando verificación...</h3>
-                            <p>Preparando el asistente de despliegue</p>
-                        </div>
+    <!-- SMTP Config Box -->
+    <div class="smtp-config-box glass"
+        style="margin-top: 30px; padding: 25px; border: 1px solid rgba(255,255,255,0.05);">
+        <h3 style="font-size: 15px; margin-bottom: 20px; color: var(--accent);">⚙️ Configuración
+            SMTP (Admin)</h3>
+        <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div class="form-group">
+                <label>Host SMTP</label>
+                <input type="text" id="smtp-host" placeholder="smtp.ejemplo.com">
+            </div>
+            <div class="form-group">
+                <label>Puerto SMTP</label>
+                <input type="number" id="smtp-port" placeholder="465">
+            </div>
+            <div class="form-group">
+                <label>Seguridad (Security)</label>
+                <select id="smtp-security">
+                    <option value="SSL">SSL (Recom. 465)</option>
+                    <option value="STARTTLS">STARTTLS (Recom. 587)</option>
+                    <option value="NONE">NONE</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Usuario SMTP</label>
+                <input type="text" id="smtp-user" placeholder="usuario@ejemplo.com">
+            </div>
+            <div class="form-group">
+                <label>Contraseña SMTP</label>
+                <input type="password" id="smtp-pass" placeholder="********">
+                <small style="color: var(--text-secondary); font-size: 11px;">Escribe para
+                    cambiarla, deja ******** para mantener.</small>
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top: 30px; text-align: right;">
+        <select id="handoff-tenant-select"
+            style="background: var(--bg-card); color: white; border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px;">
+            <option value="">Seleccionar Tenant...</option>
+        </select>
+        <button class="btn btn-primary" onclick="saveHandoffSettings()">
+            <span>💾 Guardar Configuración de Derivación</span>
+        </button>
+    </div>
+    </div>
+    </div>
+    </section>
+
+    <!-- New view: Consola -->
+    <section id="view-console" class="view">
+        <div class="view-header">
+            <h1 class="view-title">Consola del Sistema</h1>
+            <div class="console-controls">
+                <button class="btn-secondary" onclick="clearConsole()">🗑️ Limpiar</button>
+                <button class="btn-secondary" onclick="toggleAutoScroll()">📜 Auto-scroll</button>
+                <button class="btn-primary" onclick="startConsoleStreaming()">▶️ Iniciar Streaming</button>
+                <button class="btn-secondary" onclick="stopConsoleStreaming()">⏸️ Detener</button>
+            </div>
+        </div>
+        <div class="console-filters glass">
+            <div class="filter-group">
+                <label>Filtro por Severidad:</label>
+                <select id="severity-filter" onchange="applyConsoleFilters()">
+                    <option value="">Todas</option>
+                    <option value="debug">Debug</option>
+                    <option value="info">Info</option>
+                    <option value="warn">Warning</option>
+                    <option value="error">Error</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Filtro por Tipo:</label>
+                <input type="text" id="type-filter" placeholder="Ej: message.incoming" onkeyup="applyConsoleFilters()">
+            </div>
+            <div class="filter-group">
+                <label>Buscar:</label>
+                <input type="text" id="search-filter" placeholder="Buscar en eventos..."
+                    onkeyup="applyConsoleFilters()">
+            </div>
+        </div>
+        <div class="console-container glass">
+            <div class="console-output" id="console-output">
+                <!-- Real-time events will appear here -->
+                <div class="console-welcome">
+                    <div class="welcome-icon">💻</div>
+                    <h3>Consola del Sistema CodExy</h3>
+                    <p>Haz clic en "Iniciar Streaming" para ver eventos en tiempo real del sistema.</p>
+                    <div class="console-tips">
+                        <strong>Tips de Debug:</strong>
+                        <ul>
+                            <li>📱 <strong>WhatsApp:</strong> Eventos de mensajes entrantes/salientes</li>
+                            <li>🤖 <strong>IA:</strong> Procesamiento de respuestas del agente</li>
+                            <li>🛠️ <strong>Herramientas:</strong> Llamadas a APIs externas</li>
+                            <li>⚠️ <strong>Errores:</strong> Problemas y excepciones</li>
+                        </ul>
                     </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-                    <div class="setup-info">
-                        <div class="info-card glass">
-                            <h4>🔍 ¿Qué verifica este asistente?</h4>
-                            <ul>
-                                <li>✅ Configuración de dominio público y TLS</li>
-                                <li>✅ Conectividad de webhooks y APIs</li>
-                                <li>✅ Base de datos y persistencia</li>
-                                <li>✅ Reloj del servidor (NTP)</li>
-                                <li>✅ Credenciales requeridas</li>
-                                <li>✅ Reverse proxy y puertos</li>
-                            </ul>
+    <!-- Welcome / Connect View -->
+    <section id="view-welcome" class="view active">
+        <div class="welcome-container">
+            <h1 class="view-title">Bienvenido a CodExy</h1>
+            <p class="welcome-description">Verifica la conexión y configura tu bot de WhatsApp para Tienda Nube.
+            </p>
+
+            <div class="welcome-cards">
+                <!-- Card 1: Conectar API -->
+                <div class="welcome-card glass">
+                    <div class="card-icon">🔗</div>
+                    <h3>Conectar API</h3>
+                    <p>Verifica la conexión con el orquestador</p>
+                    <div class="card-status" id="api-status">Pendiente</div>
+                    <button class="btn-primary" onclick="connectInstance()">Conectar</button>
+                </div>
+
+                <!-- Card 2: Webhook URL -->
+                <div class="welcome-card glass">
+                    <div class="card-icon">📡</div>
+                    <h3>Webhook URL</h3>
+                    <p>URL para configurar en YCloud</p>
+                    <div class="webhook-display">
+                        <code id="webhook-url-display">Cargando...</code>
+                        <button class="btn-secondary" onclick="copyWebhookUrl()">Copiar</button>
+                    </div>
+                    <button class="btn-secondary" onclick="verifyWebhook()">Verificar Entrada</button>
+                </div>
+
+                <!-- Card 3: Checklist -->
+                <div class="welcome-card glass">
+                    <div class="card-icon">✅</div>
+                    <h3>Estado de Configuración</h3>
+                    <div class="checklist">
+                        <div class="check-item" id="check-tenant">
+                            <span class="check-status">❌</span> Tienda configurada
                         </div>
-
-                        <div class="info-card glass">
-                            <h4>🎯 ¿Por qué es importante?</h4>
-                            <p>En despliegues self-hosted, los problemas más comunes son de infraestructura, no de
-                                código. Este asistente previene configuraciones rotas y reduce tickets de soporte.</p>
+                        <div class="check-item" id="check-tiendanube">
+                            <span class="check-status">❌</span> Tienda Nube conectada
+                        </div>
+                        <div class="check-item" id="check-openai">
+                            <span class="check-status">❌</span> OpenAI configurado
+                        </div>
+                        <div class="check-item" id="check-ycloud">
+                            <span class="check-status">⭕</span> WhatsApp YCloud ok
+                        </div>
+                        <div class="check-item" id="check-meta">
+                            <span class="check-status">⭕</span> WhatsApp Meta API ok
                         </div>
                     </div>
                 </div>
-            </section>
-        </main>
+            </div>
+
+            <div class="welcome-actions">
+                <button class="btn-primary" onclick="startSetupWizard()">Comenzar Configuración</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Setup Wizard View - Session-Based for Self-Hosted -->
+    <section id="view-setup" class="view">
+        <div class="setup-container">
+            <h1 class="view-title">Asistente de Despliegue - CodExy</h1>
+            <p class="welcome-description">Verificaremos tu infraestructura antes de configurar WhatsApp y Meta.
+                Esto garantiza que todo funcione correctamente en tu entorno self-hosted.</p>
+
+            <!-- Dynamic content loaded by JavaScript -->
+            <div id="setup-content">
+                <div class="setup-loading">
+                    <div class="progress-spinner"></div>
+                    <h3>Iniciando verificación...</h3>
+                    <p>Preparando el asistente de despliegue</p>
+                </div>
+            </div>
+
+            <div class="setup-info">
+                <div class="info-card glass">
+                    <h4>🔍 ¿Qué verifica este asistente?</h4>
+                    <ul>
+                        <li>✅ Configuración de dominio público y TLS</li>
+                        <li>✅ Conectividad de webhooks y APIs</li>
+                        <li>✅ Base de datos y persistencia</li>
+                        <li>✅ Reloj del servidor (NTP)</li>
+                        <li>✅ Credenciales requeridas</li>
+                        <li>✅ Reverse proxy y puertos</li>
+                    </ul>
+                </div>
+
+                <div class="info-card glass">
+                    <h4>🎯 ¿Por qué es importante?</h4>
+                    <p>En despliegues self-hosted, los problemas más comunes son de infraestructura, no de
+                        código. Este asistente previene configuraciones rotas y reduce tickets de soporte.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    </main>
     </div>
 
     <!-- Sidebar Toggle Button (Mobile) -->
@@ -1136,6 +1156,67 @@
             <div class="modal-footer">
                 <button class="btn-secondary" onclick="closeModal('diagnostics-modal')">Cerrar</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal for Agents (Nexus v3) -->
+    <div id="agent-modal" class="modal-overlay">
+        <div class="modal glass" style="max-width: 800px;">
+            <h2>Configurar Agente IA</h2>
+            <form id="agent-form">
+                <input type="hidden" name="agent_id">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Nombre del Agente</label>
+                        <input type="text" name="name" required placeholder="e.g. Asistente de Ventas">
+                    </div>
+                    <div class="form-group">
+                        <label>Tenant</label>
+                        <select name="tenant_id" id="agent-tenant-select" required>
+                            <option value="">Seleccionar tenant...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Número de WhatsApp</label>
+                        <input type="text" name="whatsapp_number" required placeholder="54911...">
+                        <small style="color: #666;">Formato internacional sin +</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Modelo</label>
+                        <select name="model_provider">
+                            <option value="openai">OpenAI (GPT-4o)</option>
+                            <option value="anthropic">Anthropic (Claude 3.5)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group full">
+                        <label>System Prompt Template</label>
+                        <textarea name="system_prompt_template" rows="10"
+                            placeholder="Eres un experto asistente de ventas para {store_name}..."
+                            style="font-family: monospace; font-size: 0.9em;"></textarea>
+                    </div>
+
+                    <div class="form-group full">
+                        <label>Herramientas Habilitadas</label>
+                        <div id="tools-checklist"
+                            style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+                            <!-- Populated by JS -->
+                            <labe><input type="checkbox" value="loading" disabled> Cargando herramientas...</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" name="is_active" checked>
+                            <span>Agente Activo</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" onclick="closeModal('agent-modal')">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar Agente</button>
+                </div>
+            </form>
         </div>
     </div>
 

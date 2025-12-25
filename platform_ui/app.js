@@ -85,6 +85,7 @@ function showView(viewId, event = null) {
     if (viewId === 'analytics') loadAnalytics();
     if (viewId === 'console') loadConsoleEvents();
     if (viewId === 'chats') loadChats();
+    if (viewId === 'agents') loadAgents();
 }
 
 // Modal handling
@@ -1288,8 +1289,158 @@ document.getElementById('tool-form').addEventListener('submit', async (e) => {
     }
 });
 
+// --- AGENT MANAGEMENT (Nexus v3) ---
+
+async function loadAgents() {
+    const agents = await adminFetch('/admin/agents');
+    const container = document.getElementById('agents-list');
+    container.innerHTML = '';
+
+    if (agents && agents.length > 0) {
+        agents.forEach(a => {
+            const tr = document.createElement('tr');
+            const toolsCount = a.enabled_tools ? a.enabled_tools.length : 0;
+            const statusBadge = a.is_active ?
+                '<span class="status-badge ok">Activo</span>' :
+                '<span class="status-badge error">Inactivo</span>';
+
+            tr.innerHTML = `
+                <td><strong>${a.name}</strong></td>
+                <td>${a.whatsapp_number}</td>
+                <td>ID: ${a.tenant_id}</td>
+                <td>${a.model_provider} / ${a.model_version}</td>
+                <td>${statusBadge}</td>
+                <td>${toolsCount} tools</td>
+                <td>
+                    <button class="btn-secondary" style="padding: 5px 12px; font-size: 12px" onclick="editAgent('${a.id}')">Editar</button>
+                    <button class="btn-delete" style="padding: 5px 12px; font-size: 12px" onclick="deleteAgent('${a.id}')">Eliminar</button>
+                </td>
+            `;
+            container.appendChild(tr);
+        });
+    } else {
+        container.innerHTML = '<tr><td colspan="7" class="empty-row">No hay agentes configurados. Crea el primero.</td></tr>';
+    }
+}
+
+async function editAgent(agentId) {
+    // 1. Load Tenants for selector
+    await loadTenantSelector('agent-tenant-select');
+
+    // 2. Load Tools for checklist
+    await loadToolsChecklist();
+
+    if (agentId) {
+        // Edit Mode
+        const agents = await adminFetch('/admin/agents');
+        const agent = agents.find(a => a.id === agentId);
+        if (agent) {
+            const form = document.getElementById('agent-form');
+            form.elements['agent_id'].value = agent.id;
+            form.elements['name'].value = agent.name;
+            form.elements['role'].value = agent.role || 'sales';
+            form.elements['tenant_id'].value = agent.tenant_id;
+            form.elements['whatsapp_number'].value = agent.whatsapp_number || '';
+            form.elements['model_provider'].value = agent.model_provider;
+            form.elements['temperature'].value = agent.temperature || 0.3;
+            document.getElementById('temp-val').innerText = agent.temperature || 0.3;
+            form.elements['system_prompt_template'].value = agent.system_prompt_template || '';
+            form.elements['is_active'].checked = agent.is_active;
+
+            // Check tools
+            const checkboxes = document.querySelectorAll('#tools-checklist input');
+            checkboxes.forEach(cb => {
+                cb.checked = agent.enabled_tools && agent.enabled_tools.includes(cb.value);
+            });
+        }
+    } else {
+        // Create Mode (Clear form)
+        document.getElementById('agent-form').reset();
+        document.querySelector('#agent-form [name="agent_id"]').value = '';
+    }
+
+    openModal('agent-modal');
+}
+
+async function loadToolsChecklist() {
+    const tools = await adminFetch('/admin/tools');
+    const container = document.getElementById('tools-checklist');
+    container.innerHTML = '';
+
+    if (tools) {
+        tools.forEach(t => {
+            const label = document.createElement('label');
+            label.style.display = 'flex';
+            label.style.alignItems = 'center';
+            label.style.gap = '5px';
+            label.style.cursor = 'pointer';
+            label.style.fontSize = '0.9em';
+
+            label.innerHTML = `
+                <input type="checkbox" name="enabled_tools" value="${t.name}">
+                <span>${t.name}</span>
+            `;
+            container.appendChild(label);
+        });
+    }
+}
+
+async function deleteAgent(id) {
+    if (confirm("¿Estás seguro de eliminar este agente?")) {
+        try {
+            await adminFetch(`/admin/agents/${id}`, 'DELETE');
+            showNotification(true, "Agente Eliminado", "El agente ha sido eliminado correctamente.");
+            loadAgents();
+        } catch (e) {
+            showNotification(false, "Error", "No se pudo eliminar el agente.");
+        }
+    }
+}
+
+// Agent Form Submit
+document.getElementById('agent-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData.entries());
+
+    // Process Checkboxes
+    const tools = [];
+    document.querySelectorAll('#tools-checklist input:checked').forEach(cb => tools.push(cb.value));
+
+    const payload = {
+        name: data.name,
+        role: data.role,
+        tenant_id: parseInt(data.tenant_id),
+        whatsapp_number: data.whatsapp_number || null, // Allow null
+        model_provider: data.model_provider,
+        temperature: parseFloat(data.temperature),
+        system_prompt_template: data.system_prompt_template,
+        enabled_tools: tools,
+        is_active: data.is_active === 'on'
+    };
+
+    const agentId = data.agent_id;
+    const method = agentId ? 'PUT' : 'POST';
+    const url = agentId ? `/admin/agents/${agentId}` : '/admin/agents';
+
+    try {
+        await adminFetch(url, method, payload);
+        showNotification(true, "Agente Guardado", "La configuración del agente se ha guardado.");
+        closeModal('agent-modal');
+        loadAgents();
+    } catch (e) {
+        showNotification(false, "Error", `No se pudo guardar: ${e.message}`);
+    }
+});
+
+
 // Tour System
 const tourSteps = [
+    {
+        icon: "🤖",
+        title: "Agentes IA (Nexus v3)",
+        content: "Configura tus agentes inteligentes. Define sus prompts, asigna herramientas y vinculálos a tus números de WhatsApp. El sistema inyectará esta configuración dinámicamente en cada mensaje."
+    },
     {
         icon: "📊",
         title: "Panel General",
