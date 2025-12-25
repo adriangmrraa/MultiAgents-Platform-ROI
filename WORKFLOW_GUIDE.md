@@ -66,7 +66,7 @@ El sistema incluye herramientas de diagnóstico en tiempo real bajo el menú **"
 ### Caso: "Veo datos viejos o pantalla blanca"
 *   Hemos actualizado la versión. Nginx debería forzar la recarga, pero si persiste, pide al usuario hacer `Ctrl + Shift + R` (Hard Reload).
 
----
+--------
 
 ## 5. Mantenimiento de Base de Datos
 
