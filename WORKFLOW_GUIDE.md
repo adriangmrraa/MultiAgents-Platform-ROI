@@ -86,7 +86,7 @@ EasyPanel asigna nombres de host automáticos dentro del proyecto. Configura las
 Para
 
 
-**Vía Base de Datos (Recomendado):**
+**Víaa Base de Datos (Recomendado):**
 1.  Inserta una fila en la tabla `tenants`.
 2.  Datos obligatorios:
     *   `store_name`: Nombre visible.
