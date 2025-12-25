@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
-import { ArrowRight, CheckCircle, Smartphone, Globe, Terminal, Loader2, Sparkles, BarChart3, Palette, FileText, Image } from 'lucide-react';
+import { ArrowRight, CheckCircle, Smartphone, Globe, Terminal, Loader2, Sparkles, BarChart3, Palette, FileText, Image, Activity, Brain } from 'lucide-react';
 
 // --- Components (Minimalist for MVP) ---
 
-const FuturisticLoader = ({ message, percent }: { message: string, percent: number }) => (
+const FuturisticLoader = ({ message, percent, status }: { message?: string, percent: number, status?: string }) => (
     <div className="futuristic-loader fade-in">
         <div className="relative flex items-center justify-center">
             <Loader2 className="animate-spin text-cyan-400" size={64} style={{ opacity: 0.5 }} />
             <div className="absolute text-white font-bold text-sm">{Math.round(percent)}%</div>
         </div>
-        <p className="mt-6 text-cyan-400 font-mono tracking-widest text-lg">{message}</p>
+        <p className="mt-6 text-cyan-400 font-mono tracking-widest text-lg">{message || status || "LOADING..."}</p>
 
         {/* Progress Bar */}
         <div className="w-64 h-1 bg-slate-800 rounded mt-4 overflow-hidden relative">
@@ -51,6 +51,7 @@ export const SetupExperience: React.FC = () => {
     const [step, setStep] = useState<'connect' | 'igniting' | 'dashboard'>('connect');
     const [logs, setLogs] = useState<string[]>([]);
     const [assets, setAssets] = useState<any[]>([]);
+    const [percent, setPercent] = useState(0);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -70,20 +71,12 @@ export const SetupExperience: React.FC = () => {
         setStep('igniting');
 
         // 1. Ignite the Engine
-        // Note: We use the hook which uses the updated base URL (BFF:3000)
-        // But for SSE we need the raw URL.
-
         try {
             // A. Trigger Ignition (Fire and Forget)
             const payload = { ...formData, tenant_id: formData.bot_phone_number }; // Using phone as temporary tenant_id
             await fetchApi('/api/engine/ignite', { method: 'POST', body: payload });
 
             // B. Connect to Stream (BFF)
-            // We need to resolve the ABSOLUTE URL for EventSource because it doesn't support relative paths well with headers (though standard EventSource does support relative).
-            // Since we updated useApi to return absolute 'http://localhost:3000', we can try to reuse that logic or just rely on the API_BASE if exported.
-            // For now, let's assume relative path works if served from same domain, OR construct it.
-            // Let's assume localhost:3000 for development as per useApi.
-
             const streamUrl = `http://localhost:3000/api/engine/stream/${formData.bot_phone_number}`;
             const evtSource = new EventSource(streamUrl);
 
@@ -104,23 +97,29 @@ export const SetupExperience: React.FC = () => {
                 const asset = JSON.parse(e.data);
                 setAssets(prev => [...prev, asset]);
                 setLogs(prev => [...prev, ">> ASSET: Branding Manual Generated."]);
+                setPercent(prev => Math.min(prev + 25, 100));
             });
             evtSource.addEventListener("script", (e: any) => {
                 const asset = JSON.parse(e.data);
                 setAssets(prev => [...prev, asset]);
+                setLogs(prev => [...prev, ">> ASSET: Sales Scripts Hydrated."]);
+                setPercent(prev => Math.min(prev + 25, 100));
             });
             evtSource.addEventListener("visuals", (e: any) => {
                 const asset = JSON.parse(e.data);
                 setAssets(prev => [...prev, asset]);
+                setLogs(prev => [...prev, ">> ASSET: Visual Concepts Rendered."]);
+                setPercent(prev => Math.min(prev + 25, 100));
             });
             evtSource.addEventListener("roi", (e: any) => {
                 const asset = JSON.parse(e.data);
                 setAssets(prev => [...prev, asset]);
+                setLogs(prev => [...prev, ">> ASSET: ROI Analysis Verified."]);
+                setPercent(prev => Math.min(prev + 25, 100));
             });
 
-            // Transition to dashboard view after a few seconds or immediately?
-            // "The Awakening" implies watching the process.
-            setTimeout(() => setStep('dashboard'), 1500);
+            // Auto transition to dashboard logic if needed, but staying in igniting to show progress is better.
+            // setStep('dashboard'); // Optional later
 
         } catch (e: any) {
             console.error(e);
@@ -172,91 +171,59 @@ export const SetupExperience: React.FC = () => {
             {(step === 'igniting' || step === 'dashboard') && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 400px', gap: '20px', maxWidth: '1400px', margin: '0 auto', height: 'calc(100vh - 40px)' }}>
 
-                    const [percent, setPercent] = useState(0);
-
-    // ... (inside handleConnect, update event listeners)
-            evtSource.addEventListener("branding", (e: any) => {
-                const asset = JSON.parse(e.data);
-                setAssets(prev => [...prev, asset]);
-                setLogs(prev => [...prev, ">> ASSET: Branding Manual Completed."]);
-                setPercent(prev => Math.min(prev + 25, 100)); // 4 Steps approx
-            });
-            evtSource.addEventListener("script", (e: any) => {
-                const asset = JSON.parse(e.data);
-                setAssets(prev => [...prev, asset]);
-                setLogs(prev => [...prev, ">> ASSET: Sales Scripts Hydrated."]);
-                setPercent(prev => Math.min(prev + 25, 100));
-            });
-            evtSource.addEventListener("visuals", (e: any) => {
-                const asset = JSON.parse(e.data);
-                setAssets(prev => [...prev, asset]);
-                setLogs(prev => [...prev, ">> ASSET: Visual Concepts Rendered."]);
-                setPercent(prev => Math.min(prev + 25, 100));
-            });
-            evtSource.addEventListener("roi", (e: any) => {
-                const asset = JSON.parse(e.data);
-                setAssets(prev => [...prev, asset]);
-                setLogs(prev => [...prev, ">> ASSET: ROI Analysis Verified."]);
-                setPercent(prev => Math.min(prev + 25, 100));
-            });
-
-                    // ...
-
-                    {/* Left Panel: Assets Dashboard */}
-                    <div className="dashboard-content fade-in">
-                        <h1 className="text-2xl font-bold mb-6 flex items-center">
-                            <Globe className="mr-3 text-cyan-400" />
-                            Mission Control: {formData.store_name}
-                        </h1>
-
-                        {assets.length < 4 ? (
-                            <FuturisticLoader message={`HYDRATING SYSTEM...`} percent={percent} />
-                        ) : (
-                            <div className="grid gap-4">
-                                {/* ... map assets ... */}
-                                {assets.map((asset, i) => (
-                                    <AssetCard key={i} title={asset.asset_type?.toUpperCase() || 'ASSET'} icon={CheckCircle}>
-                                        <pre style={{
-                                            background: 'rgba(0,0,0,0.3)',
-                                            padding: '10px',
-                                            borderRadius: '8px',
-                                            overflowX: 'auto',
-                                            fontSize: '12px',
-                                            color: '#94a3b8'
-                                        }}>
-                                            {JSON.stringify(asset.content || asset.data, null, 2)}
-                                        </pre>
-                                    </AssetCard>
-                                ))}
+                    {/* Left Canvas (Assets) */}
+                    <div className="bg-slate-900/50 rounded-lg p-6 overflow-y-auto">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold flex items-center gap-2">
+                                <Activity className="text-cyan-400" />
+                                Business Canvas
+                            </h2>
+                            <div className="text-sm text-cyan-400/60 font-mono">
+                                STATUS: {step === 'igniting' ? 'GENERATING...' : 'ONLINE'}
                             </div>
-                        )}
-                    </div>
-
-                    {/* Right Panel: Thinking Logs (Matrix Style) */}
-                    <div className="logs-panel" style={{
-                        background: '#0f172a',
-                        borderLeft: '1px solid #1e293b',
-                        padding: '20px',
-                        fontFamily: 'monospace',
-                        display: 'flex',
-                        flexDirection: 'column'
-                    }}>
-                        <div className="flex items-center mb-4 text-emerald-400">
-                            <Terminal size={18} className="mr-2" />
-                            <span className="font-bold tracking-wider">SYSTEM LOGS</span>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                        {/* Loader with Percentage */}
+                        {step === 'igniting' && (assets.length < 4) && (
+                            <FuturisticLoader percent={percent} status={logs[logs.length - 1] || "Initializing..."} />
+                        )}
+
+                        {/* Asset Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 mt-8">
+                            {/* Render Assets */}
+                            {assets.map((a, i) => (
+                                <AssetCard key={i} title={a.asset_type?.toUpperCase() || 'ASSET'} icon={CheckCircle}>
+                                    <pre style={{
+                                        background: 'rgba(0,0,0,0.3)',
+                                        padding: '10px',
+                                        borderRadius: '8px',
+                                        overflowX: 'auto',
+                                        fontSize: '12px',
+                                        color: '#94a3b8'
+                                    }}>
+                                        {JSON.stringify(a.content || a, null, 2)}
+                                    </pre>
+                                </AssetCard>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Right Panel (Logs) */}
+                    <div className="bg-black border-l border-white/10 flex flex-col">
+                        <div className="p-4 border-b border-white/10 bg-slate-900/80 backdrop-blur">
+                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                <Brain size={16} /> Thinking Process
+                            </h3>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 font-mono text-xs text-slate-400 space-y-2">
                             {logs.map((log, i) => (
-                                <div key={i} className="text-xs border-l-2 border-emerald-500/30 pl-2 py-1">
-                                    <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span>
-                                    <span className="text-emerald-400 ml-2">{log}</span>
+                                <div key={i} className="border-l-2 border-cyan-500/20 pl-2">
+                                    <span className="text-cyan-600">[{new Date().toLocaleTimeString()}]</span> {log}
                                 </div>
                             ))}
                             <div ref={messagesEndRef} />
                         </div>
                     </div>
-
                 </div>
             )}
         </div>
