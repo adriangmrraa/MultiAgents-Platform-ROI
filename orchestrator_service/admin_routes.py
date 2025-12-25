@@ -74,8 +74,8 @@ async def sync_environment():
     if store_name and store_phone:
         store_id = os.getenv("TIENDANUBE_STORE_ID", "")
         access_token = os.getenv("TIENDANUBE_ACCESS_TOKEN", "")
-        store_loc = os.getenv("STORE_LOCATION", "Paraná, Entre Ríos, Argentina")
-        store_web = os.getenv("STORE_WEBSITE", "https://www.pointecoach.shop/")
+        store_loc = os.getenv("STORE_LOCATION", "")
+        store_web = os.getenv("STORE_WEBSITE", "")
         store_desc = os.getenv("STORE_DESCRIPTION", "")
         store_know = os.getenv("STORE_CATALOG_KNOWLEDGE", "")
         
@@ -89,6 +89,11 @@ async def sync_environment():
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (bot_phone_number) 
             DO UPDATE SET 
+                store_name = EXCLUDED.store_name,
+                store_location = CASE WHEN EXCLUDED.store_location <> '' THEN EXCLUDED.store_location ELSE tenants.store_location END,
+                store_website = CASE WHEN EXCLUDED.store_website <> '' THEN EXCLUDED.store_website ELSE tenants.store_website END,
+                store_description = CASE WHEN EXCLUDED.store_description <> '' THEN EXCLUDED.store_description ELSE tenants.store_description END,
+                store_catalog_knowledge = CASE WHEN EXCLUDED.store_catalog_knowledge <> '' THEN EXCLUDED.store_catalog_knowledge ELSE tenants.store_catalog_knowledge END,
                 tiendanube_store_id = CASE WHEN EXCLUDED.tiendanube_store_id <> '' THEN EXCLUDED.tiendanube_store_id ELSE tenants.tiendanube_store_id END,
                 tiendanube_access_token = CASE WHEN EXCLUDED.tiendanube_access_token <> '' THEN EXCLUDED.tiendanube_access_token ELSE tenants.tiendanube_access_token END,
                 updated_at = NOW()

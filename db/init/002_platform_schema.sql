@@ -42,22 +42,4 @@ CREATE TABLE IF NOT EXISTS system_events (
     occurred_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. Insert Default Tenant (Pointe Coach)
-INSERT INTO tenants (
-    store_name, 
-    bot_phone_number, 
-    store_location, 
-    store_website,
-    store_description,
-    store_catalog_knowledge
-) VALUES (
-    'Pointe Coach',
-    '5491100000000', -- Placeholder, user can update via UI
-    'Paraná, Entre Ríos, Argentina',
-    'https://www.pointecoach.shop/',
-    'tienda de artículos de danza clásica y contemporánea',
-    '- Accesorios: Metatarsianas, Bolsa de red, Elásticos, Cintas de satén y elastizadas, Endurecedor para puntas, Accesorios para el pie, Punteras, Protectores de puntas.
-- Medias: Medias convertibles, Socks, Medias de contemporáneo, Medias poliamida, Medias de patín.
-- Zapatillas: Zapatillas de punta, Zapatillas de media punta.
-- Marcas: Pointe Coach, Grishko, Capezio, Sansha.'
-) ON CONFLICT (bot_phone_number) DO NOTHING;
+-- 4. Default initialization moved to Python (sync_environment) to support Protocol Omega

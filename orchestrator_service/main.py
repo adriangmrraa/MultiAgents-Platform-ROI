@@ -430,7 +430,7 @@ CONTEXTO DE LA TIENDA:
 {STORE_DESCRIPTION}
 CATALOGO:
 {STORE_CATALOG_KNOWLEDGE}'
-    WHERE store_name = 'Pointe Coach' OR id = 39;
+    WHERE system_prompt_template IS NULL OR store_name = 'Pointe Coach';
     """
 ]
 
