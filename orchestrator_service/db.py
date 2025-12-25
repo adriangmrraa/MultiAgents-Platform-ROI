@@ -34,7 +34,7 @@ class Database:
 
     async def log_system_event(self, level: str, event_type: str, message: str, metadata: dict = None):
         """Standardized system event logging."""
-        query = "INSERT INTO system_events (level, event_type, message, metadata) VALUES ($1, $2, $3, $4)"
+        query = "INSERT INTO system_events (severity, event_type, message, payload) VALUES ($1, $2, $3, $4)"
         async with self.pool.acquire() as conn:
             await conn.execute(query, level, event_type, message, json.dumps(metadata or {}))
 

@@ -27,7 +27,8 @@ async def init_db(session: AsyncSession) -> None:
     
     # 1. Read Env Vars
     store_name = os.getenv("STORE_NAME", settings.PROJECT_NAME)
-    phone = os.getenv("BOT_PHONE_NUMBER")
+    # Flexible Phone Number Detection
+    phone = os.getenv("BOT_PHONE_NUMBER") or os.getenv("YCLOUD_Phone_Number_ID") or os.getenv("WHATSAPP_PHONE_NUMBER")
     
     tn_id = os.getenv("TIENDANUBE_STORE_ID")
     tn_token = os.getenv("TIENDANUBE_ACCESS_TOKEN") or os.getenv("TIENDANUBE_API_KEY")
@@ -38,8 +39,8 @@ async def init_db(session: AsyncSession) -> None:
 
     # Validate Critical Vars
     if not phone:
-        logger.warning("db_hydration_failed", reason="missing_bot_phone_number_env")
-        return
+        logger.warning("db_hydration_incomplete", reason="missing_bot_phone_number_env", note="Using placeholder 0000000000 to allow startup")
+        phone = "0000000000"
 
     # 2. Normalize Phone (Remove +, spaces)
     clean_phone = "".join(filter(str.isdigit, phone))

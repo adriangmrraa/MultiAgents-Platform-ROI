@@ -18,6 +18,10 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # --- Security ---
 async def verify_admin_token(x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_TOKEN:
+        # Debugging 401 (Temporary)
+        masked_received = x_admin_token[:5] + "***" if x_admin_token else "None"
+        masked_expected = ADMIN_TOKEN[:5] + "***" if ADMIN_TOKEN else "None"
+        print(f"AUTH_DEBUG: Expected '{masked_expected}' vs Received '{masked_received}'")
         raise HTTPException(status_code=401, detail="Invalid Admin Token")
 
 # --- RBAC Helper ---
