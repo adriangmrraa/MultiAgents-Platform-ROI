@@ -19,6 +19,21 @@ class Settings(BaseSettings):
                 return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
 
+    @field_validator("CORS_ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_list(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            # If it looks like a JSON list, try to parse it
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    import json
+                    return json.loads(v)
+                except:
+                    pass
+            # Otherwise, split by comma and strip whitespace
+            return [item.strip() for item in v.split(",")]
+        return v
+
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "Platform AI Solutions"
     
