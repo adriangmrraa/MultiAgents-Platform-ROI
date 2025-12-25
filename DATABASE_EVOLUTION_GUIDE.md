@@ -1,82 +1,82 @@
-# Guía de Evolución de Base de Datos: "La Casa y los Planos"
+# 🧬 Database Evolution Guide (Nexus v3 - Protocol Omega)
 
-**Este documento explica qué pasó con el error "Schema Drift" (Desviación de Esquema) y cómo evitarlo al agregar nuevas funciones en el futuro.**
-
----
-
-## 1. ¿Qué pasó? (Explicación para No-Técnicos)
-
-Imagina que tu aplicación es un **Edificio de Departamentos**.
-*   La **Base de Datos** es la estructura física del edificio.
-*   El **Código (Python/Backend)** son los planos que usan los arquitectos para trabajar.
-
-### El Problema
-Recientemente, decidimos agregar una nueva función: **"Interruptor General de Luz"** (la columna `is_active`) para poder apagar departamentos (tiendas) individualmente.
-
-Actualizamos los **planos** (el código) diciendo: *"Ahora todos los departamentos deben tener un interruptor maestro"* y *"No se permite que el interruptor no exista"*.
-
-**El error ocurrió porque:**
-Fuimos al edificio existente (la base de datos real en EasyPanel) y el código intentó buscar este interruptor en los departamentos viejos. Como **no lo construimos físicamente** en los datos existentes, el sistema entró en pánico ("¡Error! ¡Se requiere interruptor y aquí hay un hueco vacío!").
-
-Esto se llama **Crash por Violación de Restricción (NotNullViolation)**.
+Este documento define la **Filosofía de Gestión de Datos** para la plataforma. En Nexus v3, la base de datos es la **Única Fuente de Verdad (SSOT)**.
 
 ---
 
-## 2. ¿Cómo lo solucionamos? (La Reparación Automática)
+## 1. Filosofía "Schema Drift Prevention"
 
-Para no tener que demoler el edificio y construirlo de nuevo cada vez que cambiamos algo, implementamos un **"Robot de Mantenimiento"** (Scripts de Migración en el arranque).
+El "Schema Drift" ocurre cuando el código espera una columna que la base de datos no tiene. Protocol Omega resuelve esto con una estrategia de **Auto-Reparación en Tiempo de Arranque**.
 
-Cada vez que el sistema se enciende, este robot hace lo siguiente:
-1.  Revisa los planos actuales.
-2.  Camina por el edificio.
-3.  Si ve que falta el "Interruptor General", **lo instala automáticamente**.
-4.  **¡Muy Importante!** Si el interruptor es nuevo, **lo deja encendido por defecto** (DEFAULT TRUE) para que nadie se quede a oscuras de repente.
+### El Ciclo de Vida del Arranque (Main.py)
+Cada vez que el orquestador inicia:
+1.  **Import**: Carga todos los modelos de `app/models/__init__.py`.
+2.  **Inspect**: Verifica si existen las tablas críticas (`tenants`, `tools`, `credentials`).
+3.  **Repair (Migration Steps)**:
+    *   Si falta la columna `customer_id` en `chat_conversations` -> La crea.
+    *   Si falta la columna `openai_api_key` en `tenants` -> La inyecta.
+    *   Si la tabla `credentials` tiene el esquema viejo -> Ejecuta `ALTER TABLE` para agregar `scope`, `category`, etc.
 
 ---
 
-## 3. Guía para el Futuro: "Quiero agregar algo nuevo"
+## 2. Guía de Migración Sagrada (Los 4 Pasos)
 
-Digamos que mañana quieres agregar una función para saber si la tienda es "VIP" o "Estándar".
-Necesitas agregar un campo `plan_type`. Sigue estos 4 Pasos Sagrados:
+Si necesitas agregar un nuevo campo a la base de datos, **NO crees un archivo .sql manual**. Sigue este protocolo:
 
-### Paso 1: Definir en los Planos (Python Models)
-En los archivos de modelos (`models/tenant.py` o similares), agregas la variable.
-*   *Incorrecto:* `plan_type: str` (¡Peligroso! Si no hay dato, crashea).
-*   *Correcto:* `plan_type: str = "standard"` (Tiene un valor por defecto).
+### Paso 1: Actualizar el Modelo Pydantic/SQLAlchemy
+Edita el archivo en `app/models/`.
 
-### Paso 2: Definir en la Creación (SQL Init)
-En el archivo que crea la base de datos de cero (`db/init/*.sql` o `main.py` -> `CREATE TABLE`), agregas la columna.
-```sql
-plan_type VARCHAR(50) DEFAULT 'standard'
+```python
+class Tenant(Base):
+    # ... campos existentes ...
+    # [NUEVO] Agrega el campo con valor por defecto o nullable
+    new_feature_flag: Mapped[bool] = mapped_column(Boolean, default=False)
 ```
 
-### Paso 3: El Robot de Mantenimiento (La Clave del Éxito)
-Este es el paso que faltó y causó los errores recientes. Debes ir a `orchestrator_service/main.py` (sección `migration_steps`) y decirle al robot qué hacer si encuentra una base vieja.
+### Paso 2: Agregar Paso de Migración en `main.py`
+En la lista `migration_steps`, agrega la sentencia SQL defensiva (`IF NOT EXISTS`).
 
-Debes agregar un bloque así:
-```sql
-DO $$ 
-BEGIN 
-    -- "Si no existe la columna plan_type, agrégala y ponle 'standard' a todos"
-    ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_type VARCHAR(50) DEFAULT 'standard';
-EXCEPTION WHEN OTHERS THEN 
-    -- "Si falla, no explotes, solo avísame"
-    RAISE NOTICE 'Error menor al actualizar'; 
-END $$;
+```python
+migration_steps = [
+    # ... pasos anteriores ...
+    """
+    DO $$ 
+    BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tenants' AND column_name='new_feature_flag') THEN 
+            ALTER TABLE tenants ADD COLUMN new_feature_flag BOOLEAN DEFAULT FALSE; 
+        END IF; 
+    END $$;
+    """
+]
 ```
 
-### Paso 4: La Regla de Oro de los Defaults
-**SIEMPRE** que agregues algo a un sistema que ya está vivo (tiene usuarios/datos), debes preguntarte:
-> *"¿Qué valor deben tener los datos antiguos que ya existen?"*
+### Paso 3: Reiniciar el Orquestador
+Al reiniciar, el log mostrará: `[MIGRATION] Applying step...`.
 
-*   Si es texto: Usa `DEFAULT ''` (vacío) o `DEFAULT 'valor_comun'`.
-*   Si es número: Usa `DEFAULT 0`.
-*   Si es booleano (Si/No): Usa `DEFAULT FALSE` o `DEFAULT TRUE`.
-*   **NUNCA** dejes que sea `NULL` (vacío/nulo) si el código no está preparado para manejar la "nada absoluta".
+### Paso 4: Validar
+Consulta la base de datos para confirmar que la columna existe.
 
 ---
 
-## Resumen de Salud del Proyecto
-*   **Calificación del Problema:** Intermedio (Estructural).
-*   **Estado Actual:** Corregido con auto-reparación.
-*   **Robustez:** Ahora el sistema es "Auto-Curable" para las columnas `is_active`, `store_location` y las de Branding.
+## 3. Identificadores (UUID vs Integers)
+
+**Protocol Omega estandariza el uso de UUIDs.**
+
+*   **Nuevas Tablas**: Deben usar `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`.
+*   **Tablas Legacy**: Se mantienen como están para no romper compatibilidad, pero sus referencias nuevas deben respetar el tipo original.
+
+---
+
+## 4. Troubleshooting de DB
+
+### Error: `Relation "X" does not exist`
+*   **Causa**: El modelo no se importó en `main.py` antes de `Base.metadata.create_all`.
+*   **Solución**: Agrega `from app.models import X` en las importaciones de `main.py`.
+
+### Error: `NotNullViolation`
+*   **Causa**: Agregaste una columna obligatoria a una tabla con datos existentes.
+*   **Solución**: Haz la columna `nullable=True` o asigna un `DEFAULT`.
+
+---
+
+**© 2025 Platform AI Solutions - Data Engineering**
