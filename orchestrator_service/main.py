@@ -142,7 +142,33 @@ migration_steps = [
         updated_at TIMESTAMPTZ DEFAULT NOW()
     );
     """,
-    # 1b. Pre-clean Handoff Config
+    # 1b. Tenants Repair (Ensure Branding Columns)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS owner_email TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS store_location TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS store_website TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS store_description TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS store_catalog_knowledge TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tiendanube_store_id TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tiendanube_access_token TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS system_prompt_template TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_enabled BOOLEAN DEFAULT FALSE;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_instructions TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_target_email TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_message TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_smtp_host TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_smtp_user TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_smtp_pass TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_smtp_port INTEGER;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_policy JSONB DEFAULT '{}';
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Schema repair failed for tenants';
+    END $$;
+    """,
+    # 1c. Pre-clean Handoff Config
     """
     DO $$
     BEGIN
@@ -376,16 +402,27 @@ migration_steps = [
         RAISE NOTICE 'Schema repair failed for chat_messages';
     END $$;
     """,
-    # 10. System Events
+    # 10. System Events (For Console View)
     """
     CREATE TABLE IF NOT EXISTS system_events (
-        id SERIAL PRIMARY KEY,
-        level VARCHAR(16) NOT NULL, -- info, warn, error
-        event_type VARCHAR(64) NOT NULL, -- http_request, tool_use, system
+        id BIGSERIAL PRIMARY KEY,
+        event_type VARCHAR(64) NOT NULL, 
+        severity VARCHAR(16) DEFAULT 'info',
         message TEXT,
-        metadata JSONB,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        payload JSONB,
+        occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    """,
+    # 10b. System Events Repair
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE system_events ADD COLUMN IF NOT EXISTS severity VARCHAR(16) DEFAULT 'info';
+        ALTER TABLE system_events ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE system_events ADD COLUMN IF NOT EXISTS payload JSONB;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Schema repair failed for system_events';
+    END $$;
     """,
     # 11. Indexes
     "CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages (conversation_id, created_at);",

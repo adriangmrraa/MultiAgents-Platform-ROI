@@ -135,6 +135,19 @@ class Database:
             END $$;
             """,
             """
+            DO $$
+            BEGIN
+                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS store_description TEXT;
+                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS store_location TEXT;
+                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS store_website VARCHAR(255);
+                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS store_catalog_knowledge TEXT;
+                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tiendanube_store_id VARCHAR(50);
+                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tiendanube_access_token TEXT;
+                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS owner_email VARCHAR(255);
+                ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+            END $$;
+            """,
+            """
             CREATE TABLE IF NOT EXISTS tools (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
