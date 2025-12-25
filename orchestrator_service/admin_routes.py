@@ -158,13 +158,17 @@ async def bootstrap():
     # Get tenants count
     tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants")
     
-    # Get last activity
-    last_inbound = await db.pool.fetchval("SELECT MAX(received_at) FROM inbound_messages")
+    # Get last activity from chat_messages (Legacy inbound_messages removed)
+    last_inbound = await db.pool.fetchval("SELECT MAX(created_at) FROM chat_messages WHERE role = 'user'")
     last_outbound = await db.pool.fetchval("SELECT MAX(created_at) FROM chat_messages WHERE role = 'assistant'")
     
     # Get Configured Services
-    cred_rows = await db.pool.fetch("SELECT DISTINCT category FROM credentials")
-    services = [r["category"] for r in cred_rows]
+    services = []
+    try:
+        cred_rows = await db.pool.fetch("SELECT DISTINCT category FROM credentials")
+        services = [r["category"] for r in cred_rows]
+    except Exception as e:
+        print(f"Error fetching services: {e}")
     
     return {
         "version": "1.2.0 (Platform AI Solutions)",
