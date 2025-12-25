@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Platform AI Solutions"
     
     # Infrastructure
-    POSTGRES_DSN: str = "postgresql+asyncpg://postgres:password@postgres:5432/pointcoach"
+    POSTGRES_DSN: str = "postgresql+asyncpg://postgres:password@postgres:5432/platform_ai"
     REDIS_URL: str = "redis://redis:6379/0"
     CORS_ALLOWED_ORIGINS: Any = ["*"]  # Configurable string or list
     BOT_PHONE_NUMBER: str | None = None

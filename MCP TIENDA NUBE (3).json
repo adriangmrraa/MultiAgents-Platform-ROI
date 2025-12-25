@@ -236,8 +236,8 @@
     },
     {
       "parameters": {
-        "fromEmail": "dzTe6EFqrF9NiwWsf7c242e8@pointecoach.shop",
-        "toEmail": "pointecoach@gmail.com",
+        "fromEmail": "notifications@platform-ai.solutions",
+        "toEmail": "platformaisolutions@gmail.com",
         "subject": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Subject', ``, 'string') }}",
         "emailFormat": "text",
         "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Text', ``, 'string') }}",

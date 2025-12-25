@@ -25,4 +25,4 @@ Si el usuario pregunta por productos, categorías, marcas o stock, DEBES ejecuta
 
 CONOCIMIENTO OFICIAL:
 {STORE_CATALOG_KNOWLEDGE}'
-WHERE store_name = 'Pointe Coach' AND system_prompt_template IS NULL;
+WHERE system_prompt_template IS NULL;

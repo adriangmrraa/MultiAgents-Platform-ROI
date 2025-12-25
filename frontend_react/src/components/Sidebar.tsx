@@ -31,8 +31,8 @@ export const Sidebar: React.FC = () => {
     return (
         <aside className="sidebar">
             <div className="logo">
-                <span className="logo-icon">🩰</span>
-                <span className="logo-text">POINTE COACH</span>
+                <span className="logo-icon">🤖</span>
+                <span className="logo-text">PLATFORM AI</span>
             </div>
             <nav>
                 {menuItems.map((item) => (

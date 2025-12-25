@@ -327,15 +327,15 @@ async def run_infrastructure_preflight(public_base_url: str = None, webhook_base
     }
 
 # Configuration & Store Branding & Context (Whitelabel)
-STORE_NAME = os.getenv("STORE_NAME", "Pointe Coach")
-STORE_LOCATION = os.getenv("STORE_LOCATION", "Paraná, Entre Ríos, Argentina")
-STORE_DESCRIPTION = os.getenv("STORE_DESCRIPTION", "tienda de artículos de danza clásica y contemporánea")
-STORE_WEBSITE = os.getenv("STORE_WEBSITE", "https://www.pointecoach.shop/")
+STORE_NAME = os.getenv("STORE_NAME", "Platform AI Solutions")
+STORE_LOCATION = os.getenv("STORE_LOCATION", "")
+STORE_DESCRIPTION = os.getenv("STORE_DESCRIPTION", "")
+STORE_WEBSITE = os.getenv("STORE_WEBSITE", "")
 STORE_CATALOG_KNOWLEDGE = os.getenv("STORE_CATALOG_KNOWLEDGE", """
-- Accesorios: Metatarsianas, Bolsa de red, Elásticos, Cintas de satén y elastizadas, Endurecedor para puntas, Accesorios para el pie, Punteras, Protectores de puntas.
-- Medias: Medias convertibles, Socks, Medias de contemporáneo, Medias poliamida, Medias de patín.
+- Accesorios: Metatarsianas, Bolsa de red, Elásticos, Cintas, Punteras, Protectores.
+- Medias: Medias convertibles, Socks, Medias de danza.
 - Zapatillas: Zapatillas de punta, Zapatillas de media punta.
-- Marcas: Pointe Coach, Grishko, Capezio, Sansha.
+- Marcas: Generico, Marca1, Marca2.
 """)
 
 # Initialize config - fallback to env vars

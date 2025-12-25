@@ -40,12 +40,12 @@ class CredentialModel(BaseModel):
 async def sync_environment():
     """Reads env vars and ensures the default tenant and credentials exist."""
     # 1. Tenant Sync
-    store_name = os.getenv("STORE_NAME", "Pointe Coach")
-    store_phone = os.getenv("BOT_PHONE_NUMBER", "5491100000000")
+    store_name = os.getenv("STORE_NAME", "Platform AI Solutions")
+    store_phone = os.getenv("BOT_PHONE_NUMBER", "")
     store_id = os.getenv("TIENDANUBE_STORE_ID", "")
     access_token = os.getenv("TIENDANUBE_ACCESS_TOKEN", "")
-    store_loc = os.getenv("STORE_LOCATION", "Paraná, Entre Ríos, Argentina")
-    store_web = os.getenv("STORE_WEBSITE", "https://www.pointecoach.shop/")
+    store_loc = os.getenv("STORE_LOCATION", "")
+    store_web = os.getenv("STORE_WEBSITE", "")
     store_desc = os.getenv("STORE_DESCRIPTION", "")
     store_know = os.getenv("STORE_CATALOG_KNOWLEDGE", "")
     
@@ -121,7 +121,7 @@ async def bootstrap():
     services = [r["category"] for r in cred_rows]
     
     return {
-        "version": "1.2.0 (Pointe Coach)",
+        "version": "1.2.0 (Platform AI Solutions)",
         "tenants_count": tenants,
         "last_inbound_at": last_inbound,
         "last_outbound_at": last_outbound,

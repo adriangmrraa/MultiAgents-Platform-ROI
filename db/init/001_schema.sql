@@ -1,4 +1,4 @@
--- Initial schema for Pointe Coach microservices
+-- Initial schema for Platform AI Solutions microservices
 
 -- Table for inbound messages (dedupe/idempotency)
 CREATE TABLE inbound_messages (

@@ -21,7 +21,7 @@ services:
     ports:
       - "4173:80"
     environment:
-      - VITE_API_BASE_URL=https://bff.pointcoach.shop # Logic needed here or baking in build
+      - VITE_API_BASE_URL=https://bff.platform-ai.solutions # Logic needed here or baking in build
     depends_on:
       - bff_service
 
