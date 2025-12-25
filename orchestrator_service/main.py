@@ -426,7 +426,8 @@ migration_steps = [
     # 10. System Events (For Console View)
     """
     CREATE TABLE IF NOT EXISTS system_events (
-        id BIGSERIAL PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
         event_type VARCHAR(64) NOT NULL, 
         severity VARCHAR(16) DEFAULT 'info',
         message TEXT,
@@ -434,10 +435,20 @@ migration_steps = [
         occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     """,
-    # 10b. System Events Repair
+    # 10b. System Events Repair (UUID Migration)
     """
     DO $$
     BEGIN
+        -- Schema Drift: If 'id' is BIGINT/INTEGER (Legacy), we must drop and recreate.
+        -- This is a destructive operation allowed by Protocol Omega during maintenance window.
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'system_events' AND column_name = 'id' AND data_type IN ('bigint', 'integer')
+        ) THEN
+            DROP TABLE system_events CASCADE;
+        END IF;
+
+        -- Columns Check (Standard Repair)
         ALTER TABLE system_events ADD COLUMN IF NOT EXISTS severity VARCHAR(16) DEFAULT 'info';
         ALTER TABLE system_events ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ DEFAULT NOW();
         ALTER TABLE system_events ADD COLUMN IF NOT EXISTS payload JSONB;

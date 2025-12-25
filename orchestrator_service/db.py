@@ -33,7 +33,10 @@ class Database:
         return True
 
     async def log_system_event(self, level: str, event_type: str, message: str, metadata: dict = None):
-        """Standardized system event logging."""
+        """Standardized system event logging (Protocol Omega: UUID)."""
+        # Note: ID is gen_random_uuid in DB, so we don't need to pass it, but if we did:
+        # query = "INSERT INTO system_events (id, severity, event_type, message, payload) VALUES ($1, $2, $3, $4, $5)"
+        # We'll stick to DB generation for simplicity unless required.
         query = "INSERT INTO system_events (severity, event_type, message, payload) VALUES ($1, $2, $3, $4)"
         async with self.pool.acquire() as conn:
             await conn.execute(query, level, event_type, message, json.dumps(metadata or {}))

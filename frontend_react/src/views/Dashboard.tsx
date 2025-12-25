@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
-import { Activity, Server, MessageSquare, Users } from 'lucide-react';
+import { Activity, MessageSquare, Users } from 'lucide-react';
+import { TelemetryHUD } from '../components/TelemetryHUD';
+import { GlobalStreamLog } from '../components/GlobalStreamLog';
+import { AgentGrid } from '../components/AgentGrid';
+import { RagGalaxy } from '../components/RagGalaxy';
+import { SystemStatus } from '../components/SystemStatus';
 
 interface Stats {
     active_tenants: number;
@@ -20,10 +25,9 @@ interface HealthData {
 }
 
 export const Dashboard: React.FC = () => {
-    const { fetchApi, loading } = useApi();
+    const { fetchApi } = useApi();
     const [stats, setStats] = useState<Stats | null>(null);
     const [health, setHealth] = useState<HealthData | null>(null);
-    const [lastSync, setLastSync] = useState<string>('Nunca');
 
     useEffect(() => {
         const loadData = async () => {
@@ -34,73 +38,66 @@ export const Dashboard: React.FC = () => {
                 ]);
                 setStats(statsData);
                 setHealth(healthData);
-                setLastSync(new Date().toLocaleTimeString());
             } catch (e) {
                 console.error(e);
             }
         };
         loadData();
-        const interval = setInterval(loadData, 30000); // Refresh every 30s
+        const interval = setInterval(loadData, 10000); // Faster refresh for "Live" feel
         return () => clearInterval(interval);
     }, [fetchApi]);
 
-    const getServiceStatus = (serviceName: string) => {
-        const check = health?.checks?.find(c => c.name === serviceName);
-        if (!check) return { color: 'var(--text-secondary)', status: 'UNKNOWN' };
-        if (check.status === 'OK') return { color: 'var(--success)', status: 'OK' };
-        if (check.status === 'FAIL') return { color: '#ff4d4d', status: 'FAIL' };
-        return { color: '#ffc107', status: 'WARN' };
-    };
-
     return (
         <div className="view active">
-            <div className="top-bar" style={{ marginBottom: '20px' }}>
-                <div className="health-strip">
-                    {['orchestrator', 'whatsapp_service', 'database', 'redis'].map(svc => {
-                        const { color, status } = getServiceStatus(svc);
-                        return (
-                            <div key={svc} className="service-pill" style={{ borderColor: color }}>
-                                <div className="pill-dot" style={{ backgroundColor: color }}></div>
-                                {svc.replace('_service', '')}: {status}
-                            </div>
-                        );
-                    })}
+            <h1 className="view-title mb-6">Mission Control</h1>
+
+            {/* Phase 1: Holographic Command Deck */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <div className="lg:col-span-2">
+                    <TelemetryHUD health={health} />
                 </div>
-                <div className="last-signals">
-                    <span className="signal-label">Última sinc: {lastSync}</span>
+                <div>
+                    <SystemStatus health={health} />
                 </div>
             </div>
 
-            <h1 className="view-title">Panel General</h1>
+            {/* Phase 2: Global Neural Feed */}
+            <GlobalStreamLog />
 
-            <div className="stats-grid">
+            {/* Phase 3: Agent Command Deck */}
+            <AgentGrid />
+
+            {/* Phase 4: RAG Knowledge Map */}
+            <RagGalaxy />
+
+            <div className="stats-grid mt-8">
                 <div className="stat-card glass accent">
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="stat-label">Tenants Activos</span>
+                        <span className="stat-label">Tenants (Fleets)</span>
                         <Users className="stat-icon" size={20} color="var(--accent)" />
                     </div>
                     <span className="stat-value">{stats?.active_tenants || 0}</span>
-                    <span className="stat-meta">Tiendas conectadas</span>
+                    <span className="stat-meta">Active Deployed Units</span>
                 </div>
 
                 <div className="stat-card glass">
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="stat-label">Total Mensajes</span>
+                        <span className="stat-label">Comms Traffic</span>
                         <MessageSquare className="stat-icon" size={20} color="var(--text-secondary)" />
                     </div>
                     <span className="stat-value">{stats?.total_messages || 0}</span>
-                    <span className="stat-meta">Procesados hoy</span>
+                    <span className="stat-meta">Interactions Processed</span>
                 </div>
 
                 <div className="stat-card glass">
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="stat-label">Tasa de Éxito</span>
+                        <span className="stat-label">Neural Efficiency</span>
                         <Activity className="stat-icon" size={20} color="var(--success)" />
                     </div>
                     <span className="stat-value">
                         {stats?.total_messages ? Math.round((stats.processed_messages / stats.total_messages) * 100) : 0}%
                     </span>
-                    <span className="stat-meta">Respuestas generadas</span>
+                    <span className="stat-meta">Operational Success Rate</span>
                 </div>
             </div>
         </div>

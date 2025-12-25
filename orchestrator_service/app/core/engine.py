@@ -40,6 +40,7 @@ class NexusEngine:
                      resp = await client.post(
                          f"{service_url}/tools/productsall",
                          json={"store_id": tn_store_id, "access_token": tn_token},
+                         json={"store_id": tn_store_id, "access_token": tn_token},
                          headers={"X-Internal-Secret": os.getenv("INTERNAL_API_TOKEN")}
                      )
                      if resp.status_code == 200:

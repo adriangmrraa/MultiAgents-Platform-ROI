@@ -16,6 +16,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain.output_parsers import PydanticOutputParser
 from langchain.tools import tool
 import httpx
+from contextvars import ContextVar # Protocol Omega: Isolation
 
 # --- Initialize Structlog ---
 structlog.configure(
@@ -56,52 +57,30 @@ class AgentThinkRequest(BaseModel):
     history: List[Dict[str, str]]
     context: AgentContext
     credentials: AgentCredentials
-    internal_secret: str
+    # internal_secret removed - passed via header
 
-# --- Global Context (Thread-local equivalent for Tool calls during iinvoke) ---
-# We use a simple object to hold context during the request lifetime
-class Context:
-    store_id: str = ""
-    token: str = ""
-    service_url: str = ""
-    internal_token: str = ""
-
-ctx = Context()
+# --- Dynamic Tool Context (Protocol Omega: ContextVars) ---
+ctx_store_id: ContextVar[str] = ContextVar("ctx_store_id", default="")
+ctx_token: ContextVar[str] = ContextVar("ctx_token", default="")
+ctx_service_url: ContextVar[str] = ContextVar("ctx_service_url", default="")
+ctx_internal_token: ContextVar[str] = ContextVar("ctx_internal_token", default="")
 
 parser = PydanticOutputParser(pydantic_object=OrchestratorResponse)
 
-# --- Dynamic Tool Context (Local to Thread/Execution) ---
-# In a real microservice, we might use ContextVars or pass these to the tools.
-# For simplicity, we'll use a wrapper or pass explicitly if needed.
-
 # --- Tools Definitions ---
-# These tools are extracted from the orchestrator and adapted for statelessness
-
-async def call_tiendanube_api(endpoint: str, store_id: str, token: str, params: dict = None):
-    url = f"https://api.tiendanube.com/v1/{store_id}{endpoint}"
-    headers = {
-        "Authentication": f"bearer {token}",
-        "User-Agent": "Nexus-Agent-Service (Nexus v3)",
-        "Content-Type": "application/json"
-    }
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(url, params=params, headers=headers)
-        if response.status_code != 200:
-            return f"Error API Tienda Nube: {response.status_code}"
-        return response.json()
 
 @tool
 async def search_specific_products(q: str):
     """SEARCH for specific products in the store by name, category or brand."""
     payload = {
-        "store_id": ctx.store_id,
-        "access_token": ctx.token,
+        "store_id": ctx_store_id.get(),
+        "access_token": ctx_token.get(),
         "q": q
     }
-    headers = {"X-Internal-Token": ctx.internal_token}
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    headers = {"X-Internal-Secret": ctx_internal_token.get()}
+    async with httpx.AsyncClient(timeout=300.0) as client: # Protocol Omega: 300s Timeout
         try:
-            resp = await client.post(f"{ctx.service_url}/tools/productsq", json=payload, headers=headers)
+            resp = await client.post(f"{ctx_service_url.get()}/tools/productsq", json=payload, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"): return data.get("data")
@@ -113,13 +92,13 @@ async def search_specific_products(q: str):
 async def browse_general_storefront():
     """Browse the generic storefront (latest items). Use for vague requests like 'show me what you have'."""
     payload = {
-        "store_id": ctx.store_id,
-        "access_token": ctx.token
+        "store_id": ctx_store_id.get(),
+        "access_token": ctx_token.get()
     }
-    headers = {"X-Internal-Token": ctx.internal_token}
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    headers = {"X-Internal-Secret": ctx_internal_token.get()}
+    async with httpx.AsyncClient(timeout=300.0) as client:
         try:
-            resp = await client.post(f"{ctx.service_url}/tools/productsall", json=payload, headers=headers)
+            resp = await client.post(f"{ctx_service_url.get()}/tools/productsall", json=payload, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"): return data.get("data")
@@ -131,15 +110,15 @@ async def browse_general_storefront():
 async def search_by_category(category: str, keyword: str = ""):
     """SEARCH products by category name and optionally a keyword to refine."""
     payload = {
-        "store_id": ctx.store_id,
-        "access_token": ctx.token,
+        "store_id": ctx_store_id.get(),
+        "access_token": ctx_token.get(),
         "category": category,
         "keyword": keyword
     }
-    headers = {"X-Internal-Token": ctx.internal_token}
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    headers = {"X-Internal-Secret": ctx_internal_token.get()}
+    async with httpx.AsyncClient(timeout=300.0) as client:
         try:
-            resp = await client.post(f"{ctx.service_url}/tools/productsq_category", json=payload, headers=headers)
+            resp = await client.post(f"{ctx_service_url.get()}/tools/productsq_category", json=payload, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"): return data.get("data")
@@ -150,11 +129,11 @@ async def search_by_category(category: str, keyword: str = ""):
 @tool
 async def cupones_list():
     """LIST available discount coupons for the store."""
-    payload = {"store_id": ctx.store_id, "access_token": ctx.token}
-    headers = {"X-Internal-Token": ctx.internal_token}
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    payload = {"store_id": ctx_store_id.get(), "access_token": ctx_token.get()}
+    headers = {"X-Internal-Secret": ctx_internal_token.get()}
+    async with httpx.AsyncClient(timeout=300.0) as client:
         try:
-            resp = await client.post(f"{ctx.service_url}/tools/cupones_list", json=payload, headers=headers)
+            resp = await client.post(f"{ctx_service_url.get()}/tools/cupones_list", json=payload, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"): return data.get("data")
@@ -165,11 +144,11 @@ async def cupones_list():
 @tool
 async def orders(q: str):
     """CHECK the status of an order by number or customer name."""
-    payload = {"store_id": ctx.store_id, "access_token": ctx.token, "q": q}
-    headers = {"X-Internal-Token": ctx.internal_token}
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    payload = {"store_id": ctx_store_id.get(), "access_token": ctx_token.get(), "q": q}
+    headers = {"X-Internal-Secret": ctx_internal_token.get()}
+    async with httpx.AsyncClient(timeout=300.0) as client:
         try:
-            resp = await client.post(f"{ctx.service_url}/tools/orders", json=payload, headers=headers)
+            resp = await client.post(f"{ctx_service_url.get()}/tools/orders", json=payload, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"): return data.get("data")
@@ -180,30 +159,29 @@ async def orders(q: str):
 @tool
 async def derivhumano(reason: str):
     """ACTIVATE human handoff. Use when the user specifically asks for a person or is frustrated."""
-    # This tool needs to tell the orchestrator to set human_override.
-    # We'll return a specific marker that the orchestrator interprets.
     return f"HUMAN_HANDOFF_REQUESTED: {reason}"
-
-# Update tools_list in think function
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "agent_service"}
 
 @app.post("/v1/agent/execute")
-async def execute_agent(request: AgentThinkRequest):
+async def execute_agent(
+    request: AgentThinkRequest,
+    x_internal_secret: str = Header(None, alias="X-Internal-Secret") # Protocol Omega: Header Handshake
+):
     # Security Check
-    internal_token = os.getenv("INTERNAL_API_TOKEN")
-    if internal_token and request.internal_secret != internal_token:
+    env_secret = os.getenv("INTERNAL_API_TOKEN")
+    if env_secret and x_internal_secret != env_secret:
         raise HTTPException(status_code=401, detail="Invalid Internal Secret")
 
     logger.info("agent_execution_start", tenant_id=request.tenant_id, store=request.context.store_name)
     
-    # 0. Hydrate Context for Tools (Protocol Omega)
-    ctx.store_id = request.credentials.tiendanube_store_id or ""
-    ctx.token = request.credentials.tiendanube_access_token.get_secret_value() if request.credentials.tiendanube_access_token else ""
-    ctx.service_url = request.credentials.tiendanube_service_url
-    ctx.internal_token = request.internal_secret
+    # 0. Hydrate Context for Tools (Protocol Omega: ContextVars)
+    ctx_store_id.set(request.credentials.tiendanube_store_id or "")
+    ctx_token.set(request.credentials.tiendanube_access_token.get_secret_value() if request.credentials.tiendanube_access_token else "")
+    ctx_service_url.set(request.credentials.tiendanube_service_url)
+    ctx_internal_token.set(x_internal_secret or "")
 
     # 1. Prepare History
     history = []
@@ -242,6 +220,10 @@ async def execute_agent(request: AgentThinkRequest):
     
     # 5. Execute
     try:
+        # Protocol Omega: Max Timeout for CoT
+        # While the HTTP client has 300s, the AgentExecutor doesn't have a direct timeout param, 
+        # but we rely on the client-side timeout we set in tools and the overall request timeout.
+        
         result = await executor.ainvoke({
             "input": request.message,
             "chat_history": history
@@ -250,7 +232,6 @@ async def execute_agent(request: AgentThinkRequest):
         output_text = result["output"]
         
         # 6. Parse Output into structured messages
-        # We look for image URLs or specific markers
         messages = []
         
         # Extract metadata (Chain of Thought / Tool steps)
@@ -263,7 +244,6 @@ async def execute_agent(request: AgentThinkRequest):
         if "HUMAN_HANDOFF_REQUESTED:" in output_text:
             messages.append(OrchestratorMessage(text=output_text, metadata=metadata))
         else:
-            # Simple splitter for now (in the future, a more complex parser could be used)
             messages.append(OrchestratorMessage(text=output_text, metadata=metadata))
             
         return {"messages": [m.dict() for m in messages]}

@@ -40,6 +40,60 @@ interface BusinessAsset {
 
 // --- Smart SSE Logic ---
 
+// --- Global Stream (Phase 2: Mission Control) ---
+app.get('/api/engine/stream/global', async (req: Request, res: Response) => {
+    console.log(`[SSE] Global Console connected`);
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    let lastLogId = 0;
+    let isActive = true;
+
+    req.on('close', () => {
+        console.log(`[SSE] Global Console disconnected`);
+        isActive = false;
+    });
+
+    const loop = async () => {
+        if (!isActive) return;
+
+        try {
+            // Fetch Global Events from Orchestrator
+            // We use /admin/events (which returns system_events globally)
+            const logsRes = await axios.get<any[]>(`${ORCHESTRATOR_URL}/admin/events`, {
+                params: { limit: 20 },
+                headers: { 'x-admin-token': ADMIN_TOKEN }
+            });
+
+            const newLogs = logsRes.data || [];
+
+            // Filter strictly new logs
+            const freshLogs = newLogs.filter((l: any) => {
+                const lid = Number(l.id);
+                return !isNaN(lid) && lid > lastLogId;
+            }).reverse();
+
+            if (freshLogs.length > 0) {
+                lastLogId = Number(freshLogs[freshLogs.length - 1].id);
+                freshLogs.forEach((log: any) => {
+                    res.write(`event: log\ndata: ${JSON.stringify(log)}\n\n`);
+                });
+            }
+
+        } catch (error) {
+            // console.error(`[Global SSE Error] ${error}`);
+            // Silent retry
+        }
+
+        if (isActive) setTimeout(loop, 2000);
+    };
+
+    loop();
+});
+
 app.get('/api/engine/stream/:tenantId', async (req: Request, res: Response) => {
     const { tenantId } = req.params;
     console.log(`[SSE] Client connected for Tenant: ${tenantId}`);
@@ -69,12 +123,15 @@ app.get('/api/engine/stream/:tenantId', async (req: Request, res: Response) => {
             // 1. Fetch Telemetry (Thinking Logs)
             // We use the admin token to access internal telemetry
             try {
-                const logsRes = await axios.get<{ items: TelemetryLog[] }>(`${ORCHESTRATOR_URL}/admin/telemetry/events`, {
+                // FIXED: Use /admin/events as verified in Schema
+                const logsRes = await axios.get<any[]>(`${ORCHESTRATOR_URL}/admin/events`, {
                     params: { tenant_id: tenantId, limit: 10 },
                     headers: { 'x-admin-token': ADMIN_TOKEN }
                 });
 
-                const newLogs = logsRes.data.items || [];
+                // Check if response is array (admin/events returns simple array) or dict
+                const newLogs = Array.isArray(logsRes.data) ? logsRes.data : (logsRes.data as any).items || [];
+
                 // Filtering logic: robust check
                 const freshLogs = newLogs.filter((l: TelemetryLog) => {
                     const lid = Number(l.id);
