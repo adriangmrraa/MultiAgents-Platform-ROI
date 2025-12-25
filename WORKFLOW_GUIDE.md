@@ -13,8 +13,7 @@ Si eres nuevo en este proyecto, estos son los términos clave que debes conocer:
 *   **Agent (Agente)**: Es la "inteligencia pura". No guarda nada, solo recibe información y genera una respuesta inteligente usando IA.
 *   **Handoff (Derivación)**: Es el proceso de "apagar" la IA para que un humano pueda hablar directamente con el cliente.
 
----
-
+------
 ## 2. 🔑 Generación de Llaves de Seguridad
 
 Para variables como `ENCRYPTION_KEY` o `ADMIN_TOKEN`, necesitas crear una cadena de texto larga y aleatoria. Aquí tienes cómo hacerlo si no tienes herramientas técnicas avanzadas:
