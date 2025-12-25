@@ -65,8 +65,12 @@ GLOBAL_TN_ACCESS_TOKEN = os.getenv("TIENDANUBE_ACCESS_TOKEN") or os.getenv("GLOB
 # Service URLs & Feature Flags (Nexus v3 Decentralized Architecture)
 NEXUS_V3_ENABLED = os.getenv("NEXUS_V3_ENABLED", "true").lower() == "true"
 AGENT_SERVICE_URL = os.getenv("AGENT_SERVICE_URL", "http://agent_service:8001")
-TIENDANUBE_SERVICE_URL = os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8002")
+TIENDANUBE_SERVICE_URL = os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003")
+WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp_service:8002")
 INTERNAL_SECRET_KEY = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY")
+ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "agente-js-secret-key-2024")
+
+from app.core.config import settings
 
 # Global Fallback Content (only used if DB has no specific tenant config)
 GLOBAL_STORE_DESCRIPTION = os.getenv("GLOBAL_STORE_DESCRIPTION")
@@ -455,16 +459,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Configuration - Broadly permissive
-# This MUST be the first middleware added
+# CORS Configuration - Dynamically loaded from settings
 app.add_middleware(
     CORSMiddleware,
-    # Explicitly list the frontend origin
-    allow_origins=[
-        "https://docker-platform-ui.yn8wow.easypanel.host", 
-        "http://localhost:3000",
-        "http://localhost:8000"
-    ],
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

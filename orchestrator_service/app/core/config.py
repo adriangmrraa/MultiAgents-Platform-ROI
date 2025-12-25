@@ -25,9 +25,12 @@ class Settings(BaseSettings):
     # Infrastructure
     POSTGRES_DSN: str = "postgresql+asyncpg://postgres:password@postgres:5432/pointcoach"
     REDIS_URL: str = "redis://redis:6379/0"
+    CORS_ALLOWED_ORIGINS: list[str] = ["*"]  # Configurable list
+    BOT_PHONE_NUMBER: str | None = None
     
     # Security
     SECRET_KEY: SecretStr = SecretStr("changeme_in_production_please_32chars")
     INTERNAL_API_TOKEN: SecretStr = SecretStr("internal_token_fallback")
+    ENCRYPTION_KEY: str = "agente-js-secret-key-2024"
 
 settings = Settings()
