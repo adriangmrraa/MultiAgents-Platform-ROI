@@ -312,7 +312,7 @@ async function loadTenants() {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>
-                    <div style="font-weight: 600">${t.store_name}</div>
+                    <div style="font-weight: 600; cursor: pointer; color: var(--accent);" onclick="editTenant('${t.bot_phone_number}')">${t.store_name} 📝</div>
                     <div style="font-size: 11px; color: #a1a1aa">${t.owner_email || 'No email'}</div>
                 </td>
                 <td>${t.bot_phone_number}</td>
@@ -797,13 +797,12 @@ function resetTenantModal() {
     document.getElementById('tenant-credentials-list').innerHTML = '';
 }
 
+// Unified Tenant Modal (Edit + Dashboard)
 function editTenant(botPhoneNumber) {
-    console.log('Edit tenant called with:', botPhoneNumber); // Debug log
+    console.log('Edit tenant called with:', botPhoneNumber);
 
     // Fetch tenant data
     adminFetch(`/admin/tenants/${botPhoneNumber}`).then(tenant => {
-        console.log('Tenant data received:', tenant); // Debug log
-
         if (tenant) {
             // Pre-fill form
             const form = document.getElementById('tenant-form');
@@ -812,38 +811,83 @@ function editTenant(botPhoneNumber) {
                 form.elements['store_name'].value = tenant.store_name || '';
                 form.elements['bot_phone_number'].value = tenant.bot_phone_number || '';
                 form.elements['tiendanube_store_id'].value = tenant.tiendanube_store_id || '';
-                form.elements['tiendanube_access_token'].value = tenant.tiendanube_access_token || '';
+                form.elements['tiendanube_access_token'].value = tenant.tiendanube_access_token || ''; // Hidden input usually
                 form.elements['store_description'].value = tenant.store_description || '';
                 form.elements['store_catalog_knowledge'].value = tenant.store_catalog_knowledge || '';
                 form.elements['store_location'].value = tenant.store_location || '';
                 form.elements['store_website'].value = tenant.store_website || '';
                 form.elements['owner_email'].value = tenant.owner_email || '';
 
-                editingTenant = botPhoneNumber;
-                const title = document.getElementById('tenant-modal-title');
-                if (title) title.textContent = 'Editar Tienda';
+                // Handle TN Preset Logic visually
+                if (tenant.tiendanube_store_id) {
+                    document.getElementById('tn-store-preset').value = 'custom';
+                    document.getElementById('tn-manual-fields').style.display = 'block';
+                } else {
+                    document.getElementById('tn-store-preset').value = '';
+                    document.getElementById('tn-manual-fields').style.display = 'none';
+                }
 
-                const deleteBtn = document.getElementById('delete-tenant-btn');
-                if (deleteBtn) deleteBtn.style.display = 'inline-block';
+                editingTenant = botPhoneNumber;
+                document.getElementById('tenant-modal-title').textContent = `Panel de Control: ${tenant.store_name}`;
+                document.getElementById('delete-tenant-btn').style.display = 'inline-block';
 
                 openModal('tenant-modal');
-                // Render associated credentials
+
+                // 1. Render Credentials (Tenant Specific Only)
                 if (tenant.id) {
                     renderTenantCredentials(tenant.id);
                 }
-                console.log('Modal opened successfully'); // Debug log
+
+                // 2. Check Service Status (Merged from Detail View)
+                checkServiceStatus(tenant.id);
+
             } else {
                 console.error('Tenant form not found');
-                showNotification(false, 'Error', 'No se pudo encontrar el formulario de edición');
             }
-        } else {
-            console.error('No tenant data received');
-            showNotification(false, 'Error', 'No se pudieron cargar los datos de la tienda');
         }
     }).catch(error => {
         console.error('Error fetching tenant:', error);
         showNotification(false, 'Error', 'Error al cargar los datos de la tienda');
     });
+}
+
+// Helper to check service status
+async function checkServiceStatus(tenantId) {
+    const ycloudInd = document.getElementById('ycloud-indicator');
+    const metaInd = document.getElementById('meta-indicator');
+
+    // Reset UI
+    if (ycloudInd) ycloudInd.innerHTML = '<span class="status-dot warning"></span><span class="status-text">Verificando...</span>';
+    if (metaInd) metaInd.innerHTML = '<span class="status-dot warning"></span><span class="status-text">Verificando...</span>';
+
+    try {
+        const statuses = await adminFetch(`/admin/diagnostics/services/${tenantId}`);
+        if (statuses) {
+            // Update YCloud
+            const yc = statuses.ycloud;
+            if (ycloudInd) {
+                if (yc.configured && yc.healthy) {
+                    ycloudInd.innerHTML = '<span class="status-dot ok"></span><span class="status-text" style="color:#00e676">Conectado</span>';
+                } else if (yc.configured && !yc.healthy) {
+                    ycloudInd.innerHTML = '<span class="status-dot error"></span><span class="status-text" style="color:#f44336">Error Conexión</span>';
+                } else {
+                    ycloudInd.innerHTML = '<span class="status-dot" style="background:#555"></span><span class="status-text" style="color:#777">No Configurado</span>';
+                }
+            }
+
+            // Update Meta
+            const meta = statuses.meta;
+            if (metaInd) {
+                if (meta.configured && meta.healthy) {
+                    metaInd.innerHTML = '<span class="status-dot ok"></span><span class="status-text" style="color:#00e676">Conectado</span>';
+                } else {
+                    metaInd.innerHTML = '<span class="status-dot" style="background:#555"></span><span class="status-text" style="color:#777">No Configurado</span>';
+                }
+            }
+        }
+    } catch (e) {
+        console.warn("Could not fetch service status", e);
+    }
 }
 
 async function deleteTenant(phoneNumber) {
@@ -914,11 +958,11 @@ async function renderTenantCredentials(tenantId) {
         };
 
         let content = '';
-        content += renderGroup('Tenant-Specific', tenantSpecific, false);
-        content += renderGroup('Global (Heredadas)', globalCreds, true);
+        content += renderGroup('Credenciales de la Tienda', tenantSpecific, false);
+        // content += renderGroup('Global (Heredadas)', globalCreds, true); // REMOVED per user request
 
         if (content === '') {
-            content = '<div style="text-align: center; color: #666; padding: 10px;">No hay credenciales asociadas.</div>';
+            content = '<div style="text-align: center; color: #666; padding: 10px;">No hay credenciales específicas para esta tienda.</div>';
         }
 
         listContainer.innerHTML = content;

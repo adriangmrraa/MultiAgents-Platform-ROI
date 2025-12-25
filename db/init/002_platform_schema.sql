@@ -29,8 +29,13 @@ CREATE TABLE IF NOT EXISTS credentials (
     tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
     description TEXT,
     
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE
 );
+
+-- Indexes for uniqueness (handled as partial indexes instead of simple constraint)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credentials_global_unique ON credentials (name) WHERE scope = 'global';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credentials_tenant_unique ON credentials (name, tenant_id) WHERE scope = 'tenant';
 
 -- 3. System Events (For "Console" view)
 CREATE TABLE IF NOT EXISTS system_events (

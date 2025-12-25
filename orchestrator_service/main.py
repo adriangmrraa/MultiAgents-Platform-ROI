@@ -263,16 +263,25 @@ migration_steps = [
         END IF;
 
         -- Check for UNIQUE constraint (name, scope)
-        IF NOT EXISTS (
+        -- CRITICAL FIX: The previous constraint UNIQUE(name, scope) was wrong because it prevented 
+        -- multiple tenants from having the same credential name (e.g. 'OPENAI_API_KEY' with scope 'tenant').
+        -- We must drop it and use partial indexes or include tenant_id.
+        
+        IF EXISTS (
             SELECT 1 FROM pg_constraint 
             WHERE conname = 'unique_name_scope' AND conrelid = 'credentials'::regclass
         ) THEN
-            BEGIN
-                ALTER TABLE credentials ADD CONSTRAINT unique_name_scope UNIQUE(name, scope);
-            EXCEPTION WHEN others THEN
-                RAISE NOTICE 'Could not add unique constraint to credentials - likely duplicates exist';
-            END;
+            ALTER TABLE credentials DROP CONSTRAINT unique_name_scope;
         END IF;
+
+        -- Create proper indexes for uniqueness
+        -- 1. Global uniqueness: One key per name where scope is global
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_credentials_global_unique 
+        ON credentials (name) WHERE scope = 'global';
+
+        -- 2. Tenant uniqueness: One key per name per tenant where scope is tenant
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_credentials_tenant_unique 
+        ON credentials (name, tenant_id) WHERE scope = 'tenant';
     END $$;
     """,
     # 4. PGCryto Extension

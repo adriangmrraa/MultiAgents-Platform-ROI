@@ -784,6 +784,7 @@ async def get_credential(id: int):
 
 @router.post("/credentials", dependencies=[Depends(verify_admin_token)])
 async def create_credential(cred: CredentialModel):
+    logger.info(f"Create Credential Payload: {cred.model_dump()}")
     tenant_id = cred.tenant_id if cred.scope == "tenant" else None
     
     q_upsert = """
