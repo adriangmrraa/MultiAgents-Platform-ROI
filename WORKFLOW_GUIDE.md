@@ -98,7 +98,7 @@ ParaAA
 1.  Ve a `/admin/tenants` (o sección Configuración).
 2.  Usa el formulario para crear/editar.
 
---------------
+--------------------
 
 ## 4. ✋ Configuración de Derivación Humana (Handoff)
 
