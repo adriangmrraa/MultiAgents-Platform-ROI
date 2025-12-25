@@ -1358,7 +1358,8 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             "credentials": {
                 "openai_api_key": decrypt_password(tenant_row['openai_api_key_enc']) if tenant_row.get('openai_api_key_enc') else OPENAI_API_KEY,
                 "tiendanube_store_id": tenant_row['tiendanube_store_id'],
-                "tiendanube_access_token": decrypt_password(tenant_row['tiendanube_access_token_enc']) if tenant_row.get('tiendanube_access_token_enc') else None
+                "tiendanube_access_token": decrypt_password(tenant_row['tiendanube_access_token_enc']) if tenant_row.get('tiendanube_access_token_enc') else None,
+                "tiendanube_service_url": TIENDANUBE_SERVICE_URL
             },
             "internal_secret": INTERNAL_SECRET_KEY
         }

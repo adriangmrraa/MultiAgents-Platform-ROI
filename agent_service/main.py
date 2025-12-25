@@ -40,19 +40,23 @@ class OrchestratorMessage(BaseModel):
 class OrchestratorResponse(BaseModel):
     messages: List[OrchestratorMessage] = Field(description="List of messages to send to the user.")
 
-class AgentThinkRequest(BaseModel):
-    tenant_id: int
+class AgentContext(BaseModel):
     store_name: str
-    user_input: str
-    chat_history: List[Dict[str, str]] 
     system_prompt: str
+
+class AgentCredentials(BaseModel):
     openai_api_key: str
-    # Protocol Omega: Context passed dynamically
     tiendanube_store_id: Optional[str] = None
     tiendanube_access_token: Optional[SecretStr] = None
-    tiendanube_service_url: str = "http://tiendanube_service:8002"
-    internal_api_token: str
-    mcp_url: Optional[str] = None
+    tiendanube_service_url: str = "http://tiendanube_service:8003"
+
+class AgentThinkRequest(BaseModel):
+    tenant_id: int
+    message: str
+    history: List[Dict[str, str]]
+    context: AgentContext
+    credentials: AgentCredentials
+    internal_secret: str
 
 # --- Global Context (Thread-local equivalent for Tool calls during iinvoke) ---
 # We use a simple object to hold context during the request lifetime
@@ -188,26 +192,30 @@ async def health():
 
 @app.post("/v1/agent/execute")
 async def execute_agent(request: AgentThinkRequest):
-    logger.info("agent_execution_start", tenant_id=request.tenant_id, store=request.store_name)
+    # Security Check
+    internal_token = os.getenv("INTERNAL_API_TOKEN")
+    if internal_token and request.internal_secret != internal_token:
+        raise HTTPException(status_code=401, detail="Invalid Internal Secret")
+
+    logger.info("agent_execution_start", tenant_id=request.tenant_id, store=request.context.store_name)
     
     # 0. Hydrate Context for Tools (Protocol Omega)
-    ctx.store_id = request.tiendanube_store_id or ""
-    ctx.token = request.tiendanube_access_token.get_secret_value() if request.tiendanube_access_token else ""
-    ctx.service_url = request.tiendanube_service_url
-    ctx.internal_token = request.internal_api_token
+    ctx.store_id = request.credentials.tiendanube_store_id or ""
+    ctx.token = request.credentials.tiendanube_access_token.get_secret_value() if request.credentials.tiendanube_access_token else ""
+    ctx.service_url = request.credentials.tiendanube_service_url
+    ctx.internal_token = request.internal_secret
 
     # 1. Prepare History
-    # ...
     history = []
-    for m in request.chat_history:
+    for m in request.history:
         if m['role'] == 'user':
             history.append(HumanMessage(content=m['content']))
-        else:
+        elif m['role'] == 'assistant':
             history.append(AIMessage(content=m['content']))
             
     # 2. Build Prompt
     prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content=request.system_prompt),
+        SystemMessage(content=request.context.system_prompt),
         MessagesPlaceholder(variable_name="chat_history"),
         ("user", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
@@ -216,7 +224,7 @@ async def execute_agent(request: AgentThinkRequest):
     # 3. Initialize LLM
     llm = ChatOpenAI(
         model="gpt-4o-mini",
-        api_key=request.openai_api_key,
+        api_key=request.credentials.openai_api_key,
         temperature=0
     )
     
@@ -235,7 +243,7 @@ async def execute_agent(request: AgentThinkRequest):
     # 5. Execute
     try:
         result = await executor.ainvoke({
-            "input": request.user_input,
+            "input": request.message,
             "chat_history": history
         })
         
