@@ -451,6 +451,14 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
     logger.info("shutdown_complete")
 
+# FastAPI App Initialization
+app = FastAPI(
+    title="Orchestrator Service",
+    description="Central intelligence for Kilocode microservices.",
+    version="1.1.0",
+    lifespan=lifespan
+)
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error("unhandled_exception", error=str(exc))
@@ -464,14 +472,6 @@ async def global_exception_handler(request: Request, exc: Exception):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
-
-# FastAPI App Initialization
-app = FastAPI(
-    title="Orchestrator Service",
-    description="Central intelligence for Kilocode microservices.",
-    version="1.1.0",
-    lifespan=lifespan
-)
 
 # CORS Configuration - Dynamically loaded from settings
 app.add_middleware(
