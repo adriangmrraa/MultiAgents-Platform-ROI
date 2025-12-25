@@ -1,7 +1,7 @@
 # 🤝 Guía de Operaciones Nexus v3.1 (Manual de Vuelo)
 
 Este documento es el manual operativo para el despliegue, mantenimiento y uso diario de la plataforma. Está diseñado para Operadores y Administradores de Sistema.
-
+    
 ### 3. Onboarding Ultra-Rápido & Business Ignition (v3.2)
 *El "Manual de Vuelo" para el despliegue automático de valor.*
 
