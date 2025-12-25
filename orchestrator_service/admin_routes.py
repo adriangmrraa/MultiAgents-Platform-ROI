@@ -14,6 +14,25 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-99")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+# --- Tools Registry (Code Reflection) ---
+REGISTERED_TOOLS = []
+
+def register_tools(tools_list):
+    """Populates the in-memory tools registry from main.py"""
+    global REGISTERED_TOOLS
+    REGISTERED_TOOLS = tools_list
+
+@router.get("/tools", dependencies=[Depends(verify_admin_token)])
+async def get_tools():
+    """Returns available tools using Code Reflection (no DB)."""
+    return [
+        {
+            "name": t.name,
+            "description": t.description
+        }
+        for t in REGISTERED_TOOLS
+    ]
+
 # --- Security ---
 async def verify_admin_token(x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_TOKEN:

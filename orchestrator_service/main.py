@@ -1033,6 +1033,10 @@ ACCIÓN REQUERIDA:
 
 tools = [search_specific_products, search_by_category, browse_general_storefront, cupones_list, orders, sendemail, derivhumano]
 
+# Register tools for Code Reflection (Nexus v3)
+from admin_routes import register_tools
+register_tools(tools)
+
 from langchain.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
 
