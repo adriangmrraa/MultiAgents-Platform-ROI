@@ -83,7 +83,7 @@ EasyPanel asigna nombres de host automáticos dentro del proyecto. Configura las
 
 ## 3. ⚙️ Configuración de Nueva Tienda (Multi-Tenant)
 
-Para
+ParaAA
 
 
 **Víaa Base de Datos (Recomendado):**
