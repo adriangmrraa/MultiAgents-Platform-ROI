@@ -57,8 +57,21 @@ services:
     environment:
       - PORT=8001
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN} # Security Check
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  tiendanube_service:
+    build: ./tiendanube_service
+    # No ports exposed to host = Protocol Omega (Store Integrations stay internal)
+    environment:
+      - PORT=8003
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8003/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -75,6 +88,7 @@ services:
       - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
       - ORCHESTRATOR_SERVICE_URL=http://orchestrator_service:8000
       - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY} # For Audio Transcription
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8002/health" ]
       interval: 30s

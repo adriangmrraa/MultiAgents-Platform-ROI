@@ -513,7 +513,22 @@ async def lifespan(app: FastAPI):
         else:
              await db.connect() 
              
-        # 2. Universal Schema Creation (SQLAlchemy)
+        # 2. Auto-Migration for EasyPanel (Schema Repair & Prep)
+        # We execute this BEFORE SQLAlchemy to ensure "Ghost Tables" (like customers) have PKs/Unique constraints
+        # so that Foreign Keys created by SQLAlchemy don't fail.
+        
+        # Execute migration steps sequentially
+        for i, step in enumerate(migration_steps):
+            try:
+                if step.strip():
+                    await db.pool.execute(step)
+            except Exception as step_err:
+                # Log but verify severity. "Index already exists" is fine. "No unique constraint" is fatal later but maybe here we are fixing it.
+                logger.debug(f"migration_step_ignored", index=i, error=str(step_err))
+
+        logger.info("db_migrations_applied_v3")
+
+        # 3. Universal Schema Creation (SQLAlchemy)
         # CRITICAL: Must import all models to ensure they are registered in Base.metadata
         from app.models.base import Base
         from app.models.tenant import Tenant
@@ -523,21 +538,7 @@ async def lifespan(app: FastAPI):
         
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-             
-        # 3. Auto-Migration for EasyPanel
-        # We use the global migration_steps defined at module level
-        
-        # Execute migration steps sequentially
-        for i, step in enumerate(migration_steps):
-            try:
-                if step.strip():
-                    await db.pool.execute(step)
-            except Exception as step_err:
-                logger.debug(f"migration_step_ignored", index=i, error=str(step_err))
-                # We continue despite errors to try to apply as much as possible
-        
-        logger.info("db_migrations_applied")
-        
+            
         # 4. Hydrate Data (SQLAlchemy session)
         async with AsyncSessionLocal() as session:
             await init_db(session)
@@ -1556,6 +1557,24 @@ BEGIN
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(tenant_id, phone_number)
     );
+
+    -- ENFORCE CONSTRAINTS (Schema Drift Repair)
+    -- If table existed without PK or Unique, add them now.
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='customers') THEN
+       -- Ensure ID is PK
+       IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name='customers' AND constraint_type='PRIMARY KEY') THEN
+           ALTER TABLE customers ADD PRIMARY KEY (id);
+       END IF;
+       -- Ensure Unique (tenant_id, phone_number) for lookups
+       IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name='customers' AND constraint_name='uq_customers_tenant_phone') THEN
+           -- Try to add, might fail if duplicates exist (User must clean data if so)
+           BEGIN
+               ALTER TABLE customers ADD CONSTRAINT uq_customers_tenant_phone UNIQUE (tenant_id, phone_number);
+           EXCEPTION WHEN others THEN
+               RAISE NOTICE 'Skipping Unique Constraint on customers due to duplicates';
+           END;
+       END IF;
+    END IF;
 
     -- Identity Link (Repair Roto)
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='chat_conversations') THEN
