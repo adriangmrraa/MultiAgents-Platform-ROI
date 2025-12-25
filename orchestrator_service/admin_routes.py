@@ -15,8 +15,14 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-99")
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 # --- Security ---
+# --- Security ---
 async def verify_admin_token(x_admin_token: str = Header(None)):
+    # DEBUG LOGGING FOR 401 - REMOVE IN PROD
+    print(f"DEBUG AUTH: Server expects='{ADMIN_TOKEN[:3]}***{ADMIN_TOKEN[-3:] if len(ADMIN_TOKEN)>3 else ''}'")
+    print(f"DEBUG AUTH: Client sent='{x_admin_token[:3] if x_admin_token else 'None'}***{x_admin_token[-3:] if x_admin_token and len(x_admin_token)>3 else ''}'")
+    
     if x_admin_token != ADMIN_TOKEN:
+        print("DEBUG AUTH: Mismatch detected -> 401")
         raise HTTPException(status_code=401, detail="Invalid Admin Token")
 
 # --- RBAC Helper ---
