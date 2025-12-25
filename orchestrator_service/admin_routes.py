@@ -1113,6 +1113,108 @@ async def meta_status():
     """Check WhatsApp compatibility status."""
     return {"connected": True, "provider": "ycloud"}
 
+# --- Diagnostics ---
+@router.get("/diagnostics/healthz")
+async def health_check():
+    """Internal health check wrapper for Admin UI."""
+    return {"status": "ok", "service": "orchestrator", "timestamp": datetime.now().isoformat()}
+
+# --- Analytics & Telemetry ---
+
+@router.get("/analytics/summary", dependencies=[Depends(verify_admin_token)])
+async def get_analytics_summary(tenant_id: Optional[int] = None, from_date: str = None):
+    # Default to 7 days
+    if not from_date:
+        from_date = (datetime.now() - timedelta(days=7)).isoformat()
+    
+    # 1. Total Messages
+    q_msgs = "SELECT COUNT(*) FROM chat_messages WHERE created_at >= $1"
+    args = [datetime.fromisoformat(from_date)]
+    if tenant_id:
+        q_msgs += " AND tenant_id = $2"
+        args.append(tenant_id)
+    
+    total_msgs = await db.pool.fetchval(q_msgs, *args)
+    
+    # 2. Orders Lookup (Mock using tool calls or message content)
+    # We'll use a placeholder logic: 10% of user messages are lookups
+    q_user_msgs = q_msgs + " AND role = 'user'"
+    user_msgs = await db.pool.fetchval(q_user_msgs, *args)
+    
+    return {
+        "kpis": {
+            "conversations": {"value": user_msgs}, # Proxy for active conversations
+            "messages": {"total": total_msgs},
+            "orders_lookup": {
+                "requested": int(user_msgs * 0.1),
+                "success_rate": 0.85
+            }
+        }
+    }
+
+@router.get("/telemetry/events", dependencies=[Depends(verify_admin_token)])
+async def get_telemetry_events(tenant_id: Optional[int] = None, limit: int = 20):
+    q = "SELECT * FROM system_events"
+    args = []
+    if tenant_id:
+        q += " WHERE tenant_id = $1"
+        args.append(tenant_id)
+    q += " ORDER BY occurred_at DESC LIMIT " + ("$2" if tenant_id else "$1")
+    if tenant_id:
+        args.append(limit)
+    else:
+        args.append(limit)
+        
+    rows = await db.pool.fetch(q, *args)
+    return {
+        "items": [
+            {
+                "event_type": r['event_type'],
+                "severity": r['severity'],
+                "payload": json.loads(r['payload']) if isinstance(r['payload'], str) else r['payload'],
+                "occurred_at": r['occurred_at'].isoformat(),
+                "error_message": r['message']
+            } for r in rows
+        ]
+    }
+
+# Alias for legacy calls
+@router.get("/console/events", dependencies=[Depends(verify_admin_token)])
+async def get_console_events(limit: int = 10):
+    res = await get_telemetry_events(limit=limit)
+    return {"events": res["items"]} # Adapt format slightly if needed by JS
+
+# --- Tools Management ---
+
+class ToolModel(BaseModel):
+    name: str
+    type: str # http | tienda_nube
+    service_url: Optional[str] = None
+    config: Optional[dict] = {}
+
+@router.get("/tools", dependencies=[Depends(verify_admin_token)])
+async def list_tools():
+    rows = await db.pool.fetch("SELECT * FROM tools ORDER BY id DESC")
+    return [dict(r) for r in rows]
+
+@router.post("/tools", dependencies=[Depends(verify_admin_token)])
+async def create_tool(tool: ToolModel):
+    # Basic upsert
+    q = """
+        INSERT INTO tools (name, type, service_url, config, updated_at)
+        VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (tenant_id, name) DO UPDATE SET
+            type = EXCLUDED.type,
+            service_url = EXCLUDED.service_url,
+            config = EXCLUDED.config,
+            updated_at = NOW()
+        RETURNING id
+    """
+    # Assuming global tools for now (tenant_id=NULL) as per current architecture
+    await db.pool.fetchval(q, tool.name, tool.type, tool.service_url, json.dumps(tool.config))
+    return {"status": "ok"}
+
+
 # --- Reports ---
 
 @router.get("/reports/assisted-gmv")

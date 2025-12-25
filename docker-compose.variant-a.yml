@@ -1,0 +1,108 @@
+version: '3.8'
+
+# Nexus v3.1 - Variant A: Single Node (All-in-One)
+# Ideal for: Testing, Development, Small Production (<50 Tenants)
+# Protocol Omega: Strict Network Isolation
+
+services:
+  # --- Backend Core ---
+  orchestrator_service:
+    build: ./orchestrator_service
+    container_name: orchestrator_service
+    restart: unless-stopped
+    ports:
+      - "8000:8000" # Allowed for internal health checks / local dev
+    environment:
+      - ENV=production
+      - POSTGRES_DSN=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0
+      - WHATSAPP_SERVICE_URL=http://whatsapp_service:8002
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
+      # Protocol Omega: Dynamic Config
+      - NEXUS_V3_ENABLED=true
+    networks:
+      - nexus-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  whatsapp_service:
+    build: ./whatsapp_service
+    container_name: whatsapp_service
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      - PORT=8002
+      - ORCHESTRATOR_SERVICE_URL=http://orchestrator_service:8000
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
+      - REDIS_URL=redis://redis:6379/0
+      - YCLOUD_API_KEY=${YCLOUD_API_KEY}
+      - YCLOUD_WEBHOOK_SECRET=${YCLOUD_WEBHOOK_SECRET}
+    networks:
+      - nexus-network
+    depends_on:
+      - redis
+      - orchestrator_service
+
+  # --- Frontend Layer ---
+  platform_ui:
+    build:
+      context: ./platform_ui
+    container_name: platform_ui
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      # Protocol Omega: Dynamic Injection for app.js
+      - API_BASE_URL=http://localhost:8000
+      # NOTE: In production with domain, this should be the public HTTPS URL of the orchestrator 
+      # IF accessing from client browser, OR internal if doing SSR (but this is a SPA).
+      # For SPA, the browser needs the Public URL.
+      # However, Nginx logic was refactored to rely on app.js detection.
+    networks:
+      - nexus-network
+    depends_on:
+      - orchestrator_service
+
+  # --- Persistence (Local) ---
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nexus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-nexus_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    networks:
+      - nexus-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexus}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    restart: always
+    networks:
+      - nexus-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  nexus-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

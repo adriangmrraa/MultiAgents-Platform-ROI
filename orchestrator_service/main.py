@@ -423,9 +423,24 @@ migration_steps = [
         ALTER TABLE system_events ADD COLUMN IF NOT EXISTS severity VARCHAR(16) DEFAULT 'info';
         ALTER TABLE system_events ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ DEFAULT NOW();
         ALTER TABLE system_events ADD COLUMN IF NOT EXISTS payload JSONB;
+        ALTER TABLE system_events ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE;
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Schema repair failed for system_events';
     END $$;
+    """,
+    # 10c. Tools Management (Nexus v3.1)
+    """
+    CREATE TABLE IF NOT EXISTS tools (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        service_url TEXT,
+        config JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(tenant_id, name)
+    );
     """,
     # 11. Indexes
     "CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages (conversation_id, created_at);",

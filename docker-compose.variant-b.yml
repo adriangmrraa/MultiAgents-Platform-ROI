@@ -1,0 +1,65 @@
+version: '3.8'
+
+# Nexus v3.1 - Variant B: Scaled / External State
+# Ideal for: Production (>50 Tenants), Managed DBs
+# Protocol Omega: Stateless Computation
+
+services:
+  # --- Backend Core (Stateless) ---
+  orchestrator_service:
+    build: ./orchestrator_service
+    # No container_name to allow scaling (docker compose up --scale orchestrator_service=3)
+    deploy:
+      mode: replicated
+      replicas: 2
+    restart: unless-stopped
+    ports:
+      - "8000-8005:8000" # Port range for scaling
+    environment:
+      - ENV=production
+      # External Managed DB (SSL Required)
+      - POSTGRES_DSN=${MANAGED_DB_URL}?sslmode=require
+      # External Managed Redis
+      - REDIS_URL=${MANAGED_REDIS_URL}
+      - WHATSAPP_SERVICE_URL=http://whatsapp_service:8002
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
+      - NEXUS_V3_ENABLED=true
+    networks:
+      - nexus-network
+
+  whatsapp_service:
+    build: ./whatsapp_service
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      - PORT=8002
+      - ORCHESTRATOR_SERVICE_URL=http://orchestrator_service:8000
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
+      - REDIS_URL=${MANAGED_REDIS_URL}
+      - YCLOUD_API_KEY=${YCLOUD_API_KEY}
+      - YCLOUD_WEBHOOK_SECRET=${YCLOUD_WEBHOOK_SECRET}
+    networks:
+      - nexus-network
+
+  # --- Frontend Layer ---
+  platform_ui:
+    build:
+      context: ./platform_ui
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - API_BASE_URL=${PUBLIC_API_URL} # Must be explicitly set for public access
+    networks:
+      - nexus-network
+    depends_on:
+      - orchestrator_service
+  # NO LOCAL DATABASE SERVICES
+  # State is delegated to Managed Providers (AWS RDS / DigitalOcean / EasyPanel Managed)
+
+networks:
+  nexus-network:
+    driver: bridge
