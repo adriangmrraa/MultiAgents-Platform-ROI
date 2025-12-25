@@ -65,7 +65,11 @@ async def init_db(session: AsyncSession) -> None:
         tenant_id=tenant.id,
         enabled=False,
         triggers={"rule_generic": True}, # Default trigger
-        destination_email=os.getenv("DEFAULT_HANDOFF_EMAIL")
+        destination_email=os.getenv("DEFAULT_HANDOFF_EMAIL", "admin@example.com"), # Fallback for NotNullViolation
+        smtp_host="smtp.example.com",
+        smtp_port=587,
+        smtp_username="user",
+        smtp_password_encrypted="encrypted_placeholder"
     )
     session.add(handoff)
     
