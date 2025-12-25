@@ -1428,6 +1428,23 @@ async def delete_agent(agent_id: str):
         if not row:
             raise HTTPException(404, "Agent not found")
         return {"status": "ok", "deleted": str(row['id'])}
+
+# --- Compliance: Forensically Identified Missing Endpoint ---
+@router.get("/analytics/summary", dependencies=[Depends(verify_admin_token)])
+async def get_analytics_summary():
+    """
+    Placeholder endpoint preventing 404 errors in Agents Page.
+    Future: Implement real aggregation.
+    """
+    return {
+        "status": "ok", 
+        "data": {
+            "total_conversations": 0,
+            "active_now": 0,
+            "handover_rate": 0.0,
+            "avg_response_time": 0.0
+        }
+    }
     except Exception as e:
         logger.error(f"Error deleting agent: {e}")
         raise HTTPException(500, f"Error deleting agent: {e}")
