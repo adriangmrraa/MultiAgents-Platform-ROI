@@ -176,11 +176,11 @@ async def sync_environment():
     for env_var, category, desc in env_creds:
         val = os.getenv(env_var)
         if val:
-            # Atomic upsert using the unique_name_scope constraint
+            # Atomic upsert using Partial Index (Nexus v3 Fix)
             await db.pool.execute("""
                 INSERT INTO credentials (name, value, category, scope, description)
                 VALUES ($1, $2, $3, 'global', $4)
-                ON CONFLICT ON CONSTRAINT unique_name_scope
+                ON CONFLICT (name) WHERE scope = 'global'
                 DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
             """, env_var, val, category, f"{desc} (Auto-detected from ENV)")
 
@@ -968,6 +968,7 @@ async def get_media(media_id: str):
 
 
 @router.get("/tools", dependencies=[Depends(verify_admin_token)])
+@require_role('SuperAdmin')
 async def list_tools():
     # Return list of active tools (hardcoded or dynamic if we had a table)
     return [
@@ -980,11 +981,22 @@ async def list_tools():
 # --- Analytics / Telemetry ---
 
 @router.get("/analytics/summary", dependencies=[Depends(verify_admin_token)])
+@require_role('SuperAdmin')
 async def analytics_summary(tenant_id: int = 1, from_date: str = None, to_date: str = None):
     """
-    Advanced Analytics derived strictly from PostgreSQL (Single Source of Truth).
-    Follows AGENTS.md contract.
+    Advanced Analytics derived strictly from PostgreSQL with Aggregated Cache (Redis).
     """
+    # Cache Key
+    cache_key = f"analytics:summary:{tenant_id}"
+    
+    # Try Cache
+    try:
+        cached = redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass # Fail silently on cache error
+
     try:
         # 1. Conversation KPIs
         active_convs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations WHERE status = 'open'")
@@ -1008,11 +1020,20 @@ async def analytics_summary(tenant_id: int = 1, from_date: str = None, to_date: 
                 }
             }
         }
+        
+        # Set Cache (TTL 5 minutes)
+        try:
+            redis_client.setex(cache_key, 300, json.dumps(res))
+        except:
+            pass
+            
+        return res
     except Exception as e:
         print(f"ERROR analytics_summary: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
 
 @router.get("/telemetry/events", dependencies=[Depends(verify_admin_token)])
+@require_role('SuperAdmin')
 async def telemetry_events(tenant_id: int = 1):
     # Retrieve system events if any
     return {"items": []}
@@ -1279,8 +1300,9 @@ async def create_tool(tool: ToolModel):
 
 # --- Reports ---
 
-@router.get("/reports/assisted-gmv")
-async def report_assisted_gmv(tenant_id: Optional[int] = None, days: int = 30, x_admin_token: str = Header(None)):
+@router.get("/reports/assisted-gmv", dependencies=[Depends(verify_admin_token)])
+@require_role('SuperAdmin')
+async def report_assisted_gmv(tenant_id: Optional[int] = None, days: int = 30):
     await verify_admin_token(x_admin_token)
     
     # 1. Get all conversations that have Assistant messages in the last X days

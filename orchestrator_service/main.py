@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 # --- Imports ---
 from app.core.tenant import TenantContext
 from app.api.deps import get_current_tenant_webhook, get_current_tenant_header
+from app.models.customer import Customer # Schema Drift Prevention
 
 # --- Dynamic Context ---
 tenant_store_id: ContextVar[Optional[str]] = ContextVar("tenant_store_id", default=None)
@@ -1541,12 +1542,25 @@ BEGIN
         ALTER TABLE agents ADD COLUMN IF NOT EXISTS temperature FLOAT DEFAULT 0.3;
         ALTER TABLE agents ALTER COLUMN whatsapp_number DROP NOT NULL;
         ALTER TABLE agents ALTER COLUMN system_prompt_template SET NOT NULL;
-        
-        -- Remove legacy unique constraint if we are allowing multiple agents per number? 
-        -- Or keep it unique? The guide implies 1 agent per number.
-        -- We'll keep unique but only if not null. 
-        -- If constraint exists on (whatsapp_number), we might need to recreate it as partial or leave it.
-        -- For now, let's assume standard unique is fine if not null.
     END IF;
+
+    -- Customers (Ghost Table Fix)
+    CREATE TABLE IF NOT EXISTS customers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+        phone_number TEXT NOT NULL,
+        name TEXT,
+        email TEXT,
+        notes TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(tenant_id, phone_number)
+    );
+
+    -- Identity Link (Repair Roto)
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='chat_conversations') THEN
+         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES customers(id);
+    END IF;
+
 END $$;
 """)
