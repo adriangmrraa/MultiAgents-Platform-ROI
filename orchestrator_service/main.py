@@ -310,6 +310,7 @@ migration_steps = [
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMPTZ;
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS avatar_url TEXT;
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS human_override_until TIMESTAMPTZ;
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES customers(id); -- Fix Identity Link
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Schema repair failed for chat_conversations';
     END $$;
@@ -503,7 +504,12 @@ async def lifespan(app: FastAPI):
              await db.connect() 
              
         # 2. Universal Schema Creation (SQLAlchemy)
+        # CRITICAL: Must import all models to ensure they are registered in Base.metadata
         from app.models.base import Base
+        from app.models.tenant import Tenant
+        from app.models.chat import ChatConversation, ChatMessage, ChatMedia
+        from app.models.customer import Customer # Fixes "Phantom Table" issue
+        
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
              

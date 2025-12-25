@@ -22,7 +22,7 @@ CREATE INDEX idx_inbound_messages_status ON inbound_messages (status);
 
 -- Table for chat messages (source-of-truth)
 CREATE TABLE chat_messages (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY, -- Modernized to UUID
     from_number TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
     content TEXT NOT NULL,
