@@ -258,6 +258,9 @@ migration_steps = [
         IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='provider') THEN
             ALTER TABLE credentials ALTER COLUMN provider DROP NOT NULL;
         END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='api_key_encrypted') THEN
+            ALTER TABLE credentials ALTER COLUMN api_key_encrypted DROP NOT NULL;
+        END IF;
 
         -- Check for UNIQUE constraint (name, scope)
         IF NOT EXISTS (
