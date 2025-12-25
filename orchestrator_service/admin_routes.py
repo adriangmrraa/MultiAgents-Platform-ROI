@@ -187,8 +187,8 @@ async def bootstrap():
 @router.get("/stats", dependencies=[Depends(verify_admin_token)])
 async def get_stats():
     """Get dashboard statistics. Strictly derived from HITL tables."""
-    # Active tenants (with ID)
-    active_tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants WHERE tiendanube_store_id IS NOT NULL")
+    # Active tenants (with ID and active status)
+    active_tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants WHERE is_active = TRUE")
     
     # Message stats (Source of Truth: chat_messages)
     total_messages = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages")
@@ -479,18 +479,32 @@ async def list_tenants():
 @router.post("/tenants", dependencies=[Depends(verify_admin_token)])
 async def create_tenant(tenant: TenantModel):
     q = """
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (bot_phone_number) 
-        DO UPDATE SET 
-            store_name = EXCLUDED.store_name,
-            owner_email = EXCLUDED.owner_email,
-            store_location = EXCLUDED.store_location,
         INSERT INTO tenants (
             store_name, bot_phone_number, owner_email, store_location, store_website, store_description, store_catalog_knowledge,
             tiendanube_store_id, tiendanube_access_token, handoff_enabled, handoff_instructions, handoff_target_email, handoff_message,
             handoff_smtp_host, handoff_smtp_user, handoff_smtp_pass, handoff_smtp_port, handoff_policy
         ) 
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        ON CONFLICT (bot_phone_number) 
+        DO UPDATE SET 
+            store_name = EXCLUDED.store_name,
+            owner_email = EXCLUDED.owner_email,
+            store_location = EXCLUDED.store_location,
+            store_website = EXCLUDED.store_website,
+            store_description = EXCLUDED.store_description,
+            store_catalog_knowledge = EXCLUDED.store_catalog_knowledge,
+            tiendanube_store_id = EXCLUDED.tiendanube_store_id,
+            tiendanube_access_token = EXCLUDED.tiendanube_access_token,
+            handoff_enabled = EXCLUDED.handoff_enabled,
+            handoff_instructions = EXCLUDED.handoff_instructions,
+            handoff_target_email = EXCLUDED.handoff_target_email,
+            handoff_message = EXCLUDED.handoff_message,
+            handoff_smtp_host = EXCLUDED.handoff_smtp_host,
+            handoff_smtp_user = EXCLUDED.handoff_smtp_user,
+            handoff_smtp_pass = EXCLUDED.handoff_smtp_pass,
+            handoff_smtp_port = EXCLUDED.handoff_smtp_port,
+            handoff_policy = EXCLUDED.handoff_policy,
+            updated_at = NOW()
         RETURNING id
     """
     tenant_id = await db.pool.fetchval(
