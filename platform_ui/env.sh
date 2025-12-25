@@ -6,6 +6,8 @@ if [ -z "$API_BASE_URL" ] && [ -n "$API_BASE" ]; then
 fi
 
 echo "Generating env.js with API_BASE_URL=${API_BASE_URL}"
+echo "DEBUG ENV: ADMIN_TOKEN is set to: '${ADMIN_TOKEN}'"
+echo "DEBUG ENV: Length of ADMIN_TOKEN: ${#ADMIN_TOKEN}"
 
 # Default to empty string if not set, or handle strictness
 : "${API_BASE_URL:=}"
