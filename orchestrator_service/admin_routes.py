@@ -1423,11 +1423,12 @@ async def update_agent(agent_id: str, agent: AgentModel):
 @require_role('SuperAdmin')
 async def delete_agent(agent_id: str):
     try:
-        q = "DELETE FROM agents WHERE id=$1::uuid RETURNING id"
-        row = await db.pool.fetchrow(q, agent_id)
         if not row:
             raise HTTPException(404, "Agent not found")
         return {"status": "ok", "deleted": str(row['id'])}
+    except Exception as e:
+        logger.error(f"Error deleting agent: {e}")
+        raise HTTPException(500, f"Error deleting agent: {e}")
 
 # --- Compliance: Forensically Identified Missing Endpoint ---
 @router.get("/analytics/summary", dependencies=[Depends(verify_admin_token)])
@@ -1445,6 +1446,3 @@ async def get_analytics_summary():
             "avg_response_time": 0.0
         }
     }
-    except Exception as e:
-        logger.error(f"Error deleting agent: {e}")
-        raise HTTPException(500, f"Error deleting agent: {e}")
