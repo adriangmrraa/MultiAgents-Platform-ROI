@@ -41,10 +41,25 @@ export const Credentials: React.FC = () => {
                 fetchApi('/admin/credentials'),
                 fetchApi('/admin/tenants')
             ]);
-            setCredentials(credsData);
-            setTenants(tenantsData);
+
+            if (Array.isArray(credsData)) {
+                setCredentials(credsData);
+            } else {
+                console.error("Invalid credentials data:", credsData);
+                setCredentials([]);
+            }
+
+            if (Array.isArray(tenantsData)) {
+                setTenants(tenantsData);
+            } else {
+                console.error("Invalid tenants data:", tenantsData);
+                setTenants([]);
+            }
         } catch (e) {
-            console.error(e);
+            console.error("Failed to load credentials/tenants", e);
+            // Don't crash the UI, use empty
+            setCredentials([]);
+            setTenants([]);
         }
     };
 

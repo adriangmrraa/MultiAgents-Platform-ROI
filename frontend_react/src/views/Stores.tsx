@@ -31,9 +31,15 @@ export const Stores: React.FC = () => {
     const loadTenants = async () => {
         try {
             const data = await fetchApi('/admin/tenants');
-            setTenants(data);
+            if (Array.isArray(data)) {
+                setTenants(data);
+            } else {
+                console.error("Invalid tenants data received:", data);
+                setTenants([]); // Safe fallback to empty array
+            }
         } catch (e) {
-            console.error(e);
+            console.error("Failed to load tenants", e);
+            setTenants([]); // Safe fallback
         }
     };
 

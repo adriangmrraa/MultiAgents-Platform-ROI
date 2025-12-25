@@ -8,14 +8,24 @@ function detectApiBase() {
         return 'http://localhost:3000'; // Target BFF Proxy
     }
     let hostname = window.location.hostname;
+
+    // Legacy platform-ui support
     if (hostname.includes('platform-ui')) {
         return window.location.protocol + '//' + hostname.replace('platform-ui', 'orchestrator-service');
     }
-    // Fallback for EasyPanel
-    if (hostname.includes('frontend-react')) {
-        return window.location.protocol + '//' + hostname.replace('frontend-react', 'bff-service').replace('5173', '3000');
+
+    // Modern frontend-react support (EasyPanel / Production)
+    // Matches "multiagents-frontend.x.host" -> "multiagents-orchestrator.x.host"
+    if (hostname.includes('frontend')) {
+        // Try to replace 'frontend' with 'orchestrator' which is the standard service name
+        // This handles 'multiagents-frontend' -> 'multiagents-orchestrator'
+        let newHost = hostname.replace('frontend', 'orchestrator');
+        // If the naming convention was 'frontend-react', it might have already been handled, 
+        // but this generic replacement is safer.
+        return window.location.protocol + '//' + newHost;
     }
-    // Default to relative for BFF
+
+    // Default fallback to relative path (if using Nginx reverse proxy at root)
     return '/api';
 }
 
@@ -50,6 +60,10 @@ export function useApi() {
 
             if (!response.ok) {
                 const errorData = await response.text();
+                // Prevent showing HTML error pages as text messages
+                if (errorData.trim().startsWith('<!DOCTYPE html') || errorData.trim().startsWith('<html')) {
+                    throw new Error(`API Error: ${response.status} (Backend Unreachable)`);
+                }
                 throw new Error(errorData || `HTTP ${response.status}`);
             }
 
@@ -57,9 +71,15 @@ export function useApi() {
             if (contentType && contentType.includes('application/json')) {
                 return await response.json();
             }
-            return await response.text();
+            // If response is HTML but status is 200 (common with SPA fallbacks for bad API paths)
+            const textData = await response.text();
+            if (textData.trim().startsWith('<!DOCTYPE html') || textData.trim().startsWith('<html')) {
+                throw new Error("Invalid API Response: Received HTML instead of JSON. Check API_BASE URL.");
+            }
+            return textData;
 
         } catch (err: any) {
+            console.error("API Fetch Error:", err);
             setError(err.message);
             throw err;
         } finally {
