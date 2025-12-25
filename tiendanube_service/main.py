@@ -1,5 +1,6 @@
 import os
 import requests
+import httpx
 from fastapi import FastAPI, HTTPException, Header, Depends
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict
@@ -37,6 +38,7 @@ REQUESTS = Counter("http_requests_total", "Total Request Count", ["service", "en
 LATENCY = Histogram("http_request_latency_seconds", "Request Latency", ["service", "endpoint"])
 
 SERVICE_NAME = "tiendanube_service"
+app = FastAPI(title="Tienda Nube Tool Service", version="1.0.0")
 
 @app.middleware("http")
 async def add_metrics_and_logs(request: Request, call_next):
@@ -131,7 +133,7 @@ def_headers = {
     "Content-Type": "application/json",
 }
 
-async def verify_token(x_internal_token: str = Header(...)):
+async def verify_token(x_internal_token: str = Header(None)):
     if INTERNAL_API_TOKEN and x_internal_token != INTERNAL_API_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid Internal Token")
 

@@ -192,6 +192,21 @@ migration_steps = [
     """
     DO $$ 
     BEGIN 
+        -- Check for name column (Fix for bootstrap error)
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='name') THEN
+            ALTER TABLE credentials ADD COLUMN name TEXT;
+        END IF;
+
+        -- Check for category column
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='category') THEN
+            ALTER TABLE credentials ADD COLUMN category TEXT;
+        END IF;
+
+        -- Check for scope column
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='scope') THEN
+            ALTER TABLE credentials ADD COLUMN scope TEXT DEFAULT 'global';
+        END IF;
+
         -- Check for updated_at column
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='updated_at') THEN
             ALTER TABLE credentials ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();

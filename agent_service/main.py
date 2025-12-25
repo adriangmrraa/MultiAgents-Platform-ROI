@@ -35,6 +35,7 @@ class OrchestratorMessage(BaseModel):
     total: Optional[int] = None
     text: Optional[str] = None
     imageUrl: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class OrchestratorResponse(BaseModel):
     messages: List[OrchestratorMessage] = Field(description="List of messages to send to the user.")
@@ -238,9 +239,26 @@ async def execute_agent(request: AgentThinkRequest):
             "chat_history": history
         })
         
-        output = result["output"]
-        # In a real scenario, we'd parse and return OrchestratorResponse
-        return {"output": output}
+        output_text = result["output"]
+        
+        # 6. Parse Output into structured messages
+        # We look for image URLs or specific markers
+        messages = []
+        
+        # Extract metadata (Chain of Thought / Tool steps)
+        metadata = {
+            "intermediate_steps": [str(step) for step in result.get("intermediate_steps", [])],
+            "agent_outcome": str(result.get("output", ""))
+        }
+
+        # Check for handoff
+        if "HUMAN_HANDOFF_REQUESTED:" in output_text:
+            messages.append(OrchestratorMessage(text=output_text, metadata=metadata))
+        else:
+            # Simple splitter for now (in the future, a more complex parser could be used)
+            messages.append(OrchestratorMessage(text=output_text, metadata=metadata))
+            
+        return {"messages": [m.dict() for m in messages]}
         
     except Exception as e:
         logger.error("agent_thinking_failed", error=str(e))

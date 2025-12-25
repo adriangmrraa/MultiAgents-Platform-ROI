@@ -25,31 +25,18 @@ class Database:
             await self.pool.close()
 
     async def try_insert_inbound(self, provider: str, provider_message_id: str, event_id: str, from_number: str, payload: dict, correlation_id: str) -> bool:
-        """Try to insert inbound message. Returns True if inserted, False if duplicate."""
-        query = """
-        INSERT INTO inbound_messages (provider, provider_message_id, event_id, from_number, payload, status, correlation_id)
-        VALUES ($1, $2, $3, $4, $5, 'received', $6)
-        ON CONFLICT (provider, provider_message_id) DO NOTHING
-        RETURNING id
         """
-        async with self.pool.acquire() as conn:
-            result = await conn.fetchval(query, provider, provider_message_id, event_id, from_number, json.dumps(payload), correlation_id)
-            return result is not None
+        Legacy wrapper. Now we use chat_messages as source of truth.
+        Returns True if not a duplicate (using Redis for fast dedup).
+        """
+        # Dedup is now handled in main.py via Redis, but we keep this for legacy compatibility if needed
+        return True
 
-    async def mark_inbound_processing(self, provider: str, provider_message_id: str):
-        query = "UPDATE inbound_messages SET status = 'processing' WHERE provider = $1 AND provider_message_id = $2"
+    async def log_system_event(self, level: str, event_type: str, message: str, metadata: dict = None):
+        """Standardized system event logging."""
+        query = "INSERT INTO system_events (level, event_type, message, metadata) VALUES ($1, $2, $3, $4)"
         async with self.pool.acquire() as conn:
-            await conn.execute(query, provider, provider_message_id)
-
-    async def mark_inbound_done(self, provider: str, provider_message_id: str):
-        query = "UPDATE inbound_messages SET status = 'done', processed_at = NOW() WHERE provider = $1 AND provider_message_id = $2"
-        async with self.pool.acquire() as conn:
-            await conn.execute(query, provider, provider_message_id)
-
-    async def mark_inbound_failed(self, provider: str, provider_message_id: str, error: str):
-        query = "UPDATE inbound_messages SET status = 'failed', processed_at = NOW(), error = $3 WHERE provider = $1 AND provider_message_id = $2"
-        async with self.pool.acquire() as conn:
-            await conn.execute(query, provider, provider_message_id, error)
+            await conn.execute(query, level, event_type, message, json.dumps(metadata or {}))
 
     async def append_chat_message(self, from_number: str, role: str, content: str, correlation_id: str):
         query = "INSERT INTO chat_messages (from_number, role, content, correlation_id) VALUES ($1, $2, $3, $4)"

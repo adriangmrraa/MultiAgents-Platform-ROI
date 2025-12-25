@@ -1024,14 +1024,14 @@ async def healthz():
 @router.get("/diagnostics/events/stream", dependencies=[Depends(verify_admin_token)])
 async def events_stream(limit: int = 10):
     """Return recent events for the setup wizard polling."""
-    # Fetch recent inbound messages as "events"
-    rows = await db.pool.fetch("SELECT * FROM inbound_messages ORDER BY received_at DESC LIMIT $1", limit)
+    # Fetch recent user messages as "inbound events"
+    rows = await db.pool.fetch("SELECT * FROM chat_messages WHERE role = 'user' ORDER BY created_at DESC LIMIT $1", limit)
     events = []
     for r in rows:
         events.append({
             "event_type": "webhook_received",
             "correlation_id": r["correlation_id"],
-            "timestamp": r["received_at"].isoformat(),
+            "timestamp": r["created_at"].isoformat(),
             "details": {"from_number": r["from_number"]}
         })
     # Also fetch recent outgoing
