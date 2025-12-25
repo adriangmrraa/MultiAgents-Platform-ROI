@@ -197,6 +197,11 @@ migration_steps = [
             ALTER TABLE credentials ADD COLUMN name TEXT;
         END IF;
 
+        -- Check for value column (Fix for bootstrap error)
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='value') THEN
+            ALTER TABLE credentials ADD COLUMN value TEXT;
+        END IF;
+
         -- Check for category column
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='category') THEN
             ALTER TABLE credentials ADD COLUMN category TEXT;
@@ -205,6 +210,11 @@ migration_steps = [
         -- Check for scope column
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='scope') THEN
             ALTER TABLE credentials ADD COLUMN scope TEXT DEFAULT 'global';
+        END IF;
+
+        -- Check for description column
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='description') THEN
+            ALTER TABLE credentials ADD COLUMN description TEXT;
         END IF;
 
         -- Check for updated_at column
