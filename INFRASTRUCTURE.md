@@ -1,79 +1,84 @@
-# Infrastructure: Hetzner & EasyPanel (Nexus v3)
+# 🛡️ Nexus v3.1 Infrastructure Guide (Protocol Omega)
 
-This document outlines the recommended security and networking configurations for deploying the **Platform AI Solutions** ecosystem in a production environment using **Hetzner Cloud** and **EasyPanel**.
-
-## 🛡️ Network Isolation
-
-For maximum security, avoid exposing internal services (Postgres, Redis, Agent Service) to the public internet.
-
-### 1. EasyPanel Virtual Network
-*   All services in this project should be placed within the same **EasyPanel Project Network**.
-*   **Public Access**: Only the `platform_ui` and `orchestrator_service` should have "Public Domains" assigned.
-*   **Internal Access**: Use the service names (e.g., `http://agent_service:8001`) for inter-service communication.
-
-### 2. Hetzner Firewall Rules
-In the Hetzner Cloud Console, apply a Firewall to your VPS with the following rules:
-
-| Type | Protocol | Port | Source | Purpose |
-| :--- | :--- | :--- | :--- | :--- |
-| Inbound | TCP | 22 | Your IP / Jump box | SSH Access |
-| Inbound | TCP | 80 | 0.0.0.0/0 | HTTP (Redirect to HTTPS) |
-| Inbound | TCP | 443 | 0.0.0.0/0 | HTTPS (Traefik/EasyPanel) |
-| Inbound | TCP | 3000 | 0.0.0.0/0 | EasyPanel Admin Portal |
-| Inbound | UDP | 443 | 0.0.0.0/0 | HTTP/3 (Optional) |
-| Outbound | Any | Any | 0.0.0.0/0 | Allow all updates/API calls |
-
-> [!WARNING]
-> Ensure ports **5432 (Postgres)** and **6379 (Redis)** are **NOT** open in the Hetzner Firewall. EasyPanel handles their communication internally via Docker networks.
-
-## 🔑 Secret Management
-
-*   **Internal Secret**: Ensure the `INTERNAL_API_TOKEN` matches across all microservices. This is used to authenticate requests between the Orchestrator and the Agent Service.
-*   **Encryption**: Database passwords and API keys are stored encrypted at rest using the `INTERNAL_SECRET_KEY`.
-
-## 📈 Monitoring & Health
-*   **Health Checks**: EasyPanel should monitor `/health` on all services.
-*   **Auto-Restart**: Set a restart policy to `always` or `on-failure`.
-
-## ⚙️ Environment Variables (Reference)
-
-Ensure these are set in the **Environment** tab of each service in EasyPanel.
-
-### 1. Global / Shared
-| Variable | Value / Purpose |
-| :--- | :--- |
-| `INTERNAL_API_TOKEN` | Secure token for inter-service calls. **MUST MATCH ALL.** |
-| `REDIS_URL` | `redis://redis:6379/0` (Internal link) |
-| `POSTGRES_DSN` | `postgresql+asyncpg://postgres:pass@db:5432/db` |
-
-### 2. Service Specific
-
-#### 📦 orchestrator_service (Port 8000)
-- `ADMIN_TOKEN`: Secret for dashboard login.
-- `AGENT_SERVICE_URL`: `http://agent_service:8001`
-- `WHATSAPP_SERVICE_URL`: `http://whatsapp_service:8002`
-- `TIENDANUBE_SERVICE_URL`: `http://tiendanube_service:8003`
-- `OPENAI_API_KEY`: Global fallback API key.
-- `ENCRYPTION_KEY`: **CRÍTICO**. Se usa para cifrar credenciales de tenants.
-- `CORS_ALLOWED_ORIGINS`: `https://your-ui-domain.com`
-
-#### 🧠 agent_service (Port 8001)
-- `TIENDANUBE_SERVICE_URL`: `http://tiendanube_service:8003`
-- *Nota: Recibe el OpenAI Key dinámicamente desde el Orchestrator.*
-
-#### 💬 whatsapp_service (Port 8002)
-- `ORCHESTRATOR_SERVICE_URL`: `http://orchestrator_service:8000`
-- `YCLOUD_WEBHOOK_SECRET`: From YCloud portal for security.
-- `OPENAI_API_KEY`: **Requerido para Transcripción de Audio (Whisper).**
-
-#### 🛒 tiendanube_service (Port 8003)
-- `TIENDANUBE_API_KEY`: Global credentials if applicable.
-
-#### 💻 platform_ui (Port 80)
-- `API_BASE`: `https://api.your-domain.com` (Your Orchestrator URL)
-- `ADMIN_TOKEN`: Matches the Orchestrator admin token.
+Este documento define la **Topología de Red** y las **Políticas de Seguridad** finales para el despliegue de Platform AI Solutions.
 
 ---
 
-> [!TIP]
-> **Container Ports**: In the "Domains" section of each service in EasyPanel, make sure the **Container Port** matches the ports listed above (e.g., 8000 for orchestrator).
+## 1. Topología de Red (Aislamiento Estricto)
+
+El sistema utiliza una arquitectura de **"Submarino Presurizado"**. Solo las escotillas necesarias están abiertas al exterior; el resto de la maquinaria opera en un vacío privado.
+
+### 🌍 Zona Pública (Expuesta a Internet)
+Solo estos servicios deben tener un Dominio Público asignado en EasyPanel:
+
+| Servicio | Puerto Público | Dominio (Ejemplo) | Propósito |
+| :--- | :--- | :--- | :--- |
+| **Platform UI** | `443` (HTTPS) | `app.tusistema.com` | Acceso Administrativo (Dashboard) |
+| **Orchestrator** | `443` (HTTPS) | `api.tusistema.com` | Webhooks de WhatsApp y API Frontend |
+
+### 🔒 Zona Privada (Docker Internal Network)
+Estos servicios **NO** deben tener dominio público. Se comunican exclusivamente vía la red interna de Docker (`127.0.0.11` DNS).
+
+| Servicio | Puerto Interno | Dirección DNS |
+| :--- | :--- | :--- |
+| **Agent Service** | `8001` | `http://agent_service:8001` |
+| **WhatsApp Service** | `8002` | `http://whatsapp_service:8002` |
+| **TiendaNube Service** | `8003` | `http://tiendanube_service:8003` |
+| **Redis** | `6379` | `redis://redis:6379` |
+| **PostgreSQL** | `5432` | `postgresql://postgres...` |
+
+---
+
+## 2. Resiliencia de Red (Nginx Auto-Repair)
+
+El Frontend implementa el estándar **Protocol Omega - Variante A**.
+
+*   **Resolver**: `127.0.0.11` (Docker DNS Embed).
+*   **TTL**: 30 segundos.
+*   **Proxy Pass Dinámico**: Uso de variables (`set $backend "orchestrator_service"`) para forzar la re-resolución de IPs.
+*   **Timeouts**: 300 segundos para permitir cadenas de pensamiento complejas (CoT) de los Agentes sin errores 504.
+
+---
+
+## 3. Gestión de Secretos (Encryption at Rest)
+
+### Llave Maestra (`ENCRYPTION_KEY`)
+Todas las credenciales de terceros (Tokens de Tienda Nube, API Keys de OpenAI específicas del cliente) se cifran en la base de datos usando **Fernet (Symmetric Encryption)**.
+*   **Regla de Oro**: Si pierdes la `ENCRYPTION_KEY`, pierdes acceso a todas las integraciones de clientes. **Respáldala en un gestor de contraseñas seguro.**
+
+### Token Interno (`INTERNAL_API_TOKEN`)
+Es el "Pasaporte Diplomático". Permite que el Orchestrator hable con el Agent Service sin pasar por la validación de usuario habitual. Debe ser idéntico en todos los microservicios.
+
+---
+
+## 4. Mapa de Variables de Entorno (Producción)
+
+### Orchestrator (`:8000`)
+```bash
+ADMIN_TOKEN=...              # Acceso al Dashboard
+ENCRYPTION_KEY=...           # Cifrado DB
+INTERNAL_API_TOKEN=...       # Pasaporte Interno
+AGENT_SERVICE_URL=http://agent_service:8001
+WHATSAPP_SERVICE_URL=http://whatsapp_service:8002
+TIENDANUBE_SERVICE_URL=http://tiendanube_service:8003
+REDIS_URL=redis://redis:6379
+POSTGRES_DSN=...
+NEXUS_V3_ENABLED=true
+```
+
+### Agent Service (`:8001`)
+```bash
+OPENAI_API_KEY=...           # Llave Global (Fallback)
+INTERNAL_API_TOKEN=...       # Debe coincidir con Orchestrator
+```
+
+### Platform UI (`:80`)
+```bash
+API_BASE_URL=https://api.tusistema.com  # URL Pública del Orchestrator
+ADMIN_TOKEN=...                         # Para validación inicial
+APP_VERSION=v3.1.0-omega                # Cache Buster
+```
+
+---
+
+> **Nota de Seguridad**: Nunca subas archivos `.env` al repositorio. Configura estas variables directamente en el panel de despliegue (EasyPanel/Render).

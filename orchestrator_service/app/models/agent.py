@@ -32,3 +32,16 @@ class Agent(Base, TimestampMixin):
 
     # Relationships
     # tenant = relationship("Tenant") # Defined in Tenant model usually
+
+class AgentTool(Base, TimestampMixin):
+    __tablename__ = "tools"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    tenant_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True) # Null = Global Tool
+    
+    name: Mapped[str] = mapped_column(String(100), nullable=False) # Not unique globally if scoped? enforcing unique name for simplicity now.
+    type: Mapped[str] = mapped_column(String(50), nullable=False) # 'http', 'function', 'integration'
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    
+    config: Mapped[dict] = mapped_column(JSONB, default={}) # Payload definition, headers, etc.
+    service_url: Mapped[str] = mapped_column(String(255), nullable=True) # For http tools

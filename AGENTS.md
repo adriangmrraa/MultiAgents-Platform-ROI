@@ -1,96 +1,72 @@
-# 🤖 Platform AI Solutions: Guía Suprema de Mantenimiento (Protocolo Omega)
+# 🧠 Guía de Desarrollo de Agentes (Nexus v3)
 
-**Versión 1.1 - 24 de Diciembre de 2025**
-*Fuente Única de Verdad (Single Source of Truth) para el Ecosistema Platform AI Solutions*
-
-## 🧱 Arquitectura Nexus v3 (Decentralized Intelligence)
-
-El sistema ha evolucionado de un monolito a una arquitectura totalmente descentralizada. El núcleo ya no "piensa", sino que "coordina".
-   
-### 📡 Traffic Controller (orchestrator_service)
-- **Rol**: Orquestación de datos, persistencia en PostgreSQL y gestión de estados.
-- **Responsabilidad**: Recepción de webhooks (WhatsApp/YCloud), auditoría de seguridad y ruteo cognitivo.
-- **Protocolo de Ruteo**: Delega el procesamiento de IA al `agent_service` mediante peticiones HTTP internas (`/v1/agent/execute`).
-- **Estado**: Gestiona el historial y los metadatos de los tenants.
-
-### 🧠 Cognitive Brain (agent_service)
-- **Rol**: Razonamiento puro y ejecución de herramientas.
-- **Responsabilidad**: Procesar entradas de usuario usando LangChain (GPT-4o-mini).
-- **Statelessness**: Es un servicio 100% apátrida. Recibe TODO el contexto (prompts, catálogo, credenciales dinámicas) en cada petición.
-- **Tools**: Ejecuta búsquedas en Tienda Nube usando las credenciales inyectadas por el orquestador bajo el **Protocolo Omega**.
-- **Esquema de Respuesta**: El agente debe retornar un JSON con la estructura `{"messages": [{"text": "...", "metadata": {...}}]}`. Los metadatos son cruciales para alimentar el "Thinking Log" en el Dashboard.
+El **Agent Service** es el componente inteligente de la plataforma. Esta guía explica cómo extender sus capacidades.
 
 ---
 
-## 🛡️ Protocolo Omega (Soberanía y Aislamiento)
+## 1. Anatomía de una Respuesta (Protocolo Omega)
 
-Garantiza la soberanía de datos absoluta en un entorno multi-inquilino.
+A diferencia de un chatbot simple, nuestros agentes no devuelven texto plano. Devuelven un objeto estructurado `OrchestratorResponse`:
 
-### 1. Inyección Dinámica de Credenciales
-- Ningún servicio (excepto el orquestador) almacena API Keys de forma permanente.
-- El orquestador resuelve el `tenant_id` y pasa las claves necesarias (Tienda Nube, OpenAI) al agente en tiempo de ejecución.
-- **Seguridad**: La variable `ENCRYPTION_KEY` **DEBE** inyectarse en el entorno de EasyPanel. El uso del valor por defecto en producción se considera una falla crítica de seguridad.
+```json
+{
+  "messages": [
+    {
+      "text": "Hola, ¿cómo puedo ayudarte?",
+      "metadata": {
+        "agent_outcome": "Usuario saludó. Responder amablemente.",
+        "intermediate_steps": ["Tool(search_products) -> Found 0 items"]
+      }
+    }
+  ]
+}
+```
 
-### 2. Integridad y Borrado en Cascada
-Para garantizar que no queden datos "huérfanos", la eliminación de un inquilino debe seguir este orden estricto:
-1.  **Handoff Config**: `tenant_human_handoff_config`.
-2.  **Conversaciones**: `chat_conversations` (dispara cascada a mensajes y media).
-3.  **Credenciales**: `credentials` (específicos del tenant).
-4.  **Entidad Raíz**: `tenants`.
-
----
-
-## 📜 Reglas de Oro para Operación (Precauciones)
-
-### 1. 🐍 Python (Backend)
-- **LA TRAMPA DE PYDANTIC (CRÍTICO)**: Nunca definas un `BaseModel` dentro de una función asíncrona. Define siempre las clases al nivel superior del archivo para evitar errores de sintaxis en contenedores.
-- **Comunicación Interna**: Usa siempre el DNS interno de Docker (ej. `http://agent_service:8001`). No expongas servicios cognitivos a la red pública.
-- **Human Override**: El flag `human_override_until` debe ser la primera compuerta lógica. Si está activo, el orquestador **silencia** la comunicación con el agente.
-
-### 2. 🚦 Intervención Humana (Handoff)
-- **Trigger**: El agente activa el modo `HUMAN_HANDOFF_REQUESTED: <razon>`.
-- **Acción**: El orquestador bloquea la IA (2099) y notifica vía SMTP configurado.
-- **Status Dashboard**: 🔴 Rojo (Atención Humana) vs 🟢 Verde (IA Activa).
+*   **Text**: Lo que ve el usuario en WhatsApp.
+*   **Metadata**: Lo que ve el administrador en el "Thinking Log" (UI). **Crucial para depuración.**
 
 ---
 
-## 🌐 Networking y Seguridad Interna (El Corazón de Omega)
+## 2. Creación de Nuevas Herramientas (Tools)
 
-La arquitectura profesional de **Platform AI Solutions** se basa en la comunicación por red privada.
+Las herramientas se definen en `agent_service/main.py`.
 
-### 🛡️ Seguridad Extrema
-Si usas la URL pública (https://agent.tudominio.com), estás exponiendo tu "Cerebro Cognitivo" a todo internet. Aunque tengas autenticación, estás abriendo una puerta a ataques DDoS o intentos de fuerza bruta.
-- **Con URL Interna**: El servicio `agent_service` es invisible para el mundo exterior. Solo el Orquestador (que vive en la misma red privada de Docker) puede tocarlo. Es como tener una caja fuerte dentro de un búnker, en lugar de en la acera con un candado.
-- **Validación**: El sistema valida estrictamente el header `X-Internal-Secret` en cada petición, reforzando la confianza en la red interna.
+### Pasos para crear una Tool:
+1.  Definir la función asíncrona decorada con `@tool`.
+2.  Usar el contexto global `ctx` para obtener credenciales (`ctx.store_id`, `ctx.token`).
+3.  Manejar errores internamente y devolver un string descriptivo (el LLM leerá este error).
 
-### ⚡ Latencia y Performance (Velocidad Pura)
-- **Vía Pública**: La petición sale de tu servidor, da una vuelta por el router de internet, hace un handshake SSL (HTTPS) y vuelve a entrar. Tarda milisegundos valiosos.
-- **Vía Interna**: La petición viaja por la memoria del servidor a través de la red virtual de Docker. Es casi instantáneo. Para un chat en tiempo real, cada milisegundo cuenta.
-
-### 💰 Costes y Estabilidad
-- El tráfico interno en Docker no consume ancho de banda de tu cuota de salida de Hetzner.
-- No dependes de que los certificados SSL se renueven o de que el DNS público funcione. Si se cae internet (pero el servidor sigue vivo), los servicios internos siguen operando.
-
----
-
-## 📋 Checklist de Validación (EasyPanel)
-
-Para asegurar que esta configuración funcione correctamente:
-
-1.  **Nombres de Servicio**: El nombre del servicio en EasyPanel debe coincidir con el host usado (ej. `multiagents-agent-service`).
-    - *Tip*: Si tu proyecto es `multiagents` y la app `agent-service`, el host es `multiagents-agent-service`.
-2.  **Puertos Internos**:
-    - `agent_service`: Puerto **8001**.
-    - `tiendanube_service`: Puerto **8003**.
-3.  **Dominios Públicos (RECOMENDACIÓN)**:
-    - Ve a la pestaña "Domains" de `agent_service` y `tiendanube_service` y **BORRA** el dominio público.
-    - **Solo** el `orchestrator` (para la UI) y el `whatsapp_service` (para el Webhook) necesitan dominios públicos.
+```python
+@tool
+async def check_stock(product_id: str):
+    """Checks stock level using the API."""
+    try:
+        # Lógica de llamada a Tienda Nube Service
+        return f"Stock: 50 unidades" 
+    except Exception as e:
+        return f"Error revisando stock: {e}"
+```
 
 ---
 
-## 📈 Observabilidad y Diagnóstico
-- **Logs**: Formato JSON en `stdout` para indexación en EasyPanel.
-- **Correlation-ID**: Cada "burbuja" de mensaje debe rastrearse desde el webhook de entrada hasta la respuesta final.
+## 3. Configuración de Modelos
+
+El modelo se selecciona dinámicamente según la configuración del Agente en la BD (tabla `agents`).
+*   **Provider**: `openai` (Standard), `anthropic` (Future).
+*   **Model**: `gpt-4o`, `gpt-4o-mini` (Recomendado por velocidad/costo).
+*   **Temperature**: Controla la creatividad.
 
 ---
-**Recuerda**: La estabilidad del sistema depende de la adherencia estricta a la separación entre Coordinación (Orquestador) y Cognición (Agente).
+
+## 4. Human Handoff (Derivación)
+
+Si el agente detecta frustración o solicitud explícita, usa la herramienta `derivhumano`.
+*   Esto inserta un marcador `HUMAN_HANDOFF_REQUESTED` en la respuesta.
+*   El **Orchestrator** intercepta este marcador y:
+    1.  Detiene al bot.
+    2.  Cambia el estado de la conversación a `human_override`.
+    3.  Envía email de alerta (si está configurado).
+
+---
+
+> **Tip de Desarrollo**: Si cambias la definición de una herramienta, reinicia el `agent_service` para que LangChain reconstruya el esquema de funciones de OpenAI.

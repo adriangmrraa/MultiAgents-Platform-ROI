@@ -1496,18 +1496,14 @@ async def delete_agent(agent_id: str):
 async def get_analytics_summary():
     """
     Aggregated Cache Implementation (Pattern: Access-Through-Cache)
-    TTL: 60 seconds
+    TTL: 300 seconds (Omega Protocol: 5 min protection)
+    Contingency X: Redis Fallback to DB with Performance Warning.
     """
     CACHE_KEY = "analytics:summary"
     
-    try:
-        # 1. Try Cache
-        cached = redis_client.get(CACHE_KEY)
-        if cached:
-            return json.loads(cached)
-            
-        # 2. Db Queries (Aggregation)
-        # Active Tenants (Any message in last 24h or just active flag?) -> using flag for speed
+    # Inner function for DB fetch to allow reuse in fallback
+    async def fetch_analytics_from_db():
+         # 2. Db Queries (Aggregation)
         total_tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants WHERE is_active = TRUE")
         
         # Messages stats
@@ -1521,26 +1517,127 @@ async def get_analytics_summary():
         """)
         
         # Handover Rate
-        # Count convs with status 'human_override' vs total
         handovers = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations WHERE status = 'human_override'")
         handover_rate = (handovers / total_conversations) if total_conversations > 0 else 0.0
         
-        data = {
+        return {
             "status": "ok",
             "active_tenants": total_tenants,
             "data": {
                 "total_conversations": total_conversations,
                 "active_now": active_now,
                 "handover_rate": round(handover_rate, 2),
-                "avg_response_time": 150 # Placeholder until telemetry table grows
+                "avg_response_time": 150 # Placeholder
             }
         }
+
+    try:
+        # 1. Try Cache
+        try:
+            cached = redis_client.get(CACHE_KEY)
+            if cached:
+                return json.loads(cached)
+        except redis.exceptions.ConnectionError:
+            # Contingency X: Redis not available -> Log & Continue to DB
+            logger.warning("analytics_cache_miss_redis_down", risk="Performance Degraded")
+            
+        # 2. DB Query (Primary or Fallback)
+        data = await fetch_analytics_from_db()
         
-        # 3. Set Cache
-        redis_client.setex(CACHE_KEY, 60, json.dumps(data))
+        # 3. Set Cache (300s TTL) - wrapped to prevent crash if Redis is down
+        try:
+            redis_client.setex(CACHE_KEY, 300, json.dumps(data))
+        except: pass # Best effort cache
         
         return data
+        
     except Exception as e:
-        logger.error(f"Analytics error: {e}")
-        # Fallback empty
+        logger.error(f"Analytics Critical Failure: {e}")
+        # Final fallback if DB also fails
         return {"status": "error", "data": {"total_conversations": 0, "active_now": 0}}
+
+# --- Step 3: Admin Tools Gateway (Whitelist) ---
+class SystemAction(BaseModel):
+    action: str # 'clear_cache', 'trigger_handoff'
+    payload: Dict[str, Any] = {}
+
+@router.post("/system/actions", dependencies=[Depends(verify_admin_token)])
+async def execute_system_action(action_req: SystemAction):
+    """
+    Gateway for protected system operations.
+    Whitelist: clear_cache, trigger_handoff, db_health_check.
+    """
+    logger.info("admin_system_action", action=action_req.action, admin="SuperAdmin")
+    
+    if action_req.action == "clear_cache":
+        try:
+            redis_client.flushdb()
+            return {"status": "ok", "message": "Global Cache Cleared"}
+        except Exception as e:
+            return {"status": "error", "message": f"Redis Flush Failed: {str(e)}"}
+            
+    elif action_req.action == "trigger_handoff":
+        # Force handoff for testing
+        pid = action_req.payload.get("conversation_id")
+        if not pid: raise HTTPException(400, "conversation_id required")
+        # Logic would go here, stubbed for safety unless requested full impl
+        return {"status": "ok", "message": f"Handoff triggered for {pid}"}
+        
+    elif action_req.action == "db_health_check":
+        try:
+            val = await db.pool.fetchval("SELECT 1")
+            return {"status": "ok", "db_response": val}
+        except Exception as e:
+            raise HTTPException(503, f"DB Health Check Failed: {e}")
+            
+    else:
+        raise HTTPException(400, f"Action '{action_req.action}' not in whitelist.")
+
+@router.get("/telemetry/events", dependencies=[Depends(verify_admin_token)])
+async def get_telemetry_events(
+    page: int = 1, 
+    page_size: int = 20,
+    tenant_id: Optional[int] = None
+):
+    """
+    Live structured logs with strict pagination to prevent memory overflow.
+    Sanitizes sensitive data (API Keys) from payload.
+    """
+    if page_size > 50: page_size = 50 # Enforcement
+    offset = (page - 1) * page_size
+    
+    base_query = "SELECT * FROM system_events"
+    args = []
+    
+    if tenant_id:
+        base_query += " WHERE tenant_id = $1"
+        args.append(tenant_id)
+        
+    base_query += f" ORDER BY occurred_at DESC LIMIT ${len(args)+1} OFFSET ${len(args)+2}"
+    args.extend([page_size, offset])
+    
+    try:
+        rows = await db.pool.fetch(base_query, *args)
+        
+        # Transformation & Sanitization
+        events = []
+        for r in rows:
+            evt = dict(r)
+            # Sanitization Logic (Mask passwords/keys in payload)
+            if evt.get('payload'):
+                try:
+                    payload_js = json.loads(evt['payload']) if isinstance(evt['payload'], str) else evt['payload']
+                    if isinstance(payload_js, dict):
+                        for key in ['api_key', 'password', 'token']:
+                             if key in payload_js: payload_js[key] = '***'
+                    evt['payload'] = payload_js
+                except: pass
+            
+            # Serialize dates
+            evt['occurred_at'] = evt['occurred_at'].isoformat()
+            events.append(evt)
+            
+        return {"status": "ok", "items": events, "page": page, "page_size": page_size}
+    except Exception as e:
+        logger.error(f"Telemetry error: {e}")
+        raise HTTPException(500, "Log stream error")

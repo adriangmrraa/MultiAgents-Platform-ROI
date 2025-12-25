@@ -1,144 +1,77 @@
-# 🤝 Guía de Operaciones (Platform AI Solutions)
+# 🤝 Guía de Operaciones Nexus v3.1 (Manual de Vuelo)
 
-Este documento detalla los **procedimientos operativos** para mantener, desplegar y escalar la plataforma de inteligencia artificial.
-
----
-
-## 1. 🐣 Conceptos Básicos para Principiantes
-
-Si eres nuevo en este proyecto, estos son los términos clave que debes conocer:
-
-*   **Tenant (Inquilino)**: Es cada cliente o tienda individual que usa el bot. El sistema es "Multi-tenant", lo que significa que un solo servidor puede manejar muchas tiendas diferentes al mismo tiempo.
-*   **Orchestrator (Orquestador)**: Es el "cerebro logístico". Decide a dónde van los mensajes, guarda el historial del chat y maneja la base de datos.
-*   **Agent (Agente)**: Es la "inteligencia pura". No guarda nada, solo recibe información y genera una respuesta inteligente usando IA.
-*   **Handoff (Derivación)**: Es el proceso de "apagar" la IA para que un humano pueda hablar directamente con el cliente.
-
-------
-## 2. 🔑 Generación de Llaves de Seguridad
-
-Para variables como `ENCRYPTION_KEY` o `ADMIN_TOKEN`, necesitas crear una cadena de texto larga y aleatoria. Aquí tienes cómo hacerlo si no tienes herramientas técnicas avanzadas:
-
-### Opción A: Usando PowerShell (Windows)
-Si estás en Windows, abre una terminal y pega esto:
-```powershell
--join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | % {[char]$_})
-```
-
-### Opción B: Usando Python (Cualquier sistema)
-Si tienes Python instalado, ejecuta esto:
-```python
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-
-### Opción C: Generador Online
-Usa cualquier sitio web de confianza como [1Password Password Generator](https://1password.com/password-generator/) configurado para generar una cadena de 32 a 64 caracteres.
-
-> [!WARNING]
-> Una vez que elijas una `ENCRYPTION_KEY` y guardes tu primer cliente, **NUNCA la cambies**, o no podrás volver a leer sus datos.
+Este documento es el manual operativo para el despliegue, mantenimiento y uso diario de la plataforma. Está diseñado para Operadores y Administradores de Sistema.
 
 ---
 
-## 2. 🚀 Guía de Despliegue en EasyPanel (Hetzner/VPS)
+## 1. Alta de Nuevos Clientes (Onboarding)
 
-Esta es la ruta recomendada para escalabilidad y ahorro de costos. Sigue estos pasos para un despliegue limpio:
+Gracias a la **UI Unificada (Nexus v3)**, ya no es necesario tocar la base de datos manualmente.
 
-### Paso 1: Crear el Proyecto
-1.  En EasyPanel, haz clic en **"Create Project"** y nómbralo `platform-ai`.
+### Paso A: Registro en Dashboard
+1.  Ingresa a tu dominio `https://app.tusistema.com`.
+2.  Navega a **"Tenants"** (Tiendas).
+3.  Click en **"New Tenant"**.
+4.  Llena los datos esenciales:
+    *   **Nombre de Tienda**: Identificador visual.
+    *   **WhatsApp**: Número (sin `+`, ej `54911...`).
+    *   **Tienda Nube ID & Token**: Credenciales API.
+    *   **System Prompt**: Define la personalidad (ej. "Eres un vendedor experto en zapatos...").
+5.  **Guardar**. El sistema validará y cifrará las credenciales automáticamente.
 
-### Paso 2: Crear los Servicios de Infraestructura
-1.  **PostgreSQL**: Ve a "Services" -> "Add Service" -> **App** (o usa el template de Postgres). 
-    *   Si usas "App", usa la imagen `postgres:13`.
-    *   Configura las variables: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`.
-2.  **Redis**: Añade un servicio tipo **App** con la imagen `redis:alpine`.
-
-### Paso 3: Desplegar los Microservicios (Apps)
-Para cada uno de los 5 microservicios base, añade un servicio tipo **App** -> **GitHub**:
-1.  Conecta tu repositorio.
-2.  **Configuración de Carpeta (Docker Context)**:
-    *   Para `orchestrator`: Docker Source Path = `./orchestrator_service`.
-    *   Para `agent-service`: Docker Source Path = `./agent_service`.
-    *   Para `tiendanube`: Docker Source Path = `./tiendanube_service`.
-    *   Para `whatsapp`: Docker Source Path = `./whatsapp_service`.
-    *   Para `ui`: Docker Source Path = `./platform_ui`.
-
-### Paso 4: Variables de Entorno y Networking
-EasyPanel asigna nombres de host automáticos dentro del proyecto. Configura las variables en cada App:
-
-*   **Orchestrator**:
-    *   `POSTGRES_DSN`: `postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}`
-    *   `REDIS_URL`: `redis://redis:6379`
-    *   `AGENT_SERVICE_URL`: `http://agent-service:8001`
-    *   `TIENDANUBE_SERVICE_URL`: `http://tiendanube:8003`
-    *   `WHATSAPP_SERVICE_URL`: `http://whatsapp:8002`
-    *   `ENCRYPTION_KEY`: Una cadena larga y aleatoria para proteger los tokens de los clientes.
-*   **Agent Service**:
-    *   `OPENAI_API_KEY`: Clave global (fallback).
-    *   `INTERNAL_API_TOKEN`: Token compartido.
-*   **UI (Frontend)**:
-    *   `API_BASE`: La URL pública (`https://api...`) del Orchestrator.
+### Paso B: Conexión WhatsApp (YCloud)
+1.  En el dashboard de YCloud, configura el **Webhook URL**:
+    *   `https://api.tusistema.com/chat/webhook`
+2.  Verifica que el `PHONE_NUMBER_ID` en YCloud coincida con el registrado en el Tenant.
+3.  Envía un mensaje de prueba ("Hola"). Deberías ver respuesta en segundos.
 
 ---
 
----
+## 2. Gestión de Agentes (Cerebro IA)
 
-## 3. ⚙️ Configuración de Nueva Tienda (Multi-Tenant)
+Ahora puedes tener múltiples agentes por tienda (Ventas, Soporte, Post-venta).
 
-ParaAA
-
-
-**Víaa Base de Datos (Recomendado):**
-1.  Inserta una fila en la tabla `tenants`.
-2.  Datos obligatorios:
-    *   `store_name`: Nombre visible.
-    *   `bot_phone_number`: Número de WhatsApp (Formato: `54911...`). **CRÍTICO**: Debe coincidir con el `to` del webhook de YCloud.
-    *   `tiendanube_store_id` y `tiendanube_access_token`: Credenciales de la API.
-    *   `system_prompt_template`: El "cerebro" inicial del bot.
-
-**Vía UI (Si está habilitado):**
-1.  Ve a `/admin/tenants` (o sección Configuración).
-2.  Usa el formulario para crear/editar.
-
---------------------
-
-## 4. ✋ Configuración de Derivación Humana (Handoff)
-
-Cómo configurar que el bot se apague y avise a un humano:
-
-1.  **Habilitación**:
-    *   En la tabla `tenant_human_handoff_config`, setear `enabled = true`.
-2.  **Destino**:
-    *   Configurar `destination_email`.
-    *   Configurar credenciales SMTP (`smtp_host`, `smtp_user`, `smtp_password_encrypted`).
-3.  **Triggers (Disparadores)**:
-    *   El bot usa la tool `derivhumano` cuando detecta intención (ej: "quiero hablar con alguien").
-    *   Puedes forzarlo manualmente desde el Chat de la UI (Botón "Human Override").
+*   Ve a la pestaña **"Agents"**.
+*   Edita el agente activo.
+*   **Temperatura**: `0.3` para respuestas precisas (Ventas), `0.7` para creativas (Marketing).
+*   **Herramientas**: Selecciona qué capacidades tiene (ej. `search_specific_products`).
 
 ---
 
-## 5. 🛠️ Troubleshooting (Solución de Problemas)
+## 3. Monitorización y Telemetría
 
-**Problema: "El bot no responde en WhatsApp"**
-1.  ¿Está el servidor corriendo? Revisa EasyPanel.
-2.  ¿Llega el Webhook? Revisa los logs (`POST /chat/webhook`).
-    *   Si ves `Tenant not found for phone...`: Revisa que el número en la tabla `tenants` coincida EXACTAMENTE con el que envía YCloud.
-3.  ¿Error de OpenAI? Revisa si la API Key es válida.
+El sistema incluye herramientas de diagnóstico en tiempo real bajo el menú **"Status"**.
 
-**Problema: "El bot inventa productos o precios"**
-1.  Revisa el `system_prompt_template`.
-2.  Asegúrate de que la variable `{STORE_CATALOG_KNOWLEDGE}` se esté inyectando correctamente.
-3.  Verifica que la tool `search_specific_products` esté funcionando (mira los logs de `tiendanube_service`).
-
-**Problema: "Los cambios en el código no se ven"**
-1.  ¿Hiciste `git push`?
-2.  ¿Terminó el deploy en EasyPanel?
-3.  Intenta reiniciar el contenedor manualmente si es necesario.
+*   **Analytics Summary**: Muestra conversaciones activas y tasa de derivación humana. (Cache 5 min).
+*   **Live Telemetry**: Logs en vivo del sistema. Útil para ver si un webhook llegó o si OpenAI falló.
+    *   *Nota*: Las contraseñas y API Keys se ocultan automáticamente (`***`).
+*   **Thinking Log**: En el chat de prueba, verás un icono 🧠. Haz click para ver el "Razonamiento Oculto" del agente antes de responder.
 
 ---
 
-## 6. 🧹 Limpieza de Código (Refactoring Workflow)
+## 4. Protocolo de Emergencia (Troubleshooting)
 
-Si vas a limpiar código (ej: quitar hardcoding):
-1.  Identifica todas las ocurrencias (`grep_search`).
-2.  Crea un plan de reemplazo seguro (usando `os.getenv` con valores por defecto seguros).
-3.  Prueba localmente o verifica que la lógica de fallback funcione.
-4.  Avisa al usuario qué variables de entorno NUEVAS necesita agregar en EasyPanel.
+### Caso: "El bot no responde"
+1.  Revisa **Telemetry**. ¿Llegó el evento `inbound_message`?
+    *   **NO**: El problema es YCloud o el Webhook URL está mal.
+    *   **SI**: El problema es interno.
+2.  ¿Error `Redis Connection`?
+    *   El sistema activará el "Modo Degradado" (DB directa). El bot seguirá funcionando pero más lento. Reinicia el contenedor de Redis.
+3.  ¿Error `OpenAI Rate Limit`?
+    *   Verifica tu crédito en OpenAI Platform. El sistema usará la Key del Tenant si existe, o la Global si no.
+
+### Caso: "Error 502 Bad Gateway en Frontend"
+*   El contenedor `orchestrator_service` se está reiniciando. El Nginx (Protocolo Omega) reintentará la conexión automáticamente cada 30 segundos. **Espera 1 minuto.**
+
+### Caso: "Veo datos viejos o pantalla blanca"
+*   Hemos actualizado la versión. Nginx debería forzar la recarga, pero si persiste, pide al usuario hacer `Ctrl + Shift + R` (Hard Reload).
+
+---
+
+## 5. Mantenimiento de Base de Datos
+
+El sistema use **Auto-Reparación (Schema Drift Prevention)**.
+*   **Al reiniciar**, el orquestador verifica si faltan tablas o columnas (`customers`, `uuid`, etc.) y las crea.
+*   **No necesitas correr scripts SQL manuales** para actualizaciones normales.
+
+**© 2025 Platform AI Solutions - Operations Division**

@@ -11,7 +11,10 @@ echo "DEBUG ENV: Length of ADMIN_TOKEN: ${#ADMIN_TOKEN}"
 
 # Default to empty string if not set, or handle strictness
 : "${API_BASE_URL:=}"
+# Default to empty string if not set, or handle strictness
+: "${API_BASE_URL:=}"
 : "${ADMIN_TOKEN:=admin-secret-99}"
+: "${APP_VERSION:=v3.1.0-omega}" # Protocol Omega: Cache Buster
 
 # Normalize variables: strip double quotes and semicolons just in case
 API_BASE_URL=$(echo "$API_BASE_URL" | tr -d '";')

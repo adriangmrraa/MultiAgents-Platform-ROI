@@ -1,8 +1,9 @@
 -- Initial schema for Platform AI Solutions microservices
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Table for inbound messages (dedupe/idempotency)
 CREATE TABLE inbound_messages (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Omega Protocol: UUID
     provider TEXT NOT NULL,
     provider_message_id TEXT NOT NULL,
     event_id TEXT NULL,
@@ -22,7 +23,7 @@ CREATE INDEX idx_inbound_messages_status ON inbound_messages (status);
 
 -- Table for chat messages (source-of-truth)
 CREATE TABLE chat_messages (
-    id UUID PRIMARY KEY, -- Modernized to UUID
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Modernized to UUID
     from_number TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
     content TEXT NOT NULL,
