@@ -1398,6 +1398,126 @@ async def test_ycloud():
         return {"status": "OK", "message": "YCloud configured (ENV or DB)"}
     return {"status": "FAIL", "message": "Missing YCLOUD_API_KEY"}
 
+# --- Tenants Management ---
+
+@router.get("/tenants", dependencies=[Depends(verify_admin_token)])
+async def get_tenants():
+    """List all tenants."""
+    try:
+        rows = await db.pool.fetch("SELECT * FROM tenants ORDER BY id ASC")
+        return [dict(row) for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/tenants", dependencies=[Depends(verify_admin_token)])
+async def create_tenant(tenant: TenantModel):
+    """Create or update a tenant."""
+    try:
+        # Check if exists
+        exists = await db.pool.fetchval("SELECT id FROM tenants WHERE bot_phone_number = $1", tenant.bot_phone_number)
+        
+        if exists:
+            # Update
+            q = """
+            UPDATE tenants SET 
+                store_name = $1, 
+                tiendanube_store_id = $2, 
+                tiendanube_access_token = $3,
+                store_website = $4
+            WHERE bot_phone_number = $5
+            """
+            await db.pool.execute(q, tenant.store_name, tenant.tiendanube_store_id, tenant.tiendanube_access_token, tenant.store_website, tenant.bot_phone_number)
+        else:
+            # Insert
+            q = """
+            INSERT INTO tenants (
+                store_name, bot_phone_number, tiendanube_store_id, tiendanube_access_token, store_website
+            ) VALUES ($1, $2, $3, $4, $5)
+            """
+            await db.pool.execute(q, tenant.store_name, tenant.bot_phone_number, tenant.tiendanube_store_id, tenant.tiendanube_access_token, tenant.store_website)
+            
+        return {"status": "ok"}
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/tenants/{phone}", dependencies=[Depends(verify_admin_token)])
+async def delete_tenant(phone: str):
+    try:
+        await db.pool.execute("DELETE FROM tenants WHERE bot_phone_number = $1", phone)
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Credentials Management ---
+
+@router.get("/credentials", dependencies=[Depends(verify_admin_token)])
+async def get_credentials():
+    """List all credentials."""
+    try:
+        rows = await db.pool.fetch("""
+            SELECT c.*, t.store_name as tenant_name 
+            FROM credentials c
+            LEFT JOIN tenants t ON c.tenant_id = t.id
+            ORDER BY c.id ASC
+        """)
+        return [dict(row) for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/credentials", dependencies=[Depends(verify_admin_token)])
+async def create_credential(cred: CredentialModel):
+    """Create a credential."""
+    try:
+        q = """
+        INSERT INTO credentials (name, value, category, scope, tenant_id, description)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        """
+        await db.pool.execute(q, cred.name, cred.value, cred.category, cred.scope, cred.tenant_id, cred.description)
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/credentials/{cred_id}", dependencies=[Depends(verify_admin_token)])
+async def delete_credential(cred_id: int):
+    try:
+        await db.pool.execute("DELETE FROM credentials WHERE id = $1", cred_id)
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/logs", dependencies=[Depends(verify_admin_token)])
+async def get_logs(limit: int = 50):
+    """Get system logs (telemetry)."""
+    try:
+        # We need to cast created_at to string or handled by Pydantic
+        rows = await db.pool.fetch("""
+            SELECT 
+                created_at as timestamp, 
+                severity as level, 
+                message, 
+                event_type as source 
+            FROM system_events 
+            ORDER BY id DESC 
+            LIMIT $1
+        """, limit)
+        # Convert datetime to ISO string
+        return [{
+            "timestamp": row['timestamp'].isoformat() if row['timestamp'] else None,
+            "level": row['level'],
+            "message": row['message'],
+            "source": row['source']
+        } for row in rows]
+    except Exception as e:
+        # Return empty list on error (e.g. table missing) to prevent UI crash
+        print(f"Error fetching logs: {e}")
+        return []
+async def delete_credential(cred_id: int):
+    try:
+        await db.pool.execute("DELETE FROM credentials WHERE id = $1", cred_id)
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/diagnostics/healthz", dependencies=[Depends(verify_admin_token)])
 async def healthz():
     # Check Database
