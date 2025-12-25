@@ -222,6 +222,14 @@ migration_steps = [
             ALTER TABLE credentials ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
         END IF;
 
+        -- Fix Legacy NOT NULL violations (Omega Phase 3)
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='service_name') THEN
+            ALTER TABLE credentials ALTER COLUMN service_name DROP NOT NULL;
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='provider') THEN
+            ALTER TABLE credentials ALTER COLUMN provider DROP NOT NULL;
+        END IF;
+
         -- Check for UNIQUE constraint (name, scope)
         IF NOT EXISTS (
             SELECT 1 FROM pg_constraint 
