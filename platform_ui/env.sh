@@ -9,7 +9,7 @@ echo "Generating env.js with API_BASE_URL=${API_BASE_URL}"
 
 # Default to empty string if not set, or handle strictness
 : "${API_BASE_URL:=}"
-: "${ADMIN_TOKEN:=}"
+: "${ADMIN_TOKEN:=admin-secret-99}"
 
 # Normalize variables: strip double quotes and semicolons just in case
 API_BASE_URL=$(echo "$API_BASE_URL" | tr -d '";')
