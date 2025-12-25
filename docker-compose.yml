@@ -16,14 +16,15 @@ services:
     depends_on:
       - orchestrator_service
 
-  frontend_react:
-    build: ./frontend_react
+  platform_ui:
+    build: ./platform_ui
     ports:
-      - "4173:80"
+      - "80:80"
     environment:
-      - VITE_API_BASE_URL=https://bff.platform-ai.solutions # Logic needed here or baking in build
+      - API_BASE_URL=http://localhost:8000 # Default fallback
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-admin-secret-99} # Protocol Omega Auth
     depends_on:
-      - bff_service
+      - orchestrator_service
 
   # --- Existing Backend Services ---
 
@@ -39,6 +40,7 @@ services:
       - POSTGRES_DSN=${POSTGRES_DSN}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-admin-secret-99} # Explicit Sync
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
       interval: 30s
@@ -47,6 +49,19 @@ services:
     depends_on:
       - redis
       - postgres
+      - postgres
+
+  agent_service:
+    build: ./agent_service
+    # No ports exposed to host = Protocol Omega (Pressurized Tunnel)
+    environment:
+      - PORT=8001
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   whatsapp_service:
     build: ./whatsapp_service
