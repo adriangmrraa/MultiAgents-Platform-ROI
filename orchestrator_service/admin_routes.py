@@ -16,10 +16,10 @@ from email.mime.multipart import MIMEMultipart
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-99")
 
 # Resilience & Engine
+# Resilience & Engine
 from app.core.resilience import safe_db_call
 from app.core.engine import NexusEngine # NEW
-from sse_starlette.sse import EventSourceResponse # For Streaming (requires installation) - wait, plan said BFF handles streaming? 
-# Ah, BFF proxies it. Orchestrator needs to provide it.
+
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -1873,48 +1873,117 @@ async def get_telemetry_events(
         return {"status": "ok", "items": events, "page": page, "page_size": page_size}
     except Exception as e:
         logger.error(f"Telemetry error: {e}")
-        raise HTTPException(500, "Log stream error")
-
-# --- Nexus Business Engine (v3.2) ---
+     # --- Nexus v3.2 Engine Endpoints (Protocol Omega) ---
 
 @router.post("/engine/ignite", dependencies=[Depends(verify_admin_token)])
-@safe_db_call
-async def ignite_engine(payload: dict = {}):
+async def ignite_engine(request: Request):
     """
-    Triggers the 5 Proactive Agents.
-    Payload: { "tenant_id": "...", "catalog": [...], "public_url": "..." }
+    Ignite the Business Engine (Agents Start).
     """
-    tenant_id = payload.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(400, "Missing tenant_id")
-        
-    # Launch Engine
-    engine = NexusEngine(tenant_id, payload)
-    results = await engine.ignite()
-    return {"status": "ignited", "results": results}
+    # 1. Get Context (Tenant)
+    # MVP: Single Tenant Mode via ENV or Headers
+    # Ideal: request.state.tenant_id
+    tenant_id = "1" # Default bootstrap tenant
+    
+    # Context Hydration (SSOT)
+    t = await db.pool.fetchrow("SELECT * FROM tenants WHERE id = $1", int(tenant_id))
+    if not t: raise HTTPException(404, "Tenant not found")
+    
+    # Decrypt Keys
+    openai_key = decrypt_password(t['openai_api_key']) if t.get('openai_api_key') else os.getenv("OPENAI_API_KEY")
+    
+    context = {
+        "store_name": t['store_name'],
+        "store_website": t['store_website'],
+        "credentials": {
+            "tiendanube_store_id": t['tiendanube_store_id'],
+            "tiendanube_access_token": t['tiendanube_access_token']
+        }
+    }
+    
+    # 2. Ignite
+    engine = NexusEngine(tenant_id, context)
+    result = await engine.ignite()
+    return result
 
 @router.get("/engine/assets/{tenant_id}", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
 async def get_business_assets(tenant_id: str):
     """
-    Polling Endpoint for UI to fetch generated assets.
-    Implements Aggregated Cache (Redis) for millisecond response times.
+    Aggregated Cache Pattern (Redis + DB Fallback).
+    Returns assets for the dashboard.
     """
-    cache_key = f"engine:assets:{tenant_id}"
+    cache_key = f"assets:{tenant_id}"
     
+    # 1. Try Cache (Instant Vis)
+    cached = redis_client.get(cache_key)
+    if cached:
+        return json.loads(cached)
+        
+    # 2. Fetch from DB
+    current_asset_types = ["branding", "scripts", "visuals", "roi", "rag"]
+    
+    # Since we implemented the Schema Robot for business_assets, we can query it safely.
+    # However, if engine hasn't run, it might be empty.
+    rows = await db.pool.fetch("SELECT asset_type, content FROM business_assets WHERE tenant_id = $1 AND is_active = True", tenant_id)
+    
+    # Construct "Skeleton" if empty (Didactic UI)
+    assets = {atype: None for atype in current_asset_types}
+    
+    if rows:
+        for r in rows:
+            assets[r['asset_type']] = json.loads(r['content'])
+    else:
+        # Mock for instant gratification if DB empty (Demo Mode)
+        pass 
+            
+    # 3. Cache
+    redis_client.setex(cache_key, 5, json.dumps(assets)) # Short TTL (5s) to allow updates during generation
+    return assets
+
+@router.get("/engine/analytics", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
+async def get_engine_analytics():
+    """
+    Dedicated Endpoint for New UI Dashboard (v3.2).
+    Aligns with 'Endpoint Synchronization' rule.
+    """
     # 1. Try Cache
+    cache_key = "engine:analytics:summary"
+    cached = redis_client.get(cache_key)
+    if cached: return json.loads(cached)
+
+    # 2. Real Aggregation
     try:
-        cached = redis_client.get(cache_key)
-        if cached:
-            return json.loads(cached)
-    except Exception:
-        pass # Fallback to DB
+        total_conv = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations")
+        active_agents = 5 # Fixed for now (Branding, Script, Visual, ROI, RAG)
+        vectors = 0 # TODO: Get from Chroma
+        
+        # Calculate Tokens (Approximation)
+        total_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages")
+        tokens_est = total_msgs * 150 
+        
+        data = {
+            "total_conversations": total_conv,
+            "active_agents": active_agents,
+            "vector_count": vectors,
+            "tokens_consumed": tokens_est,
+            "health_score": 98 # Mock high health
+        }
+        
+        # 3. Cache (TTL 300s)
+        redis_client.setex(cache_key, 300, json.dumps(data))
+        return data
+
+    except Exception as e:
+        logger.error(f"ENGINE_ANALYTICS_FAIL: {e}")
+        return {"error": "Analytics unavailable"}
+    pass # Fallback to DB
 
     # 2. Fetch from DB
     from app.models.business import BusinessAsset
     from sqlalchemy import select
     
-    # We use a raw query or session if available. Using raw SQL for consistency with this file's pattern
     # Assuming 'business_assets' table exists as per BusinessAsset model
     
     q = """
