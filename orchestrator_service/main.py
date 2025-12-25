@@ -164,6 +164,10 @@ migration_steps = [
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_smtp_pass TEXT;
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_smtp_port INTEGER;
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_policy JSONB DEFAULT '{}';
+        
+        -- Nexus v3: OpenAI Override per Tenant
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS openai_api_key VARCHAR(255);
+        
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
         ALTER TABLE tenants ALTER COLUMN is_active SET DEFAULT TRUE;
         UPDATE tenants SET is_active = TRUE WHERE is_active IS NULL;

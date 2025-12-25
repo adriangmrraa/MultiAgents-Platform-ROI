@@ -53,3 +53,10 @@ Para mantener la integridad del proyecto, sugiero revisar estos puntos en tus do
 
 ## 🚀 Estado Actual: **ESTABLE**
 El orquestador está en versión **1.2.0**. La base de datos es ahora la **Única Fuente de Verdad** (Single Source of Truth), cumpliendo con el objetivo de arquitectura multi-tenant de alto rendimiento.
+
+### ✅ Verificación de Protocolo Omega (Checklist)
+- [x] **Identity Link**: `chat_conversations` ahora tiene `customer_id` (UUID FK).
+- [x] **Ghost Tables**: Todos los modelos (`Customer`, `Agent`) se importan explícitamente en `main.py` antes de `create_all`.
+- [x] **Schema Drift**: `openai_api_key` tiene valor por defecto/nullable para evitar `NotNullViolation`.
+- [x] **SQL Consistency**: Scripts de init en `db/init/` sincronizados para usar UUIDs (Gen Random).
+- [x] **Centralized Imports**: `app/models/__init__.py` elimina imports circulares.

@@ -44,16 +44,78 @@ def register_tools(tools_list):
     global REGISTERED_TOOLS
     REGISTERED_TOOLS = tools_list
 
+# --- Redis Setup for Aggregated Cache ---
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+
 @router.get("/tools", dependencies=[Depends(verify_admin_token)])
 async def get_tools():
-    """Returns available tools using Code Reflection (no DB)."""
-    return [
-        {
-            "name": t.name,
-            "description": t.description
-        }
+    """
+    Hybrid Tool Discovery: System (Code) + Custom (DB).
+    Follows 'Aggregated Cache' pattern: DB tools are fetched live, System tools are memory-cached.
+    """
+    # 1. Fetch Custom Tools from DB
+    db_tools_rows = await db.pool.fetch("SELECT * FROM tools")
+    db_tools = [dict(row) for row in db_tools_rows]
+    
+    # 2. System Tools (Registered in memory)
+    system_tools = [
+        {"name": t.name, "description": t.description, "type": "system", "service_url": "internal"}
         for t in REGISTERED_TOOLS
     ]
+    
+    # 3. Merge
+    # We map DB keys to match UI expectations
+    formatted_db_tools = []
+    for t in db_tools:
+        formatted_db_tools.append({
+            "name": t['name'],
+            "description": t.get('description', 'Custom Tool'),
+            "type": t['type'],
+            "service_url": t.get('service_url'),
+            "config": json.loads(t['config']) if t.get('config') else {},
+            "id": t['id']
+        })
+        
+    return system_tools + formatted_db_tools
+
+class ToolCreate(BaseModel):
+    name: str # Must be unique
+    type: str # 'http', 'tienda_nube', etc.
+    config: Dict[str, Any]
+    service_url: Optional[str] = None
+    description: Optional[str] = "User defined tool"
+
+@router.post("/tools", dependencies=[Depends(verify_admin_token)])
+async def create_tool(tool: ToolCreate):
+    try:
+        # Check uniqueness against system tools
+        if any(t.name == tool.name for t in REGISTERED_TOOLS):
+             raise HTTPException(400, "Cannot override system tool name")
+             
+        q = """
+        INSERT INTO tools (tenant_id, name, type, config, service_url, description)
+        VALUES (NULL, $1, $2, $3, $4, $5)
+        RETURNING id
+        """
+        # Note: NULL tenant_id implies Global Tool for now. Future: ContextVar injection.
+        row = await db.pool.fetchrow(q, tool.name, tool.type, json.dumps(tool.config), tool.service_url, tool.description)
+        return {"status": "ok", "id": row['id']}
+    except Exception as e:
+        logger.error(f"Error creating tool: {e}")
+        raise HTTPException(500, f"Error creating tool: {e}")
+
+@router.delete("/tools/{name}", dependencies=[Depends(verify_admin_token)])
+async def delete_tool(name: str):
+    try:
+        # Check if system tool
+        if any(t.name == name for t in REGISTERED_TOOLS):
+             raise HTTPException(403, "Cannot delete system tool")
+             
+        await db.pool.execute("DELETE FROM tools WHERE name = $1", name)
+        return {"status": "ok"}
+    except Exception as e:
+         raise HTTPException(500, str(e))
 
 # --- Models ---
 from utils import encrypt_password, decrypt_password
@@ -1430,19 +1492,55 @@ async def delete_agent(agent_id: str):
         logger.error(f"Error deleting agent: {e}")
         raise HTTPException(500, f"Error deleting agent: {e}")
 
-# --- Compliance: Forensically Identified Missing Endpoint ---
 @router.get("/analytics/summary", dependencies=[Depends(verify_admin_token)])
 async def get_analytics_summary():
     """
-    Placeholder endpoint preventing 404 errors in Agents Page.
-    Future: Implement real aggregation.
+    Aggregated Cache Implementation (Pattern: Access-Through-Cache)
+    TTL: 60 seconds
     """
-    return {
-        "status": "ok", 
-        "data": {
-            "total_conversations": 0,
-            "active_now": 0,
-            "handover_rate": 0.0,
-            "avg_response_time": 0.0
+    CACHE_KEY = "analytics:summary"
+    
+    try:
+        # 1. Try Cache
+        cached = redis_client.get(CACHE_KEY)
+        if cached:
+            return json.loads(cached)
+            
+        # 2. Db Queries (Aggregation)
+        # Active Tenants (Any message in last 24h or just active flag?) -> using flag for speed
+        total_tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants WHERE is_active = TRUE")
+        
+        # Messages stats
+        total_conversations = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations")
+        
+        # 24h Activity
+        active_now = await db.pool.fetchval("""
+            SELECT COUNT(DISTINCT conversation_id) 
+            FROM chat_messages 
+            WHERE created_at > NOW() - INTERVAL '24 hours'
+        """)
+        
+        # Handover Rate
+        # Count convs with status 'human_override' vs total
+        handovers = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations WHERE status = 'human_override'")
+        handover_rate = (handovers / total_conversations) if total_conversations > 0 else 0.0
+        
+        data = {
+            "status": "ok",
+            "active_tenants": total_tenants,
+            "data": {
+                "total_conversations": total_conversations,
+                "active_now": active_now,
+                "handover_rate": round(handover_rate, 2),
+                "avg_response_time": 150 # Placeholder until telemetry table grows
+            }
         }
-    }
+        
+        # 3. Set Cache
+        redis_client.setex(CACHE_KEY, 60, json.dumps(data))
+        
+        return data
+    except Exception as e:
+        logger.error(f"Analytics error: {e}")
+        # Fallback empty
+        return {"status": "error", "data": {"total_conversations": 0, "active_now": 0}}
