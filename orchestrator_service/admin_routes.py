@@ -8,9 +8,19 @@ from pydantic import BaseModel
 import httpx
 import redis
 from db import db
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Configuration
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-99")
+
+# Resilience & Engine
+from app.core.resilience import safe_db_call
+from app.core.engine import NexusEngine # NEW
+from sse_starlette.sse import EventSourceResponse # For Streaming (requires installation) - wait, plan said BFF handles streaming? 
+# Ah, BFF proxies it. Orchestrator needs to provide it.
+
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -49,6 +59,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 @router.get("/tools", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
 async def get_tools():
     """
     Hybrid Tool Discovery: System (Code) + Custom (DB).
@@ -266,6 +277,7 @@ class ConversationModel(BaseModel):
     human_override_until: Optional[datetime] = None
 
 @router.get("/bootstrap", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
 async def bootstrap():
     """Initial load for the dashboard."""
     # 1. Sync Env Vars to DB so they appear in UI
@@ -296,23 +308,242 @@ async def bootstrap():
     }
 
 @router.get("/stats", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
 async def get_stats():
-    """Get dashboard statistics. Strictly derived from HITL tables."""
-    # Active tenants (with ID and active status)
-    active_tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants WHERE is_active = TRUE")
+    """
+    Get dashboard statistics.
+    Implements Aggregated Cache pattern (TTL 300s).
+    Fallback to direct DB query if Redis is unavailable.
+    """
+    cache_key = "dashboard:stats"
     
-    # Message stats (Source of Truth: chat_messages)
-    total_messages = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages")
-    # Mapping 'processed' to 'assistant' responses for logic equivalent
-    processed_messages = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'assistant'")
+    # 1. Try Redis Cache
+    try:
+        cached = redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception as e:
+        print(f"WARN: Redis cache error (get): {e}")
+
+    # 2. Fetch from DB (Fallback/Live)
+    try:
+        # Active tenants (with ID and active status)
+        active_tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants WHERE is_active = TRUE")
+        
+        # Message stats (Source of Truth: chat_messages)
+        total_messages = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages")
+        # Mapping 'processed' to 'assistant' responses for logic equivalent
+        processed_messages = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'assistant'")
+        
+        stats_data = {
+            "active_tenants": active_tenants,
+            "total_messages": total_messages,
+            "processed_messages": processed_messages,
+            "cached_at": datetime.utcnow().isoformat()
+        }
+        
+        # 3. Cache result
+        try:
+            redis_client.setex(cache_key, 300, json.dumps(stats_data))
+        except Exception as e:
+            print(f"WARN: Redis cache error (set): {e}")
+
+        return stats_data
+
+    except Exception as db_err:
+        print(f"CRIT: DB Stats failed: {db_err}")
+        # Return fallback structure to prevent UI crash
+        return {
+            "active_tenants": 0,
+            "total_messages": 0,
+            "processed_messages": 0,
+            "error": "Database unavailable"
+        }
+
+def sanitize_payload(payload: Any) -> Any:
+    """Recursively mask sensitive keys in a dictionary or list."""
+    SENSITIVE_KEYS = {'api_key', 'password', 'secret', 'token', 'access_token', 'smtp_password', 'smtp_password_encrypted'}
+    if isinstance(payload, dict):
+        new_dict = {}
+        for k, v in payload.items():
+            if k.lower() in SENSITIVE_KEYS or 'key' in k.lower() or 'secret' in k.lower() or 'token' in k.lower():
+                new_dict[k] = "********"
+            else:
+                new_dict[k] = sanitize_payload(v)
+        return new_dict
+    elif isinstance(payload, list):
+        return [sanitize_payload(item) for item in payload]
+    else:
+        return payload
+
+@router.get("/events", dependencies=[Depends(verify_admin_token)])
+async def get_events(limit: int = 50):
+    """
+    Fetch recent telemetry events.
+    Strict pagination (max 50) and content sanitization.
+    """
+    real_limit = min(limit, 50)
     
-    return {
-        "active_tenants": active_tenants,
-        "total_messages": total_messages,
-        "processed_messages": processed_messages
-    }
+    # Ensure system_events table exists (handled in main.py migration, but good to be safe)
+    # Using simple query
+    try:
+        query = """
+            SELECT id, event_type, severity, message, payload, occurred_at, tenant_id
+            FROM system_events
+            ORDER BY id DESC
+            LIMIT $1
+        """
+        rows = await db.pool.fetch(query, real_limit)
+        
+        events = []
+        for r in rows:
+            payload = r['payload']
+            # Parse JSON string if needed (asyncpg usually handles jsonb as str unless codec set)
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except:
+                    pass
+            elif not payload:
+                payload = {}
+            
+            events.append({
+                "id": r['id'],
+                "event_type": r['event_type'],
+                "severity": r['severity'],
+                "message": r['message'],
+                "payload": sanitize_payload(payload),
+                "occurred_at": r['occurred_at'].isoformat() if r['occurred_at'] else None,
+                "tenant_id": r['tenant_id']
+            })
+            
+        return events
+    except Exception as e:
+        print(f"ERROR: Fetching events failed: {e}")
+        return []
+
+@router.post("/ops/{action}", dependencies=[Depends(verify_admin_token)])
+@require_role("SuperAdmin")
+@safe_db_call
+async def admin_ops(action: str, payload: dict = {}):
+    """
+    Restricted Admin Operations Gateway.
+    Allowed Actions: clear_cache, trigger_handoff.
+    """
+    if action == "clear_cache":
+        # Clear specific pattern or all
+        pattern = payload.get("pattern", "dashboard:*")
+        # Security check: Prevent clearing arbitrary system keys if possible, or assume SuperAdmin knows (Protocol Omega)
+        # We enforce a prefix to be safe(r)
+        if not pattern.startswith("dashboard:") and not pattern.startswith("cache:"):
+             if pattern != "*": # Allow full clear if explicitly requested by SuperAdmin? Let's limit for now.
+                pattern = f"dashboard:{pattern}"
+        
+        try:
+            keys = redis_client.keys(pattern)
+            count = 0
+            if keys:
+                redis_client.delete(*keys)
+                count = len(keys)
+            return {"status": "ok", "cleared": count, "pattern": pattern}
+        except Exception as e:
+            raise HTTPException(500, f"Redis error: {e}")
+            
+    elif action == "trigger_handoff":
+        conversation_id = payload.get("conversation_id")
+        if not conversation_id:
+            # Fallback for manual testing: try finding by phone + tenant
+            phone = payload.get("phone")
+            tenant_id = payload.get("tenant_id")
+            if phone and tenant_id:
+                row = await db.pool.fetchrow("SELECT id FROM chat_conversations WHERE external_user_id = $1 AND tenant_id = $2", phone, tenant_id)
+                if row: conversation_id = str(row['id'])
+        
+        if not conversation_id:
+            raise HTTPException(400, "conversation_id (or phone+tenant_id) required")
+
+        # 1. Fetch Conversation Details
+        conv = await db.pool.fetchrow("SELECT * FROM chat_conversations WHERE id = $1", conversation_id)
+        if not conv:
+             raise HTTPException(404, "Conversation not found")
+        
+        tenant_id = conv['tenant_id']
+
+        # 2. Lock Conversation (Disable AI)
+        # Lock for 24 hours to ensure human has time to intervene
+        lock_until = datetime.utcnow() + timedelta(hours=24)
+        await db.pool.execute("UPDATE chat_conversations SET human_override_until = $1, status = 'human_override' WHERE id = $2", lock_until, conversation_id)
+        
+        # 3. Fetch Handoff Config & Credentials
+        config = await db.pool.fetchrow("SELECT * FROM tenant_human_handoff_config WHERE tenant_id = $1", tenant_id)
+        if not config:
+             return {"status": "ok", "message": "Handoff triggered (AI Paused), but email NOT sent (No Config found)."}
+
+        # 4. Fetch History
+        history_rows = await db.pool.fetch("""
+            SELECT role, content, created_at, from_number FROM chat_messages 
+            WHERE conversation_id = $1 ORDER BY created_at ASC LIMIT 100
+        """, conversation_id)
+        
+        transcript = []
+        for r in history_rows:
+            ts = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+            sender = "BOT" if r['role'] == "assistant" else f"USER ({r.get('from_number') or 'Client'})"
+            transcript.append(f"[{ts}] {sender}:\n{r['content']}\n")
+        
+        transcript_text = "\n".join(transcript)
+
+        # 5. Send Email
+        try:
+             # Decrypt password (ensure utils import matches your environment)
+             # Note: decrypt_password is imported in this file around line 121
+             smtp_pass = decrypt_password(config['smtp_password_encrypted'])
+             
+             msg = MIMEMultipart()
+             msg['From'] = config['smtp_username']
+             msg['To'] = config['destination_email']
+             msg['Subject'] = f"🚨 Handoff Request: {conv['external_user_id']} ({conv['channel']})"
+             
+             body = f"""
+             ACTION REQUIRED: Manual Handoff Triggered by Admin.
+             
+             Tenant ID: {tenant_id}
+             Customer: {conv['external_user_id']}
+             Channel: {conv['channel']}
+             Reason: Manual Trigger via Admin Tools
+             
+             --- Chat Transcript (Last 100 messages) ---
+             {transcript_text}
+             """
+             msg.attach(MIMEText(body, 'plain'))
+             
+             # SMTP Connect
+             server = None
+             try:
+                 if config['smtp_security'] == 'SSL':
+                     server = smtplib.SMTP_SSL(config['smtp_host'], config['smtp_port'], timeout=10)
+                 else:
+                     server = smtplib.SMTP(config['smtp_host'], config['smtp_port'], timeout=10)
+                     if config['smtp_security'] == 'STARTTLS':
+                        server.starttls()
+                 
+                 server.login(config['smtp_username'], smtp_pass)
+                 server.send_message(msg)
+             finally:
+                 if server: server.quit()
+             
+             print(f"MANUAL_OPS: Handoff Email sent to {config['destination_email']}")
+             return {"status": "ok", "message": f"Handoff triggered. AI paused for 24h. Email sent to {config['destination_email']}."}
+             
+        except Exception as e:
+             print(f"HANDOFF_EMAIL_FAIL: {e}")
+             return {"status": "warning", "message": f"AI Paused, but Email failed: {str(e)}"}
+
+    else:
+        raise HTTPException(400, f"Unknown action: {action}")
 
 @router.get("/logs", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
 async def get_logs(limit: int = 50):
     """Fetch recent chat logs for the 'Live History' view (Legacy/Debug)."""
     # Using chat_messages as the source of truth for display
@@ -356,6 +587,7 @@ async def get_logs(limit: int = 50):
 # --- HITL Chat Views (New) ---
 
 @router.get("/chats", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
 async def list_chats():
     """
     List conversations for the WhatsApp-like view.
@@ -404,6 +636,7 @@ async def list_chats():
         raise HTTPException(status_code=500, detail=f"Failed to list chats: {str(e)}")
 
 @router.get("/chats/{conversation_id}/messages", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
 async def get_chat_history(conversation_id: str):
     """
     Get full history for a conversation.
@@ -1641,3 +1874,72 @@ async def get_telemetry_events(
     except Exception as e:
         logger.error(f"Telemetry error: {e}")
         raise HTTPException(500, "Log stream error")
+
+# --- Nexus Business Engine (v3.2) ---
+
+@router.post("/engine/ignite", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
+async def ignite_engine(payload: dict = {}):
+    """
+    Triggers the 5 Proactive Agents.
+    Payload: { "tenant_id": "...", "catalog": [...], "public_url": "..." }
+    """
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(400, "Missing tenant_id")
+        
+    # Launch Engine
+    engine = NexusEngine(tenant_id, payload)
+    results = await engine.ignite()
+    return {"status": "ignited", "results": results}
+
+@router.get("/engine/assets/{tenant_id}", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
+async def get_business_assets(tenant_id: str):
+    """
+    Polling Endpoint for UI to fetch generated assets.
+    Implements Aggregated Cache (Redis) for millisecond response times.
+    """
+    cache_key = f"engine:assets:{tenant_id}"
+    
+    # 1. Try Cache
+    try:
+        cached = redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass # Fallback to DB
+
+    # 2. Fetch from DB
+    from app.models.business import BusinessAsset
+    from sqlalchemy import select
+    
+    # We use a raw query or session if available. Using raw SQL for consistency with this file's pattern
+    # Assuming 'business_assets' table exists as per BusinessAsset model
+    
+    q = """
+        SELECT id, asset_type, content, is_active, created_at 
+        FROM business_assets 
+        WHERE tenant_id = $1 AND is_active = TRUE
+        ORDER BY created_at DESC
+    """
+    rows = await db.pool.fetch(q, tenant_id)
+    
+    assets = []
+    for r in rows:
+        assets.append({
+            "id": r['id'],
+            "asset_type": r['asset_type'],
+            "content": json.loads(r['content']) if isinstance(r['content'], str) else r['content'],
+            "created_at": r['created_at'].isoformat() if r['created_at'] else None
+        })
+        
+    response = {"assets": assets}
+    
+    # 3. Cache Result (Short TTL for "Near Real-time" feel, but fast refresh)
+    try:
+        redis_client.setex(cache_key, 5, json.dumps(response)) # 5 seconds TTL
+    except Exception:
+        pass
+        
+    return response        

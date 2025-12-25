@@ -5,7 +5,7 @@ const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN || "admin-secret-99";
 
 function detectApiBase() {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        return 'http://localhost:8000';
+        return 'http://localhost:3000'; // Target BFF Proxy
     }
     let hostname = window.location.hostname;
     if (hostname.includes('platform-ui')) {

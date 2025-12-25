@@ -22,10 +22,35 @@ Estos servicios **NO** deben tener dominio público. Se comunican exclusivamente
 | Servicio | Puerto Interno | Dirección DNS |
 | :--- | :--- | :--- |
 | **Agent Service** | `8001` | `http://agent_service:8001` |
+| **BFF Service** | `3000` | `http://bff_service:3000` |
 | **WhatsApp Service** | `8002` | `http://whatsapp_service:8002` |
 | **TiendaNube Service** | `8003` | `http://tiendanube_service:8003` |
 | **Redis** | `6379` | `redis://redis:6379` |
 | **PostgreSQL** | `5432` | `postgresql://postgres...` |
+
+### 2. Services
+*   **Orchestrator (The Brain)**:
+    *   **Port**: 8000
+    *   **Persistence**: `/app/data` mounted to `./orchestrator_data` (ChromaDB vectors survive restarts).
+    *   **Logic**: `main.py` (FastAPI) + `engine.py` (AsyncIO).
+    *   **Self-Healing**: `SchemaSurgeon` fixes DB drift on startup.
+*   **Frontend (The Face)**:
+    *   **Port**: 80 (Internal) / 80 (External)
+    *   **Resilience**: Nginx Timeouts extended to **300s** to tolerate Deep Thinking.
+    *   **Discovery**: `useApi.ts` implements Triple Redundancy (Local/Internal/EasyPanel).
+*   **Agent Service**: Python (FastAPI) en `agent_service` (Port **8001**).
+    *   **Rol**: Ejecuta los "Agentes" (LLM-powered workers) que realizan tareas específicas.
+*   **Frontend**: React (Vite) en `platform_ui` (Served via Nginx).
+*   **Middleware / BFF**: Node.js (Express) en `bff_service` (Port **3000**).
+    *   **Rol**: Proxy de Estado y "Plomería de Datos" para SSE.
+*   **External Integrations**:
+    *   **WhatsApp Service**: Node.js (Baileys) en `whatsapp_service` (Port **8002**).
+    *   **Tienda Nube Service**: Node.js en `tiendanube_service` (Port **8003**).
+
+### C. Persistent Storage (Volúmenes)
+*   `postgres_data`: Persistencia de base de datos relacional.
+*   `whatsapp_sessions`: Persistencia de credenciales de WhatsApp.
+*   `orchestrator_data`: **/app/data** (ChromaDB Vectors) - Crucial para RAG, montado en `/app/data/chroma`.
 
 ---
 

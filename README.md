@@ -8,7 +8,26 @@ Este repositorio aloja el ecosistema **Nexus v3**, una plataforma de orquestaci�
 
 ## 🌟 Visión: "Agentes Soberanos, Infraestructura Auto-Reparable"
 
-A diferencia de los chatbots tradicionales, Nexus v3 es un **Sistema Operativo para Agentes**. No solo responde mensajes, sino que gestiona identidad, memoria a largo plazo, herramientas de comercio electrónico (Tienda Nube) y canales de comunicación (WhatsApp) de forma autónoma y descentralizada.
+A diferencia de los chatbots tradicionales, Nexus v3 es un **Sistema Operativo para Agentes**. No solo responde mensajes, sino que gestiona identidad, memoria a largo plazo, herramientas de comercio electrónico (Tienda Nube) y canales de comunicación (WhatsApp) de forma autónoma, descentralizada y proactiva.
+
+### ⚡ Current Status: v3.2# Nexus Business Engine (v3.2 Protocol Omega)
+
+> **"La Estación Espacial del E-commerce"**
+> Arquitectura de Microservicios Orquestada con Inteligencia Soberana y Resiliencia Extrema.
+
+## 🚀 Estado: CONSOLIDADO (v3.2)
+- **Smart RAG**: Ingesta Neuronal con Transformación Cognitiva (GPT-4o-mini).
+- **Robustez**: Timeouts de 300s, Schema Self-Healing ("Robot de Mantenimiento").
+- **Performance**: Redis Aggregated Cache & Persistence.
+- **Protocolo Omega**: Aislamiento total, Triple Redundancia Frontend.
+*   **Interface**: React + TypeScript (Futuristic UI with "Thinking Logs").
+*   **Plumbing**: Node.js BFF (Real-time SSE for state management).
+*   **Stability check**: `STABILITY_REPORT_NEXUS_V3.md`
+
+## 🚀 Key Features (v3.2)
+*   **Proactive Business Starters**: 5 Agents (Branding, Scripts, Visuals, ROI, RAG) run in parallel upon connection.
+*   **RAG "Stellar Map"**: Persistent Vector Store (ChromaDB) for zero-hallucination context.
+*   **Futuristic UX**: Real-time "Thinking Logs" streamed via SSE to a React Dashboard.
 
 ### Pilares del Protocolo Omega
 1.  **Single Source of Truth (SSOT)**: La Base de Datos (Postgres) es la autoridad final. Todo ID es UUID. Todo esquema se auto-repara al inicio.

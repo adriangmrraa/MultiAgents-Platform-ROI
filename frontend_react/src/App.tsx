@@ -4,6 +4,7 @@ import { Dashboard } from './views/Dashboard';
 import { Credentials } from './views/Credentials';
 import { Stores } from './views/Stores';
 import { Setup } from './views/Setup';
+import { SetupExperience } from './views/SetupExperience'; // v3.2 Nexus Engine
 import { Logs } from './views/Logs';
 import { Tools } from './views/Tools';
 
@@ -14,6 +15,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/setup" element={<Setup />} />
+          <Route path="/nexus-setup" element={<SetupExperience />} />
           <Route path="/stores" element={<Stores />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/analytics" element={<div className="view active"><h1 className="view-title">Métricas Avanzadas</h1><p>Próximamente...</p></div>} />

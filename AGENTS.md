@@ -43,13 +43,33 @@ async def check_stock(product_id: str):
     try:
         # Lógica de llamada a Tienda Nube Service
         return f"Stock: 50 unidades" 
+        return f"Stock: 50 unidades"
     except Exception as e:
         return f"Error revisando stock: {e}"
 ```
 
 ---
 
-## 3. Configuración de Modelos
+### 3. Nexus Business Engine Agents (v3.2)
+*Estos agentes son 100% Apátridas (Stateless). Reciben su contexto completo del Orquestador en cada invocación.*
+
+*   **Branding Agent**: Extrae ADN visual (HTML/CSS) -> Crea Manual de Marca.
+*   **Scriptwriter Agent**: LLM + System Prompt -> Genera Guiones de Venta (Email, WhatsApp).
+*   **Visual Artist Agent**: Genera conceptos visuales para RRSS basados en inventario/fechas.
+### 5. The Librarian (RAG Agent)
+*   **Role**: Knowledge Keeper.
+*   **Source**: `tiendanube_service` (`/tools/productsall`).
+*   **Process (Smart RAG)**:
+    1.  **Fetch**: Get raw catalog JSON.
+    2.  **Transform**: `gpt-4o-mini` rewrites product as "Semantic Document" (SEO-optimized).
+    3.  **Index**: Store in `ChromaDB` (Persistent) with Tenant ID.
+*   **Output**: High-precision vector retrieval for "Search Specific Products".
+*   **Deep Research Agent (ROI)**: Analiza competencia y sugiere estrategia de precios.
+*   **Post-Venta & Memoria Agent**: Se nutre de conversaciones pasadas (con autorización) y del catálogo indexado (RAG) para fidelizar clientes y resolver dudas sin alucinaciones.
+
+---
+
+## 4. Configuración de Modelos
 
 El modelo se selecciona dinámicamente según la configuración del Agente en la BD (tabla `agents`).
 *   **Provider**: `openai` (Standard), `anthropic` (Future).

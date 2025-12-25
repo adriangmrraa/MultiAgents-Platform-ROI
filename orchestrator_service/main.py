@@ -504,6 +504,33 @@ CONTEXTO DE LA TIENDA:
 CATALOGO:
 {STORE_CATALOG_KNOWLEDGE}'
     WHERE system_prompt_template IS NULL;
+    """,
+    # 14. Business Assets (Nexus Engine v3.2 - Phase 2)
+    """
+    CREATE TABLE IF NOT EXISTS business_assets (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id VARCHAR(255) NOT NULL,
+        asset_type VARCHAR(50) NOT NULL,
+        content JSONB NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_business_assets_tenant ON business_assets (tenant_id, is_active);
+    """,
+    # 14b. Business Assets Repair (Schema Drift Prevention)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);
+        ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS asset_type VARCHAR(50);
+        ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS content JSONB;
+        ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+        ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Schema repair failed for business_assets';
+    END $$;
     """
 ]
 

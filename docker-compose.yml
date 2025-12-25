@@ -17,7 +17,7 @@ services:
       - orchestrator_service
 
   platform_ui:
-    build: ./platform_ui
+    build: ./frontend_react
     ports:
       - "80:80"
     environment:
@@ -34,6 +34,7 @@ services:
       - "8000:8000"
     volumes:
       - ./orchestrator_service:/app
+      - ./orchestrator_data:/app/data # PERSISTENT VECTOR STORAGE (v3.2)
     environment:
       - WHATSAPP_SERVICE_URL=http://whatsapp_service:8002
       - REDIS_URL=redis://redis:6379

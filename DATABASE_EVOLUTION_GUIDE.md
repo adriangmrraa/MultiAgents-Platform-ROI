@@ -73,6 +73,36 @@ Consulta la base de datos para confirmar que la columna existe.
 *   **Causa**: El modelo no se importó en `main.py` antes de `Base.metadata.create_all`.
 *   **Solución**: Agrega `from app.models import X` en las importaciones de `main.py`.
 
+## Schema Strategy: "The Maintenance Robot" (v3.2)
+
+Instead of traditional migration files (`alembic`, etc.), the Orchestrator implements a **Self-Healing Mechanism** on startup (`lifespan` in `main.py`).
+
+### Active Drift Prevention
+1.  **Check**: Does `business_assets` exist?
+2.  **Repair**: If not, `CREATE TABLE` with UUID PK.
+3.  **Heal**: If exists but missing `tenant_id` or `content`, `ALTER TABLE ADD COLUMN`.
+4.  This ensures "Ghost Tables" never crash the system in Production.
+
+### Core Tables
+*   `tenants` (Config & Credentials)
+*   `business_assets` (Generated content, cached JSONB)
+*   `chat_conversations` / `chat_messages` (History)
+
+**Definición (SSOT)**:
+```sql
+CREATE TABLE IF NOT EXISTS business_assets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Protocol Omega Standard
+    tenant_id TEXT NOT NULL,
+    asset_type TEXT NOT NULL, -- 'branding', 'script', 'image', 'roi_report'
+    content JSONB NOT NULL,   -- El contenido estructurado (paleta, prompt, texto)
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+-- Index for fast retrieval by UI
+CREATE INDEX idx_business_assets_tenant ON business_assets(tenant_id);
+```
+
 ### Error: `NotNullViolation`
 *   **Causa**: Agregaste una columna obligatoria a una tabla con datos existentes.
 *   **Solución**: Haz la columna `nullable=True` o asigna un `DEFAULT`.

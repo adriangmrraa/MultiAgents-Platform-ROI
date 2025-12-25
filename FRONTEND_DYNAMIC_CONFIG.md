@@ -2,10 +2,16 @@
 
 Para eliminar la dependencia de variables "hardcodeadas" y permitir que una misma imagen de Docker funcione en cualquier entorno (Local, Dev, Prod) sin recompilar, se implementó una estrategia de **Inyección de Configuración en Tiempo de Ejecución**.
 
-## 1. El Problema Original
+## 1. Filosofía: "Build Once, Deploy Anywhere"
+En Nexus v3.2, la UI es agnóstica al entorno. El mismo contenedor Docker (`platform_ui`) funciona en localhost, EasyPanel o AWS sin recompilar. Esto se logra mediante **Triple Redundancia** con `detectApiBase()`:
+1.  **Window Global**: `window.API_BASE` (Inyectado en runtime por `env.js`).
+2.  **Meta Tag**: `<meta name="api-base" ...>` (Server-Side Injection).
+3.  **Localhost Fallback**: `http://localhost:3000` (Para desarrollo).
+
+## 2. El Problema Original
 En aplicaciones React/SPA tradicionales, las variables de entorno (como `REACT_APP_API_URL`) se "comen" (se reemplazan) en el momento del **Build**. Esto significa que si construyes la imagen en tu PC, la URL queda fija para siempre. Si luego despliegas en EasyPanel, la app intentará conectar a `localhost` o a lo que tenías al compilar.
 
-## 2. La Solución Implementada: `window.env`
+## 3. La Solución Implementada: `window.env`
 
 La solución consta de dos partes principales:
 
@@ -20,6 +26,22 @@ Este script:
     window.API_BASE = "https://orchestrator.tudominio.com";
     window.ADMIN_TOKEN = "tu_token_secreto";
     ```
+# 3. Nexus UI (v3.2) - The Futuristic Dashboard
+> **Arquitectura**: React (Vite) + TypeScript + Node.js BFF + SSE.
+
+### Flujo de Carga ("The Awakening")
+1.  **Estado Inicial (Void)**: Pantalla limpia, solo logo pulsante.
+2.  **SSE Stream**: Conexión a `http://bff_service:3000/api/engine/stream/{tenant_id}`.
+3.  **Renderizado Reactivo**:
+    *   Evento `branding`: Renderiza `<BrandingBlock />` (Colors, Typography).
+    *   Evento `scripts`: Renderiza `<ScriptBlock />` (Copy-paste scripts).
+    *   Evento `visuals`: Renderiza `<VisualGrid />` (Image placeholders/results).
+    *   Evento `roi`: Renderiza `<ROIGraph />` (Live chart).
+    *   Evento `rag`: Muestra barra de progreso de "Sincronización Neural".
+
+### Componentes Clave
+*   `FuturisticLoader`: Animación CSS/Canvas.
+*   `StreamingLog`: Consola tipo "Matrix" que muestra los pensamientos del backend.
 
 **Resultado:** Cuando el navegador del usuario carga tu página, primero carga este `env.js` y el navegador "aprende" cuál es la URL correcta *en ese momento*.
 

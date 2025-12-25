@@ -23,15 +23,28 @@ class Settings(BaseSettings):
     @classmethod
     def parse_cors_list(cls, v: Any) -> Any:
         if isinstance(v, str):
+            # Resilience: Handle empty string or generic wildcard
+            if not v.strip():
+                return ["*"]
+            
             # If it looks like a JSON list, try to parse it
-            if v.startswith("[") and v.endswith("]"):
+            if v.strip().startswith("[") and v.strip().endswith("]"):
                 try:
                     import json
-                    return json.loads(v)
+                    loaded = json.loads(v)
+                    if isinstance(loaded, list):
+                        return loaded
                 except:
+                    # Fallback to comma splitting if JSON fails
                     pass
-            # Otherwise, split by comma and strip whitespace
-            return [item.strip() for item in v.split(",")]
+            
+            # Split by comma and strip whitespace
+            return [item.strip() for item in v.split(",") if item.strip()]
+        
+        # Guard clause: If it's not a list or string, default to wildcard to prevent crash
+        if not isinstance(v, list):
+            return ["*"]
+            
         return v
 
     API_V1_STR: str = "/api/v1"

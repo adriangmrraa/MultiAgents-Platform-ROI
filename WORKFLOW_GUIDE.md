@@ -2,6 +2,23 @@
 
 Este documento es el manual operativo para el despliegue, mantenimiento y uso diario de la plataforma. Está diseñado para Operadores y Administradores de Sistema.
 
+### 3. Onboarding Ultra-Rápido & Business Ignition (v3.2)
+*El "Manual de Vuelo" para el despliegue automático de valor.*
+
+1.  **Conexión (The Trigger)**: Usuario conecta Tienda Nube.
+2.  **Escaneo Multimodal**: El sistema "lee" la tienda (API) y el sitio web (HTML) para entender el ADN de la marca.
+3.  **Activación Paralela**: Se disparan los 5 Iniciadores de Negocio simultáneamente:
+    *   **Branding**: Extrae paleta y tipografía.
+    *   **Guiones**: Redacta textos de venta persuasivos.
+    *   **Visuals**: Genera conceptos para RRSS.
+    *   **ROI**: Analiza el nicho de mercado.
+    *   **Memoria**: Indexa todo en ChromaDB (RAG).
+4.  **Entrega**: Los activos se materializan en la UI en tiempo real.
+
+### 4. Flujo de Handoff (Derivación Humana)
+*   **Trigger**: Usuario pide hablar con humano o Agente detecta frustración/incertidumbre.
+*   **Acción**: `trigger_handoff` (Admin Ops).
+
 ---
 
 ## 1. Alta de Nuevos Clientes (Onboarding)
@@ -19,7 +36,16 @@ Gracias a la **UI Unificada (Nexus v3)**, ya no es necesario tocar la base de da
     *   **System Prompt**: Define la personalidad (ej. "Eres un vendedor experto en zapatos...").
 5.  **Guardar**. El sistema validará y cifrará las credenciales automáticamente.
 
-### Paso B: Conexión WhatsApp (YCloud)
+### Paso B: Ignite the Engine (v3.2)
+1.  Navigate to `http://<your-domain>/nexus-setup`.
+2.  Enter User Token (`admin-secret-99` or custom).
+3.  Click **"Iniciar Motores"**.
+4.  **Observe**:
+    *   **Startup**: Maintenance Robot checks `business_assets` table.
+    *   **Ingestion**: "Smart RAG" transforms `productsall` JSON into Semantic Vectors (check logs).
+    *   **Visualization**: Progress bar hits 100% and Assets appear instantly (Redis Cache).
+
+### Paso C: Conexión WhatsApp (YCloud)
 1.  En el dashboard de YCloud, configura el **Webhook URL**:
     *   `https://api.tusistema.com/chat/webhook`
 2.  Verifica que el `PHONE_NUMBER_ID` en YCloud coincida con el registrado en el Tenant.

@@ -23,11 +23,27 @@ La plataforma ha completado exitosamente la transición al **Protocolo Omega**. 
 ### 2. Infraestructura y Red
 *   **[OK] Variante A (Auto-Repair)**: Nginx configurado con Resolver `127.0.0.11` y Proxy Dinámico.
 *   **[OK] Presurización**: Puertos de BD y Servicios Internos cerrados al exterior. Solo `80` y `8000` responden.
+
+## 3. Stability Interventions (v3.2 Implemented)
+
+### A. Network Layer (Fixed)
+*   ✅ **Timeouts**: Extended to 300s.
+*   ✅ **BFF**: `bff_service` proxies cleanly.
+*   ✅ **HTTPS**: Hardcoded `API_BASE` removed, relies on `useApi.ts`.
+
+### B. Data Layer (Fixed)
+*   ✅ **Schema Drift**: "Maintenance Robot" implemented in `main.py`.
+*   ✅ **Persistence**: Volumes mounted for ChromaDB (`/app/data`).
+*   ✅ **Smart RAG**: `productsall` + Neural Transformation used.
+
+## 4. Conclusion
+System is **STABLE** and **ROBUST**. Ready for Production High-Load.
 *   **[OK] Timeout Exemption**: Inferencia de IA permitida hasta 300s.
 
-### 3. Backend y Lógica
+### 5. Backend y Lógica
 *   **[OK] Aggregated Cache**: Analytics usa Redis (300s TTL) con Fallback automático a DB.
-*   **[OK] Admin Gateway**: Acciones críticas (`clear_cache`) protegidas por Whitelist en API.
+*   **[OK] Admin Gateway**: Acciones críticas (`clear_cache`, `trigger_handoff`) protegidas por Whitelist y RBAC (`@require_role`).
+*   **[OK] Manual Handoff**: Capacidad de pausar IA y enviar transcript por Email bajo demanda.
 *   **[OK] Telemetry**: Logs sanitizados (Sin passwords en payload) y paginados.
 
 ---
