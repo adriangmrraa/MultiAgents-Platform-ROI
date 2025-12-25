@@ -54,6 +54,40 @@ Para garantizar que no queden datos "huérfanos", la eliminación de un inquilin
 
 ---
 
+## 🌐 Networking y Seguridad Interna (El Corazón de Omega)
+
+La arquitectura profesional de **Platform AI Solutions** se basa en la comunicación por red privada.
+
+### 🛡️ Seguridad Extrema
+Si usas la URL pública (https://agent.tudominio.com), estás exponiendo tu "Cerebro Cognitivo" a todo internet. Aunque tengas autenticación, estás abriendo una puerta a ataques DDoS o intentos de fuerza bruta.
+- **Con URL Interna**: El servicio `agent_service` es invisible para el mundo exterior. Solo el Orquestador (que vive en la misma red privada de Docker) puede tocarlo. Es como tener una caja fuerte dentro de un búnker, en lugar de en la acera con un candado.
+- **Validación**: El sistema valida estrictamente el header `X-Internal-Secret` en cada petición, reforzando la confianza en la red interna.
+
+### ⚡ Latencia y Performance (Velocidad Pura)
+- **Vía Pública**: La petición sale de tu servidor, da una vuelta por el router de internet, hace un handshake SSL (HTTPS) y vuelve a entrar. Tarda milisegundos valiosos.
+- **Vía Interna**: La petición viaja por la memoria del servidor a través de la red virtual de Docker. Es casi instantáneo. Para un chat en tiempo real, cada milisegundo cuenta.
+
+### 💰 Costes y Estabilidad
+- El tráfico interno en Docker no consume ancho de banda de tu cuota de salida de Hetzner.
+- No dependes de que los certificados SSL se renueven o de que el DNS público funcione. Si se cae internet (pero el servidor sigue vivo), los servicios internos siguen operando.
+
+---
+
+## 📋 Checklist de Validación (EasyPanel)
+
+Para asegurar que esta configuración funcione correctamente:
+
+1.  **Nombres de Servicio**: El nombre del servicio en EasyPanel debe coincidir con el host usado (ej. `multiagents-agent-service`).
+    - *Tip*: Si tu proyecto es `multiagents` y la app `agent-service`, el host es `multiagents-agent-service`.
+2.  **Puertos Internos**:
+    - `agent_service`: Puerto **8001**.
+    - `tiendanube_service`: Puerto **8003**.
+3.  **Dominios Públicos (RECOMENDACIÓN)**:
+    - Ve a la pestaña "Domains" de `agent_service` y `tiendanube_service` y **BORRA** el dominio público.
+    - **Solo** el `orchestrator` (para la UI) y el `whatsapp_service` (para el Webhook) necesitan dominios públicos.
+
+---
+
 ## 📈 Observabilidad y Diagnóstico
 - **Logs**: Formato JSON en `stdout` para indexación en EasyPanel.
 - **Correlation-ID**: Cada "burbuja" de mensaje debe rastrearse desde el webhook de entrada hasta la respuesta final.
