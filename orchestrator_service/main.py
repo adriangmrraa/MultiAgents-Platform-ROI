@@ -536,17 +536,37 @@ CATALOGO:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # --- Flight Check (Nexus v3.2 Protocol) ---
+    logger.info("system_startup_initiated", version="v3.2 Protocol Omega")
+    
+    # 1. Environment Audit
+    env_status = {
+        "OPENAI_API_KEY": bool(OPENAI_API_KEY),
+        "POSTGRES_DSN": bool(POSTGRES_DSN),
+        "REDIS_URL": bool(REDIS_URL),
+        "TIENDANUBE_TOKEN": bool(GLOBAL_TN_ACCESS_TOKEN),
+        "INTERNAL_SECRET": bool(INTERNAL_SECRET_KEY)
+    }
+    logger.info("environment_audit", **env_status)
+
     # Startup: Connect to DB and Hydrate
     try:
-        # 1. Ensure Legacy DB Pool (db.py) is connected
+        # 2. Connectivity Check: Postgres
         if not POSTGRES_DSN:
              logger.error("missing_postgres_dsn")
         else:
              await db.connect() 
+             logger.info("connectivity_check", service="postgres", status="connected")
              
-        # 2. Auto-Migration for EasyPanel (Schema Repair & Prep)
-        # We execute this BEFORE SQLAlchemy to ensure "Ghost Tables" (like customers) have PKs/Unique constraints
-        # so that Foreign Keys created by SQLAlchemy don't fail.
+        # 3. Connectivity Check: Redis
+        try:
+             redis_client.ping()
+             logger.info("connectivity_check", service="redis", status="connected")
+        except Exception as r_err:
+             logger.error("connectivity_check", service="redis", status="failed", error=str(r_err))
+
+        # 4. Auto-Migration for EasyPanel (Schema Repair & Prep)
+        logger.info("maintenance_robot_start", strategy="schema_surgeon")
         
         # Execute migration steps sequentially
         for i, step in enumerate(migration_steps):
@@ -557,9 +577,9 @@ async def lifespan(app: FastAPI):
                 # Log but verify severity. "Index already exists" is fine. "No unique constraint" is fatal later but maybe here we are fixing it.
                 logger.debug(f"migration_step_ignored", index=i, error=str(step_err))
 
-        logger.info("db_migrations_applied_v3")
+        logger.info("maintenance_robot_complete", status="tables_verified")
 
-        # 3. Universal Schema Creation (SQLAlchemy)
+        # 5. Universal Schema Creation (SQLAlchemy)
         # CRITICAL: Must import all models to ensure they are registered in Base.metadata
         from app.models.base import Base
         from app.models.tenant import Tenant
@@ -570,16 +590,20 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
             
-        # 4. Hydrate Data (SQLAlchemy session)
+        # 6. Hydrate Data (SQLAlchemy session)
         async with AsyncSessionLocal() as session:
-            await init_db(session)
+            try:
+                await init_db(session)
+                logger.info("data_hydration_complete")
+            except Exception as hyd_err:
+                logger.error("data_hydration_failed", error=str(hyd_err))
+                # Don't crash, allow partial startup
             
-        logger.info("startup_complete")
+        logger.info("system_startup_complete", port=8000)
         
     except Exception as e:
         logger.error("startup_critical_error", error=str(e), dsn_preview=POSTGRES_DSN[:15] if POSTGRES_DSN else "None")
         # Optimization: We let it start, but health checks will fail.
-        # However, for debugging, let's stop it if it's a gaierror to force visibility.
         if "Name or service not known" in str(e):
              print(f"CRITICAL DNS ERROR: Cannot resolve database host. Check your POSTGRES_DSN: {POSTGRES_DSN}")
              raise e

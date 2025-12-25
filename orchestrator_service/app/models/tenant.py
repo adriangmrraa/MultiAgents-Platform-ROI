@@ -40,8 +40,7 @@ class Tenant(Base, TimestampMixin):
 class TenantHumanHandoffConfig(Base, TimestampMixin):
     __tablename__ = "tenant_human_handoff_config"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), unique=True, nullable=False)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), primary_key=True, unique=True, nullable=False)
     
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     
