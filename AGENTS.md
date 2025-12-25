@@ -6,7 +6,7 @@
 ## 🧱 Arquitectura Nexus v3 (Decentralized Intelligence)
 
 El sistema ha evolucionado de un monolito a una arquitectura totalmente descentralizada. El núcleo ya no "piensa", sino que "coordina".
-
+   
 ### 📡 Traffic Controller (orchestrator_service)
 - **Rol**: Orquestación de datos, persistencia en PostgreSQL y gestión de estados.
 - **Responsabilidad**: Recepción de webhooks (WhatsApp/YCloud), auditoría de seguridad y ruteo cognitivo.
