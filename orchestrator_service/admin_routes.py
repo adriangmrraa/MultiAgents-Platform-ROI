@@ -19,6 +19,18 @@ async def verify_admin_token(x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid Admin Token")
 
+# --- RBAC Helper ---
+from functools import wraps
+def require_role(role: str):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # In MVP, verify_admin_token guarantees SuperAdmin access
+            # Future: Check user roles from JWT
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
 # --- Models ---
 from utils import encrypt_password, decrypt_password
 
