@@ -1,6 +1,6 @@
-# 🧠 Platform AI Solutions (Nexus v3.1) - Protocol Omega
+# 🧠 Platform AI Solutions (Nexus v3.3) - Protocol Omega
 
-> **Estado del Sistema**: `STABLE` | **Versión**: `v3.1.0-omega` | **Arquitectura**: `Decentralized Microservices`
+> **Estado del Sistema**: `STABLE` | **Versión**: `v3.3.0-omega` | **Arquitectura**: `Decentralized Microservices`
 
 Este repositorio aloja el ecosistema **Nexus v3**, una plataforma de orquestación de Agentes de IA Multi-Tenant diseñada para operar con **Resiliencia Extrema (Protocolo Omega)** sobre infraestructura Docker/EasyPanel.
 
@@ -10,42 +10,24 @@ Este repositorio aloja el ecosistema **Nexus v3**, una plataforma de orquestaci�
 
 A diferencia de los chatbots tradicionales, Nexus v3 es un **Sistema Operativo para Agentes**. No solo responde mensajes, sino que gestiona identidad, memoria a largo plazo, herramientas de comercio electrónico (Tienda Nube) y canales de comunicación (WhatsApp) de forma autónoma, descentralizada y proactiva.
 
-### ⚡ Current Status: v3.2# Nexus Business Engine (v3.2 Protocol Omega)
-
-> **"La Estación Espacial del E-commerce"**
-> Arquitectura de Microservicios Orquestada con Inteligencia Soberana y Resiliencia Extrema.
-
-## 🚀 Estado: CONSOLIDADO (v3.2)
-- **Smart RAG**: Ingesta Neuronal con Transformación Cognitiva (GPT-4o-mini).
-- **Robustez**: Timeouts de 300s, Schema Self-Healing ("Robot de Mantenimiento").
-- **Performance**: Redis Aggregated Cache & Persistence.
-- **Protocolo Omega**: Aislamiento total, Triple Redundancia Frontend.
-*   **Interface**: React + TypeScript (Futuristic UI with "Thinking Logs").
-*   **Plumbing**: Node.js BFF (Real-time SSE for state management).
-*   **Stability check**: `STABILITY_REPORT_NEXUS_V3.md`
-
-## 🚀 Key Features (v3.2)
-*   **Proactive Business Starters**: 5 Agents (Branding, Scripts, Visuals, ROI, RAG) run in parallel upon connection.
-*   **RAG "Stellar Map"**: Persistent Vector Store (ChromaDB) for zero-hallucination context.
-*   **Futuristic UX**: Real-time "Thinking Logs" streamed via SSE to a React Dashboard.
-
-### Pilares del Protocolo Omega
-1.  **Single Source of Truth (SSOT)**: La Base de Datos (Postgres) es la autoridad final. Todo ID es UUID. Todo esquema se auto-repara al inicio.
-2.  **Resiliencia de Red (Variante A)**: Nginx utiliza resolución DNS dinámica (`127.0.0.11`) para sobrevivir a reinicios de contenedores sin intervención humana.
-3.  **Aislamiento Estricto**: Solo el Orquestador y la UI son públicos. Los servicios de IA (Agent, WhatsApp) operan en una red privada blindada.
-4.  **Rendimiento en Capas**: Cache Agregada (Redis) para lecturas rápidas, con Fallback a DB para garantizar disponibilidad.
+### 🚀 Novedades v3.3 (Current Release)
+- **Zero-Config Deployment**: Despliegue automático de tiendas nuevas con escaneo de activos.
+- **Glassmorphism UI**: Interfaz administrativa React con modo oscuro y feedback háptico visual.
+- **Stateless Agents**: Arquitectura apátrida con inyección de contexto (`ContextVars`) para escalabilidad infinita.
+- **Put & Delete**: Gestión completa de Tenants y Credenciales desde la UI.
 
 ---
 
 ## 🏗️ Arquitectura de Microservicios
 
-| Servicio | Puerto | Función | Tecnología |
-| :--- | :--- | :--- | :--- |
-| **Orchestrator** | `8000` | Cerebro Central. Router de mensajes, Gestión de Estado, API Administrativa. | Python (FastAPI) |
-| **Agent Service** | `8001` | Corteza Prefrontal. Ejecuta Cadenas de Pensamiento (CoT) y usa Herramientas. | LangChain / OpenAI |
-| **WhatsApp Service** | `8002` | Oído y Voz. Gateway para YCloud/Meta. Transcribe audios (Whisper). | Python (FastAPI) |
-| **TiendaNube Service** | `8003` | Brazos Ejecutores. Conector oficial API Tienda Nube (Catálogos, Órdenes). | Python (FastAPI) |
-| **Platform UI** | `80` | Panel de Control Visual. Dashboard React adminstrativo. | React / Nginx |
+| Servicio | Puerto | Tipo | Función | Tecnología |
+| :--- | :--- | :--- | :--- | :--- |
+| **Orchestrator** | `8000` | 🧠 Cerebro | Router de mensajes, Gestión de Estado, API Administrativa. | Python (FastAPI) |
+| **Agent Service** | `8001` | ⚡ Worker | Ejecuta Cadenas de Pensamiento (CoT) y usa Herramientas. | LangChain / OpenAI |
+| **WhatsApp Service** | `8002` | 👂 Gateway | Conexión con YCloud/Meta. | Python (FastAPI) |
+| **TiendaNube Service** | `8003` | 🛒 Tool | Conector oficial API Tienda Nube (Catálogos, Órdenes). | Python (FastAPI) |
+| **BFF Service** | `3000` | 🔌 Proxy | Backend for Frontend (SSE, Estado). | Node.js (Express) |
+| **Frontend React** | `80` | 🖥️ UI | Panel de Control Visual (Vite). | React / Nginx |
 
 ---
 
@@ -53,41 +35,38 @@ A diferencia de los chatbots tradicionales, Nexus v3 es un **Sistema Operativo p
 
 El sistema está optimizado para **EasyPanel** (Docker Swarm/Compose).
 
-### 1. Requisitos
-*   Servidor VPS (Hetzner/DigitalOcean) con Docker.
-*   EasyPanel instalado.
-*   Claves API: OpenAI, YCloud, Tienda Nube.
-
-### 2. Variables de Entorno Críticas
-Estas variables definen la "Identidad" del despliegue. Ver `INFRASTRUCTURE.md` para la lista completa.
+### 1. Variables de Entorno Críticas
+Ver `INFRASTRUCTURE.md` para la lista completa y segura.
 
 ```bash
 # Seguridad
-INTERNAL_API_TOKEN=super-secret-token-shared-between-services
-ENCRYPTION_KEY=32-char-random-string-for-db-encryption
+ADMIN_TOKEN=...              # Token Maestro (Debe coincidir en Frontend y Backend)
+INTERNAL_API_TOKEN=...       # Token entre servicios (Orchestrator <-> Agent)
+ENCRYPTION_KEY=...           # 32-char string para cifrado DB
 
-# Conectividad
+# Infraestructura
 POSTGRES_DSN=postgresql+asyncpg://...
 REDIS_URL=redis://redis:6379
 
-# Servicios IA
+# IA & Integraciones
 OPENAI_API_KEY=sk-...
 ```
 
-### 3. Comandos de Mantenimiento (Admin Gateway)
-Desde el Dashboard (`/admin`), puedes ejecutar acciones de sistema protegidas:
-*   **Clear Cache**: `POST /admin/system/actions` `{ "action": "clear_cache" }`
-*   **Trigger Handoff**: `POST /admin/system/actions` `{ "action": "trigger_handoff", "payload": { "conversation_id": "..." } }`
+### 2. Protocolo Omega (Resiliencia)
+El sistema implementa **Auto-Reparación de Esquema**. Al reiniciar el Orquestador:
+1.  Verifica la integridad de la BD.
+2.  Crea tablas faltantes (`system_events`, `active_agents`).
+3.  Migra columnas si hay desviación de esquema (Schema Drift).
 
 ---
 
 ## 📚 Documentación Viva
 Para profundizar en áreas específicas, consulta las guías especializadas:
 
-*   **[INFRASTRUCTURE.md](./INFRASTRUCTURE.md)**: Mapa de puertos, seguridad de red y configuración de EasyPanel.
-*   **[WORKFLOW_GUIDE.md](./WORKFLOW_GUIDE.md)**: Manual de operaciones para dar de alta tiendas y gestionar agentes.
-*   **[DATABASE_EVOLUTION_GUIDE.md](./DATABASE_EVOLUTION_GUIDE.md)**: Filosofía de "Schema Drift" y los 4 Pasos Sagrados de migración.
-*   **[STABILITY_REPORT.md](./STABILITY_REPORT_NEXUS_V3.md)**: Auditoría forense y estado de salud actual.
+*   **[INFRASTRUCTURE.md](./INFRASTRUCTURE.md)**: Mapa de puertos, seguridad de red y configuración.
+*   **[AGENTS.md](./AGENTS.md)**: Guía de desarrollo de nuevas herramientas y lógica de agentes.
+*   **[WORKFLOW_GUIDE.md](./WORKFLOW_GUIDE.md)**: Manual de operaciones para dar de alta tiendas.
+*   **[DATABASE_EVOLUTION_GUIDE.md](./DATABASE_EVOLUTION_GUIDE.md)**: Filosofía de "Schema Drift".
 
 ---
 
