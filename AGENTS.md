@@ -18,6 +18,7 @@ El sistema ha evolucionado de un monolito a una arquitectura totalmente descentr
 - **Responsabilidad**: Procesar entradas de usuario usando LangChain (GPT-4o-mini).
 - **Statelessness**: Es un servicio 100% apátrida. Recibe TODO el contexto (prompts, catálogo, credenciales dinámicas) en cada petición.
 - **Tools**: Ejecuta búsquedas en Tienda Nube usando las credenciales inyectadas por el orquestador bajo el **Protocolo Omega**.
+- **Esquema de Respuesta**: El agente debe retornar un JSON con la estructura `{"messages": [{"text": "...", "metadata": {...}}]}`. Los metadatos son cruciales para alimentar el "Thinking Log" en el Dashboard.
 
 ---
 
