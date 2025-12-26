@@ -7,6 +7,10 @@ import { Setup } from './views/Setup';
 import { SetupExperience } from './views/SetupExperience'; // v3.2 Nexus Engine
 import { Logs } from './views/Logs';
 import { Tools } from './views/Tools';
+import { Chats } from './views/Chats'; // v3.3 Chat Module
+import { YCloudSettings } from './views/YCloudSettings'; // v3.3 Settings Module
+import { MetaSettings } from './views/MetaSettings'; // v3.3 Settings Module
+import { Analytics } from './views/Analytics'; // v3.3 Analytics Module
 
 function App() {
   return (
@@ -18,10 +22,11 @@ function App() {
           <Route path="/nexus-setup" element={<SetupExperience />} />
           <Route path="/stores" element={<Stores />} />
           <Route path="/logs" element={<Logs />} />
-          <Route path="/analytics" element={<div className="view active"><h1 className="view-title">Métricas Avanzadas</h1><p>Próximamente...</p></div>} />
+          <Route path="/analytics" element={<Analytics />} />
           <Route path="/credentials" element={<Credentials />} />
-          <Route path="/ycloud" element={<div className="view active"><h1 className="view-title">WhatsApp (YCloud)</h1><p>Próximamente...</p></div>} />
-          <Route path="/whatsapp-meta" element={<div className="view active"><h1 className="view-title">WhatsApp Meta API</h1><p>Próximamente...</p></div>} />
+          <Route path="/ycloud" element={<YCloudSettings />} />
+          <Route path="/whatsapp-meta" element={<MetaSettings />} />
+          <Route path="/chats" element={<Chats />} />
           <Route path="/tools" element={<Tools />} />
         </Routes>
       </Layout>

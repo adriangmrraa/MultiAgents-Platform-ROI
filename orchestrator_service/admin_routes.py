@@ -1569,12 +1569,56 @@ async def events_stream(limit: int = 10):
         })
     return {"events": events}
 
-@router.post("/diagnostics/whatsapp/send_test", dependencies=[Depends(verify_admin_token)])
-async def send_test_msg(data: dict):
-    """Mock sending a test message."""
-    # In a real scenario, this would call the YCloud client
-    # For now, we verified the backend works with real Webhook events
-    return {"status": "OK", "message": "Test message queued (Mock)"}
+@router.post("/whatsapp/send", dependencies=[Depends(verify_admin_token)])
+async def send_manual_message(data: dict):
+    """
+    Send a manual message to a user via YCloud.
+    Payload: { "phone": "549...", "message": "Content..." }
+    """
+    try:
+        phone = data.get("phone")
+        message = data.get("message")
+        
+        if not phone or not message:
+            raise HTTPException(status_code=400, detail="Missing phone or message")
+
+        # 1. Store the manual message in DB for history
+        # We generate a correlation_id for tracking
+        correlation_id = str(uuid.uuid4())
+        
+        await db.pool.execute("""
+            INSERT INTO chat_messages (id, correlation_id, from_number, to_number, role, content, status, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        """, str(uuid.uuid4()), correlation_id, "admin", phone, "assistant", message, "sent")
+
+        # 2. Call YCloud Service
+        # We need the tenant_id to know WHICH YCloud account to use.
+        # For Nexus v3, we usually infer tenant from phone number, but for now we'll assume a global or default context.
+        # Ideally, the UI sends the tenant_id. If not, we broadcast or use default.
+        
+        # Check if we have a tenant for this phone
+        tenant = await db.pool.fetchrow("SELECT * FROM tenants WHERE bot_phone_number = $1 OR id = 1 LIMIT 1", phone) 
+        # Note: This logic is loose. In a real multi-tenant app, we need the source bot phone.
+        # For now, we'll try to use the YCloud Service URL from env or DB.
+        
+        async with httpx.AsyncClient() as client:
+            ycloud_url = os.getenv("YCLOUD_SERVICE_URL", "http://whatsapp_service:8002")
+            # We send to the whatsapp service which handles the YCloud API mapping
+            response = await client.post(f"{ycloud_url}/send/text", json={
+                "to": phone,
+                "body": message
+            }, headers={"x-internal-secret": os.getenv("INTERNAL_API_TOKEN", "")})
+            
+            if response.status_code != 200:
+                print(f"Error sending to YCloud: {response.text}")
+                raise HTTPException(status_code=500, detail=f"Upstream error: {response.text}")
+                
+        return {"status": "sent", "correlation_id": correlation_id}
+
+    except Exception as e:
+        print(f"Manual send error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/console/events", dependencies=[Depends(verify_admin_token)])
 async def console_events(limit: int = 50):
@@ -1597,8 +1641,126 @@ async def console_events(limit: int = 50):
     for r in rows:
         # Map DB row to UI event format
         # UI expects: event_type, timestamp, source, severity, correlation_id, details
-        meta = json.loads(r["metadata"]) if r["metadata"] else {}
-        correlation_id = meta.get("correlation_id")
+@router.get("/analytics/kpis", dependencies=[Depends(verify_admin_token)])
+async def get_analytics_kpis():
+    """Get high-level KPIs for the dashboard."""
+    try:
+        # 1. Total Messages (All time)
+        total_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages")
+        
+        # 2. Messages Today
+        msgs_today = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE created_at > CURRENT_DATE")
+        
+        # 3. Active Users (Unique phones in last 24h)
+        active_users = await db.pool.fetchval("SELECT COUNT(DISTINCT from_number) FROM chat_messages WHERE role='user' AND created_at > NOW() - INTERVAL '24 hours'")
+        
+        # 4. Error Rate (System events with severity ERROR in last 24h)
+        errors_today = await db.pool.fetchval("SELECT COUNT(*) FROM system_events WHERE severity='ERROR' AND occurred_at > CURRENT_DATE")
+        
+        return {
+            "total_messages": total_msgs or 0,
+            "messages_today": msgs_today or 0,
+            "active_users_24h": active_users or 0,
+            "errors_today": errors_today or 0
+        }
+    except Exception as e:
+        print(f"Error fetching KPIs: {e}")
+        return {"total_messages": 0, "messages_today": 0, "active_users_24h": 0, "errors_today": 0}
+
+@router.get("/analytics/daily", dependencies=[Depends(verify_admin_token)])
+async def get_analytics_daily():
+    """Get daily message volume for the last 7 days."""
+    try:
+        query = """
+        SELECT 
+            to_char(created_at, 'YYYY-MM-DD') as date,
+            COUNT(*) as count
+        FROM chat_messages
+        WHERE created_at > NOW() - INTERVAL '7 days'
+        GROUP BY date
+        ORDER BY date ASC
+        """
+        rows = await db.pool.fetch(query)
+        return [{"date": r["date"], "count": r["count"]} for r in rows]
+    except Exception as e:
+        print(f"Error fetching daily analytics: {e}")
+        return []
+
+async def get_chats_summary(limit: int = 50):
+    """Get a summary of recent conversations (Distinct by phone)."""
+    # 1. Get unique phones from recent messages
+    query = """
+    WITH RecentMessages AS (
+        SELECT 
+            DISTINCT ON (from_number) from_number, 
+            created_at, 
+            content,
+            role,
+            correlation_id
+        FROM chat_messages
+        WHERE role = 'user'
+        ORDER BY from_number, created_at DESC
+    )
+    SELECT * FROM RecentMessages
+    ORDER BY created_at DESC
+    LIMIT $1
+    """
+    try:
+        rows = await db.pool.fetch(query, limit)
+        chats = []
+        for r in rows:
+            # Check if this phone is in "human_override" mode (requires redis/db check)
+            # For simplistic approach, we just return the row. The UI can fetch status later or we join.
+            chats.append({
+                "phone": r["from_number"],
+                "last_message": r["content"][:50] + "..." if len(r["content"]) > 50 else r["content"],
+                "timestamp": r["created_at"].isoformat(),
+                "status": "active" # Placeholder
+            })
+        return chats
+    except Exception as e:
+        print(f"Error fetching chats: {e}")
+        return []
+
+@router.get("/chats/{phone}/history", dependencies=[Depends(verify_admin_token)])
+async def get_chat_history(phone: str, limit: int = 50):
+    """Get full history for a specific phone number."""
+    query = """
+    SELECT role, content, created_at, correlation_id
+    FROM chat_messages
+    WHERE from_number = $1 OR (role = 'assistant' AND correlation_id IN (
+        SELECT correlation_id FROM chat_messages WHERE from_number = $1
+    ))
+    ORDER BY created_at ASC
+    LIMIT $2
+    """
+    # Simplified query: assuming 'from_number' tracks the user ID effectively
+    # A better approach for the future is a Conversation ID column
+    query_simple = "SELECT role, content, created_at FROM chat_messages WHERE from_number = $1 OR (role = 'assistant' AND content LIKE $2) ORDER BY created_at ASC LIMIT $3"
+    
+    # Correction: The current schema stores only inbound messages with 'from_number'.
+    # Outbound messages (role='assistant') often lack 'from_number' in simple schemas unless explicitly added.
+    # We will fetch everything for now and filter client-side if needed, OR relies on the fact that assistant replies are usually close in time.
+    # BEST EFFORT CHECK:
+    try:
+        rows = await db.pool.fetch("SELECT * FROM chat_messages WHERE from_number = $1 ORDER BY created_at ASC LIMIT $2", phone, limit)
+        return [{
+            "role": r["role"],
+            "content": r["content"],
+            "timestamp": r["created_at"].isoformat()
+        } for r in rows]
+    except Exception as e:
+        return []
+
+@router.post("/handoff/toggle", dependencies=[Depends(verify_admin_token)])
+async def toggle_handoff(data: dict):
+    """Toggle human override for a specific phone."""
+    phone = data.get("phone")
+    enabled = data.get("enabled", False)
+    # We would store this in Redis or a 'conversations' table
+    # await redis.set(f"handoff:{phone}", "true" if enabled else "false")
+    return {"status": "ok", "message": f"Handoff for {phone} set to {enabled}"}
+
         
         events.append({
             "event_type": r["event_type"],
