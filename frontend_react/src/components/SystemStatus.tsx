@@ -5,17 +5,19 @@ interface SystemStatusProps {
     health: any;
 }
 
+// ... imports ...
+
 export const SystemStatus: React.FC<SystemStatusProps> = ({ health }) => {
-    // Determine status colors based on health check properties
-    const getStatusColor = (status: string) => {
-        if (status === 'OK' || status === 'healthy') return 'text-green-400';
-        if (status === 'WARN') return 'text-yellow-400';
-        return 'text-red-400';
+
+    // Mapping helper
+    const getStatusClass = (status: string) => {
+        if (status === 'OK' || status === 'healthy') return 'ok';
+        if (status === 'WARN') return 'warning';
+        return 'error';
     };
 
-    // Mock CPU/RAM for effect if not provided by backend yet
+    // Mock CPU/RAM for effect
     const cpuLoad = 12;
-    const ramUsage = 45;
 
     return (
         <div className="glass p-4 rounded-xl border border-slate-700/50 flex flex-col gap-4">
@@ -28,24 +30,28 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health }) => {
                 <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <Database size={16} className="text-blue-400" />
-                        <div className="flex flex-col">
+                        <div className="flex flex-col gap-1">
                             <span className="text-[10px] text-slate-500 uppercase">PostgreSQL</span>
-                            <span className={`text-xs font-bold ${getStatusColor('OK')}`}>CONNECTED</span>
+                            <div className={`service-pill ${getStatusClass('OK')}`} style={{ padding: '2px 8px', fontSize: '10px' }}>
+                                <div className="pill-dot"></div>
+                                CONNECTED
+                            </div>
                         </div>
                     </div>
-                    <div className="text-[10px] text-slate-600 font-mono">5ms</div>
                 </div>
 
                 {/* Redis Metrics */}
                 <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <HardDrive size={16} className="text-red-400" />
-                        <div className="flex flex-col">
+                        <div className="flex flex-col gap-1">
                             <span className="text-[10px] text-slate-500 uppercase">Redis Stack</span>
-                            <span className={`text-xs font-bold ${getStatusColor('OK')}`}>READY</span>
+                            <div className={`service-pill ${getStatusClass('OK')}`} style={{ padding: '2px 8px', fontSize: '10px' }}>
+                                <div className="pill-dot"></div>
+                                READY
+                            </div>
                         </div>
                     </div>
-                    <div className="text-[10px] text-slate-600 font-mono">TTL:300s</div>
                 </div>
 
                 {/* API Latency */}
@@ -57,10 +63,8 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health }) => {
                             <span className="text-xs font-bold text-white">24ms</span>
                         </div>
                     </div>
-                    <div className="w-12 h-4 bg-slate-800 rounded-sm overflow-hidden flex items-end gap-[1px]">
-                        {[1, 2, 3, 4, 5, 4, 3, 2, 5, 6].map((h, i) => (
-                            <div key={i} className="bg-purple-500/50 w-1" style={{ height: `${h * 10}%` }}></div>
-                        ))}
+                    <div className="service-pill ok" style={{ padding: '2px 6px' }}>
+                        <div className="pill-dot"></div>
                     </div>
                 </div>
 
@@ -70,11 +74,11 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health }) => {
                         <Cpu size={16} className="text-cyan-400" />
                         <div className="flex flex-col">
                             <span className="text-[10px] text-slate-500 uppercase">Core Vitals</span>
-                            <span className="text-xs font-bold text-white">CPU: {cpuLoad}%</span>
+                            <div className="service-pill ok" style={{ padding: '2px 8px', fontSize: '10px' }}>
+                                <div className="pill-dot"></div>
+                                {cpuLoad}%
+                            </div>
                         </div>
-                    </div>
-                    <div className="w-12 h-1 bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-cyan-400 transition-all duration-1000" style={{ width: `${ramUsage}%` }}></div>
                     </div>
                 </div>
             </div>
