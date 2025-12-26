@@ -97,12 +97,6 @@ logger = structlog.get_logger()
 redis_client = redis.from_url(REDIS_URL)
 
 # --- Shared Models ---
-# --- Shared Models ---
-class ToolError(BaseModel):
-    code: str = Field(..., description="Error code")
-    message: str
-    retryable: bool
-    details: Optional[Dict[str, Any]] = None
 
 class SimpleEvent:
     def __init__(self, from_num, text, msg_id):
