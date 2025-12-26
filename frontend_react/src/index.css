@@ -3,16 +3,16 @@
 @tailwind utilities;
 
 :root {
-    --bg-dark: #0a0a0c;
-    --bg-card: rgba(255, 255, 255, 0.03);
-    --border-glass: rgba(255, 255, 255, 0.1);
+    --bg-dark: #070708;
+    --bg-card: rgba(255, 255, 255, 0.02);
+    --border-glass: rgba(255, 255, 255, 0.05);
     --accent: #7c4dff;
-    --accent-glow: rgba(124, 77, 255, 0.3);
+    --accent-glow: rgba(124, 77, 255, 0.2);
     --success: #00e676;
     --text-primary: #f5f5f7;
-    --text-secondary: #a1a1aa;
-    --sidebar-width: 260px;
-    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --text-secondary: #86868b;
+    --sidebar-width: 64px;
+    --transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * {
@@ -48,117 +48,76 @@ body {
 @media (max-width: 768px) {
     .glass-container {
         flex-direction: column;
-        padding: 10px;
-        gap: 10px;
+        padding: 0;
+        gap: 0;
         min-height: 100vh;
     }
 
     .sidebar {
-        width: 100% !important;
-        height: auto;
-        padding: 15px;
-        flex-direction: row;
-        overflow-x: auto;
-        justify-content: space-between;
-        flex-shrink: 0;
-    }
-
-    .sidebar nav {
-        flex-direction: row;
-        gap: 10px;
-    }
-
-    .nav-item {
-        width: auto;
-        padding: 10px;
-        margin-bottom: 0;
-        justify-content: center;
-    }
-
-    .nav-item span {
-        /* Hide labels on mobile if too crowded */
-        display: none;
-    }
-
-    .logo {
-        display: none;
+        display: none !important;
+        /* Manejado por componentes dinámicos en v4.0 */
     }
 
     .content {
-        padding-bottom: 80px;
-        /* Space for bottom nav if needed */
+        padding: 16px;
+        padding-bottom: 100px;
     }
 }
 
-/* Sidebar Styling */
+/* Sidebar Minimalist v4.0 */
 .sidebar {
     width: var(--sidebar-width);
-    background: var(--bg-card);
-    backdrop-filter: blur(20px);
-    border: 1px solid var(--border-glass);
-    border-radius: 24px;
+    background: transparent !important;
+    border: none !important;
     display: flex;
     flex-direction: column;
-    padding: 30px 15px;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 50px;
-    padding-left: 15px;
-}
-
-.logo-icon {
-    font-size: 24px;
-    background: var(--accent);
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 12px;
-    box-shadow: 0 0 20px var(--accent-glow);
-}
-
-.logo-text {
-    font-weight: 800;
-    font-size: 20px;
-    letter-spacing: 1px;
-    background: linear-gradient(to right, #fff, var(--accent));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    padding: 20px 0;
+    height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 50;
+    transition: var(--transition);
 }
 
 .nav-item {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    width: 100%;
-    padding: 14px 20px;
-    margin-bottom: 8px;
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    cursor: pointer;
-    font-size: 15px;
-    font-weight: 400;
-    transition: var(--transition);
-    text-align: left;
-    text-decoration: none;
-}
-
-.nav-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
+    @apply w-12 h-12 rounded-2xl flex items-center justify-center mb-3 mx-auto text-white/30 hover:text-white transition-all duration-300 relative group;
+    background: transparent !important;
 }
 
 .nav-item.active {
-    background: var(--accent);
-    color: #fff;
-    box-shadow: 0 10px 20px var(--accent-glow);
+    @apply text-white bg-white/5 shadow-[0_0_20px_rgba(255, 255, 255, 0.05)];
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Burbuja de Información de Protocolo */
+.info-bubble {
+    @apply absolute left-16 top-0 w-72 p-5 bg-slate-900/95 border border-white/5 rounded-[2rem] shadow-[0_20px_50px_rgba(0, 0, 0, 0.6)] backdrop-blur-2xl opacity-0 group-hover:opacity-100 transition-all duration-500 pointer-events-none z-[100] scale-90 group-hover:scale-100 origin-left;
+}
+
+.info-bubble-title {
+    @apply text-xs font-bold text-indigo-400 tracking-widest uppercase mb-2 block;
+}
+
+.info-bubble-desc {
+    @apply text-[11px] text-slate-300 leading-relaxed mb-3 block;
+}
+
+.info-bubble-steps {
+    @apply space-y-1 border-t border-white/5 pt-3;
+}
+
+.info-bubble-step {
+    @apply text-[10px] text-slate-500 flex items-center gap-2;
+}
+
+/* Mobile Adaptive HUD */
+.mobile-nav-v4 {
+    @apply fixed bottom-6 left-6 right-6 h-20 bg-black/40 backdrop-blur-3xl border border-white/5 rounded-[2.5rem] flex items-center px-6 gap-6 overflow-x-auto no-scrollbar z-50 transition-all duration-1000 shadow-2xl;
+}
+
+.mobile-toggle-btn {
+    @apply fixed bottom-28 left-10 w-12 h-12 rounded-full bg-slate-900/80 backdrop-blur-xl border border-white/5 flex items-center justify-center text-white shadow-xl z-50 transition-all duration-500 hover:scale-110;
 }
 
 /* Main Content area */
@@ -496,112 +455,75 @@ body {
 @media (max-width: 768px) {
     .glass-container {
         flex-direction: column;
-        padding: 10px;
-        gap: 10px;
-        height: 100vh;
-        /* Keep viewport height */
+        padding: 0;
+        gap: 0;
+        min-height: 100vh;
     }
 
     .sidebar {
-        width: 100% !important;
-        height: auto;
-        padding: 15px;
-        flex-direction: row;
-        overflow-x: auto;
-        justify-content: space-between;
-        flex-shrink: 0;
+        display: none !important;
     }
 
-    .sidebar nav {
-        flex-direction: row;
-        gap: 10px;
-    }
-
-    .nav-item {
-        width: auto;
-        padding: 10px;
-        margin-bottom: 0;
-    }
-
-    .nav-item span {
-        /* Hide labels on mobile if too crowded */
-        display: none;
-    }
-
-    .logo {
-        display: none;
+    .content {
+        padding: 16px;
+        padding-bottom: 100px;
     }
 }
 
-/* Sidebar Styling */
+/* Sidebar Minimalist v4.0 */
 .sidebar {
     width: var(--sidebar-width);
-    background: var(--bg-card);
-    backdrop-filter: blur(20px);
-    border: 1px solid var(--border-glass);
-    border-radius: 24px;
+    background: transparent !important;
+    border: none !important;
     display: flex;
     flex-direction: column;
-    padding: 30px 15px;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 50px;
-    padding-left: 15px;
-}
-
-.logo-icon {
-    font-size: 24px;
-    background: var(--accent);
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 12px;
-    box-shadow: 0 0 20px var(--accent-glow);
-}
-
-.logo-text {
-    font-weight: 800;
-    font-size: 20px;
-    letter-spacing: 1px;
-    background: linear-gradient(to right, #fff, var(--accent));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    padding: 20px 0;
+    height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 50;
+    transition: var(--transition);
 }
 
 .nav-item {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    width: 100%;
-    padding: 14px 20px;
-    margin-bottom: 8px;
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    cursor: pointer;
-    font-size: 15px;
-    font-weight: 400;
-    transition: var(--transition);
-    text-align: left;
-    text-decoration: none;
-}
-
-.nav-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
+    @apply w-12 h-12 rounded-2xl flex items-center justify-center mb-3 mx-auto text-white/30 hover:text-white transition-all duration-300 relative group;
+    background: transparent !important;
 }
 
 .nav-item.active {
-    background: var(--accent);
-    color: #fff;
-    box-shadow: 0 10px 20px var(--accent-glow);
+    @apply text-white bg-white/5 shadow-[0_0_20px_rgba(255, 255, 255, 0.05)];
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Burbuja de Información de Protocolo */
+.info-bubble {
+    @apply absolute left-16 top-0 w-72 p-5 bg-slate-900/95 border border-white/5 rounded-[2rem] shadow-[0_20px_50px_rgba(0, 0, 0, 0.6)] backdrop-blur-2xl opacity-0 group-hover:opacity-100 transition-all duration-500 pointer-events-none z-[100] scale-90 group-hover:scale-100 origin-left;
+}
+
+.info-bubble-title {
+    @apply text-xs font-bold text-indigo-400 tracking-widest uppercase mb-2 block;
+}
+
+.info-bubble-desc {
+    @apply text-[11px] text-slate-300 leading-relaxed mb-3 block;
+}
+
+.info-bubble-steps {
+    @apply space-y-1 border-t border-white/5 pt-3;
+}
+
+.info-bubble-step {
+    @apply text-[10px] text-slate-500 flex items-center gap-2;
+}
+
+/* Mobile Adaptive HUD */
+.mobile-nav-v4 {
+    @apply fixed bottom-6 left-6 right-6 h-20 bg-black/40 backdrop-blur-3xl border border-white/5 rounded-[2.5rem] flex items-center px-6 gap-6 overflow-x-auto no-scrollbar z-50 transition-all duration-1000 shadow-2xl;
+}
+
+.mobile-toggle-btn {
+    @apply fixed bottom-28 left-10 w-12 h-12 rounded-full bg-slate-900/80 backdrop-blur-xl border border-white/5 flex items-center justify-center text-white shadow-xl z-50 transition-all duration-500 hover:scale-110;
 }
 
 /* Main Content area */
