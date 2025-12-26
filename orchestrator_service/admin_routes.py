@@ -2502,6 +2502,38 @@ async def get_rag_galaxy(tenant_id: Optional[str] = None):
         import random
         nodes = []
         
+        # Deterministic Seed based on Tenant
+        seed_str = tenant_id or "global"
+        seed_int = int(hashlib.sha256(seed_str.encode("utf-8")).hexdigest(), 16) % 10**8
+        random.seed(seed_int)
+        
+        for i in range(50):
+            # 3D Coordinates (roughly spherical distribution)
+            u = random.random()
+            v = random.random()
+            theta = 2 * 3.14159 * u
+            phi = 3.14159 * v
+            r = 800 + random.random() * 400 # Radius
+            
+            x = r * random.random() # Simplified projection
+            y = r * random.random()
+            z = r * random.random()
+            
+            nodes.append({
+                "id": f"node_{i}",
+                "x": int(x - 500),
+                "y": int(y - 500),
+                "z": int(z - 500),
+                "color": "#22d3ee" if i % 5 == 0 else "#aaaaaa",
+                "size": random.randint(1, 3)
+            })
+            
+        return nodes
+
+    except Exception as e:
+        logger.error(f"RAG Galaxy Fail: {e}")
+        return []
+        
 # --- Sentiment/Frustration Analysis ---
 
 @router.get("/analytics/frustration", dependencies=[Depends(verify_admin_token)])
