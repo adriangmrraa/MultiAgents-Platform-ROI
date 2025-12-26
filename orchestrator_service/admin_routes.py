@@ -90,6 +90,40 @@ async def get_tools():
         
     return system_tools + formatted_db_tools
 
+class CredentialModel(BaseModel):
+    name: str
+    value: str
+    category: str
+    scope: str = "global"
+    tenant_id: Optional[int] = None
+    description: Optional[str] = None
+
+class AgentModel(BaseModel):
+    name: str
+    role: str = "sales"
+    tenant_id: int
+    whatsapp_number: Optional[str] = None
+    model_provider: str = "openai"
+    model_version: str = "gpt-4o"
+    temperature: float = 0.3
+    system_prompt_template: Optional[str] = None
+    enabled_tools: Optional[List[str]] = []
+    config: Optional[dict] = {}
+    is_active: bool = True
+
+class AgentCreate(BaseModel):
+    name: str
+    role: str = "sales"
+    tenant_id: int
+    whatsapp_number: Optional[str] = None
+    model_provider: str = "openai"
+    model_version: str = "gpt-4o"
+    temperature: float = 0.3
+    system_prompt_template: Optional[str] = None
+    enabled_tools: Optional[List[str]] = []
+    config: Optional[dict] = {}
+    is_active: bool = True
+
 class ToolCreate(BaseModel):
     name: str # Must be unique
     type: str # 'http', 'tienda_nube', etc.
@@ -226,39 +260,6 @@ async def list_credentials(category: Optional[str] = None):
     except Exception as e:
         raise HTTPException(500, detail=str(e))
 
-class CredentialModel(BaseModel):
-    name: str
-    value: str
-    category: str
-    scope: str = "global"
-    tenant_id: Optional[int] = None
-    description: Optional[str] = None
-
-class AgentModel(BaseModel):
-    name: str
-    role: str = "sales"
-    tenant_id: int
-    whatsapp_number: Optional[str] = None
-    model_provider: str = "openai"
-    model_version: str = "gpt-4o"
-    temperature: float = 0.3
-    system_prompt_template: Optional[str] = None
-    enabled_tools: Optional[List[str]] = []
-    config: Optional[dict] = {}
-    is_active: bool = True
-
-class AgentCreate(BaseModel):
-    name: str
-    role: str = "sales"
-    tenant_id: int
-    whatsapp_number: Optional[str] = None
-    model_provider: str = "openai"
-    model_version: str = "gpt-4o"
-    temperature: float = 0.3
-    system_prompt_template: Optional[str] = None
-    enabled_tools: Optional[List[str]] = []
-    config: Optional[dict] = {}
-    is_active: bool = True
 
 # --- AGENTS MANAGEMENT ---
 
