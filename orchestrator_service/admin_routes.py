@@ -2483,7 +2483,7 @@ async def get_analytics_summary():
             "processed_messages": 0
         }
 
-# --- Step# --- RAG Visuals ---
+# --- RAG Visuals ---
 
 @router.get("/rag/galaxy", dependencies=[Depends(verify_admin_token)])
 async def get_rag_galaxy(tenant_id: Optional[str] = None):
@@ -2814,21 +2814,6 @@ async def get_engine_analytics():
     except Exception as e:
         logger.error(f"ENGINE_ANALYTICS_FAIL: {e}")
         return {"error": "Analytics unavailable"}
-    pass # Fallback to DB
-
-    # 2. Fetch from DB
-    from app.models.business import BusinessAsset
-    from sqlalchemy import select
-    
-    # Assuming 'business_assets' table exists as per BusinessAsset model
-    
-    q = """
-        SELECT id, asset_type, content, is_active, created_at 
-        FROM business_assets 
-        WHERE tenant_id = $1 AND is_active = TRUE
-        ORDER BY created_at DESC
-    """
-    rows = await db.pool.fetch(q, tenant_id)
     
     assets = []
     for r in rows:
