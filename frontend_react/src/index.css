@@ -89,13 +89,15 @@ body {
 }
 
 .nav-item.active {
-    @apply text-white bg-white/5 shadow-[0_0_20px_rgba(255, 255, 255, 0.05)];
+    @apply text-white bg-white/5;
     background: rgba(255, 255, 255, 0.05) !important;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.05);
 }
 
 /* Burbuja de Información de Protocolo */
 .info-bubble {
-    @apply absolute left-16 top-0 w-72 p-5 bg-slate-900/95 border border-white/5 rounded-[2rem] shadow-[0_20px_50px_rgba(0, 0, 0, 0.6)] backdrop-blur-2xl opacity-0 transition-all duration-500 pointer-events-none z-[100] scale-90 origin-left;
+    @apply absolute left-16 top-0 w-72 p-5 bg-slate-900/95 border border-white/5 rounded-[2rem] backdrop-blur-2xl opacity-0 transition-all duration-500 pointer-events-none z-[100] scale-90 origin-left;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
 }
 
 .group:hover .info-bubble {
