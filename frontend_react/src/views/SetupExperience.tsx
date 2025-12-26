@@ -278,7 +278,14 @@ export const SetupExperience: React.FC = () => {
             )}
 
             {(step === 'igniting' || step === 'dashboard') && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 400px', gap: '20px', maxWidth: '1400px', margin: '0 auto', height: 'calc(100vh - 40px)' }}>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(300px, 1fr) 400px',
+                    gap: '20px',
+                    maxWidth: '1400px',
+                    margin: '0 auto',
+                    minHeight: '800px'
+                }}>
 
                     {/* Left Canvas (Assets) */}
                     <div className="bg-slate-900/50 rounded-lg p-6 overflow-y-auto">

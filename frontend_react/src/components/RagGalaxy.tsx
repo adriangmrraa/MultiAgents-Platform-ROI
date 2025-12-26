@@ -122,7 +122,7 @@ export const RagGalaxy: React.FC = () => {
     };
 
     return (
-        <div className="glass mt-8 p-1 rounded-2xl border border-indigo-900/30 shadow-2xl relative overflow-hidden group">
+        <div className="glass w-full rounded-2xl overflow-hidden flex flex-col min-h-[400px] h-[60vh] border border-cyan-900/30 shadow-2xl mt-8 relative overflow-hidden group">
             <div className="absolute top-0 left-0 right-0 bg-slate-900/80 p-3 border-b border-indigo-500/20 flex justify-between items-center z-10 backdrop-blur-sm">
                 <div className="flex items-center gap-2">
                     <Database size={16} className="text-indigo-400" />
@@ -142,7 +142,7 @@ export const RagGalaxy: React.FC = () => {
                 ref={containerRef}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={() => setHoveredNode(null)}
-                className="h-[300px] w-full bg-black/60 relative cursor-crosshair"
+                className="min-h-[300px] h-[40vh] w-full bg-black/60 relative cursor-crosshair"
             >
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-900/20 via-black to-black opacity-50"></div>
                 <canvas ref={canvasRef} className="block w-full h-full" />

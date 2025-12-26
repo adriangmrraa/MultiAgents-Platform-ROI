@@ -100,7 +100,13 @@ export const Chats: React.FC = () => {
         <div className="view active animate-fade-in">
             <h1 className="view-title">Gestión de Conversaciones (Human Handoff)</h1>
 
-            <div className="chats-layout" style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', height: 'calc(100vh - 150px)' }}>
+            <div className="chats-layout" style={{
+                display: 'grid',
+                gridTemplateColumns: '300px 1fr',
+                gap: '20px',
+                minHeight: '600px',
+                maxHeight: 'calc(100vh - 150px)'
+            }}>
                 {/* Left: List */}
                 <div className="glass" style={{ padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                     <div className="p-4 border-b border-white/5 flex justify-between items-center">

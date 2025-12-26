@@ -25,24 +25,24 @@
 body {
     background: var(--bg-dark);
     color: var(--text-primary);
-    overflow: hidden;
+    min-height: 100vh;
     background-image:
         radial-gradient(circle at 20% 20%, #1a1a2e 0%, transparent 40%),
         radial-gradient(circle at 80% 80%, #16213e 0%, transparent 40%);
+    background-attachment: fixed;
 }
 
 #root {
-    height: 100vh;
-    width: 100vw;
+    min-height: 100vh;
+    width: 100%;
 }
 
 /* Glassmorphism Container */
 .glass-container {
     display: flex;
-    height: 100vh;
+    min-height: 100vh;
     padding: 20px;
     gap: 20px;
-    overflow: hidden;
 }
 
 @media (max-width: 768px) {
@@ -50,8 +50,7 @@ body {
         flex-direction: column;
         padding: 10px;
         gap: 10px;
-        height: 100vh;
-        /* Keep viewport height */
+        min-height: 100vh;
     }
 
     .sidebar {
@@ -168,8 +167,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 20px;
-    height: 100%;
-    overflow: hidden;
+    min-height: 100%;
 }
 
 .top-bar {
@@ -463,9 +461,6 @@ body {
     --accent-glow: rgba(124, 77, 255, 0.3);
     --success: #00e676;
     --text-primary: #f5f5f7;
-    --text-secondary: #a1a1aa;
-    --sidebar-width: 260px;
-    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * {
@@ -478,24 +473,24 @@ body {
 body {
     background: var(--bg-dark);
     color: var(--text-primary);
-    overflow: hidden;
+    min-height: 100vh;
     background-image:
         radial-gradient(circle at 20% 20%, #1a1a2e 0%, transparent 40%),
         radial-gradient(circle at 80% 80%, #16213e 0%, transparent 40%);
+    background-attachment: fixed;
 }
 
 #root {
-    height: 100vh;
-    width: 100vw;
+    min-height: 100vh;
+    width: 100%;
 }
 
 /* Glassmorphism Container */
 .glass-container {
     display: flex;
-    height: 100vh;
+    min-height: 100vh;
     padding: 20px;
     gap: 20px;
-    overflow: hidden;
 }
 
 @media (max-width: 768px) {
@@ -615,8 +610,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 20px;
-    height: 100%;
-    overflow: hidden;
+    min-height: 100%;
 }
 
 .top-bar {
