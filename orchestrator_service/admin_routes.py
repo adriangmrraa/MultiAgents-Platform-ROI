@@ -186,6 +186,164 @@ class AgentModel(BaseModel):
     config: Optional[dict] = {}
     is_active: bool = True
 
+class AgentCreate(BaseModel):
+    name: str
+    role: str = "sales"
+    tenant_id: int
+    whatsapp_number: Optional[str] = None
+    model_provider: str = "openai"
+    model_version: str = "gpt-4o"
+    temperature: float = 0.3
+    system_prompt_template: Optional[str] = None
+    enabled_tools: Optional[List[str]] = []
+    config: Optional[dict] = {}
+    is_active: bool = True
+
+# --- AGENTS MANAGEMENT ---
+
+@router.on_event("startup")
+async def ensure_agents_table():
+    """Ensure agents table exists."""
+    pass
+
+@router.get("/agents", dependencies=[Depends(verify_admin_token)])
+async def list_agents():
+    """List all agents."""
+    try:
+        # Create table if not exists (Lazy Init)
+        await db.pool.execute("""
+            CREATE TABLE IF NOT EXISTS agents (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                role TEXT DEFAULT 'sales',
+                tenant_id INT REFERENCES tenants(id),
+                whatsapp_number TEXT,
+                model_provider TEXT DEFAULT 'openai',
+                model_version TEXT DEFAULT 'gpt-4o',
+                temperature FLOAT DEFAULT 0.3,
+                system_prompt_template TEXT,
+                enabled_tools JSONB,
+                config JSONB,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+        
+        rows = await db.pool.fetch("""
+            SELECT a.*, t.store_name as tenant_name 
+            FROM agents a 
+            LEFT JOIN tenants t ON a.tenant_id = t.id 
+            ORDER BY a.id DESC
+        """)
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"Error listing agents: {e}")
+        return []
+
+@router.post("/agents", dependencies=[Depends(verify_admin_token)])
+async def create_agent(agent: AgentCreate):
+    try:
+        q = """
+            INSERT INTO agents (
+                name, role, tenant_id, whatsapp_number, model_provider, model_version, 
+                temperature, system_prompt_template, enabled_tools, config, is_active, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+            RETURNING id
+        """
+        id = await db.pool.fetchval(q, 
+            agent.name, agent.role, agent.tenant_id, agent.whatsapp_number, 
+            agent.model_provider, agent.model_version, agent.temperature, 
+            agent.system_prompt_template, json.dumps(agent.enabled_tools), 
+            json.dumps(agent.config), agent.is_active
+        )
+        return {"status": "ok", "id": id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/agents/{id}", dependencies=[Depends(verify_admin_token)])
+async def update_agent(id: int, agent: AgentCreate):
+    try:
+        q = """
+            UPDATE agents SET
+                name = $1, role = $2, tenant_id = $3, whatsapp_number = $4, 
+                model_provider = $5, model_version = $6, temperature = $7, 
+                system_prompt_template = $8, enabled_tools = $9, config = $10, 
+                is_active = $11, updated_at = NOW()
+            WHERE id = $12
+        """
+        await db.pool.execute(q, 
+            agent.name, agent.role, agent.tenant_id, agent.whatsapp_number, 
+            agent.model_provider, agent.model_version, agent.temperature, 
+            agent.system_prompt_template, json.dumps(agent.enabled_tools), 
+            json.dumps(agent.config), agent.is_active, id
+        )
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/agents/{id}", dependencies=[Depends(verify_admin_token)])
+async def delete_agent(id: int):
+    try:
+        await db.pool.execute("DELETE FROM agents WHERE id = $1", id)
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- CONSOLE STREAMING ---
+from sse_starlette.sse import EventSourceResponse
+import asyncio
+
+@router.get("/console/stream", dependencies=[Depends(verify_admin_token)])
+async def console_stream(request: Request):
+    """
+    Stream real-time system events (logs) to the console.
+    This simulates a log stream by polling the system_events table.
+    """
+    async def event_generator():
+        last_id = 0
+        try:
+            # Get max ID to start from
+            last_id = await db.pool.fetchval("SELECT MAX(id) FROM system_events") or 0
+        except:
+            pass
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            try:
+                # Fetch new events
+                rows = await db.pool.fetch("""
+                    SELECT id, severity, event_type, message, payload, occurred_at 
+                    FROM system_events 
+                    WHERE id > $1 
+                    ORDER BY id ASC
+                """, last_id)
+
+                for row in rows:
+                    last_id = row['id']
+                    data = {
+                        "id": row['id'],
+                        "severity": row['severity'],
+                        "type": row['event_type'],
+                        "message": row['message'],
+                        "payload": row['payload'], # Already jsonb/dict usually
+                        "timestamp": row['occurred_at'].isoformat()
+                    }
+                    yield {
+                        "event": "log",
+                        "data": json.dumps(data)
+                    }
+                
+                await asyncio.sleep(2) # Poll every 2s
+            except Exception as e:
+                print(f"Stream error: {e}")
+                await asyncio.sleep(5)
+
+    return EventSourceResponse(event_generator())
+
+
 # --- Helper: Sync Environment to DB ---
 async def sync_environment():
     """Reads env vars and ensures the default tenant and credentials exist."""
@@ -1685,6 +1843,57 @@ async def get_analytics_daily():
     except Exception as e:
         print(f"Error fetching daily analytics: {e}")
         return []
+
+# --- TOOLS MANAGEMENT ---
+
+@router.on_event("startup")
+async def ensure_tools_table():
+    """Ensure agent_tools table exists."""
+    # We might not be able to hook into startup here if using APIRouter, but we can verify in the GET
+    pass
+
+@router.get("/tools", dependencies=[Depends(verify_admin_token)])
+async def get_tools():
+    """List available agent tools."""
+    try:
+        # Create table if not exists (Lazy Init for simplicity in migration)
+        await db.pool.execute("""
+            CREATE TABLE IF NOT EXISTS agent_tools (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL,
+                service_url TEXT,
+                config JSONB,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+        
+        rows = await db.pool.fetch("SELECT * FROM agent_tools ORDER BY created_at DESC")
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"Error listing tools: {e}")
+        return []
+
+@router.post("/tools", dependencies=[Depends(verify_admin_token)])
+async def create_tool(tool: dict):
+    """Create a new agent tool."""
+    try:
+        await db.pool.execute("""
+            INSERT INTO agent_tools (name, type, service_url, config)
+            VALUES ($1, $2, $3, $4)
+        """, tool.get("name"), tool.get("type"), tool.get("service_url"), json.dumps(tool.get("config", {})))
+        return {"status": "created"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/tools/{tool_id}", dependencies=[Depends(verify_admin_token)])
+async def delete_tool(tool_id: int):
+    try:
+        await db.pool.execute("DELETE FROM agent_tools WHERE id = $1", tool_id)
+        return {"status": "deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 async def get_chats_summary(limit: int = 50):
     """Get a summary of recent conversations (Distinct by phone)."""

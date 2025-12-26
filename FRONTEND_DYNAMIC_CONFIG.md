@@ -1,74 +1,64 @@
-# Estrategia de Configuración Dinámica en Frontend (`platform_ui`)
+# Estrategia de Configuración Dinámica en Frontend (`frontend_react`)
 
-Para eliminar la dependencia de variables "hardcodeadas" y permitir que una misma imagen de Docker funcione en cualquier entorno (Local, Dev, Prod) sin recompilar, se implementó una estrategia de **Inyección de Configuración en Tiempo de Ejecución**.
+> **Estado**: `Production Ready` | **Estrategia**: `Runtime Injection` | **Framework**: `Vite + React`
 
-## 1. Filosofía: "Build Once, Deploy Anywhere"
-En Nexus v3.2, la UI es agnóstica al entorno. El mismo contenedor Docker (`platform_ui`) funciona en localhost, EasyPanel o AWS sin recompilar. Esto se logra mediante **Triple Redundancia** con `detectApiBase()`:
-1.  **Window Global**: `window.API_BASE` (Inyectado en runtime por `env.js`).
-2.  **Meta Tag**: `<meta name="api-base" ...>` (Server-Side Injection).
-3.  **Localhost Fallback**: `http://localhost:3000` (Para desarrollo).
+Para garantizar la portabilidad del contenedor Docker (`build once, deploy anywhere`), el frontend no "quema" las variables de entorno durante el build. En su lugar, las resuelve dinámicamente en el navegador del usuario.
 
-## 2. El Problema Original
-En aplicaciones React/SPA tradicionales, las variables de entorno (como `REACT_APP_API_URL`) se "comen" (se reemplazan) en el momento del **Build**. Esto significa que si construyes la imagen en tu PC, la URL queda fija para siempre. Si luego despliegas en EasyPanel, la app intentará conectar a `localhost` o a lo que tenías al compilar.
+## 1. El Problema: Docker vs. REACT_APP_
+En un build tradicional de React, `import.meta.env.VITE_API_URL` se reemplaza por texto estático al ejecutar `npm run build`. Esto obliga a reconstruir la imagen para cada entorno (Staging, Prod, Cliente X).
 
-## 3. La Solución Implementada: `window.env`
+## 2. La Solución: Triple Redundancia
 
-La solución consta de dos partes principales:
+El hook `useApi.ts` implementa una estrategia de resolución de 3 capas para encontrar al Backend:
 
-### Parte A: Script de Arranque (`env.sh`)
-En lugar de servir solo archivos estáticos, el contenedor Docker ejecuta un pequeño script (`platform_ui/env.sh`) justo antes de iniciar Nginx.
+### Capa 1: Inyección Explícita (Runtime)
+Si el contenedor inyecta un objeto global `window.env` (usando un script `env.sh` al inicio de Nginx), este tiene prioridad absoluta.
+```typescript
+const RUNTIME_API = window.env?.API_BASE_URL;
+```
 
-Este script:
-1.  Lee las variables de entorno reales del servidor/pod (`API_BASE`, `ADMIN_TOKEN`).
-2.  Genera un archivo `env.js` en vivo y lo guarda en la carpeta pública del servidor web.
-3.  El contenido de este archivo es algo como:
-    ```javascript
-    window.API_BASE = "https://orchestrator.tudominio.com";
-    window.ADMIN_TOKEN = "tu_token_secreto";
-    ```
-# 3. Nexus UI (v3.2) - The Futuristic Dashboard
-> **Arquitectura**: React (Vite) + TypeScript + Node.js BFF + SSE.
+### Capa 2: Variables de Entorno (Vite)
+Si no hay inyección en runtime, se usa la variable definida en EasyPanel/Docker.
+```typescript
+const ENV_API = import.meta.env.VITE_API_BASE_URL;
+```
 
-### Flujo de Carga ("The Awakening")
-1.  **Estado Inicial (Void)**: Pantalla limpia, solo logo pulsante.
-2.  **SSE Stream**: Conexión a `http://bff_service:3000/api/engine/stream/{tenant_id}`.
-3.  **Renderizado Reactivo**:
-    *   Evento `branding`: Renderiza `<BrandingBlock />` (Colors, Typography).
-    *   Evento `scripts`: Renderiza `<ScriptBlock />` (Copy-paste scripts).
-    *   Evento `visuals`: Renderiza `<VisualGrid />` (Image placeholders/results).
-    *   Evento `roi`: Renderiza `<ROIGraph />` (Live chart).
-    *   Evento `rag`: Muestra barra de progreso de "Sincronización Neural".
+### Capa 3: Inferencia Inteligente (Self-Hosting)
+Si todo falla, el frontend "adivina" dónde está el backend basándose en su propio dominio.
 
-### Componentes Clave
-*   `FuturisticLoader`: Animación CSS/Canvas.
-*   `StreamingLog`: Consola tipo "Matrix" que muestra los pensamientos del backend.
+*   Si estoy en `app.midominio.com` -> Backend en `api.midominio.com`
+*   Si estoy en `frontend.midominio.com` -> Backend en `orchestrator.midominio.com`
+*   Si estoy en `localhost` -> Backend en `http://localhost:3000` (BFF)
 
-**Resultado:** Cuando el navegador del usuario carga tu página, primero carga este `env.js` y el navegador "aprende" cuál es la URL correcta *en ese momento*.
+---
 
-### Parte B: Auto-Detección Inteligente (`app.js`)
-Como capa de seguridad adicional (fallback), si por alguna razón `window.API_BASE` no está definido, el archivo `app.js` tiene una función inteligente `detectApiBase()`:
+## 3. Implementación Actual (`src/hooks/useApi.ts`)
 
-```javascript
+```typescript
 function detectApiBase() {
-    // 1. Prioridad: Lo que inyectó env.sh
-    if (window.API_BASE) return window.API_BASE;
+    // 1. Localhost (Desarrollo)
+    if (window.location.hostname === 'localhost') return 'http://localhost:3000';
 
+    // 2. Legacy / EasyPanel Auto-Discovery
     const host = window.location.hostname;
     
-    // 2. Si estoy en local, asumo puerto 8000
-    if (host === 'localhost') return 'http://localhost:8000';
-
-    // 3. Inferencia por nombre de dominio (Magia de EasyPanel)
-    // Si la UI es "platform-ui.dominio.com", asume que la API es "orchestrator-service.dominio.com"
-    if (host.includes('platform-ui')) {
-        return window.location.protocol + '//' + host.replace('platform-ui', 'orchestrator-service');
+    // Regla: "frontend" -> "orchestrator"
+    if (host.includes('frontend')) {
+        return window.location.protocol + '//' + host.replace('frontend', 'orchestrator');
     }
-    
-    // ... otras reglas de inferencia
+
+    // Default: Asumir que existe un proxy inverso en /api
+    return '/api';
 }
 ```
 
-## Beneficios
-1.  **Build Once, Deploy Anywhere:** Puedes mover tu imagen Docker de un servidor a otro sin tocar el código.
-2.  **EasyPanel Friendly:** Aprovecha las variables de entorno que configuras en el panel de control.
-3.  **Resiliente:** Si olvidas configurar la variable, intenta "adivinar" la ubicación de la API basándose en convenciones de nombres comunes.
+## 4. Guía para Nuevos Entornos
+
+Si despliegas en un nuevo servidor, solo asegúrate de configurar estas variables en EasyPanel/Docker:
+
+*   `VITE_ADMIN_TOKEN`: Debe coincidir con el `ADMIN_TOKEN` del backend.
+*   `VITE_API_BASE_URL`: (Opcional) Solo si la inferencia automática falla.
+
+---
+
+> **Nota**: Esta arquitectura permite que el mismo contenedor `frontend_react:latest` funcione instantáneamente en cualquier despliegue nuevo sin reconfiguración manual.
