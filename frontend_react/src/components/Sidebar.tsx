@@ -13,7 +13,8 @@ import {
     Bot,
     Terminal,
     Mail,
-    Zap
+    Zap,
+    Sparkles
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -36,12 +37,15 @@ export const Sidebar: React.FC = () => {
                 <NavItem to="/logs" icon={<Terminal size={20} />} label="Black Box" />
                 <NavItem to="/analytics" icon={<BarChart2 size={20} />} label="Telemetry" />
                 <NavItem to="/tools" icon={<Wrench size={20} />} label="Armory (Tools)" />
+                <NavItem to="/console" icon={<Terminal size={20} />} label="Nerve Center (Console)" />
 
                 <div className="h-px bg-white/10 w-full my-2" />
 
                 <NavItem to="/credentials" icon={<Key size={20} />} label="Keymaster" />
                 <NavItem to="/settings/meta" icon={<Smartphone size={20} />} label="Meta Uplink" />
                 <NavItem to="/settings/ycloud" icon={<Mail size={20} />} label="YCloud Relay" />
+                <NavItem to="/nexus-setup" icon={<Zap size={20} />} label="Nexus Engine" />
+                <NavItem to="/magic" icon={<Sparkles size={20} />} label="Magic Onboarding" />
                 <NavItem to="/setup" icon={<ScrollText size={20} />} label="Protocol Init" />
             </nav>
 

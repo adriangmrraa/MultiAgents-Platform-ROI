@@ -69,7 +69,7 @@ export const MetaSettings: React.FC = () => {
 
     return (
         <div className="view active animate-fade-in">
-            <h1 className="view-title">WhatsApp Meta Integration (Official)</h1>
+            <h1 className="view-title">Meta Uplink Protocol</h1>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Configuration Form */}

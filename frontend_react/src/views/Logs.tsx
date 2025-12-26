@@ -38,7 +38,7 @@ export const Logs: React.FC = () => {
     return (
         <div className="view active">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h1 className="view-title" style={{ margin: 0 }}>Live History</h1>
+                <h1 className="view-title" style={{ margin: 0 }}>Black Box: Protocol Logs</h1>
                 <button className="btn-secondary" onClick={loadLogs} disabled={loading}>
                     <RefreshCw size={14} className={loading ? 'spin' : ''} style={{ marginRight: '6px' }} />
                     Actualizar

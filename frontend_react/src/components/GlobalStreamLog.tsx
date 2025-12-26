@@ -25,7 +25,7 @@ export const GlobalStreamLog: React.FC = () => {
         // Let's try relative '/api...' assuming Nginx proxies /api to BFF.
 
         // Use relative path which goes through Nginx -> BFF
-        const streamUrl = `/api/engine/stream/global`;
+        const streamUrl = `/api/admin/console/stream`;
 
         const evtSource = new EventSource(streamUrl);
 

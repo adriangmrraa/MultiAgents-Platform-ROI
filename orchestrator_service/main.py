@@ -207,25 +207,49 @@ migration_steps = [
         updated_at TIMESTAMP DEFAULT NOW()
     );
     """,
-    # 2. Credentials Table
+    # 2. Credentials Table (Nexus v3.1: UUID Migration)
     """
     CREATE TABLE IF NOT EXISTS credentials (
-        id SERIAL PRIMARY KEY,
+        id_uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        id SERIAL, -- Legacy support
         name TEXT NOT NULL,
         value TEXT NOT NULL,
-        category TEXT,
+        category TEXT DEFAULT 'general',
         scope TEXT DEFAULT 'global',
         tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
         description TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        CONSTRAINT unique_name_scope UNIQUE(name, scope)
+        updated_at TIMESTAMPTZ DEFAULT NOW()
     );
     """,
-    # 3. Credentials Repair (DO block)
+    # 3. Credentials Repair (UUID Migration & Uniqueness)
     """
     DO $$ 
     BEGIN 
+        -- 1. Add id_uuid if it doesn't exist
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='id_uuid') THEN
+            ALTER TABLE credentials ADD COLUMN id_uuid UUID DEFAULT gen_random_uuid();
+        END IF;
+
+        -- 2. Populate id_uuid for legacy rows
+        UPDATE credentials SET id_uuid = gen_random_uuid() WHERE id_uuid IS NULL;
+
+        -- 3. Set Primary Key (Sacred Step 3)
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='id') THEN
+            -- Check if 'id' is currently the PK
+            IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'credentials_pkey') THEN
+                ALTER TABLE credentials DROP CONSTRAINT credentials_pkey;
+            END IF;
+            -- Set new PK
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'credentials_pkey') THEN
+                ALTER TABLE credentials ADD PRIMARY KEY (id_uuid);
+            END IF;
+        END IF;
+
+        -- 4. Defaults & Resilience
+        ALTER TABLE credentials ALTER COLUMN category SET DEFAULT 'general';
+        ALTER TABLE credentials ALTER COLUMN scope SET DEFAULT 'global';
+        ALTER TABLE credentials ALTER COLUMN updated_at SET DEFAULT NOW();
         -- Check for name column (Fix for bootstrap error)
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='name') THEN
             ALTER TABLE credentials ADD COLUMN name TEXT;

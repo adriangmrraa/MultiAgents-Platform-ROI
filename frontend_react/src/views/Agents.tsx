@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Modal } from '../components/Modal';
+import { GlobalStreamLog } from '../components/GlobalStreamLog';
 import { Bot, Plus, Settings, Trash2, Edit } from 'lucide-react';
 
 interface Agent {
@@ -87,7 +88,7 @@ export const Agents: React.FC = () => {
     return (
         <div className="view active animate-fade-in">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="view-title">Gestión de Agentes IA</h1>
+                <h1 className="view-title">Agent Squad: Neural Configuration</h1>
                 <button className="btn-primary" onClick={openNew}>
                     <Plus size={18} className="mr-2" /> Nuevo Agente
                 </button>
@@ -138,6 +139,13 @@ export const Agents: React.FC = () => {
                         )}
                     </tbody>
                 </table>
+            </div>
+
+            <div className="mt-8">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Activity size={18} className="text-accent" /> Neural Thinking Log
+                </h3>
+                <GlobalStreamLog />
             </div>
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={isEditing ? 'Editar Agente' : 'Nuevo Agente'}>

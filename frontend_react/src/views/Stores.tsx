@@ -91,7 +91,7 @@ export const Stores: React.FC = () => {
     return (
         <div className="view active">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                <h1 className="view-title" style={{ margin: 0 }}>Mis Tiendas</h1>
+                <h1 className="view-title" style={{ margin: 0 }}>Hangar: Deployment Deck</h1>
                 <button className="btn-primary" onClick={openNew}>
                     <Plus size={18} style={{ marginRight: '8px' }} />
                     Nueva Tienda

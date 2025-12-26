@@ -153,25 +153,21 @@ export const SetupExperience: React.FC = () => {
         setStep('igniting');
 
         try {
-            // A. Trigger Ignition (Fire and Forget)
+            // A. Trigger Ignition
             const payload = { ...formData, tenant_id: formData.bot_phone_number };
-            await fetchApi('/api/engine/ignite', { method: 'POST', body: payload });
+            await fetchApi('/engine/ignite', { method: 'POST', body: payload });
 
             // B. Connect to Stream (BFF)
-            // B. Connect to Stream (BFF)
-            // Use detectApiBase logic via useApi hook or recreate it here contextually
-            // but we can't import private function. Ideally fetchApi handles this but for EventSource we need raw URL.
-            // Temporary fix: Use relative path if in prop, or assume same hostname logic.
-
-            // Re-use logic from useApi (We should export the helper, but for now let's use window logic)
-            let base = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '/api';
-            // Better: Check if we have a global config
-            // Let's use the same logic as useApi approximately
-            if (window.location.hostname.includes('frontend')) {
-                base = window.location.protocol + '//' + window.location.hostname.replace('frontend', 'orchestrator');
+            // Use API_BASE logic from detectApiBase or relative fallback
+            let base = window.location.origin;
+            // If we are in frontend-xxx.easypanel.host, target orchestrator-xxx.easypanel.host
+            if (base.includes('frontend')) {
+                base = base.replace('frontend', 'orchestrator');
+            } else if (base.includes('localhost')) {
+                base = 'http://localhost:8000';
             }
 
-            const streamUrl = `${base}/engine/stream/${formData.bot_phone_number}`;
+            const streamUrl = `${base}/api/engine/stream/${formData.bot_phone_number}`;
             const evtSource = new EventSource(streamUrl);
 
             evtSource.onopen = () => {

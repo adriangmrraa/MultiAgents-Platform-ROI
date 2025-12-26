@@ -165,6 +165,67 @@ class TenantModel(BaseModel):
     handoff_smtp_port: Optional[int] = 465
     handoff_policy: Optional[dict] = None
 
+@router.post("/credentials", dependencies=[Depends(verify_admin_token)])
+@require_role("SuperAdmin")
+async def save_credential(cred: CredentialModel):
+    try:
+        # Security: Encrypt sensitive categories
+        final_value = cred.value
+        sensitive_categories = ['whatsapp_cloud', 'meta_whatsapp', 'tiendanube', 'openai', 'security']
+        if cred.category in sensitive_categories:
+            from utils import encrypt_password
+            final_value = encrypt_password(cred.value)
+            
+        q = """
+            INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            ON CONFLICT (name) WHERE scope = 'global'
+            DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            RETURNING id_uuid
+        """
+        row = await db.pool.fetchrow(q, cred.name, final_value, cred.category, cred.scope, cred.tenant_id, cred.description)
+        
+        # Performance: Invalidate Redis Cache
+        cache_key = f"settings:{cred.category}"
+        redis_client.delete(cache_key)
+        
+        return {"status": "ok", "id": str(row['id_uuid'])}
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
+@router.get("/credentials", dependencies=[Depends(verify_admin_token)])
+@require_role("SuperAdmin")
+async def list_credentials(category: Optional[str] = None):
+    # Performance: Try Redis Cache (Aggregated Cache Pattern)
+    cache_key = f"settings:{category or 'all'}"
+    try:
+        cached = redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except: pass
+
+    try:
+        if category:
+            rows = await db.pool.fetch("SELECT * FROM credentials WHERE category = $1 ORDER BY name", category)
+        else:
+            rows = await db.pool.fetch("SELECT * FROM credentials ORDER BY category, name")
+            
+        data = [dict(r) for r in rows]
+        # Cast UUIDs to strings
+        for item in data:
+            if 'id_uuid' in item and item['id_uuid']:
+                item['id'] = str(item['id_uuid'])
+                del item['id_uuid']
+        
+        # Performance: Cache result
+        try:
+            redis_client.setex(cache_key, 300, json.dumps(data, default=str))
+        except: pass
+        
+        return data
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
 class CredentialModel(BaseModel):
     name: str
     value: str

@@ -77,7 +77,7 @@ export const YCloudSettings: React.FC = () => {
 
     return (
         <div className="view active animate-fade-in">
-            <h1 className="view-title">WhatsApp Integration (YCloud)</h1>
+            <h1 className="view-title">YCloud Relay Node</h1>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Configuration Form */}

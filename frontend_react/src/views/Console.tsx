@@ -64,19 +64,17 @@ export const Console: React.FC = () => {
                     // For now, let's just fetch /admin/logs limit=20 and prepend diff.
                     // OR use the /admin/console/stream if we can via fetch (Long Polling).
 
-                    // Actually, let's just use the /admin/logs endpoint for parity.
-                    const res = await fetch('http://localhost:8000/admin/logs?limit=10', {
-                        headers: { 'x-admin-token': 'admin-secret-99' } // Hardcoded for now as I can't easily access AuthContext outside hook logic in setInterval
-                    });
-                    const data = await res.json();
-                    // Map to LogEvent
-                    const newEvents = data.map((d: any) => ({
-                        id: Math.random(), // Endpoint doesn't return ID in logs? Check admin_routes.
+                    // Refactored to use resilient fetchApi hook
+                    const newLogs = await fetchApi('/admin/logs?limit=10');
+                    if (!newLogs) return;
+
+                    const newEvents = newLogs.map((d: any) => ({
+                        id: Math.random(),
                         severity: d.level,
                         type: d.source,
                         message: d.message,
                         timestamp: d.timestamp
-                    })).reverse(); // Oldest first for append? No, logs usually newest first.
+                    })).reverse();
 
                     // We want to append NEW events.
                     // Simple way: just replace for now or dedup. 
@@ -145,8 +143,8 @@ export const Console: React.FC = () => {
                     <div key={i} className="mb-1 hover:bg-white/5 p-1 rounded flex gap-2 break-all group">
                         <span className="text-secondary select-none w-32 shrink-0 opacity-50">{new Date(e.timestamp).toLocaleTimeString()}</span>
                         <span className={`font-bold w-16 shrink-0 ${e.severity === 'ERROR' ? 'text-red-500' :
-                                e.severity === 'WARN' ? 'text-yellow-500' :
-                                    'text-green-500'
+                            e.severity === 'WARN' ? 'text-yellow-500' :
+                                'text-green-500'
                             }`}>[{e.severity || 'INFO'}]</span>
                         <span className="text-accent/70 w-24 shrink-0">{e.type}:</span>
                         <span className="text-gray-300">{e.message}</span>
