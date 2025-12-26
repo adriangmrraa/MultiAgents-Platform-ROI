@@ -2336,18 +2336,6 @@ async def report_assisted_gmv(tenant_id: Optional[str] = None, days: int = 30):
             },
             "status": "degraded_mode"
         }
-            assisted_value = 15000.0 * count # Mock value
-            order_count = count
-
-        report_data["details"].append({
-            "store": conv['store_name'],
-            "customer": conv['external_user_id'],
-            "orders_count": order_count,
-            "estimated_gmv": assisted_value
-        })
-        report_data["summary"]["total_estimated_gmv"] += assisted_value
-
-    return report_data
 
 # --- AGENTS CRUD (Nexus v3) ---
 @router.post("/agents", dependencies=[Depends(verify_admin_token)])
