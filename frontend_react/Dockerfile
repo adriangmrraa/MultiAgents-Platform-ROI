@@ -5,7 +5,12 @@ COPY package*.json ./
 # Relaxed install for stability
 RUN npm install --legacy-peer-deps
 COPY . .
-# Build the app
+# Build the app with environment variables from Easypanel
+ARG VITE_ADMIN_TOKEN
+ARG VITE_API_BASE_URL
+ENV VITE_ADMIN_TOKEN=$VITE_ADMIN_TOKEN
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 RUN npm run build
 
 # Stage 2: Serve

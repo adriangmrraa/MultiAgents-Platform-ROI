@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Modal } from '../components/Modal';
 import { GlobalStreamLog } from '../components/GlobalStreamLog';
-import { Bot, Plus, Settings, Trash2, Edit } from 'lucide-react';
+import { Bot, Plus, Settings, Trash2, Edit, Activity } from 'lucide-react';
 
 interface Agent {
     id?: number;
