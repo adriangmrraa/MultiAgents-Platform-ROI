@@ -81,8 +81,12 @@ body {
 }
 
 .nav-item {
-    @apply w-12 h-12 rounded-2xl flex items-center justify-center mb-3 mx-auto text-white/30 hover:text-white transition-all duration-300 relative group;
+    @apply w-12 h-12 rounded-2xl flex items-center justify-center mb-3 mx-auto text-white/30 transition-all duration-300 relative;
     background: transparent !important;
+}
+
+.nav-item:hover {
+    @apply text-white;
 }
 
 .nav-item.active {
@@ -92,7 +96,11 @@ body {
 
 /* Burbuja de Información de Protocolo */
 .info-bubble {
-    @apply absolute left-16 top-0 w-72 p-5 bg-slate-900/95 border border-white/5 rounded-[2rem] shadow-[0_20px_50px_rgba(0, 0, 0, 0.6)] backdrop-blur-2xl opacity-0 group-hover:opacity-100 transition-all duration-500 pointer-events-none z-[100] scale-90 group-hover:scale-100 origin-left;
+    @apply absolute left-16 top-0 w-72 p-5 bg-slate-900/95 border border-white/5 rounded-[2rem] shadow-[0_20px_50px_rgba(0, 0, 0, 0.6)] backdrop-blur-2xl opacity-0 transition-all duration-500 pointer-events-none z-[100] scale-90 origin-left;
+}
+
+.group:hover .info-bubble {
+    @apply opacity-100 scale-100;
 }
 
 .info-bubble-title {
@@ -487,8 +495,12 @@ body {
 }
 
 .nav-item {
-    @apply w-12 h-12 rounded-2xl flex items-center justify-center mb-3 mx-auto text-white/30 hover:text-white transition-all duration-300 relative group;
+    @apply w-12 h-12 rounded-2xl flex items-center justify-center mb-3 mx-auto text-white/30 transition-all duration-300 relative;
     background: transparent !important;
+}
+
+.nav-item:hover {
+    @apply text-white;
 }
 
 .nav-item.active {
@@ -498,7 +510,11 @@ body {
 
 /* Burbuja de Información de Protocolo */
 .info-bubble {
-    @apply absolute left-16 top-0 w-72 p-5 bg-slate-900/95 border border-white/5 rounded-[2rem] shadow-[0_20px_50px_rgba(0, 0, 0, 0.6)] backdrop-blur-2xl opacity-0 group-hover:opacity-100 transition-all duration-500 pointer-events-none z-[100] scale-90 group-hover:scale-100 origin-left;
+    @apply absolute left-16 top-0 w-72 p-5 bg-slate-900/95 border border-white/5 rounded-[2rem] shadow-[0_20px_50px_rgba(0, 0, 0, 0.6)] backdrop-blur-2xl opacity-0 transition-all duration-500 pointer-events-none z-[100] scale-90 origin-left;
+}
+
+.group:hover .info-bubble {
+    @apply opacity-100 scale-100;
 }
 
 .info-bubble-title {
