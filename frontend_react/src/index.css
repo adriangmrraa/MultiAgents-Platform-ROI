@@ -458,18 +458,14 @@ body {
     100% {
         transform: rotate(360deg);
     }
-}
 
---bg-dark: #0a0a0c;
---bg-card: rgba(255, 255, 255, 0.03);
---border-glass: rgba(255, 255, 255, 0.1);
---accent: #7c4dff;
---accent-glow: rgba(124, 77, 255, 0.3);
---success: #00e676;
---text-primary: #f5f5f7;
---text-secondary: #a1a1aa;
---sidebar-width: 260px;
---transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --accent: #7c4dff;
+    --accent-glow: rgba(124, 77, 255, 0.3);
+    --success: #00e676;
+    --text-primary: #f5f5f7;
+    --text-secondary: #a1a1aa;
+    --sidebar-width: 260px;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * {
