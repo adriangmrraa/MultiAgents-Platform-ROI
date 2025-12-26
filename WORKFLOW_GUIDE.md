@@ -2,7 +2,7 @@
 
 Este documento es el manual operativo para el despliegue, mantenimiento y uso diario de la plataforma.
 
--------
+-----------
 
 ## 1. Alta de Nuevos Clientes (Onboarding)
 
