@@ -2135,19 +2135,7 @@ async def toggle_handoff(data: dict):
     # await redis.set(f"handoff:{phone}", "true" if enabled else "false")
     return {"status": "ok", "message": f"Handoff for {phone} set to {enabled}"}
 
-        
-        events.append({
-            "event_type": r["event_type"],
-            "timestamp": r["created_at"].isoformat(),
-            "source": "orchestrator",
-            "severity": r["level"],
-            "correlation_id": correlation_id,
-            "details": {
-                "message": r["message"], 
-                "meta": meta
-            }
-        })
-    return {"events": events}
+
 
 @router.get("/whatsapp-meta/status", dependencies=[Depends(verify_admin_token)])
 async def meta_status():
