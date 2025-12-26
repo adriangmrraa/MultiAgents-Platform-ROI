@@ -1958,7 +1958,12 @@ async def console_events(limit: int = 50):
     events = []
     for r in rows:
         # Map DB row to UI event format
-        # UI expects: event_type, timestamp, source, severity, correlation_id, details
+        evt = dict(r)
+        if evt.get('created_at'):
+            evt['created_at'] = evt['created_at'].isoformat()
+        events.append(evt)
+        
+    return {"events": events}
 @router.get("/analytics/kpis", dependencies=[Depends(verify_admin_token)])
 async def get_analytics_kpis():
     """Get high-level KPIs for the dashboard."""
