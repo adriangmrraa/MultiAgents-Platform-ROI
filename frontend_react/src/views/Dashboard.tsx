@@ -26,8 +26,31 @@ interface HealthData {
 
 import { FrustrationGauge } from '../components/FrustrationGauge';
 
+import { RoiTicker } from '../components/RoiTicker';
+
 export const Dashboard: React.FC = () => {
-    // ... (existing code) ...
+    const { fetchApi } = useApi();
+    const [health, setHealth] = useState<HealthData>({ status: 'unknown', checks: [] });
+    const [stats, setStats] = useState<Stats | null>(null);
+
+    useEffect(() => {
+        const loadDashboardData = async () => {
+            try {
+                const [healthData, statsData] = await Promise.all([
+                    fetchApi('/admin/health'),
+                    fetchApi('/admin/stats')
+                ]);
+                setHealth(healthData);
+                setStats(statsData);
+            } catch (err) {
+                console.error("Failed to load dashboard telemetry:", err);
+            }
+        };
+        loadDashboardData();
+        // Poll every 30s
+        const interval = setInterval(loadDashboardData, 30000);
+        return () => clearInterval(interval);
+    }, [fetchApi]);
 
     return (
         <div className="view active">
