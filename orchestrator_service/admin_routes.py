@@ -2808,21 +2808,4 @@ async def get_engine_analytics():
         logger.error(f"ENGINE_ANALYTICS_FAIL: {e}")
         return {"error": "Analytics unavailable"}
     
-    assets = []
-    for r in rows:
-        assets.append({
-            "id": r['id'],
-            "asset_type": r['asset_type'],
-            "content": json.loads(r['content']) if isinstance(r['content'], str) else r['content'],
-            "created_at": r['created_at'].isoformat() if r['created_at'] else None
-        })
         
-    response = {"assets": assets}
-    
-    # 3. Cache Result (Short TTL for "Near Real-time" feel, but fast refresh)
-    try:
-        redis_client.setex(cache_key, 5, json.dumps(response)) # 5 seconds TTL
-    except Exception:
-        pass
-        
-    return response        
