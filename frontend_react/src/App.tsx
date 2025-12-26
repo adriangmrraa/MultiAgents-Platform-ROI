@@ -11,6 +11,7 @@ import { Chats } from './views/Chats'; // v3.3 Chat Module
 import { YCloudSettings } from './views/YCloudSettings'; // v3.3 Settings Module
 import { MetaSettings } from './views/MetaSettings'; // v3.3 Settings Module
 import { Analytics } from './views/Analytics'; // v3.3 Analytics Module
+import { MagicOnboarding } from './views/MagicOnboarding'; // v3.4 Magic Module
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/nexus-setup" element={<SetupExperience />} />
+          <Route path="/magic" element={<MagicOnboarding />} />
           <Route path="/stores" element={<Stores />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/analytics" element={<Analytics />} />

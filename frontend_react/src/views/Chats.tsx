@@ -163,19 +163,45 @@ export const Chats: React.FC = () => {
 
                             {/* Messages */}
                             <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-black/10">
-                                {messages.map((msg, idx) => (
-                                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                                        <div className={`max-w-[70%] rounded-2xl p-4 ${msg.role === 'user'
-                                            ? 'bg-white/5 border border-white/10 text-white rounded-tl-none'
-                                            : 'bg-accent/20 border border-accent/30 text-white rounded-tr-none'
-                                            }`}>
-                                            <p className="text-sm">{msg.content}</p>
-                                            <span className="text-[10px] opacity-50 mt-2 block text-right">
-                                                {new Date(msg.timestamp).toLocaleTimeString()}
-                                            </span>
+                                {messages.map((msg, idx) => {
+                                    // Audio Protocol Parsing
+                                    const audioMatch = msg.content.match(/\[AUDIO_URL:\s*(.*?)\s*\|\s*TRANSCRIPT:\s*(.*?)\]/);
+                                    let contentCmp = <p className="text-sm">{msg.content}</p>;
+
+                                    if (audioMatch) {
+                                        const [_, url, transcript] = audioMatch;
+                                        contentCmp = (
+                                            <div className="flex flex-col gap-2 min-w-[200px]">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-xs font-bold text-accent uppercase tracking-wider">Audio Message</span>
+                                                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                                                </div>
+                                                <audio controls className="w-full h-8 mb-1 rounded-lg">
+                                                    <source src={url} type="audio/ogg" />
+                                                    <source src={url} type="audio/mpeg" />
+                                                    Your browser does not support the audio element.
+                                                </audio>
+                                                <div className="bg-black/20 p-2 rounded border-l-2 border-accent/50">
+                                                    <p className="text-xs italic opacity-80">"{transcript}"</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                                            <div className={`max-w-[70%] rounded-2xl p-4 ${msg.role === 'user'
+                                                ? 'bg-white/5 border border-white/10 text-white rounded-tl-none'
+                                                : 'bg-accent/20 border border-accent/30 text-white rounded-tr-none'
+                                                }`}>
+                                                {contentCmp}
+                                                <span className="text-[10px] opacity-50 mt-2 block text-right">
+                                                    {new Date(msg.timestamp).toLocaleTimeString()}
+                                                </span>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
 
                             {/* Input */}

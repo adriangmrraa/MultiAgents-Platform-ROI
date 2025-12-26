@@ -95,25 +95,61 @@ export const GlobalStreamLog: React.FC = () => {
                     </div>
                 )}
 
-                {logs.map((log, idx) => (
-                    <div key={idx} className="mb-2 pl-3 border-l-2 border-transparent hover:border-cyan-500/50 transition-all group">
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-[10px] text-slate-500">{new Date(log.occurred_at).toLocaleTimeString()}</span>
-                            <span className={`font-bold ${log.severity === 'error' ? 'text-red-400' :
-                                log.severity === 'warning' ? 'text-yellow-400' :
-                                    log.event_type === 'engine' ? 'text-purple-400' : 'text-cyan-300'
-                                }`}>
-                                [{log.event_type.toUpperCase()}]
-                            </span>
-                            <span className="text-slate-300 group-hover:text-white">{log.message}</span>
+                {logs.map((log, idx) => {
+                    // Didactic Parsing Logic
+                    let icon = <Activity size={12} className="text-slate-500" />; // Default
+                    let borderColor = 'border-slate-800';
+                    let label = 'SYSTEM';
+
+                    if (log.message.includes('Planning') || log.message.includes('Reasoning')) {
+                        icon = <span className="text-lg">🦉</span>;
+                        borderColor = 'border-purple-500/50';
+                        label = 'COGNITION';
+                    } else if (log.message.includes('Tool') || log.message.includes('Executing')) {
+                        icon = <span className="text-lg">🛠️</span>;
+                        borderColor = 'border-cyan-500/50';
+                        label = 'TOOL USE';
+                    } else if (log.message.includes('RAG') || log.message.includes('Retrieving')) {
+                        icon = <span className="text-lg">🐢</span>;
+                        borderColor = 'border-emerald-500/50';
+                        label = 'MEMORY';
+                    } else if (log.message.includes('Response') || log.message.includes('Speaking')) {
+                        icon = <span className="text-lg">🗣️</span>;
+                        borderColor = 'border-pink-500/50';
+                        label = 'RESPONSE';
+                    }
+
+                    return (
+                        <div key={idx} className={`mb-3 p-3 rounded-lg border bg-slate-900/50 backdrop-blur-sm ${borderColor} border-l-4 transition-all hover:translate-x-1 duration-300`}>
+                            <div className="flex items-start gap-3">
+                                <div className="mt-1 w-6 h-6 flex items-center justify-center bg-black/30 rounded-full shadow-inner">
+                                    {icon}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className={`text-[9px] font-bold tracking-widest opacity-70 ${borderColor.replace('border-', 'text-').replace('/50', '')}`}>
+                                            {label}
+                                        </span>
+                                        <span className="text-[9px] text-slate-600 font-mono">
+                                            {new Date(log.occurred_at).toLocaleTimeString().split(' ')[0]}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-300 font-medium leading-relaxed font-sans">
+                                        {log.message}
+                                    </p>
+
+                                    {/* Payload Inspector (Didactic Detail) */}
+                                    {log.payload && Object.keys(log.payload).length > 0 && (
+                                        <div className="mt-2 text-[10px] bg-black/40 p-2 rounded border border-slate-800/50 font-mono text-slate-400 overflow-x-auto">
+                                            {JSON.stringify(log.payload, null, 2).slice(0, 150)}
+                                            {JSON.stringify(log.payload).length > 150 && "..."}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                        {log.payload && Object.keys(log.payload).length > 0 && (
-                            <pre className="mt-1 ml-12 text-[10px] text-slate-500 overflow-x-auto">
-                                {JSON.stringify(log.payload, null, 2)}
-                            </pre>
-                        )}
-                    </div>
-                ))}
+                    );
+                })}
                 <div ref={bottomRef} />
             </div>
         </div>

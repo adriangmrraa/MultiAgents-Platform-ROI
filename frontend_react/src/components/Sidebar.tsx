@@ -6,11 +6,7 @@ import {
     Store,
     ScrollText,
     BarChart2,
-    Key,
-    Smartphone,
-    MessageCircle,
-    Wrench
-} from 'lucide-react';
+import { LayoutDashboard, Settings, Store, MessageCircle, ScrollText, BarChart2, Key, Smartphone, Wrench, Bot, Terminal, Mail, Zap } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
     const navigate = useNavigate();
@@ -18,7 +14,8 @@ export const Sidebar: React.FC = () => {
 
     const menuItems = [
         { id: 'overview', label: 'Panel General', icon: <LayoutDashboard size={20} />, path: '/' },
-        { id: 'setup', label: 'Configuración', icon: <Settings size={20} />, path: '/setup' },
+        { id: 'magic', label: 'Conexión Tienda', icon: <Zap size={20} className="text-yellow-400" />, path: '/magic' },
+        { id: 'setup', label: 'Configuración', icon: <Settings size={20} />, path: '/nexus-setup' },
         { id: 'stores', label: 'Mis Tiendas', icon: <Store size={20} />, path: '/stores' },
         { id: 'chats', label: 'Conversaciones', icon: <MessageCircle size={20} />, path: '/chats' },
         { id: 'logs', label: 'Live History', icon: <ScrollText size={20} />, path: '/logs' },

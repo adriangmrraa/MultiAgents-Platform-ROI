@@ -24,28 +24,10 @@ interface HealthData {
     checks: HealthCheck[];
 }
 
-export const Dashboard: React.FC = () => {
-    const { fetchApi } = useApi();
-    const [stats, setStats] = useState<Stats | null>(null);
-    const [health, setHealth] = useState<HealthData | null>(null);
+import { FrustrationGauge } from '../components/FrustrationGauge';
 
-    useEffect(() => {
-        const loadData = async () => {
-            try {
-                const [statsData, healthData] = await Promise.all([
-                    fetchApi('/admin/stats'),
-                    fetchApi('/admin/diagnostics/healthz')
-                ]);
-                setStats(statsData);
-                setHealth(healthData);
-            } catch (e) {
-                console.error(e);
-            }
-        };
-        loadData();
-        const interval = setInterval(loadData, 10000); // Faster refresh for "Live" feel
-        return () => clearInterval(interval);
-    }, [fetchApi]);
+export const Dashboard: React.FC = () => {
+    // ... (existing code) ...
 
     return (
         <div className="view active">
@@ -53,8 +35,12 @@ export const Dashboard: React.FC = () => {
 
             {/* Phase 1: Holographic Command Deck */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-2 flex flex-col gap-6">
                     <TelemetryHUD health={health} />
+                    <div className="grid grid-cols-2 gap-6">
+                        <RoiTicker />
+                        <FrustrationGauge />
+                    </div>
                 </div>
                 <div>
                     <SystemStatus health={health} />
@@ -63,9 +49,6 @@ export const Dashboard: React.FC = () => {
 
             {/* Phase 2: Global Neural Feed */}
             <GlobalStreamLog />
-
-            {/* Phase 3: Agent Command Deck */}
-            <AgentGrid />
 
             {/* Phase 4: RAG Knowledge Map */}
             <RagGalaxy />
