@@ -14,8 +14,6 @@ import {
     Mail,
     Zap,
     Sparkles,
-    ChevronUp,
-    ChevronDown,
     Menu,
     X
 } from 'lucide-react';
@@ -51,10 +49,8 @@ export const Sidebar: React.FC = () => {
         <>
             {/* Desktop Sidebar */}
             <aside className="hidden lg:flex sidebar shadow-2xl overflow-visible group/sidebar" onMouseMove={handleInteraction}>
-                {/* Scroll Edge Detection */}
-                <div className="sidebar-scroll-edge top-0 hover:opacity-100 opacity-0 bg-gradient-to-b from-slate-900/50 to-transparent h-12 flex items-center justify-center cursor-pointer" onMouseEnter={() => handleEdgeScroll('up')}>
-                    <ChevronUp size={16} className="text-white/40" />
-                </div>
+                {/* Invisible Scroll Zones */}
+                <div className="absolute top-0 left-0 right-0 h-20 z-10 cursor-ns-resize opacity-0" onMouseEnter={() => handleEdgeScroll('up')} />
 
                 <nav ref={navRef} className="flex-1 overflow-y-auto no-scrollbar py-6 space-y-4 px-2">
                     <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Mission Control" desc="Vista global de la IA" steps={["Analizar ROI", "Revisar Galaxy"]} />
@@ -77,9 +73,7 @@ export const Sidebar: React.FC = () => {
                     <NavItem to="/magic" icon={<Sparkles size={20} />} label="Magic" desc="Onboarding fluido" steps={["Auto-deploy", "Sync Tienda"]} />
                 </nav>
 
-                <div className="sidebar-scroll-edge bottom-0 hover:opacity-100 opacity-0 bg-gradient-to-t from-slate-900/50 to-transparent h-12 flex items-center justify-center cursor-pointer" onMouseEnter={() => handleEdgeScroll('down')}>
-                    <ChevronDown size={16} className="text-white/40" />
-                </div>
+                <div className="absolute bottom-0 left-0 right-0 h-20 z-10 cursor-ns-resize opacity-0" onMouseEnter={() => handleEdgeScroll('down')} />
             </aside>
 
             {/* Mobile Adaptive Navigation */}
