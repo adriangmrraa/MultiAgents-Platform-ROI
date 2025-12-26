@@ -15,17 +15,13 @@ function detectApiBase() {
     }
 
     // Modern frontend-react support (EasyPanel / Production)
-    // Matches "multiagents-frontend.x.host" -> "multiagents-orchestrator.x.host"
-    if (hostname.includes('frontend')) {
-        // Try to replace 'frontend' with 'orchestrator' which is the standard service name
-        // This handles 'multiagents-frontend' -> 'multiagents-orchestrator'
-        let newHost = hostname.replace('frontend', 'orchestrator');
-        // If the naming convention was 'frontend-react', it might have already been handled, 
-        // but this generic replacement is safer.
-        return window.location.protocol + '//' + newHost;
+    if (hostname.includes('frontend') || hostname.includes('easypanel')) {
+        // RESILIENCE FIX: Use Nginx Reverse Proxy (Relative Path)
+        // This avoids guessing the backend public URL and relies on internal Docker networking.
+        return '/api';
     }
 
-    // Default fallback to relative path (if using Nginx reverse proxy at root)
+    // Default fallback
     return '/api';
 }
 
