@@ -25,6 +25,15 @@ export const Chats: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [loadingChats, setLoadingChats] = useState(false);
+
+    // Auto-select first tenant if none selected
+    useEffect(() => {
+        if (!selectedTenant && tenants.length > 0) {
+            setSelectedTenant(tenants[0].id);
+        }
+    }, [tenants]);
 
     // Load Tenants for filter
     useEffect(() => {
@@ -40,24 +49,37 @@ export const Chats: React.FC = () => {
     // Load Chat List
     useEffect(() => {
         const loadChats = async () => {
+            if (!selectedTenant) return;
+            setLoadingChats(true);
             try {
-                let url = `/admin/chats/summary?limit=50`;
+                let url = `/admin/chats/summary?limit=100`; // Increased limit for scrolling
                 if (selectedTenant) url += `&tenant_id=${selectedTenant}`;
                 if (selectedChannel !== 'all') url += `&channel=${selectedChannel}`;
 
                 const data = await fetchApi(url);
                 if (Array.isArray(data)) {
-                    setChats(data);
+                    // Client-side search if backend search missing
+                    let filtered = data;
+                    if (searchTerm) {
+                        const lower = searchTerm.toLowerCase();
+                        filtered = data.filter(c =>
+                            c.phone.toLowerCase().includes(lower) ||
+                            (c.name && c.name.toLowerCase().includes(lower))
+                        );
+                    }
+                    setChats(filtered);
                 }
             } catch (err) {
                 console.error("Failed to load chats:", err);
+            } finally {
+                setLoadingChats(false);
             }
         };
         loadChats();
 
         const interval = setInterval(loadChats, 10000);
         return () => clearInterval(interval);
-    }, [fetchApi, refreshTrigger, selectedTenant, selectedChannel]);
+    }, [fetchApi, refreshTrigger, selectedTenant, selectedChannel, searchTerm]);
 
     // Icon helper
     const getChannelIcon = (channel: string) => {
@@ -133,14 +155,14 @@ export const Chats: React.FC = () => {
 
             <div className="chats-layout" style={{
                 display: 'grid',
-                gridTemplateColumns: '350px 1fr',
+                gridTemplateColumns: selectedPhone ? '350px 1fr' : '350px 1fr', // Maintain generic layout on desktop
                 gap: '20px',
-                minHeight: '600px',
-                maxHeight: 'calc(100vh - 150px)'
+                height: 'calc(100vh - 120px)', // Fixed full height
+                overflow: 'hidden'
             }}>
                 {/* Left: List */}
-                <div className="glass" style={{ padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                    <div className="p-4 border-b border-white/5 space-y-3">
+                <div className={`glass flex flex-col transition-all duration-300 ${selectedPhone ? 'hidden md:flex' : 'flex w-full'}`} style={{ padding: '0', overflow: 'hidden' }}>
+                    <div className="p-4 border-b border-white/5 space-y-3 bg-black/20">
                         <div className="flex gap-2">
                             <select
                                 className="bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none flex-1"
@@ -164,10 +186,11 @@ export const Chats: React.FC = () => {
                             </select>
                         </div>
                         <div className="flex justify-between items-center">
-                            <input
-                                type="text"
-                                placeholder="Buscar..."
-                                className="bg-black/20 border border-white/10 rounded-lg px-3 py-1.5 text-sm w-full"
+                            type="text"
+                            placeholder="Buscar cliente..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="bg-black/20 border border-white/10 rounded-lg px-3 py-1.5 text-sm w-full focus:border-accent outline-none"
                             />
                             <button onClick={() => setRefreshTrigger(p => p + 1)} className="ml-2 text-white/50 hover:text-white">
                                 <RefreshCw size={16} />
@@ -200,20 +223,26 @@ export const Chats: React.FC = () => {
                 </div>
 
                 {/* Right: Chat Window */}
-                <div className="glass flex flex-col overflow-hidden relative">
+                <div className={`glass flex flex-col overflow-hidden relative ${!selectedPhone ? 'hidden md:flex' : 'flex w-full h-full'}`}>
                     {selectedPhone ? (
                         <>
                             {/* Header */}
-                            <div className="p-4 border-b border-white/5 flex justify-between items-center bg-black/20">
+                            <div className="p-4 border-b border-white/5 flex justify-between items-center bg-black/20 shrink-0">
                                 <div className="flex items-center gap-3">
+                                    {/* Mobile Back Button */}
+                                    <button onClick={() => setSelectedPhone(null)} className="md:hidden text-white/70 hover:text-white mr-2">
+                                        ←
+                                    </button>
                                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
                                         <User size={20} className="text-white" />
                                     </div>
                                     <div>
-                                        <h3 className="font-bold text-lg">{selectedPhone}</h3>
+                                        <h3 className="font-bold text-lg">{chats.find(c => c.phone === selectedPhone)?.name || selectedPhone}</h3>
                                         <span className="text-xs text-green-400 flex items-center gap-1">
                                             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                                            Online
+                                            {chats.find(c => c.phone === selectedPhone)?.channel ? (
+                                                <span className="capitalize">{chats.find(c => c.phone === selectedPhone)?.channel} User</span>
+                                            ) : 'Online'}
                                         </span>
                                     </div>
                                 </div>
@@ -226,7 +255,7 @@ export const Chats: React.FC = () => {
                             </div>
 
                             {/* Messages */}
-                            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-black/10">
+                            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-black/10 scroll-smooth">
                                 {messages.map((msg, idx) => {
                                     // Audio Protocol Parsing
                                     const audioMatch = msg.content.match(/\[AUDIO_URL:\s*(.*?)\s*\|\s*TRANSCRIPT:\s*(.*?)\]/);
