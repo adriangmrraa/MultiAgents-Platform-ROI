@@ -932,48 +932,6 @@ async def admin_ops(action: str, payload: dict = {}):
     else:
         raise HTTPException(400, f"Unknown action: {action}")
 
-@router.get("/logs", dependencies=[Depends(verify_admin_token)])
-@safe_db_call
-async def get_logs(limit: int = 50):
-    """Fetch recent chat logs for the 'Live History' view (Legacy/Debug)."""
-    # Using chat_messages as the source of truth for display
-    # Adapted to new schema: join conversation to get metadata if needed, or just raw messages
-    rows = await db.pool.fetch("""
-        SELECT 
-            cm.id, cm.role, cm.content, cm.created_at, cm.correlation_id,
-            cc.external_user_id as from_number,
-            cm.provider_status as inbound_status
-        FROM chat_messages cm
-        LEFT JOIN chat_conversations cc ON cm.conversation_id = cc.id
-        ORDER BY cm.created_at DESC
-        LIMIT $1
-    """, limit)
-    
-    logs = []
-    for row in rows:
-        content_display = row['content']
-        # Attempt to parse legacy JSON content if assistant
-        try:
-            if row['role'] == 'assistant' and row['content'] and row['content'].startswith('{'):
-                parsed = json.loads(row['content'])
-                if isinstance(parsed, dict) and "messages" in parsed:
-                     content_display = " ".join([m.get("text", "") for m in parsed["messages"]])
-        except:
-            pass 
-
-        logs.append({
-            "id": str(row['id']),
-            "received_at": row['created_at'].isoformat(),
-            "from_number": row['from_number'] or "Unknown",
-            "to_number": "Bot",
-            "role": row['role'],
-            "status": row['inbound_status'] or "sent",
-            "correlation_id": str(row['correlation_id']) if row['correlation_id'] else None,
-            "payload": json.dumps({"text": content_display, "raw": row['content']}),
-            "ai_response": None 
-        })
-    return logs
-
 # --- HITL Chat Views (New) ---
 
 @router.get("/health")

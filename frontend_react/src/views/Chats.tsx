@@ -112,8 +112,6 @@ export const Chats: React.FC = () => {
                 }
             } catch (err) {
                 console.error("Failed to load chats:", err);
-            } finally {
-                setLoadingChats(false);
             }
         };
         loadChats();
