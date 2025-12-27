@@ -116,7 +116,7 @@ async def get_tools():
     ]
     
     # 3. Merge (System tools are overridden by DB tools if name matches)
-    db_tool_map = {t['name']: t for t in formatted_db_tools}
+    db_tool_map = {t['name']: t for t in db_tools}
     
     final_tools = []
     # System tools first (potentially modified by DB)
@@ -133,7 +133,7 @@ async def get_tools():
         
     # Add unique DB tools
     system_tool_names = {st['name'] for st in system_tools}
-    for dt in formatted_db_tools:
+    for dt in db_tools:
         if dt['name'] not in system_tool_names:
             final_tools.append(dt)
             

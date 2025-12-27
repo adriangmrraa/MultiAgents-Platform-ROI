@@ -29,6 +29,7 @@ export const Agents: React.FC = () => {
     const { fetchApi } = useApi();
     const [agents, setAgents] = useState<Agent[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
+    const [tools, setTools] = useState<any[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Form State
@@ -45,12 +46,14 @@ export const Agents: React.FC = () => {
     }, []);
 
     const loadData = async () => {
-        const [a, t] = await Promise.all([
+        const [a, t, s] = await Promise.all([
             fetchApi('/admin/agents'),
-            fetchApi('/admin/tenants')
+            fetchApi('/admin/tenants'),
+            fetchApi('/admin/tools')
         ]);
         if (a) setAgents(a);
         if (t) setTenants(t);
+        if (s) setTools(s);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -96,10 +99,17 @@ export const Agents: React.FC = () => {
             </div>
 
             <div className="glass p-4 mb-6 border-l-4 border-accent">
-                <h4 className="font-bold mb-2 flex items-center gap-2"><Bot size={16} /> Protocolo Omega Activo</h4>
-                <p className="text-sm text-secondary">
-                    Los agentes se inyectan dinámicamente en el <code>agent_service</code>. Configura aquí los prompts y herramientas.
-                </p>
+                <h4 className="font-bold mb-2 flex items-center gap-2"><Bot size={16} /> Protocolo Omega: Manual de Operaciones</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-secondary">
+                    <div className="p-3 bg-white/5 rounded border border-white/10">
+                        <p className="font-semibold text-white mb-1">🧠 Lógica del Agente</p>
+                        Los agentes utilizan el <strong>System Prompt</strong> como su identidad base. Asegúrate de incluir reglas de estilo (Ej: "Usa emojis", "Habla de usted").
+                    </div>
+                    <div className="p-3 bg-white/5 rounded border border-white/10">
+                        <p className="font-semibold text-white mb-1">🛠 Herramientas Tácticas</p>
+                        Cada herramienta añade capacidades. Configura el "Comportamiento Táctico" en la Armería para que el agente sepa CUÁNDO y CÓMO usarlas.
+                    </div>
+                </div>
             </div>
 
             <div className="glass">
@@ -180,7 +190,15 @@ export const Agents: React.FC = () => {
                     </div>
 
                     <div className="form-group">
-                        <label>System Prompt Template</label>
+                        <div className="flex justify-between items-center mb-1">
+                            <label>System Prompt Template</label>
+                            <div className="text-[10px] text-accent font-bold bg-accent/10 px-2 py-0.5 rounded border border-accent/20">
+                                RECOMENDADO: NÚCLEO OMEGA
+                            </div>
+                        </div>
+                        <div className="text-[11px] text-secondary mb-2 italic">
+                            Define la personalidad. El sistema inyectará automáticamente el catálogo y descripción de la tienda.
+                        </div>
                         <textarea
                             className="font-mono text-xs h-32"
                             value={formData.system_prompt_template || ''}
@@ -216,21 +234,23 @@ export const Agents: React.FC = () => {
 
                     <div className="form-group">
                         <label>Herramientas Habilitadas (RAG)</label>
-                        <div className="flex flex-col gap-2 mt-2 p-2 glass rounded">
-                            {['search_specific_products', 'browse_general_storefront', 'search_by_category', 'orders', 'cupones_list', 'derivhumano'].map(tool => (
-                                <label key={tool} className="flex items-center gap-2 cursor-pointer">
+                        <div className="text-[11px] text-secondary mb-2">Habilita las herramientas que este agente podrá invocar.</div>
+                        <div className="grid grid-cols-2 gap-2 mt-2 p-3 glass rounded border border-white/5">
+                            {tools.map(tool => (
+                                <label key={tool.name} className="flex items-center gap-2 cursor-pointer hover:bg-white/5 p-1 rounded transition-colors" title={tool.description}>
                                     <input
                                         type="checkbox"
-                                        checked={formData.enabled_tools?.includes(tool)}
+                                        checked={formData.enabled_tools?.includes(tool.name)}
                                         onChange={e => {
                                             const current = formData.enabled_tools || [];
-                                            if (e.target.checked) setFormData({ ...formData, enabled_tools: [...current, tool] });
-                                            else setFormData({ ...formData, enabled_tools: current.filter(t => t !== tool) });
+                                            if (e.target.checked) setFormData({ ...formData, enabled_tools: [...current, tool.name] });
+                                            else setFormData({ ...formData, enabled_tools: current.filter(t => t !== tool.name) });
                                         }}
                                     />
-                                    <span className="text-sm font-mono">{tool}</span>
+                                    <span className="text-xs font-mono">{tool.name}</span>
                                 </label>
                             ))}
+                            {tools.length === 0 && <span className="text-xs text-secondary italic">Cargando herramientas...</span>}
                         </div>
                     </div>
 

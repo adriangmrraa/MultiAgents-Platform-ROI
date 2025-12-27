@@ -12,6 +12,15 @@ interface Tool {
     id?: number;
 }
 
+const TACTICAL_TEMPLATES: Record<string, string> = {
+    'search_specific_products': "TÁCTICA: Cuando busques productos, usa SIEMPRE el parámetro 'q' con el nombre del producto, categoría o marca exacta. \n\nEjemplo: Si te preguntan por 'Zapatillas Nike', usa q='Nike'. \n\nSi el cliente pregunta de forma vaga, pide precisión antes de buscar. NO inventes productos.",
+    'search_by_category': "TÁCTICA: Selecciona la categoría correcta del catálogo para el parámetro 'category'. \n\nSi el cliente busca 'ropa', pregúntale si busca 'Remeras', 'Pantalones', etc. \n\nSi no estás seguro, usa 'search_specific_products' en su lugar.",
+    'browse_general_storefront': "TÁCTICA: Usa esta herramienta solo para dar una visión de lanzamiento o 'lo nuevo'. \n\nSi el cliente menciona un producto específico, detente y usa 'search_specific_products'.",
+    'orders': "TÁCTICA: Para buscar órdenes, solicita al cliente el ID numérico sin el símbolo #. \n\nInforma el estado actual de forma clara (Ej: 'Tu orden está en preparación').",
+    'cupones_list': "TÁCTICA: Muestra los cupones disponibles pero aclara siempre sus condiciones de uso y fecha de expiración.",
+    'derivhumano': "TÁCTICA: Activa esta herramienta si detectas frustración extrema (insultos, múltiples 'no entiendo'), o si el cliente pide hablar con un humano explícitamente. \n\nResume la situación para el operador humano."
+};
+
 export const Tools: React.FC = () => {
     const { fetchApi } = useApi();
     const [tools, setTools] = useState<Tool[]>([]);
@@ -169,8 +178,18 @@ export const Tools: React.FC = () => {
                             </button>
                         </div>
                         <div className="input-hint">Define el "comportamiento táctico" del agente con esta herramienta.</div>
+                        {TACTICAL_TEMPLATES[formData.name] && !formData.prompt_injection && (
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ margin: '8px 0', fontSize: '10px', background: 'rgba(59, 130, 246, 0.1)' }}
+                                onClick={() => setFormData({ ...formData, prompt_injection: TACTICAL_TEMPLATES[formData.name] })}
+                            >
+                                <Plus size={10} className="mr-1" /> Cargar Plantilla Recomendada para {formData.name}
+                            </button>
+                        )}
                         <textarea
-                            rows={4}
+                            rows={6}
                             value={formData.prompt_injection}
                             onChange={e => setFormData({ ...formData, prompt_injection: e.target.value })}
                             placeholder="Ej: Deberías usar esta herramienta siempre que el cliente pregunte por precios exactos..."
