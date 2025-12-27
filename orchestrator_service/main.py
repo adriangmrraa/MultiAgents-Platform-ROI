@@ -647,6 +647,15 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Tool Prompt Injection evolution failed';
     END $$;
+    """,
+    # 18. Agents Channels (Nexus v4.6)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE agents ADD COLUMN IF NOT EXISTS channels JSONB DEFAULT '["whatsapp", "instagram", "facebook"]';
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to add channels to agents';
+    END $$;
     """
 ]
 

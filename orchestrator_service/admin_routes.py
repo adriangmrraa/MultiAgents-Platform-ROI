@@ -389,6 +389,7 @@ async def ensure_agents_table():
             temperature FLOAT DEFAULT 0.3,
             system_prompt_template TEXT,
             enabled_tools JSONB,
+            channels JSONB DEFAULT '["whatsapp", "instagram", "facebook"]',
             config JSONB,
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT NOW(),
