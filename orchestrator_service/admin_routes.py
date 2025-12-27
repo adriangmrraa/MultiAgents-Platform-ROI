@@ -975,7 +975,7 @@ async def list_chats():
     """
     query = """
         SELECT 
-            id, tenant_id, channel, external_user_id, 
+            id, tenant_id, channel, channel_source, external_user_id, 
             display_name, avatar_url, status, 
             human_override_until, last_message_at, last_message_preview
         FROM chat_conversations
@@ -1000,6 +1000,7 @@ async def list_chats():
                 "id": str(r['id']),
                 "tenant_id": r['tenant_id'],
                 "channel": r['channel'],
+                "channel_source": r.get('channel_source', 'whatsapp'),
                 "external_user_id": r['external_user_id'],
                 "display_name": r['display_name'] or r['external_user_id'],
                 "avatar_url": r['avatar_url'],
@@ -1025,7 +1026,7 @@ async def get_chat_history(conversation_id: str):
     query = """
         SELECT 
             m.id, m.role, m.message_type, m.content, m.created_at, m.human_override,
-            m.sent_context, m.provider_status, m.media_id,
+            m.sent_context, m.provider_status, m.media_id, m.meta, m.channel_source,
             med.storage_url, med.media_type, med.mime_type, med.file_name
         FROM chat_messages m
         LEFT JOIN chat_media med ON m.media_id = med.id
@@ -1062,11 +1063,13 @@ async def get_chat_history(conversation_id: str):
         messages.append({
             "id": str(r['id']),
             "role": r['role'],
-            "type": r['message_type'],
+            "message_type": r['message_type'],
             "content": r['content'],
             "created_at": r['created_at'].isoformat(),
             "human_override": r['human_override'],
             "status": r['provider_status'],
+            "channel_source": r.get('channel_source', 'whatsapp'),
+            "meta": json.loads(r['meta']) if r.get('meta') else {},
             "media": media_obj
         })
     return messages

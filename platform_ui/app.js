@@ -3531,11 +3531,8 @@ async function loadChats() {
             }
         });
 
-        // Remove old chats if needed (unlikely in this context but good for consistency)
-        document.querySelectorAll('.chat-item').forEach(el => {
-            const id = el.getAttribute('data-id');
-            if (!chats.find(c => c.id === id)) el.remove();
-        });
+        // Update global store
+        allChats = chats;
 
     } catch (err) {
         console.error("Error loading chats:", err);
@@ -3565,12 +3562,18 @@ async function selectChat(chatId, chatObj = null) {
     if (chatObj) {
         document.getElementById('chat-current-phone').textContent = chatObj.display_name || chatObj.external_user_id;
 
+        // Dynamic Role Badge (Multichannel HUD)
+        const roleBadge = document.querySelector('.chat-role-badge');
+        if (roleBadge) {
+            const source = chatObj.channel_source || 'whatsapp';
+            roleBadge.textContent = source.charAt(0).toUpperCase() + source.slice(1) + ' User';
+            roleBadge.style.color = source === 'instagram' ? '#E1306C' : (source === 'facebook' ? '#4267B2' : '#25D366');
+        }
+
         // Update Human Override Toggle State
         const toggle = document.getElementById('human-override-toggle');
         const label = document.getElementById('human-override-label');
 
-        // Logic: Check is_locked (if backend sends it) OR timestamp logic
-        // Ensuring we parse the timestamp correctly
         let isLocked = chatObj.is_locked;
         if (isLocked === undefined && chatObj.human_override_until) {
             isLocked = new Date(chatObj.human_override_until) > new Date();
@@ -3579,10 +3582,10 @@ async function selectChat(chatId, chatObj = null) {
         toggle.checked = !!isLocked;
         if (isLocked) {
             label.innerText = "Atención Humana";
-            label.style.color = "#ef4444"; // Red
+            label.style.color = "#ef4444";
         } else {
             label.innerText = "Agente Activo";
-            label.style.color = "#22c55e"; // Green
+            label.style.color = "#22c55e";
         }
     }
 
@@ -3622,11 +3625,21 @@ async function loadChatHistory(chatId) {
     try {
         const messages = await adminFetch(`/admin/chats/${chatId}/messages`);
 
+        // If no messages, clear loading and show empty state
+        if (!messages || messages.length === 0) {
+            if (messagesArea.querySelector('.chat-loading')) {
+                messagesArea.innerHTML = '<div class="chat-empty">No hay mensajes en esta conversación.</div>';
+            }
+            return;
+        }
+
         // Only append new messages
         let hasNew = false;
         messages.forEach(msg => {
             if (!renderedMessageIds.has(msg.id)) {
-                if (messagesArea.querySelector('.chat-loading')) messagesArea.innerHTML = '';
+                if (messagesArea.querySelector('.chat-loading') || messagesArea.querySelector('.chat-empty')) {
+                    messagesArea.innerHTML = '';
+                }
                 renderMessageBubble(msg, messagesArea);
                 renderedMessageIds.add(msg.id);
                 hasNew = true;
@@ -3640,6 +3653,9 @@ async function loadChatHistory(chatId) {
 
     } catch (err) {
         console.error("Error loading messages:", err);
+        if (messagesArea.querySelector('.chat-loading')) {
+            messagesArea.innerHTML = `<div class="chat-error">Error: ${err.message}</div>`;
+        }
     }
 }
 
