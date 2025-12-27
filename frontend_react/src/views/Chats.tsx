@@ -48,25 +48,28 @@ export const Chats: React.FC = () => {
 
     // Auto-scroll logic (Smart Scroll) - Refined to be non-intrusive
     useEffect(() => {
-        if (scrollRef.current) {
-            const isNewChat = selectedChatId !== lastChatIdRef.current;
-            lastChatIdRef.current = selectedChatId || null;
-
-            if (isNewChat) {
-                // Immediate jump to bottom on new chat selection
-                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-            } else {
-                // For polling updates, only scroll if user is already at the bottom
+        const scrollToBottom = (force = false) => {
+            if (scrollRef.current) {
                 const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
                 const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
 
-                if (isNearBottom) {
-                    scrollRef.current.scrollTo({
-                        top: scrollHeight,
-                        behavior: 'smooth'
-                    });
+                if (force || isNearBottom) {
+                    // Use a small timeout to ensure DOM has updated
+                    setTimeout(() => {
+                        if (scrollRef.current) {
+                            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                        }
+                    }, 50);
                 }
             }
+        };
+
+        const isNewChat = selectedChatId !== lastChatIdRef.current;
+        if (isNewChat) {
+            lastChatIdRef.current = selectedChatId || null;
+            scrollToBottom(true); // Always force on new chat
+        } else {
+            scrollToBottom(false); // Only if near bottom on polling
         }
     }, [messages, selectedChatId]);
 
