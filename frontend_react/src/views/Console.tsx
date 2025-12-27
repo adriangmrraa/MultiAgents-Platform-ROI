@@ -51,49 +51,51 @@ export const Console: React.FC = () => {
         setIsStreaming(false);
     };
 
-    // Polling Effect instead of true SSE for robustness in this environment
+    // Real Streaming (SSE) Effect with Auth Support
     useEffect(() => {
-        let interval: any;
         if (isStreaming) {
-            interval = setInterval(async () => {
+            const apiBase = (window as any).env?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '';
+            const streamUrl = `${apiBase}/admin/console/stream?token=${token}`;
+
+            console.log("Starting Real-time Stream:", streamUrl.replace(token || '', '***'));
+
+            const es = new EventSource(streamUrl);
+            eventSourceRef.current = es;
+
+            es.onmessage = (event) => {
                 try {
-                    // Fetch recent events (simulating stream)
-                    // We need to fetch ONLY new ones ideally, but let's just fetch recent 50
-                    // and filter client side for smooth UI? No, that's inefficient.
-                    // Let's use the existing logs endpoint but maybe we need a 'since' param.
-                    // For now, let's just fetch /admin/logs limit=20 and prepend diff.
-                    // OR use the /admin/console/stream if we can via fetch (Long Polling).
+                    const data = JSON.parse(event.data);
+                    const logEntry: LogEvent = {
+                        id: data.id || Math.random(),
+                        severity: data.severity || 'INFO',
+                        type: data.type || 'SYS',
+                        message: data.message,
+                        timestamp: data.timestamp || new Date().toISOString(),
+                        payload: data.payload
+                    };
 
-                    // Refactored to use resilient fetchApi hook
-                    const newLogs = await fetchApi('/admin/logs?limit=10');
-                    if (!newLogs) return;
-
-                    const newEvents = newLogs.map((d: any) => ({
-                        id: Math.random(),
-                        severity: d.level,
-                        type: d.source,
-                        message: d.message,
-                        timestamp: d.timestamp
-                    })).reverse();
-
-                    // We want to append NEW events.
-                    // Simple way: just replace for now or dedup. 
-                    // Dedup by timestamp + message hash?
                     setEvents(prev => {
-                        const combined = [...prev, ...newEvents];
-                        // Unique by timestamp+msg
-                        const unique = Array.from(new Map(combined.map(item => [item.timestamp + item.message, item])).values());
-                        // Sort by time
-                        return unique.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                        const newEvents = [...prev, logEntry];
+                        // Mantener solo los últimos 200 logs para performance
+                        return newEvents.slice(-200);
                     });
-
-                } catch (e) {
-                    console.error("Stream polling error", e);
+                } catch (err) {
+                    console.error("Error parsing stream data:", err);
                 }
-            }, 2000);
+            };
+
+            es.onerror = (err) => {
+                console.error("Stream connection lost:", err);
+                setIsStreaming(false);
+                es.close();
+            };
+
+            return () => {
+                es.close();
+                eventSourceRef.current = null;
+            };
         }
-        return () => clearInterval(interval);
-    }, [isStreaming]);
+    }, [isStreaming, token]);
 
     useEffect(() => {
         if (autoScroll && bottomRef.current) {
