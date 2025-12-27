@@ -27,7 +27,35 @@ from app.core.engine import NexusEngine # NEW
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-# --- Security ---
+# --- Models ---
+class TenantModel(BaseModel):
+    store_name: str
+    bot_phone_number: str
+    owner_email: Optional[str] = None
+    store_location: Optional[str] = None
+    store_website: Optional[str] = None
+    store_description: Optional[str] = None
+    store_catalog_knowledge: Optional[str] = None
+    tiendanube_store_id: Optional[str] = None
+    tiendanube_access_token: Optional[str] = None
+    handoff_enabled: Optional[bool] = False
+    handoff_instructions: Optional[str] = None
+    handoff_target_email: Optional[str] = None
+    handoff_message: Optional[str] = None
+    handoff_smtp_host: Optional[str] = None
+    handoff_smtp_user: Optional[str] = None
+    handoff_smtp_pass: Optional[str] = None
+    handoff_smtp_port: Optional[int] = 465
+    handoff_policy: Optional[dict] = None
+
+class CredentialModel(BaseModel):
+    name: str
+    value: str
+    category: str
+    scope: str = "global"
+    tenant_id: Optional[int] = None
+    description: Optional[str] = None
+
 # --- Security ---
 async def verify_admin_token(x_admin_token: str = Header(None)):
     if x_admin_token != ADMIN_TOKEN:
@@ -162,13 +190,7 @@ async def delete_tenant(tenant_id: int):
         logger.error(f"Error deleting tenant: {e}")
         raise HTTPException(500, str(e))
 
-class CredentialModel(BaseModel):
-    name: str
-    value: str
-    category: str
-    scope: str = "global"
-    tenant_id: Optional[int] = None
-    description: Optional[str] = None
+
 
 class AgentCreate(BaseModel):
     name: str
@@ -252,25 +274,7 @@ class HandoffConfigModel(BaseModel):
     triggers: Dict[str, bool] = {}
     email_context: Dict[str, bool] = {}
 
-class TenantModel(BaseModel):
-    store_name: str
-    bot_phone_number: str
-    owner_email: Optional[str] = None
-    store_location: Optional[str] = None
-    store_website: Optional[str] = None
-    store_description: Optional[str] = None
-    store_catalog_knowledge: Optional[str] = None
-    tiendanube_store_id: Optional[str] = None
-    tiendanube_access_token: Optional[str] = None
-    handoff_enabled: Optional[bool] = False
-    handoff_instructions: Optional[str] = None
-    handoff_target_email: Optional[str] = None
-    handoff_message: Optional[str] = None
-    handoff_smtp_host: Optional[str] = None
-    handoff_smtp_user: Optional[str] = None
-    handoff_smtp_pass: Optional[str] = None
-    handoff_smtp_port: Optional[int] = 465
-    handoff_policy: Optional[dict] = None
+
 
 @router.post("/credentials", dependencies=[Depends(verify_admin_token)])
 @require_role("SuperAdmin")
