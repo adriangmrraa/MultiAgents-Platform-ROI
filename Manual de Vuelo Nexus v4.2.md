@@ -1,6 +1,6 @@
-# ✈️ Manual de Vuelo Nexus v4.2 (Protocolo Omega)
+# ✈️ Manual de Vuelo Nexus v4.6 (Protocolo Omega)
 
-Este es el manual operativo oficial para la gestión del ecosistema Nexus v4.4.
+Este es el manual operativo oficial para la gestión del ecosistema Nexus v4.6.
 
 ---
 
@@ -18,11 +18,15 @@ Para activar un nuevo cliente/tienda en la plataforma:
    - Ingresa los datos solicitados.
    - El sistema activará el **Nexus Engine** para generar automáticamente todo el ecosistema.
 
-### 6. Gestión de Tiendas (Novedad v4.6) 🏬
-*   **Edición**: Puedes actualizar la información de tu negocio en tiempo real.
-*   **IA/RAG**: Usa los campos de "Descripción" y "Catálogo" para alimentar la memoria del agente.
-*   **Guía de Búsqueda**: El campo de Catálogo es vital para que el agente sepa cómo buscar productos en tu API de Tienda Nube (ej: términos técnicos o categorías específicas).
-*   **Eliminación**: Acción irreversible que limpia agentes y configuraciones asociadas.
+### 3. La Armería: Táctica y Protocolo (Novedad v4.6) 🛡️
+- **Táctica (Injection)**: No confíes solo en el prompt general. Usa la inyección táctica de cada herramienta para decirle al agente *cuándo* ser agresivo en la búsqueda o *cuándo* derivar a un humano.
+- **Protocolo de Extracción**: Configura la extracción de datos para que el agente no escupa JSON crudo. Dile que extraiga solo lo que el cliente valorará (ej: "Solo precio y stock").
+- **Plantillas Recomendadas**: Usa el botón "Cargar Plantilla" para aplicar configuraciones probadas en campo para cada herramienta del sistema.
+
+### 4. Agentes: Refinamiento con GPT-4o 🧠
+- **Protocolo Omega**: Al crear un agente, el prompt base se pre-carga con las reglas de seguridad de Nexus.
+- **Botón Sparkle (Mejorar con IA)**: Si no eres experto en prompts, pega tu idea básica y presiona los destellos. El orquestador usará GPT-4o para convertir tu texto en un Protocolo de actuación de alto nivel.
+- **Canales Dinámicos**: Elige en qué redes operará cada agente simplemente marcando los check clusters.
 
 ---
 

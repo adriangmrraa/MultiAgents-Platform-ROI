@@ -1,4 +1,4 @@
-# Nexus v4.2 Backend Technical Specification (Protocol Omega)
+# Nexus v4.6 Backend Technical Specification (Protocol Omega)
 
 > **Purpose**: This document serves as the absolute reference for Frontend-Backend integration. It defines the expected contracts, authentication methods, and data filtering logic to prevent "Ghost Code" or mapping errors.
 
@@ -97,6 +97,12 @@ Internal microservices communicate via a secret handshake.
 **`GET /admin/health`**
 - **Response**: `{"status": "ok", "db": "connected", "redis": "connected"}`
 
+### 🧠 AI Intelligence Endpoints
+**`POST /admin/ai/improve-prompt`**
+- **Payload**: `{"text": "string", "context": "tool | catalog"}`
+- **Purpose**: Uses GPT-4o to refine system prompts or descriptions based on best practices.
+- **Response**: `{"improved_text": "string"}`
+
 ---
 
 ## 3. Data Models (Schema Reference)
@@ -120,14 +126,23 @@ Internal microservices communicate via a secret handshake.
 | `channel_source` | Varchar | `whatsapp`, `instagram`, `facebook` |
 | `meta` | JSONB | Extended context (e.g., ticket IDs) |
 
-### `chat_messages`
+### `tools` (PostgreSQL) - Armory v4.6
 | Column | Type | Description |
 | :--- | :--- | :--- |
-| `id` | UUID | Unique Message ID |
-| `message_type` | Varchar | `text`, `image`, `audio`, `video` |
-| `human_override` | Boolean | True if handled by human agent |
-| `channel_source` | Varchar | Origin channel for this specific message |
-| `meta` | JSONB | Message-specific metadata |
+| `id` | SERIAL | Primary Key |
+| `name` | Varchar | Unique identifier (internal) |
+| `prompt_injection`| Text | Tactical behavior instructions |
+| `response_guide` | Text | Extraction and presentation protocol |
+| `config` | JSONB | Tool-specific parameters |
+
+### `agents` (PostgreSQL) - v4.6
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | SERIAL | Primary Key (Integer for sequence stability) |
+| `tenant_id` | Integer | Link to `tenants` table |
+| `system_prompt_template` | Text | **NOT NULL** (Protocol Omega Core) |
+| `channels` | JSONB | ruteo: `["whatsapp", "web", ...]` |
+| `enabled_tools` | JSONB | List of tool names |
 
 ---
 

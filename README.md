@@ -1,8 +1,8 @@
-# 🧠 Platform AI Solutions (Nexus v4.4) - Protocol Omega
+# 🧠 Platform AI Solutions (Nexus v4.6) - Protocol Omega
 
-> **Estado del Sistema**: `STABLE` | **Versión**: `v4.2-omega` | **Arquitectura**: `Hybrid Microservices (Python/React)`
+> **Estado del Sistema**: `STABLE` | **Versión**: `v4.6.2-omega` | **Arquitectura**: `Hybrid Microservices (Python/React)`
 
-Este repositorio aloja el ecosistema **Nexus v4.2**, una plataforma de orquestación de Agentes de IA Omnicanal diseñada para operar con **Resiliencia Extrema (Protocolo Omega)** sobre infraestructura Docker/EasyPanel.
+Este repositorio aloja el ecosistema **Nexus v4.6**, una plataforma de orquestación de Agentes de IA Omnicanal diseñada para operar con **Resiliencia Extrema y Control Táctico** sobre infraestructura Docker/EasyPanel.
 
 ---
 
@@ -10,12 +10,13 @@ Este repositorio aloja el ecosistema **Nexus v4.2**, una plataforma de orquestac
 
 Nexus v4.4 abraza el **Minimalismo Interactivo** y la **Omnicanalidad Total**. El sistema gestiona conversaciones de múltiples canales (WhatsApp, Instagram, Facebook) de forma unificada, vinculando cada interacción a un ecosistema centralizado de IA.
 
-### 🚀 Novedades v4.4 (Current Release)
-- **Omnicanalidad Unificada**: Soporte nativo y visualización fluida para WA, IG y FB en una sola caja de chat.
-- **Persistencia de Intervención Humana**: El estado del bot se guarda en la base de datos y sobrevive a reinicios de sesión.
-- **Smart Scroll No Intrusivo**: Desplazamiento inteligente que respeta la navegación histórica del usuario.
-- **Protocolo Omega UUID**: Migración total a identificadores universales para garantizar la integridad de los datos.
-- **Auto-Reparación de Infraestructura**: El sistema audita y repara su propio esquema de base de datos en cada arranque.
+### 🚀 Novedades v4.6 (Intelligence & Guidance)
+- **Protocolo de Extracción (Response Guide)**: Control absoluto sobre cómo el agente extrae y presenta datos de las herramientas.
+- **Táctica de Herramientas (Tactical Injection)**: Instrucciones específicas por herramienta para optimizar cuándo y cómo usarlas.
+- **Herramientas Dinámicas**: Sincronización automática entre la Armería (Admin) y la configuración de los Agentes.
+- **AI-Powered Refinement**: Integración de GPT-4o para mejorar prompts de sistema y descripciones de catálogos con un clic.
+- **Guía UI Contextual**: Banners de protocolo y manuales de operaciones integrados en el dashboard administrativo.
+- **Optimización de Identidad**: Ajuste de identificadores seriales para Agentes para una gestión de secuencias libre de fricción.
 
 ---
 

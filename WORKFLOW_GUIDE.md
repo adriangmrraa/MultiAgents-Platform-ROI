@@ -1,4 +1,4 @@
-# 🤝 Guía de Operaciones Nexus v4.2 (Manual de Vuelo)
+# 🤝 Guía de Operaciones Nexus v4.6 (Manual de Vuelo)
 
 Este documento es el manual operativo para el despliegue, mantenimiento y uso diario de la plataforma.
 
@@ -19,11 +19,16 @@ Gracias a la **UI Unificada**, ya no es necesario tocar la base de datos manualm
     *   **System Prompt**: Define la personalidad (ej. "Eres un vendedor experto en zapatos...").
 5.  **Guardar**. El sistema validará y cifrará las credenciales automáticamente.
     
-### Paso B: Conexión WhatsApp (YCloud)
-1.  En el dashboard de YCloud, configura el **Webhook URL**:
+### Paso B: Conexión WhatsApp (YCloud / Chatwoot)
+1.  En el dashboard de YCloud o tu Inbox de Chatwoot, configura el **Webhook URL**:
     *   `https://api.tusistema.com/chat/webhook`
-2.  Verifica que el `PHONE_NUMBER_ID` en YCloud coincida con el registrado en el Tenant.
-3.  Envía un mensaje de prueba ("Hola"). Deberías ver respuesta en segundos.
+2.  Envía un mensaje de prueba ("Hola"). Deberías ver respuesta en segundos.
+
+### Paso C: Calibración Táctica (v4.6)
+1.  Navega a **"La Armería (Herramientas)"**.
+2.  Selecciona una herramienta crítica (ej. `orders`).
+3.  Carga la **Plantilla de Táctica** recomendada.
+4.  Carga el **Protocolo de Extracción** recomendado para garantizar que el agente responda solo lo necesario.
 
 ---
 

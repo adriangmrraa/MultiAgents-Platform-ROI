@@ -60,10 +60,8 @@ Consulta la base de datos para confirmar que la columna existe.
 
 ## 3. Identificadores (UUID vs Integers)
 
-**Protocol Omega estandariza el uso de UUIDs.**
-
-*   **Nuevas Tablas**: Deben usar `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`.
-*   **Tablas Legacy**: Se mantienen como están para no romper compatibilidad, pero sus referencias nuevas deben respetar el tipo original.
+*   **Nuevas Tablas Estratégicas**: Deben usar `id UUID PRIMARY KEY DEFAULT gen_random_uuid()` para escalabilidad global.
+*   **Agentes & Herramientas (Nexus v4.6)**: Se utiliza `SERIAL` (Integer) para garantizar la compatibilidad con secuencias heredadas y facilitar la gestión manual desde el panel administrativo en entornos de MVP.
 
 ---
 
@@ -103,18 +101,38 @@ CREATE TABLE IF NOT EXISTS chat_conversations (
 );
 ```
 
-**Definición de Mensajes (Nexus v4.4)**:
+**Definición de Herramientas (Nexus v4.6)**:
 ```sql
-CREATE TABLE IF NOT EXISTS chat_messages (
-    id UUID PRIMARY KEY,
-    conversation_id UUID REFERENCES chat_conversations(id) ON DELETE CASCADE,
-    role VARCHAR(32) NOT NULL,
-    message_type VARCHAR(32) NOT NULL DEFAULT 'text',
-    content TEXT,
-    media_id UUID REFERENCES chat_media(id),
-    channel_source VARCHAR(32) DEFAULT 'whatsapp',
-    meta JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS tools (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER REFERENCES tenants(id), -- NULL for Global
+    name VARCHAR(255) NOT NULL,
+    type VARCHAR(32) NOT NULL, -- http, internal
+    description TEXT,
+    prompt_injection TEXT, -- Tactical instructions
+    response_guide TEXT,   -- Extraction protocol
+    config JSONB DEFAULT '{}',
+    service_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(tenant_id, name)
+);
+```
+
+**Definición de Agentes (Nexus v4.6)**:
+```sql
+CREATE TABLE IF NOT EXISTS agents (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER REFERENCES tenants(id),
+    name TEXT NOT NULL,
+    role TEXT DEFAULT 'sales',
+    model_provider TEXT DEFAULT 'openai',
+    model_version TEXT DEFAULT 'gpt-4o',
+    temperature FLOAT DEFAULT 0.3,
+    system_prompt_template TEXT NOT NULL,
+    enabled_tools JSONB DEFAULT '[]',
+    channels JSONB DEFAULT '["whatsapp", "instagram", "facebook"]',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 ```
 

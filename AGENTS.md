@@ -1,4 +1,4 @@
-# 🧠 Guía de Desarrollo de Agentes (Nexus v3.3)
+# 🧠 Guía de Desarrollo de Agentes (Nexus v4.6)
 
 El **Agent Service** es el núcleo de inteligencia "Apátrida" (Stateless) de la plataforma. Diseñado bajo el **Protocolo Omega**, escala horizontalmente y procesa cada solicitud de forma aislada, recibiendo todo el contexto necesario del Orquestador.
 
@@ -9,6 +9,8 @@ El **Agent Service** es el núcleo de inteligencia "Apátrida" (Stateless) de la
 El Agente no mantiene memoria entre turnos. Cada solicitud (`POST /v1/agent/execute`) contiene:
 
 *   **Tenant Context**: Quién es la tienda, su catálogo y su Prompt del Sistema.
+*   **Tactical Context**: Instrucciones de comportamiento para cada herramienta habilitada.
+*   **Extraction Context**: Guías de respuesta sobre qué datos extraer de las herramientas.
 *   **Channel Context**: Origen (IG/FB/WA) identificado para adaptar el tono.
 *   **Credentials**: Claves de API (OpenAI, Tienda Nube) inyectadas dinámicamente.
 *   **Chat History**: Los últimos N mensajes de la conversación.
@@ -51,7 +53,12 @@ El agente devuelve un objeto estructurado `OrchestratorResponse` que el Orquesta
 ```
 
 *   **Intermediate Steps**: El "Pensamiento" del agente (Chain of Thought). Visible en el Dashboard "Thinking Log".
-*   **Agent Outcome**: La conclusión final del modelo.
+*   **Agent Outcome**: La conclusión final del modelo. Una respuesta puede contener múltiples burbujas separadas por `|||`.
+
+### Soporte Multi-Burbuja (Time Bubbles)
+El `agent_service` soporta el envío de múltiples mensajes secuenciales. Si el agente responde con:
+`Hola, busco tu orden... ||| ¡La encontré! Está en camino.`
+El sistema lo procesará como dos burbujas de mensaje independientes para mejorar la experiencia de usuario.
 
 ---
 
@@ -84,10 +91,19 @@ Gracias a la arquitectura dinámica, podemos instanciar diferentes "Roles" cambi
 *   **Tools**: `orders`, `derivhumano`, `sendemail` (vía MCP).
 *   **Prompt**: Empático, paciente, orientado a la resolución.
 
-### 4.3. The Librarian (RAG Specialist)
-*   **Objetivo**: Responder preguntas complejas sobre políticas o fichas técnicas.
-*   **Tools**: RAG Vector Search (ChromaDB).
-*   **Prompt**: Estricto, basado en documentos ("Fiel a la fuente").
+## 5. Control Inteligente de Herramientas (Nexus v4.6)
+
+A diferencia de versiones anteriores, Nexus v4.6 permite inyectar metadatos tácticos a cada herramienta sin modificar el código del `agent_service`.
+
+### 5.1. Táctica de Invocación (Prompt Injection)
+Define **cuándo** y **bajo qué condiciones** usar la herramienta. 
+*Ej: "Usa search_specific_products solo si el cliente menciona un sustantivo propio de calzado."*
+
+### 5.2. Protocolo de Extracción (Response Guide)
+Define **qué datos** presentar y en **qué formato**.
+*Ej: "De la respuesta de la orden, extrae solo el estado y la fecha, omite los IDs internos."*
+
+Estas instrucciones se inyectan dinámicamente en el System Prompt del agente durante cada turno de chat.
 
 ---
 
