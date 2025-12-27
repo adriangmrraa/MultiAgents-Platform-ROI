@@ -898,7 +898,7 @@ async def health_check():
 
 @router.get("/chats", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
-async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = None):
+async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = None, human_override: Optional[bool] = None):
     """
     List conversations for the WhatsApp-like view.
     Derived strictly from `chat_conversations`.
@@ -913,6 +913,12 @@ async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = N
     if channel and channel != 'all':
         where_clauses.append(f"channel_source = ${len(params) + 1}")
         params.append(channel)
+
+    if human_override is not None:
+        if human_override:
+            where_clauses.append(f"human_override_until > NOW()")
+        else:
+            where_clauses.append(f"(human_override_until IS NULL OR human_override_until <= NOW())")
 
     where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
@@ -978,12 +984,12 @@ async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = N
 
 @router.get("/chats/summary", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
-async def get_chats_summary(tenant_id: Optional[int] = None, channel: Optional[str] = None):
+async def get_chats_summary(tenant_id: Optional[int] = None, channel: Optional[str] = None, human_override: Optional[bool] = None):
     """
     Versión de compatibilidad de list_chats para el frontend actual.
     Cumple con el Protocolo Omega (UUID id).
     """
-    chats = await list_chats(tenant_id=tenant_id, channel=channel)
+    chats = await list_chats(tenant_id=tenant_id, channel=channel, human_override=human_override)
     # Adaptar a lo que esperaba el resumen de chat clásico pero con IDs Omega
     return [{
         "id": c["id"],

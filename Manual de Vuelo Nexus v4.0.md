@@ -34,6 +34,10 @@ Nexus v4.4 introduce mejoras críticas en la interacción:
 - **Persistencia Total**: El estado de bloqueo se guarda en la base de datos y se mantiene incluso tras refrescar la página (`F5`).
 - **Trazabilidad**: Los mensajes enviados manualmente quedan registrados con su `channel_source` (WA, IG, FB) para auditoría.
 
+### C. Filtrado Avanzado (v4.5) 🔍
+- **Selector de Canales**: Ahora incluye la opción **"⚠️ Intervención"**.
+- **Gestión Táctica**: Al seleccionar esta opción, la lista se filtrará instantáneamente para mostrar solo las conversaciones que tienen el botón de intervención humana activo, permitiéndote ignorar el ruido de los chats automatizados.
+
 ---
 
 ## 3. Resolución de Problemas (Troubleshooting)

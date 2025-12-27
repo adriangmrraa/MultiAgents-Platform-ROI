@@ -41,6 +41,7 @@ export const Chats: React.FC = () => {
     const [newMessage, setNewMessage] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
+    // humanOverrideFilter removed to unify with selectedChannel
     // const [loadingChats, setLoadingChats] = useState(false); // Removed unused, creating lint noise
     const scrollRef = useRef<HTMLDivElement>(null);
     const lastChatIdRef = useRef<string | null>(null);
@@ -92,9 +93,14 @@ export const Chats: React.FC = () => {
         const loadChats = async () => {
             if (!selectedTenant) return;
             try {
-                let url = `/admin/chats/summary?limit=100`; // Increased limit for scrolling
+                let url = `/admin/chats/summary?limit=100`;
                 if (selectedTenant) url += `&tenant_id=${selectedTenant}`;
-                if (selectedChannel !== 'all') url += `&channel=${selectedChannel}`;
+
+                if (selectedChannel === 'human_override') {
+                    url += `&human_override=true`;
+                } else if (selectedChannel !== 'all') {
+                    url += `&channel=${selectedChannel}`;
+                }
 
                 const data = await fetchApi(url);
                 if (Array.isArray(data)) {
@@ -263,6 +269,7 @@ export const Chats: React.FC = () => {
                                 <option value="whatsapp">WhatsApp</option>
                                 <option value="instagram">Instagram</option>
                                 <option value="facebook">Facebook</option>
+                                <option value="human_override">⚠️ Intervención</option>
                             </select>
                         </div>
                         <div className="flex justify-between items-center">
