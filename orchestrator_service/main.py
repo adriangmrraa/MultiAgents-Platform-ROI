@@ -627,15 +627,13 @@ CATALOGO:
         -- Add missing traceability to messages
         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS channel_source VARCHAR(32) DEFAULT 'whatsapp';
         
-        -- Ensure unique constraint on customers is tenant-aware and handles nulls correctly (standard index already does)
-        -- But we might want to ensure the psids are unique too
+        -- Ensure unique constraint on customers is tenant-aware and handles nulls correctly
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_customers_instagram_psid_unique') THEN
             CREATE UNIQUE INDEX idx_customers_instagram_psid_unique ON customers (tenant_id, instagram_psid) WHERE instagram_psid IS NOT NULL;
         END IF;
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Structural reinforcement failed';
     END $$;
-    """
     """,
     # 17. Tool Prompt Injection (Nexus v4.5)
     """
