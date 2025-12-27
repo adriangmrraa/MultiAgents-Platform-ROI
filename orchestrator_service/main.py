@@ -566,6 +566,8 @@ CATALOGO:
         ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
         ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
         ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    END $$;
+    """,
     # 15. Multi-Channel Support (Nexus v4.0 - Chatwoot Phase 1)
     """
     DO $$
