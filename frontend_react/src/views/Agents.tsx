@@ -5,7 +5,7 @@ import { GlobalStreamLog } from '../components/GlobalStreamLog';
 import { Bot, Plus, Settings, Trash2, Edit, Activity } from 'lucide-react';
 
 interface Agent {
-    id?: number;
+    id?: string;
     name: string;
     role: string;
     tenant_id: number;
@@ -68,7 +68,7 @@ export const Agents: React.FC = () => {
         }
     };
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = async (id: string) => {
         if (!confirm('¿Eliminar agente? Esta acción no se puede deshacer.')) return;
         await fetchApi(`/admin/agents/${id}`, { method: 'DELETE' });
         loadData();
