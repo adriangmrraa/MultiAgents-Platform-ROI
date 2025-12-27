@@ -186,11 +186,12 @@ export const Chats: React.FC = () => {
                             </select>
                         </div>
                         <div className="flex justify-between items-center">
-                            type="text"
-                            placeholder="Buscar cliente..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="bg-black/20 border border-white/10 rounded-lg px-3 py-1.5 text-sm w-full focus:border-accent outline-none"
+                            <input
+                                type="text"
+                                placeholder="Buscar cliente..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="bg-black/20 border border-white/10 rounded-lg px-3 py-1.5 text-sm w-full focus:border-accent outline-none"
                             />
                             <button onClick={() => setRefreshTrigger(p => p + 1)} className="ml-2 text-white/50 hover:text-white">
                                 <RefreshCw size={16} />
