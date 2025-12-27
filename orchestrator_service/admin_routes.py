@@ -1585,90 +1585,8 @@ pass
 
 # --- Credentials Routes ---
 
-@router.get("/credentials", dependencies=[Depends(verify_admin_token)])
-async def list_credentials():
-    rows = await db.pool.fetch("SELECT c.*, t.store_name as tenant_name FROM credentials c LEFT JOIN tenants t ON c.tenant_id = t.id ORDER BY c.id DESC")
-    return [dict(row) for row in rows]
-
-@router.get("/credentials/{id}", dependencies=[Depends(verify_admin_token)])
-async def get_credential(id: int):
-    row = await db.pool.fetchrow("SELECT c.*, t.store_name as tenant_name FROM credentials c LEFT JOIN tenants t ON c.tenant_id = t.id WHERE c.id = $1", id)
-    return dict(row) if row else {}
-
-@router.post("/credentials", dependencies=[Depends(verify_admin_token)])
-async def create_credential(cred: CredentialModel):
-    logger.info(f"Create Credential Payload: {cred.model_dump()}")
-    # Logic split for Partial Indexes (Nexus v3.1 Fix)
-    if cred.scope == "tenant":
-         if not tenant_id:
-             raise HTTPException(400, "Tenant ID required for tenant scope")
-             
-         q_upsert = """
-         INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())
-         ON CONFLICT (name, tenant_id) WHERE scope = 'tenant'
-         DO UPDATE SET 
-             value = EXCLUDED.value,
-             category = EXCLUDED.category,
-             description = EXCLUDED.description,
-             updated_at = NOW()
-         RETURNING id
-         """
-         row = await db.pool.fetchrow(q_upsert, cred.name, cred.value, cred.category, cred.scope, tenant_id, cred.description)
-    else:
-         # Global Scope
-         q_upsert = """
-         INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
-         VALUES ($1, $2, $3, 'global', NULL, $6, NOW())
-         ON CONFLICT (name) WHERE scope = 'global'
-         DO UPDATE SET 
-             value = EXCLUDED.value,
-             category = EXCLUDED.category,
-             description = EXCLUDED.description,
-             updated_at = NOW()
-         RETURNING id
-         """
-         row = await db.pool.fetchrow(q_upsert, cred.name, cred.value, cred.category, None, cred.description)
-         
-    return {"status": "ok", "id": row['id'], "action": "upserted"}
-
-@router.put("/credentials/{id}", dependencies=[Depends(verify_admin_token)])
-async def update_credential(id: int, cred: CredentialModel):
-    tenant_id = cred.tenant_id if cred.scope == "tenant" else None
-    
-    q_update = """
-    UPDATE credentials 
-    SET name = $1, value = $2, category = $3, scope = $4, tenant_id = $5, description = $6, updated_at = NOW()
-    WHERE id = $7
-    RETURNING id
-    """
-    row = await db.pool.fetchrow(q_update, cred.name, cred.value, cred.category, cred.scope, tenant_id, cred.description, id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Credential not found")
-    return {"status": "ok", "id": row['id'], "action": "updated"}
-
-# --- Internal Endpoints (for inter-service use) ---
-
-@router.get("/internal/credentials/{name}")
-async def get_internal_credential(name: str, x_internal_token: str = Header(None)):
-    if x_internal_token != os.getenv("INTERNAL_API_TOKEN", "internal-secret"):
-         raise HTTPException(status_code=401, detail="Unauthorized internal call")
-    
-    # 1. Check DB
-    val = await db.pool.fetchval("SELECT value FROM credentials WHERE name = $1 LIMIT 1", name)
-    # 2. Check ENV if not in DB
-    if not val:
-        val = os.getenv(name)
-        
-    if not val:
-        raise HTTPException(status_code=404, detail="Credential not found")
-        
-    return {"name": name, "value": val}
-
-@router.delete("/credentials/{id}", dependencies=[Depends(verify_admin_token)])
-async def delete_credential(id: int):
-    await db.pool.execute("DELETE FROM credentials WHERE id = $1", id)
-    return {"status": "ok"}
+# Gestión de credenciales consolidada al principio del archivo
+pass
 
 # --- Tools Management ---
 
@@ -1919,40 +1837,8 @@ async def delete_tenant(phone: str):
 
 # --- Credentials Management ---
 
-@router.get("/credentials", dependencies=[Depends(verify_admin_token)])
-async def get_credentials():
-    """List all credentials."""
-    try:
-        rows = await db.pool.fetch("""
-            SELECT c.*, t.store_name as tenant_name 
-            FROM credentials c
-            LEFT JOIN tenants t ON c.tenant_id = t.id
-            ORDER BY c.id ASC
-        """)
-        return [dict(row) for row in rows]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/credentials", dependencies=[Depends(verify_admin_token)])
-async def create_credential(cred: CredentialModel):
-    """Create a credential."""
-    try:
-        q = """
-        INSERT INTO credentials (name, value, category, scope, tenant_id, description)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        """
-        await db.pool.execute(q, cred.name, cred.value, cred.category, cred.scope, cred.tenant_id, cred.description)
-        return {"status": "ok"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.delete("/credentials/{cred_id}", dependencies=[Depends(verify_admin_token)])
-async def delete_credential(cred_id: int):
-    try:
-        await db.pool.execute("DELETE FROM credentials WHERE id = $1", cred_id)
-        return {"status": "ok"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# Eliminado redundancia final de credenciales
+pass
 
 @router.get("/logs", dependencies=[Depends(verify_admin_token)])
 async def get_logs(limit: int = 50):
@@ -1981,28 +1867,8 @@ async def get_logs(limit: int = 50):
         # Return empty list on error (e.g. table missing) to prevent UI crash
         print(f"Error fetching logs: {e}")
         return []
-async def delete_credential(cred_id: int):
-    try:
-        await db.pool.execute("DELETE FROM credentials WHERE id = $1", cred_id)
-        return {"status": "ok"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/health")
-async def health_check():
-    """Endpoint público para chequeos de salud (EasyPanel/Traefik)."""
-    try:
-        await db.pool.execute("SELECT 1")
-        db_status = "OK"
-    except:
-        db_status = "ERROR"
-
-    return {
-        "status": "OK",
-        "service": "orchestrator",
-        "database": db_status,
-        "timestamp": datetime.now().isoformat()
-    }
+# --- System Analytics & RAG ---
 
 @router.get("/diagnostics/healthz")
 async def diagnostics_healthz():
