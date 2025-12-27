@@ -1462,13 +1462,16 @@ async def chat_endpoint(
     
     if conv:
         conv_id = conv['id']
-        # Update metadata if Chatwoot ID is now available
-        if event.external_chatwoot_id:
-            await db.pool.execute("""
-                UPDATE chat_conversations 
-                SET external_chatwoot_id = $1, external_account_id = $2, channel_source = $3, updated_at = NOW()
-                WHERE id = $4
-            """, event.external_chatwoot_id, event.external_account_id, source, conv_id)
+        # Update metadata (Omnichannel Sync - Protocol v4.2.2)
+        await db.pool.execute("""
+            UPDATE chat_conversations 
+            SET external_chatwoot_id = COALESCE($1, external_chatwoot_id), 
+                external_account_id = COALESCE($2, external_account_id), 
+                channel_source = $3, 
+                customer_id = $4,
+                updated_at = NOW()
+            WHERE id = $5
+        """, event.external_chatwoot_id, event.external_account_id, source, customer_id, conv_id)
 
         # Protocol Omega: Strict lockout check
         if conv['human_override_until'] and conv['human_override_until'] > datetime.now().astimezone():
@@ -1633,14 +1636,27 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             logger.error("tenant_not_found_on_execution", tenant_id=tenant_id)
             return
 
-        # 2. Fetch History for Context
+        # 2. Fetch History for Context (Unificado Omnicanal - Protocolo Nexus v4.2.2)
         history_rows = await db.pool.fetch("""
-            SELECT role, content FROM chat_messages 
-            WHERE conversation_id = $1 
-            ORDER BY created_at ASC LIMIT 10
+            SELECT m.role, m.content, c.channel_source 
+            FROM chat_messages m
+            JOIN chat_conversations c ON m.conversation_id = c.id
+            WHERE c.customer_id = (SELECT customer_id FROM chat_conversations WHERE id = $1)
+            ORDER BY m.created_at ASC LIMIT 20
         """, conv_id)
 
-        remote_history = [{"role": h['role'], "content": h['content'] or ""} for h in history_rows]
+        remote_history = []
+        for h in history_rows:
+             role = h['role']
+             content_h = h['content'] or ""
+             ch_s = h['channel_source'] or "whatsapp"
+             
+             # Format history to tell the agent the source if it helps context
+             if role == 'user':
+                  # Prefix with [CHANNEL] so agent knows where the user said this
+                  remote_history.append({"role": "user", "content": f"[{ch_s.upper()}] {content_h}"})
+             else:
+                  remote_history.append({"role": role, "content": content_h})
 
         # 2b. Fetch Active Agent (Nexus v3)
         agent_row = await db.pool.fetchrow("SELECT * FROM agents WHERE tenant_id = $1 AND is_active = TRUE ORDER BY updated_at DESC LIMIT 1", tenant_id)
