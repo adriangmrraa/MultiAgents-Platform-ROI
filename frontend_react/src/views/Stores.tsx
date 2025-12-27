@@ -11,6 +11,8 @@ interface Tenant {
     tiendanube_access_token?: string;
     owner_email?: string;
     store_website?: string;
+    store_description?: string;
+    store_catalog_knowledge?: string;
 }
 
 export const Stores: React.FC = () => {
@@ -25,7 +27,9 @@ export const Stores: React.FC = () => {
         tiendanube_store_id: '',
         tiendanube_access_token: '',
         owner_email: '',
-        store_website: ''
+        store_website: '',
+        store_description: '',
+        store_catalog_knowledge: ''
     });
 
     const loadTenants = async () => {
@@ -50,20 +54,26 @@ export const Stores: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await fetchApi('/admin/tenants', { method: 'POST', body: formData });
+            if (editingTenant && editingTenant.id) {
+                // UPDATE (PUT)
+                await fetchApi(`/admin/tenants/${editingTenant.id}`, { method: 'PUT', body: formData });
+            } else {
+                // CREATE (POST)
+                await fetchApi('/admin/tenants', { method: 'POST', body: formData });
+            }
             setIsModalOpen(false);
             loadTenants();
-        } catch (e) {
+        } catch (e: any) {
             alert('Error al guardar tienda: ' + e.message);
         }
     };
 
-    const handleDelete = async (phone: string) => {
+    const handleDelete = async (tenantId: number) => {
         if (!confirm('¿Eliminar tienda y todos sus datos?')) return;
         try {
-            await fetchApi(`/admin/tenants/${phone}`, { method: 'DELETE' });
+            await fetchApi(`/admin/tenants/${tenantId}`, { method: 'DELETE' });
             loadTenants();
-        } catch (e) {
+        } catch (e: any) {
             alert('Error al eliminar: ' + e.message);
         }
     }
@@ -131,7 +141,7 @@ export const Stores: React.FC = () => {
                                     <td>
                                         <div style={{ display: 'flex', gap: '8px' }}>
                                             <button className="btn-secondary" style={{ padding: '6px' }} onClick={() => openEdit(t)} title="Editar"><Edit2 size={14} /></button>
-                                            <button className="btn-delete" style={{ padding: '6px' }} onClick={() => handleDelete(t.bot_phone_number)} title="Eliminar"><Trash2 size={14} /></button>
+                                            <button className="btn-delete" style={{ padding: '6px' }} onClick={() => handleDelete(t.id!)} title="Eliminar"><Trash2 size={14} /></button>
                                         </div>
                                     </td>
                                 </tr>
@@ -181,6 +191,26 @@ export const Stores: React.FC = () => {
                     <div className="form-group">
                         <label>Website URL</label>
                         <input value={formData.store_website} onChange={e => setFormData({ ...formData, store_website: e.target.value })} placeholder="https://..." />
+                    </div>
+
+                    <h4 style={{ color: 'var(--accent)', margin: '20px 0 10px', fontSize: '14px' }}>Base de Conocimiento (IA/RAG)</h4>
+                    <div className="form-group">
+                        <label>Descripción del Negocio</label>
+                        <textarea
+                            className="bg-black/40 border border-white/10 rounded p-2 text-sm text-white w-full h-24 outline-none"
+                            value={formData.store_description}
+                            onChange={e => setFormData({ ...formData, store_description: e.target.value })}
+                            placeholder="Ej: Somos una tienda de moda sustentable..."
+                        />
+                    </div>
+                    <div className="form-group" style={{ marginTop: '10px' }}>
+                        <label>Guía de búsqueda de Catálogo (API Tienda Nube)</label>
+                        <textarea
+                            className="bg-black/40 border border-white/10 rounded p-2 text-sm text-white w-full h-32 outline-none"
+                            value={formData.store_catalog_knowledge}
+                            onChange={e => setFormData({ ...formData, store_catalog_knowledge: e.target.value })}
+                            placeholder="Ej: Si preguntan por 'vestidos', busca con el término 'summer-dress'. Los talles se buscan como 'size-XL'. Esto ayuda al agente a armar la query correcta."
+                        />
                     </div>
 
                     <div style={{ marginTop: '30px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>

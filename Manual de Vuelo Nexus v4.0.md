@@ -18,6 +18,12 @@ Para activar un nuevo cliente/tienda en la plataforma:
    - Ingresa los datos solicitados.
    - El sistema activará el **Nexus Engine** para generar automáticamente todo el ecosistema.
 
+### 6. Gestión de Tiendas (Novedad v4.6) 🏬
+*   **Edición**: Puedes actualizar la información de tu negocio en tiempo real.
+*   **IA/RAG**: Usa los campos de "Descripción" y "Catálogo" para alimentar la memoria del agente.
+*   **Guía de Búsqueda**: El campo de Catálogo es vital para que el agente sepa cómo buscar productos en tu API de Tienda Nube (ej: términos técnicos o categorías específicas).
+*   **Eliminación**: Acción irreversible que limpia agentes y configuraciones asociadas.
+
 ---
 
 ## 2. Gestión de Chats (UX Avanzada)

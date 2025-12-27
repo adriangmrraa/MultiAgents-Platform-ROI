@@ -101,6 +101,67 @@ async def list_tenants(limit: int = 100):
    rows = await db.pool.fetch(query,limit)
    return [dict(r) for r in rows]
 
+@router.put("/tenants/{tenant_id}", dependencies=[Depends(verify_admin_token)])
+@require_role("SuperAdmin")
+async def update_tenant(tenant_id: int, data: TenantModel):
+    try:
+        from utils import encrypt_password
+        
+        # Check if tenant exists
+        exists = await db.pool.fetchval("SELECT 1 FROM tenants WHERE id = $1", tenant_id)
+        if not exists:
+            raise HTTPException(404, "Tenant not found")
+            
+        # Optional: Encrypt token if provided
+        encrypted_token = None
+        if data.tiendanube_access_token:
+            # Only encrypt if it's not already encrypted (basic length check or prefix check could go here)
+            # For now, we assume if user sends it, it's fresh.
+            encrypted_token = encrypt_password(data.tiendanube_access_token)
+
+        q = """
+            UPDATE tenants SET 
+                store_name = $1,
+                bot_phone_number = $2,
+                owner_email = $3,
+                store_website = $4,
+                store_description = $5,
+                store_catalog_knowledge = $6,
+                tiendanube_store_id = $7,
+                tiendanube_access_token = COALESCE($8, tiendanube_access_token),
+                updated_at = NOW()
+            WHERE id = $9
+            RETURNING id
+        """
+        await db.pool.execute(q, 
+            data.store_name, data.bot_phone_number, data.owner_email, 
+            data.store_website, data.store_description, data.store_catalog_knowledge,
+            data.tiendanube_store_id, encrypted_token, tenant_id
+        )
+        
+        return {"status": "ok", "message": f"Tenant {tenant_id} updated"}
+    except Exception as e:
+        logger.error(f"Error updating tenant: {e}")
+        raise HTTPException(500, str(e))
+
+@router.delete("/tenants/{tenant_id}", dependencies=[Depends(verify_admin_token)])
+@require_role("SuperAdmin")
+async def delete_tenant(tenant_id: int):
+    try:
+        # 1. Cleanup Dependent Data (Preventive Cascade)
+        # We delete agents first as they reference the tenant
+        await db.pool.execute("DELETE FROM agents WHERE tenant_id = $1", tenant_id)
+        
+        # 2. Delete Tenant
+        row = await db.pool.fetchrow("DELETE FROM tenants WHERE id = $1 RETURNING id", tenant_id)
+        if not row:
+            raise HTTPException(404, "Tenant not found")
+            
+        return {"status": "ok", "message": f"Tenant {tenant_id} and associated agents deleted"}
+    except Exception as e:
+        logger.error(f"Error deleting tenant: {e}")
+        raise HTTPException(500, str(e))
+
 class CredentialModel(BaseModel):
     name: str
     value: str
