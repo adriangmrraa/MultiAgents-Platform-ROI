@@ -116,7 +116,10 @@ class SimpleEvent:
         self.channel_source = channel_source
         self.external_chatwoot_id = external_cw_id
         self.external_account_id = external_acc_id
+        self.external_chatwoot_id = external_cw_id
+        self.external_account_id = external_acc_id
         self.tenant_id = tenant_id
+        self.role = 'user' # Default
 
 # FastAPI App
 from contextlib import asynccontextmanager
@@ -1401,13 +1404,21 @@ async def chat_endpoint(
                     pass
             event = SimpleEvent(
                 from_num=payload.get("from_number"),
-                text=payload.get("text"),
+                text=payload.get("text") or payload.get("content"),
                 msg_id=payload.get("event_id"),
                 channel_source=payload.get("channel_source", "whatsapp"),
                 external_cw_id=payload.get("external_chatwoot_id"),
                 external_acc_id=payload.get("external_account_id"),
                 tenant_id=tid
             )
+            
+            # Map Chatwoot Message Type to Role
+            # generic/incoming -> user
+            # generic/outgoing -> assistant
+            msg_type = payload.get("message_type") or "incoming"
+            if msg_type == "outgoing":
+                event.role = 'assistant'
+            
             if payload.get("customer_name"):
                 event.customer_name = payload.get("customer_name")
         else:
@@ -1579,10 +1590,10 @@ async def chat_endpoint(
             id, tenant_id, conversation_id, role, content, 
             correlation_id, created_at, message_type, media_id, from_number, channel_source
         ) VALUES (
-            $1, $2, $3, 'user', $4,
-            $5, NOW(), $6, $7, $8, $9
+            $1, $2, $3, $4, $5,
+            $6, NOW(), $7, $8, $9, $10
         )
-    """, uuid.uuid4(), tenant_id, conv_id, content, correlation_id, message_type, media_id, event.from_number, event.channel_source)
+    """, uuid.uuid4(), tenant_id, conv_id, event.role, content, correlation_id, message_type, media_id, event.from_number, event.channel_source)
     
     # Update Conversation Metadata
     preview_text = content[:50] if content else f"[{message_type}]"

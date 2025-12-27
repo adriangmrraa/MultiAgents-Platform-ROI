@@ -86,7 +86,7 @@ export const Chats: React.FC = () => {
         };
         loadChats();
 
-        const interval = setInterval(loadChats, 10000);
+        const interval = setInterval(loadChats, 3000);
         return () => clearInterval(interval);
     }, [fetchApi, refreshTrigger, selectedTenant, selectedChannel, searchTerm]);
 
