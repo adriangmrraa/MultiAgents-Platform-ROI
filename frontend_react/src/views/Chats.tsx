@@ -10,13 +10,12 @@ interface Chat {
     last_message: string;
     timestamp: string;
     tenant_id: number;
-    cw_id?: number;
-    account_id?: number;
-    external_chatwoot_id?: number;
-    external_account_id?: number;
+    avatar_url?: string; // New: Protocol Omega Avatar
+    human_override_until?: string; // New: Lockout Timer
     status: string;
     is_locked: boolean;
 }
+// Removed legacy fields: cw_id, account_id, external_chatwoot_id (Protocol Omega Cleanup)
 
 interface Message {
     role: string;
@@ -90,6 +89,8 @@ export const Chats: React.FC = () => {
                             ...d,
                             id: d.id, // Explicitly preserve ID
                             name: d.name || d.display_name || d.external_user_id || 'Unknown',
+                            avatar_url: d.avatar_url, // Map Avatar
+                            human_override_until: d.human_override_until, // Map Timer
                             last_message: d.last_message || d.last_message_preview || '',
                             timestamp: d.timestamp || d.last_message_at || new Date().toISOString(),
                             phone: d.external_user_id || '',
@@ -133,9 +134,11 @@ export const Chats: React.FC = () => {
     useEffect(() => {
         if (!selectedChatId) return;
 
-        const loadHistory = async () => {
+        const loadHistory = async (chatId: string) => {
+            console.log("Loading history for:", chatId); // DEBUG
             try {
-                const data = await fetchApi(`/admin/chats/${selectedChatId}/messages`);
+                const data = await fetchApi(`/admin/chats/${chatId}/messages`);
+                console.log("History Data Received:", data); // DEBUG
                 if (Array.isArray(data)) {
                     setMessages(data);
                 }
@@ -256,6 +259,8 @@ export const Chats: React.FC = () => {
                             <div
                                 key={chat.id}
                                 onClick={() => {
+                                    console.log("CLICK DETECTED. Chat ID:", chat.id); // DEBUG
+                                    // alert("Click! ID: " + chat.id); // VISUAL DEBUG
                                     setSelectedChatId(chat.id);
                                 }}
                                 className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${selectedChatId === chat.id ? 'bg-white/10 border-l-4 border-accent' : ''}`}
@@ -264,7 +269,12 @@ export const Chats: React.FC = () => {
                                     <div className="flex items-center gap-2">
                                         {getChannelIcon(chat.channel)}
                                         <span className="font-semibold text-white">{chat.name || chat.phone}</span>
-                                        {chat.is_locked && <span className="text-amber-500 text-[10px] border border-amber-500/50 px-1 rounded bg-amber-500/10">HUMAN</span>}
+                                        {chat.is_locked && (
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-amber-500 text-[10px] border border-amber-500/50 px-1 rounded bg-amber-500/10">HUMAN</span>
+                                                {chat.human_override_until && <span className="text-[9px] text-amber-500/80">{new Date(chat.human_override_until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                                            </div>
+                                        )}
                                     </div>
                                     <span className="text-[10px] text-secondary opacity-70 uppercase font-mono">{new Date(chat.timestamp).toLocaleTimeString()}</span>
                                 </div>
@@ -290,8 +300,16 @@ export const Chats: React.FC = () => {
                                     <button onClick={() => setSelectedChatId(null)} className="md:hidden text-white/70 hover:text-white mr-2">
                                         ←
                                     </button>
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-                                        <User size={20} className="text-white" />
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center overflow-hidden border border-white/20">
+                                        {chats.find(c => c.id === selectedChatId)?.avatar_url ? (
+                                            <img
+                                                src={chats.find(c => c.id === selectedChatId)?.avatar_url}
+                                                alt="Avatar"
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <User size={20} className="text-white" />
+                                        )}
                                     </div>
                                     <div>
                                         <h3 className="font-bold text-lg flex items-center gap-2">
