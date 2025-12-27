@@ -9,7 +9,7 @@ from app.models.base import Base, TimestampMixin
 class Agent(Base, TimestampMixin):
     __tablename__ = "agents"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
     
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -28,6 +28,7 @@ class Agent(Base, TimestampMixin):
     enabled_tools: Mapped[dict] = mapped_column(JSONB, server_default='[]')
     
     # Advanced Config
+    channels: Mapped[dict] = mapped_column(JSONB, server_default='["whatsapp", "instagram", "facebook"]')
     config: Mapped[dict] = mapped_column(JSONB, server_default='{}')
 
     # Relationships

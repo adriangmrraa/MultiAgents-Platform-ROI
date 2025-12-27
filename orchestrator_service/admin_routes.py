@@ -380,9 +380,9 @@ async def ensure_agents_table():
     await db.pool.execute("""
         CREATE TABLE IF NOT EXISTS agents (
             id SERIAL PRIMARY KEY,
+            tenant_id INT REFERENCES tenants(id),
             name TEXT NOT NULL,
             role TEXT DEFAULT 'sales',
-            tenant_id INT REFERENCES tenants(id),
             whatsapp_number TEXT,
             model_provider TEXT DEFAULT 'openai',
             model_version TEXT DEFAULT 'gpt-4o',

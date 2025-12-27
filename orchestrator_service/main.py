@@ -654,6 +654,40 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Failed to add channels to agents';
     END $$;
+    """,
+    # 19. Fix Agents Table Schema Drift (Nexus v4.6.1)
+    """
+    DO $$
+    BEGIN
+        -- Detect if ID is UUID (broken state) and recreate as SERIAL
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'agents' AND column_name = 'id' AND data_type = 'uuid'
+        ) THEN
+            -- Protocol Omega: Destructive repair for non-live data in MVP
+            DROP TABLE agents CASCADE;
+            
+            CREATE TABLE agents (
+                id SERIAL PRIMARY KEY,
+                tenant_id INT REFERENCES tenants(id),
+                name TEXT NOT NULL,
+                role TEXT DEFAULT 'sales',
+                whatsapp_number TEXT,
+                model_provider TEXT DEFAULT 'openai',
+                model_version TEXT DEFAULT 'gpt-4o',
+                temperature FLOAT DEFAULT 0.3,
+                system_prompt_template TEXT NOT NULL,
+                enabled_tools JSONB DEFAULT '[]',
+                channels JSONB DEFAULT '["whatsapp", "instagram", "facebook"]',
+                config JSONB DEFAULT '{}',
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to repair agents table schema';
+    END $$;
     """
 ]
 
