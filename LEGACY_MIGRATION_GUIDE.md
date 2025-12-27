@@ -18,6 +18,6 @@ La transición del antiguo `platform_ui` (Vanilla JS) al nuevo `frontend_react` 
 - **Estilos**: Usa variables de CSS definidas en el `:root` de `index.css` para mantener el estilo "Glassmorphism".
 - **Despliegue**: El antiguo flujo de subir archivos ya no existe. El despliegue es 100% automático vía Docker.
 
----
+--- ----
 
 **© 2025 Nexus Migration Taskforce**
