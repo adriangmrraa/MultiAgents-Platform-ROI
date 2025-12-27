@@ -83,11 +83,20 @@ export const Chats: React.FC = () => {
 
                 const data = await fetchApi(url);
                 if (Array.isArray(data)) {
+                    // Map Backend keys to Frontend Interface
+                    const mappedData = data.map((d: any) => ({
+                        ...d,
+                        name: d.display_name,
+                        last_message: d.last_message_preview,
+                        timestamp: d.last_message_at,
+                        phone: d.external_user_id
+                    }));
+
                     // Client-side search if backend search missing
-                    let filtered = data;
+                    let filtered = mappedData;
                     if (searchTerm) {
                         const lower = searchTerm.toLowerCase();
-                        filtered = data.filter(c =>
+                        filtered = mappedData.filter((c: any) =>
                             (c.phone && c.phone.toLowerCase().includes(lower)) ||
                             (c.name && c.name.toLowerCase().includes(lower))
                         );
@@ -241,7 +250,10 @@ export const Chats: React.FC = () => {
                         {chats.map(chat => (
                             <div
                                 key={chat.id}
-                                onClick={() => setSelectedChatId(chat.id)}
+                                onClick={() => {
+                                    console.log("Chat clicked:", chat.id);
+                                    setSelectedChatId(chat.id);
+                                }}
                                 className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${selectedChatId === chat.id ? 'bg-white/10 border-l-4 border-accent' : ''}`}
                             >
                                 <div className="flex justify-between items-start mb-1">
