@@ -44,20 +44,16 @@ export const Chats: React.FC = () => {
     // const [loadingChats, setLoadingChats] = useState(false); // Removed unused, creating lint noise
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    // Auto-scroll logic (Smart Scroll)
+    // Auto-scroll logic (Smart Scroll) - Refined for immediate action
     useEffect(() => {
         if (scrollRef.current) {
-            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-            const isNearBottom = scrollHeight - scrollTop - clientHeight < 150; // Chat specific threshold
-
-            if (isNearBottom) {
-                scrollRef.current.scrollTo({
-                    top: scrollHeight,
-                    behavior: 'smooth'
-                });
-            }
+            // Immediate scroll to bottom on first load or new message
+            scrollRef.current.scrollTo({
+                top: scrollRef.current.scrollHeight,
+                behavior: messages.length <= 1 ? 'auto' : 'smooth'
+            });
         }
-    }, [messages]);
+    }, [messages, selectedChatId]);
 
     // Auto-select first tenant if none selected
     useEffect(() => {
@@ -211,15 +207,14 @@ export const Chats: React.FC = () => {
     };
 
     return (
-        <div className="view active animate-fade-in">
-            <h1 className="view-title">Gestión Multicanal Nexus v4.2</h1>
+        <div className="view active animate-fade-in flex flex-col p-0 overflow-hidden" style={{ height: '100vh', maxHeight: '100vh', position: 'relative' }}>
+            <h1 className="view-title px-6 pt-6 hidden md:block">Gestión Multicanal Nexus v4.2</h1>
 
-            <div className="chats-layout" style={{
+            <div className="chats-layout flex-1 overflow-hidden" style={{
                 display: 'grid',
-                gridTemplateColumns: selectedChatId ? '350px 1fr' : '350px 1fr', // Maintain generic layout on desktop
-                gap: '20px',
-                height: 'calc(100vh - 120px)', // Fixed full height
-                overflow: 'hidden'
+                gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+                gap: '0',
+                height: '100%'
             }}>
                 {/* Left: List */}
                 <div className={`glass flex flex-col transition-all duration-300 ${selectedChatId ? 'hidden md:flex' : 'flex w-full'}`} style={{ padding: '0', overflow: 'hidden' }}>
@@ -417,8 +412,8 @@ export const Chats: React.FC = () => {
                                 })}
                             </div>
 
-                            {/* Input */}
-                            <div className="p-4 bg-black/20 border-t border-white/5">
+                            {/* Input (Pinned at bottom) */}
+                            <div className="p-4 bg-black/60 backdrop-blur-xl border-t border-white/10 sticky bottom-0 z-30">
                                 <div className="flex gap-2">
                                     <textarea
                                         className="flex-1 bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-accent outline-none resize-none h-[50px]"
