@@ -41,7 +41,7 @@ export const Chats: React.FC = () => {
     const [newMessage, setNewMessage] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
-    const [loadingChats, setLoadingChats] = useState(false);
+    // const [loadingChats, setLoadingChats] = useState(false); // Removed unused, creating lint noise
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
