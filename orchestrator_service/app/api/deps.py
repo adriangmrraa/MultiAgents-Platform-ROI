@@ -45,20 +45,27 @@ async def get_current_tenant_webhook(request: Request, db: AsyncSession = Depend
         # Malformed JSON
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
+    logger.info("webhook_received", body_keys=list(body.keys()), tenant_id_in_payload=body.get("tenant_id"))
+
     # 2. Strategy: Extract Tenant Identity
     target_tenant_id = body.get("tenant_id")
     if target_tenant_id:
         try:
-            result = await db.execute(select(Tenant).where(Tenant.id == int(target_tenant_id)))
+            tid = int(target_tenant_id)
+            logger.info("attempting_tenant_id_resolution", tenant_id=tid)
+            result = await db.execute(select(Tenant).where(Tenant.id == tid))
             tenant_orm = result.scalar_one_or_none()
             if tenant_orm:
                 if not tenant_orm.is_active:
                     raise HTTPException(status_code=403, detail="Tenant is inactive")
                 tenant_data = TenantInternal.model_validate(tenant_orm)
                 tenant_context.set(tenant_data)
+                logger.info("tenant_resolved_via_id", tenant_id=tid)
                 return tenant_data
+            else:
+                logger.warning("tenant_id_not_found_in_db", tenant_id=tid)
         except ValueError:
-            pass
+            logger.warning("invalid_tenant_id_format", tenant_id=target_tenant_id)
 
     target_phone = None
     
