@@ -64,7 +64,7 @@ export const Chats: React.FC = () => {
     useEffect(() => {
         const loadTenants = async () => {
             try {
-                const data = await fetchApi('/diag/tenants'); // Using diagnostic but should be /admin/tenants later
+                const data = await fetchApi('/admin/tenants');
                 if (Array.isArray(data)) setTenants(data);
             } catch (e) { }
         };
@@ -84,12 +84,15 @@ export const Chats: React.FC = () => {
                 const data = await fetchApi(url);
                 if (Array.isArray(data)) {
                     // Map Backend keys to Frontend Interface
+                    // Backend: id, display_name, last_message_preview, last_message_at, external_user_id
                     const mappedData = data.map((d: any) => ({
                         ...d,
-                        name: d.display_name,
-                        last_message: d.last_message_preview,
-                        timestamp: d.last_message_at,
-                        phone: d.external_user_id
+                        id: d.id, // Explicitly preserve ID
+                        name: d.display_name || d.external_user_id || 'Unknown',
+                        last_message: d.last_message_preview || '',
+                        timestamp: d.last_message_at || new Date().toISOString(),
+                        phone: d.external_user_id || '',
+                        is_locked: d.is_locked || false
                     }));
 
                     // Client-side search if backend search missing
