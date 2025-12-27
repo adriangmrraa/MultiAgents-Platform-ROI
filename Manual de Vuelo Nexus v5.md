@@ -1,6 +1,6 @@
-# ✈️ Manual de Vuelo Nexus v4.6 (Protocolo Omega)
+# ✈️ Manual de Vuelo Nexus v5 (Protocolo Titan)
 
-Este es el manual operativo oficial para la gestión del ecosistema Nexus v4.6.
+Este es el manual operativo oficial para la gestión del ecosistema Nexus v5.
 
 ---
 

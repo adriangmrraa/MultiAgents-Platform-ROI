@@ -1,4 +1,5 @@
 import os
+import asyncio
 import json
 import uuid
 from datetime import datetime, timedelta
@@ -450,7 +451,7 @@ async def magic_onboarding(data: MagicOnboardingRequest):
     logger.info("magic_onboarding_start", store=data.store_name)
     
     # 1. UPSERT TENANT (Protocol Omega: Internal ID + Encryption)
-    from app.core.security import encrypt_password
+    from utils import encrypt_password
     
     # Specific logic for 'TBD' phone: use provisional UUID to avoid collision
     provisional_phone = data.bot_phone_number if data.bot_phone_number not in ["TBD", ""] else f"prov_{uuid.uuid4().hex[:8]}"
