@@ -85,15 +85,15 @@ export const Chats: React.FC = () => {
                 console.log("API Response (Chats):", data); // DEBUG LOG
                 if (Array.isArray(data)) {
                     // Map Backend keys to Frontend Interface
-                    // Backend: id, display_name, last_message_preview, last_message_at, external_user_id
+                    // Backend: id, name (or display_name), last_message, timestamp, external_user_id
                     const mappedData = data.map((d: any) => {
                         console.log("Raw Chat Item:", d); // DEBUG LOG
                         return {
                             ...d,
                             id: d.id, // Explicitly preserve ID
-                            name: d.display_name || d.external_user_id || 'Unknown',
-                            last_message: d.last_message_preview || '',
-                            timestamp: d.last_message_at || new Date().toISOString(),
+                            name: d.name || d.display_name || d.external_user_id || 'Unknown',
+                            last_message: d.last_message || d.last_message_preview || '',
+                            timestamp: d.timestamp || d.last_message_at || new Date().toISOString(),
                             phone: d.external_user_id || '',
                             is_locked: d.is_locked || false
                         };

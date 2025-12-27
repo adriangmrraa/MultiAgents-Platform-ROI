@@ -96,8 +96,8 @@ async def get_tools():
 @router.get("/tenants", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
 async def list_tenants(limit: int = 100):
-   query = "SELECT id, store_name, platform FROM tenants ORDER BY id ASC LIMIT $1"
-   rows = await db.pool.fetch(query, limit)
+   query = "SELECT id, store_name FROM tenants ORDER BY id ASC LIMIT $1"
+   rows = await db.pool.fetch(query,limit)
    return [dict(r) for r in rows]
 
 class CredentialModel(BaseModel):
@@ -1031,13 +1031,13 @@ async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = N
                 "channel": r['channel'],
                 "channel_source": r['channel_source'] if 'channel_source' in r else 'whatsapp',
                 "external_user_id": r['external_user_id'],
-                "display_name": r['display_name'] or r['external_user_id'],
+                "name": r['display_name'] or r['external_user_id'],
                 "avatar_url": r['avatar_url'],
                 "status": status,
                 "is_locked": is_locked,
                 "human_override_until": lockout.isoformat() if lockout else None,
-                "last_message_at": r['last_message_at'].isoformat() if r['last_message_at'] else None,
-                "last_message_preview": r['last_message_preview'],
+                "timestamp": r['last_message_at'].isoformat() if r['last_message_at'] else None,
+                "last_message": r['last_message_preview'],
                 "meta": meta_json
             })
         logger.info(f"Auditing list_chats: Returning {len(results)} conversations")
