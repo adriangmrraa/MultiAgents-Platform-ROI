@@ -15,6 +15,7 @@ interface Agent {
     temperature: number;
     system_prompt_template: string;
     enabled_tools: string[];
+    channels?: string[];
     is_active: boolean;
     tenant_name?: string;
 }
@@ -34,7 +35,7 @@ export const Agents: React.FC = () => {
     const defaultAgent: Agent = {
         name: '', role: 'sales', tenant_id: 0, model_provider: 'openai',
         model_version: 'gpt-4o', temperature: 0.3, system_prompt_template: '',
-        enabled_tools: [], is_active: true
+        enabled_tools: ['search_specific_products'], channels: ['whatsapp', 'instagram', 'facebook', 'web'], is_active: true
     };
     const [formData, setFormData] = useState<Agent>(defaultAgent);
     const [isEditing, setIsEditing] = useState(false);
@@ -191,6 +192,46 @@ export const Agents: React.FC = () => {
                     <div className="flex items-center gap-2">
                         <input type="checkbox" checked={formData.is_active} onChange={e => setFormData({ ...formData, is_active: e.target.checked })} />
                         <label>Agente Activo</label>
+                    </div>
+
+                    <div className="form-group">
+                        <label>Canales Asignados (Ruteo)</label>
+                        <div className="flex gap-4 mt-2 mb-4">
+                            {['whatsapp', 'instagram', 'facebook', 'web'].map(ch => (
+                                <label key={ch} className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.channels?.includes(ch)}
+                                        onChange={e => {
+                                            const current = formData.channels || [];
+                                            if (e.target.checked) setFormData({ ...formData, channels: [...current, ch] });
+                                            else setFormData({ ...formData, channels: current.filter(c => c !== ch) });
+                                        }}
+                                    />
+                                    <span className="capitalize text-sm">{ch}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="form-group">
+                        <label>Herramientas Habilitadas (RAG)</label>
+                        <div className="flex flex-col gap-2 mt-2 p-2 glass rounded">
+                            {['search_specific_products', 'browse_general_storefront', 'search_by_category', 'orders', 'cupones_list'].map(tool => (
+                                <label key={tool} className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.enabled_tools?.includes(tool)}
+                                        onChange={e => {
+                                            const current = formData.enabled_tools || [];
+                                            if (e.target.checked) setFormData({ ...formData, enabled_tools: [...current, tool] });
+                                            else setFormData({ ...formData, enabled_tools: current.filter(t => t !== tool) });
+                                        }}
+                                    />
+                                    <span className="text-sm font-mono">{tool}</span>
+                                </label>
+                            ))}
+                        </div>
                     </div>
 
                     <div className="flex justify-end gap-2 mt-4">

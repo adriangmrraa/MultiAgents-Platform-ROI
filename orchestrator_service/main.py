@@ -1709,9 +1709,37 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
              else:
                   remote_history.append({"role": role, "content": content_h})
 
-        # 2b. Fetch Active Agent (Nexus v3)
-        agent_row = await db.pool.fetchrow("SELECT * FROM agents WHERE tenant_id = $1 AND is_active = TRUE ORDER BY updated_at DESC LIMIT 1", tenant_id)
+        # 2b. Fetch Active Agent (Nexus v3) with Channel Routing
+        # Logic: Prefer specific match for channel. Fallback to generic (channels is null or empty).
+        # We fetch all active agents for tenant and filter in code for flexibility (usually few agents per tenant)
+        agents = await db.pool.fetch("""
+            SELECT * FROM agents 
+            WHERE tenant_id = $1 AND is_active = TRUE 
+            ORDER BY updated_at DESC
+        """, tenant_id)
         
+        agent_row = None
+        
+        # Priority 1: Exact Channel Match
+        for a in agents:
+            channels = json.loads(a['channels']) if a.get('channels') else []
+            # Check if current_channel is in list (case insensitive)
+            if channels and channel_source.lower() in [c.lower() for c in channels]:
+                agent_row = a
+                break
+        
+        # Priority 2: Universal Agent (No channels defined or empty list)
+        if not agent_row:
+             for a in agents:
+                channels = json.loads(a['channels']) if a.get('channels') else []
+                if not channels: 
+                    agent_row = a
+                    break
+                    
+        # Priority 3: First available (Desperation Fallback)
+        if not agent_row and agents:
+            agent_row = agents[0]
+
         # 3. Construct System Prompt & Config
         if agent_row:
             # Prio 1: Agent Config

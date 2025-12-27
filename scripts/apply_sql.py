@@ -67,9 +67,8 @@ def main():
         # 1. Definir los scripts a ejecutar en sesión
         # Primero el particionamiento (Nexus Protocol)
         apply_sql_script(conn, "scripts/migration_nexus_partitioning.sql")
-        
-        # 2. Otros scripts si fueran necesarios
-        # apply_sql_script(conn, "scripts/other_migration.sql")
+        # Segundo: Soporte de Canales (Nexus Routing)
+        apply_sql_script(conn, "scripts/migration_nexus_channels.sql")
         
     finally:
         if conn:

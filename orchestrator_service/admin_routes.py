@@ -246,6 +246,7 @@ class AgentModel(BaseModel):
     temperature: float = 0.3
     system_prompt_template: Optional[str] = None
     enabled_tools: Optional[List[str]] = []
+    channels: Optional[List[str]] = ["whatsapp", "instagram", "facebook", "web"]
     config: Optional[dict] = {}
     is_active: bool = True
 
@@ -2204,11 +2205,11 @@ async def report_assisted_gmv(tenant_id: Optional[str] = None, days: int = 30):
 async def create_agent(agent: AgentModel):
     try:
         q = """
-        INSERT INTO agents (name, role, tenant_id, whatsapp_number, model_provider, model_version, temperature, system_prompt_template, enabled_tools, config, is_active, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, NOW())
+        INSERT INTO agents (name, role, tenant_id, whatsapp_number, model_provider, model_version, temperature, system_prompt_template, enabled_tools, channels, config, is_active, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12, NOW())
         RETURNING id
         """
-        row = await db.pool.fetchrow(q, agent.name, agent.role, agent.tenant_id, agent.whatsapp_number, agent.model_provider, agent.model_version, agent.temperature, agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.config), agent.is_active)
+        row = await db.pool.fetchrow(q, agent.name, agent.role, agent.tenant_id, agent.whatsapp_number, agent.model_provider, agent.model_version, agent.temperature, agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), json.dumps(agent.config), agent.is_active)
         return {"status": "ok", "id": str(row['id'])}
     except Exception as e:
         logger.error(f"Error creating agent: {e}")
@@ -2224,6 +2225,8 @@ async def list_agents():
         # Parse JSONB fields
         try: r['enabled_tools'] = json.loads(r['enabled_tools']) if r['enabled_tools'] else []
         except: r['enabled_tools'] = []
+        try: r['channels'] = json.loads(r['channels']) if r['channels'] else []
+        except: r['channels'] = []
         try: r['config'] = json.loads(r['config']) if r['config'] else {}
         except: r['config'] = {}
         # Convert UUID and datetime
@@ -2242,11 +2245,11 @@ async def update_agent(agent_id: str, agent: AgentModel):
         UPDATE agents SET 
             name=$1, role=$2, tenant_id=$3, whatsapp_number=$4, model_provider=$5, 
             model_version=$6, temperature=$7, system_prompt_template=$8, enabled_tools=$9::jsonb, 
-            config=$10::jsonb, is_active=$11, updated_at=NOW()
-        WHERE id=$12::uuid
+            channels=$10::jsonb, config=$11::jsonb, is_active=$12, updated_at=NOW()
+        WHERE id=$13::uuid
         RETURNING id
         """
-        row = await db.pool.fetchrow(q, agent.name, agent.role, agent.tenant_id, agent.whatsapp_number, agent.model_provider, agent.model_version, agent.temperature, agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.config), agent.is_active, agent_id)
+        row = await db.pool.fetchrow(q, agent.name, agent.role, agent.tenant_id, agent.whatsapp_number, agent.model_provider, agent.model_version, agent.temperature, agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), json.dumps(agent.config), agent.is_active, agent_id)
         if not row:
             raise HTTPException(404, "Agent not found")
         return {"status": "ok", "id": str(row['id'])}
