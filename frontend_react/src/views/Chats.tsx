@@ -244,6 +244,7 @@ export const Chats: React.FC = () => {
                                 onClick={() => setSelectedChatId(chat.id)}
                                 className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${selectedChatId === chat.id ? 'bg-white/10 border-l-4 border-accent' : ''}`}
                             >
+                                <div className="flex justify-between items-start mb-1">
                                     <div className="flex items-center gap-2">
                                         {getChannelIcon(chat.channel)}
                                         <span className="font-semibold text-white">{chat.name || chat.phone}</span>
@@ -254,162 +255,162 @@ export const Chats: React.FC = () => {
                                 <p className="text-sm text-secondary truncate opacity-80 pl-8">{chat.last_message}</p>
                             </div>
                         ))}
-                    {chats.length === 0 && !loading && (
-                        <div className="p-8 text-center text-secondary opacity-50">
-                            No hay conversaciones recientes.
+                        {chats.length === 0 && !loading && (
+                            <div className="p-8 text-center text-secondary opacity-50">
+                                No hay conversaciones recientes.
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Right: Chat Window */}
+                <div className={`glass flex flex-col overflow-hidden relative ${!selectedChatId ? 'hidden md:flex' : 'flex w-full h-full'}`}>
+                    {selectedChatId ? (
+                        <>
+                            {/* Header */}
+                            <div className="p-4 border-b border-white/5 flex justify-between items-center bg-black/20 shrink-0">
+                                <div className="flex items-center gap-3">
+                                    {/* Mobile Back Button */}
+                                    <button onClick={() => setSelectedChatId(null)} className="md:hidden text-white/70 hover:text-white mr-2">
+                                        ←
+                                    </button>
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                                        <User size={20} className="text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-lg flex items-center gap-2">
+                                            {chats.find(c => c.id === selectedChatId)?.name || 'Cliente'}
+                                            {chats.find(c => c.id === selectedChatId)?.is_locked && (
+                                                <span className="text-xs bg-amber-500/20 text-amber-500 border border-amber-500/50 px-2 py-0.5 rounded-full animate-pulse">
+                                                    HUMAN OVERRIDE
+                                                </span>
+                                            )}
+                                        </h3>
+                                        <span className="text-xs text-green-400 flex items-center gap-1">
+                                            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                                            {chats.find(c => c.id === selectedChatId)?.channel ? (
+                                                <span className="capitalize">{chats.find(c => c.id === selectedChatId)?.channel} User</span>
+                                            ) : 'Online'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <span className="text-sm text-secondary">Agente Activo</span>
+                                        <input type="checkbox" className="toggle" defaultChecked onChange={(e) => handleToggleHandoff(!e.target.checked)} />
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* Messages */}
+                            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-black/10 scroll-smooth">
+                                {messages.map((msg, idx) => {
+                                    // Audio Protocol Parsing
+                                    const audioMatch = msg.content.match(/\[AUDIO_URL:\s*(.*?)\s*\|\s*TRANSCRIPT:\s*(.*?)\]/);
+                                    let contentCmp = <p className="text-sm">{msg.content}</p>;
+
+                                    if (audioMatch) {
+                                        const [_, url, transcript] = audioMatch;
+                                        contentCmp = (
+                                            <div className="flex flex-col gap-2 min-w-[200px]">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-xs font-bold text-accent uppercase tracking-wider">Audio Message</span>
+                                                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                                                </div>
+                                                <audio controls className="w-full h-8 mb-1 rounded-lg">
+                                                    <source src={url} type="audio/ogg" />
+                                                    <source src={url} type="audio/mpeg" />
+                                                    Your browser does not support the audio element.
+                                                </audio>
+                                                <div className="bg-black/20 p-2 rounded border-l-2 border-accent/50">
+                                                    <p className="text-xs italic opacity-80">"{transcript}"</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    } else if (msg.media) {
+                                        // Standard Media Rendering (Chatwoot/WhatsApp)
+                                        if (msg.media.type.startsWith('image')) {
+                                            contentCmp = (
+                                                <div className="flex flex-col gap-1">
+                                                    <img src={msg.media.url} alt="Media" className="max-w-[250px] rounded-lg border border-white/10" />
+                                                    {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
+                                                </div>
+                                            );
+                                        } else if (msg.media.type.startsWith('video')) {
+                                            contentCmp = (
+                                                <div className="flex flex-col gap-1">
+                                                    <video controls className="max-w-[250px] rounded-lg border border-white/10">
+                                                        <source src={msg.media.url} type={msg.media.mime} />
+                                                        Your browser does not support video.
+                                                    </video>
+                                                    {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
+                                                </div>
+                                            );
+                                        } else if (msg.media.type.startsWith('audio')) {
+                                            contentCmp = (
+                                                <div className="flex flex-col gap-2 min-w-[200px]">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-xs font-bold text-accent uppercase tracking-wider">Audio Clip</span>
+                                                    </div>
+                                                    <audio controls className="w-full h-8 mb-1 rounded-lg">
+                                                        <source src={msg.media.url} type={msg.media.mime} />
+                                                        Your browser does not support audio.
+                                                    </audio>
+                                                    {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
+                                                </div>
+                                            );
+                                        }
+                                    }
+
+                                    return (
+                                        <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                                            <div className={`max-w-[70%] rounded-2xl p-4 ${msg.role === 'user'
+                                                ? 'bg-white/5 border border-white/10 text-white rounded-tl-none'
+                                                : 'bg-accent/20 border border-accent/30 text-white rounded-tr-none'
+                                                }`}>
+                                                {contentCmp}
+                                                <span className="text-[10px] opacity-50 mt-2 block text-right">
+                                                    {new Date(msg.timestamp).toLocaleTimeString()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                <div ref={messagesEndRef} />
+                            </div>
+
+                            {/* Input */}
+                            <div className="p-4 bg-black/20 border-t border-white/5">
+                                <div className="flex gap-2">
+                                    <textarea
+                                        className="flex-1 bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-accent outline-none resize-none h-[50px]"
+                                        placeholder="Escribir mensaje manual..."
+                                        value={newMessage}
+                                        onChange={(e) => setNewMessage(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault();
+                                                handleSendMessage();
+                                            }
+                                        }}
+                                    ></textarea>
+                                    <button
+                                        onClick={handleSendMessage}
+                                        className="bg-accent hover:bg-accent-hover text-white rounded-xl px-6 font-semibold transition-all">
+                                        Enviar
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center opacity-30">
+                            <MessageSquare size={64} className="mb-4" />
+                            <h2 className="text-2xl font-bold">Selecciona una conversación</h2>
+                            <p>El historial de chat aparecerá aquí.</p>
                         </div>
                     )}
                 </div>
             </div>
-
-            {/* Right: Chat Window */}
-            <div className={`glass flex flex-col overflow-hidden relative ${!selectedChatId ? 'hidden md:flex' : 'flex w-full h-full'}`}>
-                {selectedChatId ? (
-                    <>
-                        {/* Header */}
-                        <div className="p-4 border-b border-white/5 flex justify-between items-center bg-black/20 shrink-0">
-                            <div className="flex items-center gap-3">
-                                {/* Mobile Back Button */}
-                                <button onClick={() => setSelectedChatId(null)} className="md:hidden text-white/70 hover:text-white mr-2">
-                                    ←
-                                </button>
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-                                    <User size={20} className="text-white" />
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-lg flex items-center gap-2">
-                                        {chats.find(c => c.id === selectedChatId)?.name || 'Cliente'}
-                                        {chats.find(c => c.id === selectedChatId)?.is_locked && (
-                                            <span className="text-xs bg-amber-500/20 text-amber-500 border border-amber-500/50 px-2 py-0.5 rounded-full animate-pulse">
-                                                HUMAN OVERRIDE
-                                            </span>
-                                        )}
-                                    </h3>
-                                    <span className="text-xs text-green-400 flex items-center gap-1">
-                                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                                        {chats.find(c => c.id === selectedChatId)?.channel ? (
-                                            <span className="capitalize">{chats.find(c => c.id === selectedChatId)?.channel} User</span>
-                                        ) : 'Online'}
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-4">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <span className="text-sm text-secondary">Agente Activo</span>
-                                    <input type="checkbox" className="toggle" defaultChecked onChange={(e) => handleToggleHandoff(!e.target.checked)} />
-                                </label>
-                            </div>
-                        </div>
-
-                        {/* Messages */}
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-black/10 scroll-smooth">
-                            {messages.map((msg, idx) => {
-                                // Audio Protocol Parsing
-                                const audioMatch = msg.content.match(/\[AUDIO_URL:\s*(.*?)\s*\|\s*TRANSCRIPT:\s*(.*?)\]/);
-                                let contentCmp = <p className="text-sm">{msg.content}</p>;
-
-                                if (audioMatch) {
-                                    const [_, url, transcript] = audioMatch;
-                                    contentCmp = (
-                                        <div className="flex flex-col gap-2 min-w-[200px]">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-xs font-bold text-accent uppercase tracking-wider">Audio Message</span>
-                                                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                                            </div>
-                                            <audio controls className="w-full h-8 mb-1 rounded-lg">
-                                                <source src={url} type="audio/ogg" />
-                                                <source src={url} type="audio/mpeg" />
-                                                Your browser does not support the audio element.
-                                            </audio>
-                                            <div className="bg-black/20 p-2 rounded border-l-2 border-accent/50">
-                                                <p className="text-xs italic opacity-80">"{transcript}"</p>
-                                            </div>
-                                        </div>
-                                    );
-                                } else if (msg.media) {
-                                    // Standard Media Rendering (Chatwoot/WhatsApp)
-                                    if (msg.media.type.startsWith('image')) {
-                                        contentCmp = (
-                                            <div className="flex flex-col gap-1">
-                                                <img src={msg.media.url} alt="Media" className="max-w-[250px] rounded-lg border border-white/10" />
-                                                {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
-                                            </div>
-                                        );
-                                    } else if (msg.media.type.startsWith('video')) {
-                                        contentCmp = (
-                                            <div className="flex flex-col gap-1">
-                                                <video controls className="max-w-[250px] rounded-lg border border-white/10">
-                                                    <source src={msg.media.url} type={msg.media.mime} />
-                                                    Your browser does not support video.
-                                                </video>
-                                                {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
-                                            </div>
-                                        );
-                                    } else if (msg.media.type.startsWith('audio')) {
-                                        contentCmp = (
-                                            <div className="flex flex-col gap-2 min-w-[200px]">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-xs font-bold text-accent uppercase tracking-wider">Audio Clip</span>
-                                                </div>
-                                                <audio controls className="w-full h-8 mb-1 rounded-lg">
-                                                    <source src={msg.media.url} type={msg.media.mime} />
-                                                    Your browser does not support audio.
-                                                </audio>
-                                                {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
-                                            </div>
-                                        );
-                                    }
-                                }
-
-                                return (
-                                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                                        <div className={`max-w-[70%] rounded-2xl p-4 ${msg.role === 'user'
-                                            ? 'bg-white/5 border border-white/10 text-white rounded-tl-none'
-                                            : 'bg-accent/20 border border-accent/30 text-white rounded-tr-none'
-                                            }`}>
-                                            {contentCmp}
-                                            <span className="text-[10px] opacity-50 mt-2 block text-right">
-                                                {new Date(msg.timestamp).toLocaleTimeString()}
-                                            </span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                            <div ref={messagesEndRef} />
-                        </div>
-
-                        {/* Input */}
-                        <div className="p-4 bg-black/20 border-t border-white/5">
-                            <div className="flex gap-2">
-                                <textarea
-                                    className="flex-1 bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-accent outline-none resize-none h-[50px]"
-                                    placeholder="Escribir mensaje manual..."
-                                    value={newMessage}
-                                    onChange={(e) => setNewMessage(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault();
-                                            handleSendMessage();
-                                        }
-                                    }}
-                                ></textarea>
-                                <button
-                                    onClick={handleSendMessage}
-                                    className="bg-accent hover:bg-accent-hover text-white rounded-xl px-6 font-semibold transition-all">
-                                    Enviar
-                                </button>
-                            </div>
-                        </div>
-                    </>
-                ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-center opacity-30">
-                        <MessageSquare size={64} className="mb-4" />
-                        <h2 className="text-2xl font-bold">Selecciona una conversación</h2>
-                        <p>El historial de chat aparecerá aquí.</p>
-                    </div>
-                )}
-            </div>
-        </div>
         </div >
     );
 };
