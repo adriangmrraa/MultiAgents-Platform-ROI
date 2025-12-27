@@ -74,7 +74,6 @@ export const Chats: React.FC = () => {
     useEffect(() => {
         const loadChats = async () => {
             if (!selectedTenant) return;
-            setLoadingChats(true);
             try {
                 let url = `/admin/chats/summary?limit=100`; // Increased limit for scrolling
                 if (selectedTenant) url += `&tenant_id=${selectedTenant}`;
