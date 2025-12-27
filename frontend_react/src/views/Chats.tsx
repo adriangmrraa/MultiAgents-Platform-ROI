@@ -144,9 +144,9 @@ export const Chats: React.FC = () => {
                 console.error("Failed to load history:", err);
             }
         };
-        loadHistory();
+        loadHistory(selectedChatId);
 
-        const historyInterval = setInterval(loadHistory, 3000);
+        const historyInterval = setInterval(() => loadHistory(selectedChatId), 3000);
         return () => clearInterval(historyInterval);
     }, [selectedChatId, fetchApi]);
 
@@ -299,9 +299,9 @@ export const Chats: React.FC = () => {
                                         ←
                                     </button>
                                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center overflow-hidden border border-white/20">
-                                        {chats.find(c => c.id === selectedChatId)?.avatar_url ? (
+                                        {chats.find((c: Chat) => c.id === selectedChatId)?.avatar_url ? (
                                             <img
-                                                src={chats.find(c => c.id === selectedChatId)?.avatar_url}
+                                                src={chats.find((c: Chat) => c.id === selectedChatId)?.avatar_url}
                                                 alt="Avatar"
                                                 className="w-full h-full object-cover"
                                             />
@@ -311,8 +311,8 @@ export const Chats: React.FC = () => {
                                     </div>
                                     <div>
                                         <h3 className="font-bold text-lg flex items-center gap-2">
-                                            {chats.find(c => c.id === selectedChatId)?.name || 'Cliente'}
-                                            {chats.find(c => c.id === selectedChatId)?.is_locked && (
+                                            {chats.find((c: Chat) => c.id === selectedChatId)?.name || 'Cliente'}
+                                            {chats.find((c: Chat) => c.id === selectedChatId)?.is_locked && (
                                                 <span className="text-xs bg-amber-500/20 text-amber-500 border border-amber-500/50 px-2 py-0.5 rounded-full animate-pulse">
                                                     HUMAN OVERRIDE
                                                 </span>
@@ -320,8 +320,8 @@ export const Chats: React.FC = () => {
                                         </h3>
                                         <span className="text-xs text-green-400 flex items-center gap-1">
                                             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                                            {chats.find(c => c.id === selectedChatId)?.channel ? (
-                                                <span className="capitalize">{chats.find(c => c.id === selectedChatId)?.channel} User</span>
+                                            {chats.find((c: Chat) => c.id === selectedChatId)?.channel ? (
+                                                <span className="capitalize">{chats.find((c: Chat) => c.id === selectedChatId)?.channel} User</span>
                                             ) : 'Online'}
                                         </span>
                                     </div>

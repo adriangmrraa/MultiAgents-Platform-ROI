@@ -990,7 +990,7 @@ async def get_chats_summary(tenant_id: Optional[int] = None, channel: Optional[s
         "phone": c["external_user_id"],
         "tenant_id": c["tenant_id"],
         "channel": c["channel_source"],
-        "name": c["name"],
+        "name": c["display_name"] or c["name"],
         "last_message": c["last_message"],
         "timestamp": c["timestamp"],
         "status": c["status"]
@@ -1045,6 +1045,7 @@ async def get_chat_history(conversation_id: str):
             "role": r['role'],
             "message_type": r['message_type'],
             "content": r['content'],
+            "timestamp": r['created_at'].isoformat(),
             "created_at": r['created_at'].isoformat(),
             "human_override": r['human_override'],
             "status": r['provider_status'],
