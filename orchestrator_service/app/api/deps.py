@@ -46,7 +46,8 @@ async def get_current_tenant_webhook(request: Request, db: AsyncSession = Depend
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
     # 2. Strategy: Extract Tenant Identity
-    target_tenant_id = body.get("tenant_id")
+    # Check Query Params first (e.g. ?tenant_id=12) -> Common for Chatwoot Webhooks
+    target_tenant_id = request.query_params.get("tenant_id") or body.get("tenant_id")
     if target_tenant_id:
         try:
             result = await db.execute(select(Tenant).where(Tenant.id == int(target_tenant_id)))

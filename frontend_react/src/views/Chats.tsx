@@ -100,10 +100,14 @@ export const Chats: React.FC = () => {
         const loadChats = async () => {
             if (!selectedTenant) return;
             try {
-                let url = `/admin/chats/summary?limit=100`;
-                if (selectedTenant) url += `&tenant_id=${selectedTenant}`;
+                let url = `/admin/chats/summary?v=${refreshTrigger}`;
+                // v=refreshTrigger hack to force re-fetch
 
-                if (selectedChannel === 'human_override') {
+                console.log("DEBUG_CHATS_FETCH", { selectedTenant, selectedChannel, refreshTrigger });
+
+                if (selectedTenant) {
+                    url += `&tenant_id=${selectedTenant}`;
+                } if (selectedChannel === 'human_override') {
                     url += `&human_override=true`;
                 } else if (selectedChannel !== 'all') {
                     url += `&channel=${selectedChannel}`;
