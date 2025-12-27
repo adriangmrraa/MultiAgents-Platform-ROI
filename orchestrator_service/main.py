@@ -105,7 +105,7 @@ class ToolError(BaseModel):
 
 
 class SimpleEvent:
-    def __init__(self, from_num, text, msg_id):
+    def __init__(self, from_num, text, msg_id, channel_source='whatsapp', external_cw_id=None, external_acc_id=None):
         self.from_number = from_num
         self.text = text
         self.event_id = msg_id
@@ -113,6 +113,9 @@ class SimpleEvent:
         self.event_type = "message"
         self.media = [] # TODO: Parse media
         self.correlation_id = str(uuid.uuid4())
+        self.channel_source = channel_source
+        self.external_chatwoot_id = external_cw_id
+        self.external_account_id = external_acc_id
 
 # FastAPI App
 from contextlib import asynccontextmanager
@@ -563,8 +566,28 @@ CATALOGO:
         ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
         ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
         ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    # 15. Multi-Channel Support (Nexus v4.0 - Chatwoot Phase 1)
+    """
+    DO $$
+    BEGIN
+        -- chat_conversations evolution
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS channel_source VARCHAR(32) DEFAULT 'whatsapp';
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS external_chatwoot_id INTEGER;
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS external_account_id INTEGER;
+
+        -- customers evolution
+        ALTER TABLE customers ADD COLUMN IF NOT EXISTS instagram_psid VARCHAR(128);
+        ALTER TABLE customers ADD COLUMN IF NOT EXISTS facebook_psid VARCHAR(128);
+
+        -- Performance Indexes
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_customers_instagram') THEN
+            CREATE INDEX idx_customers_instagram ON customers (instagram_psid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_customers_facebook') THEN
+            CREATE INDEX idx_customers_facebook ON customers (facebook_psid);
+        END IF;
     EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'Schema repair failed for business_assets';
+        RAISE NOTICE 'Schema evolution for Chatwoot Phase 1 failed';
     END $$;
     """
 ]
@@ -1274,9 +1297,36 @@ async def ready():
 @app.get("/health")
 def health(): return {"status": "ok"}
 
-async def verify_internal_token(x_internal_token: str = Header(...)):
-    if INTERNAL_API_TOKEN and x_internal_token != INTERNAL_API_TOKEN:
-         raise HTTPException(status_code=401, detail="Invalid Internal Token")
+# --- Meta Compliance Endpoints ---
+
+@app.get("/api/v1/auth/meta/deauthorize")
+async def meta_deauthorize(request: Request):
+    """
+    Handles Meta deauthorization callback.
+    """
+    logger.info("meta_deauthorization_received", params=str(request.query_params))
+    # Logic to handle deauthorization (e.g., mark tenant as inactive or log)
+    return {"status": "success", "message": "Deauthorization acknowledged"}
+
+@app.post("/api/v1/auth/meta/delete-data")
+async def meta_delete_data(request: Request):
+    """
+    Handles Meta user data deletion request.
+    """
+    try:
+        body = await request.json()
+        logger.info("meta_data_deletion_requested", body=body)
+        # Protocol Omega: Ensure customer data is handled according to policy
+        # For now, we return the mandatory confirmation payload.
+        # Reference: https://developers.facebook.com/docs/development/create-an-app/app-dashboard/data-deletion-callback/
+        confirmation_code = str(uuid.uuid4())
+        return {
+            "url": f"https://nexus-platform.com/compliance/deletion-status/{confirmation_code}",
+            "confirmation_code": confirmation_code
+        }
+    except Exception as e:
+        logger.error("meta_delete_data_failed", error=str(e))
+        return {"status": "error", "message": str(e)}
 
 # Startup and Shutdown are handled by lifespan context manager.
 
@@ -1296,7 +1346,7 @@ async def chat_endpoint(
     2. Event is processed relative to that Tenant.
     """
     # 1. Verification (Internal Token) - Optional if using Webhook Secret
-    if INTERNAL_API_TOKEN.get_secret_value() and x_internal_token != INTERNAL_API_TOKEN.get_secret_value():
+    if INTERNAL_SECRET_KEY and x_internal_token != INTERNAL_SECRET_KEY:
          # Allow webhook providers if they don't send this header?
          # Usually webhooks use signature verification.
          # For now, we trust the Dependency resolution + Logic.
@@ -1314,16 +1364,30 @@ async def chat_endpoint(
     tenant_id = tenant.id
     
     # Parse payload into a consistent event object
-    # This handles the complexity of YCloud/Meta payloads
+    # This handles the complexity of YCloud/Meta payloads and now Chatwoot universal signals
     try:
-        entry = payload.get("entry", [])[0]
-        change = entry["changes"][0]["value"]
-        msg_data = change.get("messages", [])[0]
-        from_number = msg_data.get("from")
-        text_body = msg_data.get("text", {}).get("body", "")
-        message_id = msg_data.get("id")
-        
-        event = SimpleEvent(from_number, text_body, message_id)
+        if payload.get("provider") == "chatwoot":
+            # Universal Signal from Gateway
+            event = SimpleEvent(
+                from_num=payload.get("from_number"),
+                text=payload.get("text"),
+                msg_id=payload.get("event_id"),
+                channel_source=payload.get("channel_source", "whatsapp"),
+                external_cw_id=payload.get("external_chatwoot_id"),
+                external_acc_id=payload.get("external_account_id")
+            )
+            if payload.get("customer_name"):
+                event.customer_name = payload.get("customer_name")
+        else:
+            # Legacy YCloud/Meta direct hit
+            entry = payload.get("entry", [])[0]
+            change = entry["changes"][0]["value"]
+            msg_data = change.get("messages", [])[0]
+            from_number = msg_data.get("from")
+            text_body = msg_data.get("text", {}).get("body", "")
+            message_id = msg_data.get("id")
+            
+            event = SimpleEvent(from_number, text_body, message_id)
     except Exception as e:
         logger.warning("payload_parse_failed", error=str(e))
         return OrchestratorResult(status="ignore", send=False, text="Unsupported payload structure")
@@ -1335,21 +1399,51 @@ async def chat_endpoint(
         
     redis_client.set(f"processed:{event_id}", "1", ex=86400)
     
+    # --- 0. Protocol Omega: Identity Link (Find or Create Customer) ---
+    source = event.channel_source
+    customer_id = None
+    
+    if source == 'instagram':
+        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND instagram_psid = $2", tenant_id, event.from_number)
+        if not customer_id:
+            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, instagram_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.from_number, event.customer_name)
+    elif source == 'facebook':
+        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND facebook_psid = $2", tenant_id, event.from_number)
+        if not customer_id:
+            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, facebook_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.from_number, event.customer_name)
+    else:
+        # Default WhatsApp (Phone)
+        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND phone_number = $2", tenant_id, event.from_number)
+        if not customer_id:
+            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, phone_number, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.from_number, event.customer_name)
+
     # --- 1. Conversation & Lockout Management ---
-    channel = "whatsapp"
+    channel = "whatsapp" # Base routing channel
     
     # Try to find existing conversation using tenant_id from Protocol Omega
+    # Enhanced lookup: by PSID/Phone OR by Chatwoot ID
     conv = await db.pool.fetchrow("""
         SELECT id, tenant_id, status, human_override_until 
         FROM chat_conversations 
-        WHERE channel = $1 AND external_user_id = $2 AND tenant_id = $3
-    """, channel, event.from_number, tenant_id)
+        WHERE tenant_id = $1 AND (
+            (channel = $2 AND external_user_id = $3) OR
+            (external_chatwoot_id = $4 AND $4 IS NOT NULL)
+        )
+    """, tenant_id, channel, event.from_number, event.external_chatwoot_id)
     
     conv_id = None
     is_locked = False
     
     if conv:
         conv_id = conv['id']
+        # Update metadata if Chatwoot ID is now available
+        if event.external_chatwoot_id:
+            await db.pool.execute("""
+                UPDATE chat_conversations 
+                SET external_chatwoot_id = $1, external_account_id = $2, channel_source = $3, updated_at = NOW()
+                WHERE id = $4
+            """, event.external_chatwoot_id, event.external_account_id, source, conv_id)
+
         # Protocol Omega: Strict lockout check
         if conv['human_override_until'] and conv['human_override_until'] > datetime.now().astimezone():
             is_locked = True
@@ -1358,11 +1452,13 @@ async def chat_endpoint(
         new_conv_id = str(uuid.uuid4())
         conv_id = await db.pool.fetchval("""
             INSERT INTO chat_conversations (
-                id, tenant_id, channel, external_user_id, display_name, status, created_at, updated_at
+                id, tenant_id, customer_id, channel, channel_source, external_user_id, 
+                external_chatwoot_id, external_account_id, display_name, status, created_at, updated_at
             ) VALUES (
-                $1, $2, $3, $4, $5, 'open', NOW(), NOW()
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', NOW(), NOW()
             ) RETURNING id
-        """, new_conv_id, tenant_id, channel, event.from_number, event.from_number)
+        """, new_conv_id, tenant_id, customer_id, channel, source, event.from_number, event.external_chatwoot_id, 
+           event.external_account_id, event.customer_name or event.from_number)
 
     # --- 2. Handle Echoes (Human Messages from App) ---
     is_echo = False
@@ -1446,12 +1542,12 @@ async def chat_endpoint(
     await db.pool.execute("""
         INSERT INTO chat_messages (
             id, tenant_id, conversation_id, role, content, 
-            correlation_id, created_at, message_type, media_id, from_number
+            correlation_id, created_at, message_type, media_id, from_number, channel_source
         ) VALUES (
             $1, (SELECT tenant_id FROM chat_conversations WHERE id=$2), $2, 'user', $3,
-            $4, NOW(), $5, $6, $7
+            $4, NOW(), $5, $6, $7, $8
         )
-    """, uuid.uuid4(), conv_id, content, correlation_id, message_type, media_id, event.from_number)
+    """, uuid.uuid4(), conv_id, content, correlation_id, message_type, media_id, event.from_number, event.channel_source)
     
     # Update Conversation Metadata
     preview_text = content[:50] if content else f"[{message_type}]"
@@ -1483,7 +1579,7 @@ async def chat_endpoint(
 
     redis_client.setex(pending_key, 5, "active")
     
-    async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name):
+    async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_source):
         await asyncio.sleep(2)
         try:
             messages_raw = redis_client.lrange(buffer_key, 0, -1)
@@ -1491,16 +1587,16 @@ async def chat_endpoint(
             redis_client.delete(pending_key)
             if not messages_raw: return
             combined_text = "\n".join([m.decode('utf-8') for m in messages_raw])
-            await execute_agent_v3_logic(from_num, t_id, c_id, corr_id, combined_text, customer_name)
+            await execute_agent_v3_logic(from_num, t_id, c_id, corr_id, combined_text, customer_name, ch_source)
         except Exception as e:
             logger.error("buffer_processing_failed", error=str(e))
 
-    background_tasks.add_task(process_buffer_task, event.from_number, tenant_id, conv_id, correlation_id, event.customer_name)
+    background_tasks.add_task(process_buffer_task, event.from_number, tenant_id, conv_id, correlation_id, event.customer_name, event.channel_source)
     
     return OrchestratorResult(status="ok", send=False, text="Debouncing...", meta={"correlation_id": correlation_id})
 
 
-async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id, content, customer_name):
+async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id, content, customer_name, channel_source='whatsapp'):
     """
     Handles the actual long-running agent execution and response delivery.
     """
@@ -1546,6 +1642,12 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", tenant_row['store_catalog_knowledge'] or "Sin catálogo.")
         sys_template = sys_template.replace("{STORE_DESCRIPTION}", tenant_row['store_description'] or "")
         
+        # Multichannel Context Injection
+        if channel_source == 'instagram':
+            sys_template += "\n\nResponde de forma breve y visual, estás en Instagram."
+        elif channel_source == 'facebook':
+            sys_template += "\n\nResponde de forma natural, estás en Facebook."
+
         # 4. Prepare Agent Payload
         agent_request = {
             "tenant_id": tenant_id,
@@ -1553,7 +1655,8 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             "history": remote_history,
             "context": {
                 "store_name": tenant_row['store_name'],
-                "system_prompt": sys_template
+                "system_prompt": sys_template,
+                "current_channel": channel_source
             },
             "agent_config": {
                 "tools": enabled_tools,
@@ -1591,11 +1694,38 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                 # Persist Agent Response
                 metadata = msg_obj.get("metadata", {})
                 await db.pool.execute("""
-                    INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number, meta)
-                    VALUES ($1, $2, $3, 'assistant', $4, $5, NOW(), $6, $7)
+                    INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number, meta, channel_source)
+                    VALUES ($1, $2, $3, 'assistant', $4, $5, NOW(), $6, $7, (SELECT channel_source FROM chat_conversations WHERE id = $3))
                 """, uuid.uuid4(), tenant_id, conv_id, text_content, correlation_id, from_number, json.dumps(metadata))
                 
                 logger.info("agent_response_persisted", from_number=from_number)
+
+                # 6b. Delivery to Gateway (Nexus v4.0 Multichannel)
+                # Fetch full conversation metadata for delivery
+                conv_meta = await db.pool.fetchrow("""
+                    SELECT channel_source, external_chatwoot_id, external_account_id, external_user_id 
+                    FROM chat_conversations WHERE id = $1
+                """, conv_id)
+
+                if conv_meta:
+                    async with httpx.AsyncClient() as gateway_client:
+                        try:
+                            wh_url = os.getenv("WH_SERVICE_URL", "http://whatsapp_service:8002")
+                            delivery_payload = {
+                                "to": conv_meta['external_user_id'],
+                                "text": text_content,
+                                "channel_source": conv_meta['channel_source'],
+                                "external_chatwoot_id": conv_meta['external_chatwoot_id'],
+                                "external_account_id": conv_meta['external_account_id']
+                            }
+                            await gateway_client.post(
+                                f"{wh_url}/messages/send",
+                                json=delivery_payload,
+                                headers={"X-Internal-Token": str(INTERNAL_SECRET_KEY)}
+                            )
+                            logger.info("agent_response_delivered_to_gateway", channel=conv_meta['channel_source'])
+                        except Exception as de:
+                            logger.error("gateway_delivery_failed", error=str(de))
 
         # Track Usage
         await db.pool.execute("UPDATE tenants SET total_tool_calls = total_tool_calls + 1 WHERE id = $1", tenant_id)

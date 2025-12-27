@@ -1,76 +1,65 @@
-# 🛡️ Nexus v3.3 Infrastructure Guide (Protocol Omega)
+# 🛡️ Nexus v4.0 Infrastructure Guide (Protocol Omega)
 
-Este documento define la **Topología de Red** y las **Políticas de Seguridad** finales para el despliegue de Platform AI Solutions.
+Este documento define la **Topología de Red** (Submarino Presurizado) y las **Políticas de Seguridad** para el despliegue de Nexus v4.0.
 
 ---
 
-## 1. Topología de Red (Aislamiento Estricto)
+## 1. Topología de Red (Aislamiento de Microservicios)
 
-El sistema utiliza una arquitectura de **"Submarino Presurizado"**. Solo las escotillas necesarias están abiertas al exterior; el resto de la maquinaria opera en un vacío privado.
+Nexus opera sobre una red virtual privada de Docker. Solo los puntos de entrada estratégicos están expuestos.
 
-### 🌍 Zona Pública (Expuesta a Internet)
-Solo estos servicios deben tener un Dominio Público asignado en EasyPanel:
-
-| Servicio | Puerto Público | Dominio (Ejemplo) | Propósito |
-| :--- | :--- | :--- | :--- |
-| **Frontend React** | `443` (HTTPS) | `app.tusistema.com` | Acceso Administrativo (Dashboard) |
-| **Orchestrator** | `443` (HTTPS) | `api.tusistema.com` | Webhooks de WhatsApp y API Backend |
-
-### 🔒 Zona Privada (Docker Internal Network)
-Estos servicios **NO** deben tener dominio público. Se comunican exclusivamente vía la red interna de Docker (`127.0.0.11` DNS).
-
-| Servicio | Puerto Interno | Dirección DNS |
+### 🌍 Puntos de Entrada Públicos
+| Servicio | Rol | Acceso |
 | :--- | :--- | :--- |
-| **Agent Service** | `8001` | `http://agent_service:8001` |
-| **WhatsApp Service** | `8002` | `http://whatsapp_service:8002` |
-| **TiendaNube Service** | `8003` | `http://tiendanube_service:8003` |
-| **BFF Service** | `3000` | `http://bff_service:3000` |
-| **Redis** | `6379` | `redis://redis:6379` |
-| **PostgreSQL** | `5432` | `postgresql://postgres...` |
+| **Frontend React** | UI Administrativa | `https://multiagents-frontend...` |
+| **Orchestrator** | API & Webhooks | `https://multiagents-orchestrator...` |
+| **BFF Service** | Real-time Stream | `https://multiagents-bff...` |
+
+### 🔒 Red Interna (Docker DNS)
+La comunicación entre servicios no sale a internet. Se utiliza el DNS interno de Docker:
+- `http://orchestrator:8000`
+- `http://agent_service:8001`
+- `http://bff_service:3000`
+- `redis://redis:6379`
 
 ---
 
-## 2. Gestión de Secretos (Encryption at Rest)
+## 2. Gestión de Seguridad (Build-Time Protocol)
 
-### Llave Maestra (`ENCRYPTION_KEY`)
-Todas las credenciales de terceros (Tokens de Tienda Nube, API Keys de OpenAI específicas del cliente) se cifran en la base de datos usando **Fernet (Symmetric Encryption)**.
+### 🔐 El Token de Administración (`ADMIN_TOKEN`)
+En v4.0, la seguridad se basa en una coincidencia exacta de tokens entre el cliente y el servidor.
 
-### Token Interno (`INTERNAL_API_TOKEN`)
-Es el "Pasaporte Diplomático". Permite que el Orchestrator hable con el Agent Service sin pasar por la validación de usuario habitual. **Debe ser idéntico en todos los microservicios.**
+> [!IMPORTANT]
+> **Doble Configuración Requerida**:
+> 1. **Backend (Orchestrator)**: Configurado en **Environment Variables** como `ADMIN_TOKEN`.
+> 2. **Frontend (React)**: Configurado en **Build Arguments** como `VITE_ADMIN_TOKEN`. 
 
-### Token Admin (`ADMIN_TOKEN`)
-Protege el Dashboard y los endpoints administrativos.
-**CRÍTICO**: Debe ser IGUAL en el entorno del **Orchestrator** (`ADMIN_TOKEN`) y del **Frontend** (`VITE_ADMIN_TOKEN`).
+Si estos tokens no coinciden, el sistema devolverá errores `401 Unauthorized` al intentar listar agentes o tiendas.
 
----
-
-## 3. Mapa de Variables de Entorno (Producción)
-
-### Orchestrator (`:8000`)
-```bash
-ADMIN_TOKEN=...              # Acceso al Dashboard (Match con VITE_ADMIN_TOKEN)
-ENCRYPTION_KEY=...           # Cifrado DB
-INTERNAL_API_TOKEN=...       # Pasaporte Interno
-AGENT_SERVICE_URL=http://agent_service:8001
-WHATSAPP_SERVICE_URL=http://whatsapp_service:8002
-TIENDANUBE_SERVICE_URL=http://tiendanube_service:8003
-REDIS_URL=redis://redis:6379
-POSTGRES_DSN=...
-NEXUS_V3_ENABLED=true
-```
-
-### Agent Service (`:8001`)
-```bash
-OPENAI_API_KEY=...           # Llave Global (Fallback)
-INTERNAL_API_TOKEN=...       # Debe coincidir con Orchestrator
-```
-
-### Frontend React (`:80`)
-```bash
-VITE_API_BASE_URL=https://api.tusistema.com  # URL Pública del Orchestrator
-VITE_ADMIN_TOKEN=...                         # Match con Orchestrator ADMIN_TOKEN
-```
+### 🏗️ Build Arguments (Easypanel)
+Dado que el frontend es estático, el `Dockerfile` v4.0 requiere capturar las variables durante el proceso de construcción:
+- `VITE_ADMIN_TOKEN`: Tu secreto de acceso.
+- `VITE_API_BASE_URL`: URL pública del Orquestador.
 
 ---
 
-> **Nota de Seguridad**: Nunca subas archivos `.env` al repositorio. Configura estas variables directamente en el panel de despliegue (EasyPanel/Render).
+## 3. Matriz de Variables por Servicio
+
+### Orchestrator (Python)
+- `ADMIN_TOKEN`: Secreto maestro.
+- `DATABASE_URL`: Conexión de persistencia.
+- `REDIS_URL`: Sistema de mensajes/cache.
+
+### BFF (Node.js)
+- `ORCHESTRATOR_URL`: `http://orchestrator:8000` (Interno).
+- `ADMIN_TOKEN`: Debe coincidir con el Orquestador.
+
+### Frontend (Build-Time)
+- `VITE_ADMIN_TOKEN`: Se inyecta en el JS durante `npm run build`.
+- `VITE_API_BASE_URL`: Destino de todas las llamadas API.
+
+---
+
+> **Nota de Resiliencia**: Nexus v4.0 implementa **Auto-Reparación de Infraestructura**. Si un servicio cae, Docker lo reinicia automáticamente; si la base de datos se desvía, el orquestador recompone el esquema en el próximo arranque.
+
+**© 2025 Platform AI Solutions - Nexus Architecture**

@@ -16,6 +16,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 from ycloud_client import YCloudClient
+from chatwoot_client import ChatwootClient
 
 # Initialize config
 load_dotenv()
@@ -39,7 +40,7 @@ async def get_config(name: str, default: str = None) -> str:
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 f"{ORCHESTRATOR_URL}/admin/internal/credentials/{name}",
-                headers={"X-Internal-Token": INTERNAL_API_TOKEN or "internal-secret"},
+                headers={"X-Internal-Token": INTERNAL_SECRET_KEY or "internal-secret"},
                 timeout=5.0
             )
             if resp.status_code == 200:
@@ -56,9 +57,11 @@ async def get_config(name: str, default: str = None) -> str:
 YCLOUD_API_KEY = os.getenv("YCLOUD_API_KEY")
 YCLOUD_WEBHOOK_SECRET = os.getenv("YCLOUD_WEBHOOK_SECRET")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN") or "internal-secret"
+INTERNAL_SECRET_KEY = os.getenv("INTERNAL_SECRET_KEY") or os.getenv("INTERNAL_API_TOKEN") or "internal-secret"
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_SERVICE_URL", "http://orchestrator_service:8000")
+CHATWOOT_BASE_URL = os.getenv("CHATWOOT_BASE_URL")
+CHATWOOT_BOT_TOKEN = os.getenv("CHATWOOT_BOT_TOKEN")
 
 # Initialize structlog
 structlog.configure(
@@ -92,6 +95,9 @@ class OrchestratorResult(BaseModel):
 class SendMessage(BaseModel):
     to: str
     text: str
+    channel_source: str = "whatsapp"
+    external_chatwoot_id: Optional[int] = None
+    external_account_id: Optional[int] = None
 
 # FastAPI App
 app = FastAPI(
@@ -243,7 +249,7 @@ async def process_user_buffer(from_number: str, business_number: str, customer_n
             "event_type": "whatsapp.inbound_message.received", "correlation_id": correlation_id
         }
         headers = {"X-Correlation-Id": correlation_id}
-        if INTERNAL_API_TOKEN: headers["X-Internal-Token"] = INTERNAL_API_TOKEN
+        if INTERNAL_SECRET_KEY: headers["X-Internal-Token"] = INTERNAL_SECRET_KEY
              
         log.info("forwarding_to_orchestrator", text_preview=joined_text[:50])
         raw_res = await forward_to_orchestrator(inbound_event, headers)
@@ -382,7 +388,7 @@ async def ycloud_webhook(request: Request):
                 "media": media_list
              }
              headers = {"X-Correlation-Id": correlation_id}
-             if INTERNAL_API_TOKEN: headers["X-Internal-Token"] = INTERNAL_API_TOKEN
+             if INTERNAL_SECRET_KEY: headers["X-Internal-Token"] = INTERNAL_SECRET_KEY
              
              await forward_to_orchestrator(payload, headers)
              return {"status": "media_forwarded", "count": len(media_list)}
@@ -413,7 +419,7 @@ async def ycloud_webhook(request: Request):
                 "correlation_id": correlation_id
              }
              headers = {"X-Correlation-Id": correlation_id}
-             if INTERNAL_API_TOKEN: headers["X-Internal-Token"] = INTERNAL_API_TOKEN
+             if INTERNAL_SECRET_KEY: headers["X-Internal-Token"] = INTERNAL_SECRET_KEY
              
              try:
                  await forward_to_orchestrator(payload, headers)
@@ -424,11 +430,88 @@ async def ycloud_webhook(request: Request):
                  
     return {"status": "ignored_event_type", "type": event_type}
 
+@app.post("/webhooks/chatwoot")
+async def chatwoot_webhook(request: Request):
+    """
+    Universal Inbound Gateway for Chatwoot (Instagram/Facebook).
+    """
+    # 1. Security Check (Omega Protocol: Simple token validation via query param)
+    secret = request.query_params.get("secret")
+    if secret != (INTERNAL_SECRET_KEY or "internal-secret"):
+         logger.warning("chatwoot_auth_failed", reason="invalid_secret_param")
+         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    correlation_id = str(uuid.uuid4())
+    try:
+        body = await request.json()
+    except Exception as e:
+        logger.error("chatwoot_payload_error", error=str(e))
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    # Handle both single object and list (Chatwoot standard varies)
+    event = body[0] if isinstance(body, list) and body else body
+    event_type = event.get("event")
+    
+    # We only care about message creation for now
+    if event_type != "message_created":
+        return {"status": "ignored_event", "type": event_type}
+
+    message_data = event.get("conversation", {})
+    sender_data = event.get("sender", {})
+    content = event.get("content")
+    
+    # Detect Channel
+    raw_channel = message_data.get("channel", "")
+    channel_source = "whatsapp"
+    if "Instagram" in raw_channel:
+        channel_source = "instagram"
+    elif "Facebook" in raw_channel:
+        channel_source = "facebook"
+
+    # Extract PSIDs and IDs
+    psid = sender_data.get("source_id") # Source ID is the PSID (IG/FB specific)
+    chatwoot_conversation_id = message_data.get("id")
+    chatwoot_account_id = event.get("account", {}).get("id")
+
+    # Construct Orchestrator Payload (Nexus v4.0 Standard)
+    payload = {
+        "provider": "chatwoot",
+        "event_id": str(event.get("id") or uuid.uuid4()),
+        "provider_message_id": str(event.get("id") or uuid.uuid4()),
+        "from_number": psid, # Use PSID as identified in multitenant
+        "to_number": "chatwoot_inbox_" + str(message_data.get("inbox_id", "0")),
+        "text": content,
+        "customer_name": sender_data.get("name"),
+        "event_type": "chatwoot.message_created",
+        "correlation_id": correlation_id,
+        "channel_source": channel_source,
+        "external_chatwoot_id": chatwoot_conversation_id,
+        "external_account_id": chatwoot_account_id,
+        "meta": {
+             "chatwoot_inbox_id": message_data.get("inbox_id"),
+             "channel_type": raw_channel
+        }
+    }
+
+    headers = {
+        "X-Correlation-Id": correlation_id,
+        "X-Internal-Token": INTERNAL_SECRET_KEY or "internal-secret"
+    }
+
+    logger.info("forwarding_chatwoot_to_orchestrator", channel=channel_source, conv_id=chatwoot_conversation_id)
+    
+    try:
+        await forward_to_orchestrator(payload, headers)
+        return {"status": "forwarded", "correlation_id": correlation_id}
+    except Exception as e:
+        logger.error("chatwoot_forward_failed", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to reach orchestrator")
+
 @app.post("/messages/send")
 async def send_message(message: SendMessage, request: Request):
     """Internal endpoint for sending manual messages from orchestrator."""
     token = request.headers.get("X-Internal-Token")
-    if token != (INTERNAL_API_TOKEN or "internal-secret"):
+    if token != (INTERNAL_SECRET_KEY or "internal-secret"):
         raise HTTPException(status_code=401, detail="Unauthorized")
     
     correlation_id = request.headers.get("X-Correlation-Id") or str(uuid.uuid4())
@@ -447,38 +530,49 @@ async def send_message(message: SendMessage, request: Request):
     # For this MVP, let's assume global YCloud config unless passed
     
     try:
-        # Re-use send_sequence logic but for a single message
-        # We need to wrap it as OrchestratorMessage
-        orch_msg = OrchestratorMessage(text=message.text)
-        
-        # We need the 'from' number (the bot's number). 
-        # Since we don't have it in the simple body, we might need to assume it's the one in ENV or context.
-        # However, for multi-tenant, orchestrator MUST tell us.
-        # Let's inspect headers or just rely on YCloudClient to default if allowed.
-        # Actually YCloudClient requires `from_phone_number`. 
-        
-        # Updated Logic: We will parse `from_number` from query param or header if available, or fetch from config
-        business_number = request.query_params.get("from_number")
-        if not business_number:
-            # Fallback to env or fetch
-             business_number = await get_config("YCLOUD_Phone_Number_ID") # Placeholder
-        
-        if not business_number:
-             # Basic fallback
-             business_number = "default"
+        # Enrutador Inteligente (Nexus v4.0)
+        if message.channel_source in ["instagram", "facebook"]:
+            # Route via Chatwoot
+            cw_base = await get_config("CHATWOOT_BASE_URL", CHATWOOT_BASE_URL)
+            cw_token = await get_config("CHATWOOT_BOT_TOKEN", CHATWOOT_BOT_TOKEN)
+            
+            if not cw_base or not cw_token:
+                raise HTTPException(status_code=500, detail="Chatwoot configuration missing")
+            
+            cw_client = ChatwootClient(cw_base, cw_token)
+            await cw_client.send_text_message(
+                account_id=message.external_account_id,
+                conversation_id=message.external_chatwoot_id,
+                text=message.text
+            )
+            return {"status": "sent_via_chatwoot", "correlation_id": correlation_id}
+            
+        else:
+            # Route via YCloud (WhatsApp)
+            v_ycloud = await get_config("YCLOUD_API_KEY", YCLOUD_API_KEY)
+            
+            # Updated Logic: We will parse `from_number` from query param or header if available, or fetch from config
+            business_number = request.query_params.get("from_number")
+            if not business_number:
+                # Fallback to env or fetch
+                 business_number = await get_config("YCLOUD_Phone_Number_ID") # Placeholder
+            
+            if not business_number:
+                 # Basic fallback
+                 business_number = "default"
 
-        # Initialize Client
-        client = YCloudClient(v_ycloud, business_number)
-        
-        # Send
-        await client.send_text(message.to, message.text, correlation_id)
-        return {"status": "sent", "correlation_id": correlation_id}
+            # Initialize Client
+            client = YCloudClient(v_ycloud, business_number)
+            
+            # Send
+            await client.send_text(message.to, message.text, correlation_id)
+            return {"status": "sent_via_ycloud", "correlation_id": correlation_id}
         
     except Exception as e:
-        logger.error("manual_send_failed", error=str(e), correlation_id=correlation_id)
+        logger.error("manual_send_failed", error=str(e), channel=message.channel_source, correlation_id=correlation_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8002)
-
+```

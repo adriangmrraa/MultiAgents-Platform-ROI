@@ -18,7 +18,14 @@ class ChatConversation(Base, TimestampMixin):
     customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("customers.id"), index=True)
     
     channel: Mapped[str] = mapped_column(String(50), default="whatsapp")
+    channel_source: Mapped[str] = mapped_column(String(32), server_default="whatsapp", default="whatsapp")
+    
     external_user_id: Mapped[str] = mapped_column(String(50), index=True, nullable=False) # Keep for b/w compat for now
+    
+    # Chatwoot Integration
+    external_chatwoot_id: Mapped[Optional[int]] = mapped_column(Integer)
+    external_account_id: Mapped[Optional[int]] = mapped_column(Integer)
+    
     display_name: Mapped[Optional[str]] = mapped_column(String(255))
     
     status: Mapped[ChatStatus] = mapped_column(

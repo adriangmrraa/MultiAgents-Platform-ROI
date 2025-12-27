@@ -1,20 +1,21 @@
-# 🧠 Platform AI Solutions (Nexus v3.3) - Protocol Omega
+# 🧠 Platform AI Solutions (Nexus v4.0) - Protocol Omega
 
-> **Estado del Sistema**: `STABLE` | **Versión**: `v3.3.0-omega` | **Arquitectura**: `Decentralized Microservices`
+> **Estado del Sistema**: `STABLE` | **Versión**: `v4.0.0-omega` | **Arquitectura**: `Hybrid Microservices (Python/Node/React)`
 
-Este repositorio aloja el ecosistema **Nexus v3**, una plataforma de orquestación de Agentes de IA Multi-Tenant diseñada para operar con **Resiliencia Extrema (Protocolo Omega)** sobre infraestructura Docker/EasyPanel.
+Este repositorio aloja el ecosistema **Nexus v4.0**, una plataforma de orquestación de Agentes de IA Multi-Tenant diseñada para operar con **Resiliencia Extrema (Protocolo Omega)** sobre infraestructura Docker/EasyPanel.
 
 ---
 
-## 🌟 Visión: "Agentes Soberanos, Infraestructura Auto-Reparable"
+## 🌟 Visión: "Simplicidad Radical, Inteligencia Invisible"
 
-A diferencia de los chatbots tradicionales, Nexus v3 es un **Sistema Operativo para Agentes**. No solo responde mensajes, sino que gestiona identidad, memoria a largo plazo, herramientas de comercio electrónico (Tienda Nube) y canales de comunicación (WhatsApp) de forma autónoma, descentralizada y proactiva.
+A diferencia de las versiones anteriores, Nexus v4.0 abraza el **Minimalismo Interactivo**. El sistema opera con una interfaz "HUD" dinámica, ocultando la complejidad técnica para centrarse en el flujo de pensamiento de los agentes y el retorno de inversión (ROI) en tiempo real.
 
-### 🚀 Novedades v3.3 (Current Release)
-- **Zero-Config Deployment**: Despliegue automático de tiendas nuevas con escaneo de activos.
-- **Glassmorphism UI**: Interfaz administrativa React con modo oscuro y feedback háptico visual.
-- **Stateless Agents**: Arquitectura apátrida con inyección de contexto (`ContextVars`) para escalabilidad infinita.
-- **Put & Delete**: Gestión completa de Tenants y Credenciales desde la UI.
+### 🚀 Novedades v4.0 (Current Release)
+- **Nexus Minimalist Sidebar**: Navegación por hover "sensible" y tooltips dinámicos de alto detalle.
+- **Mobile HUD v2**: Interfaz adaptativa con auto-ocultamiento para control desde dispositivos móviles.
+- **Neural Stream Logs**: Visualización de pensamientos de IA vía SSE a través del BFF Service.
+- **Build-Time Injection**: Protocolo de seguridad reforzado mediante Docker Build Arguments.
+- **Protocolo de Auto-Reparación**: Auditoría automática de esquemas de base de datos y estados de salud.
 
 ---
 
@@ -22,54 +23,37 @@ A diferencia de los chatbots tradicionales, Nexus v3 es un **Sistema Operativo p
 
 | Servicio | Puerto | Tipo | Función | Tecnología |
 | :--- | :--- | :--- | :--- | :--- |
-| **Orchestrator** | `8000` | 🧠 Cerebro | Router de mensajes, Gestión de Estado, API Administrativa. | Python (FastAPI) |
-| **Agent Service** | `8001` | ⚡ Worker | Ejecuta Cadenas de Pensamiento (CoT) y usa Herramientas. | LangChain / OpenAI |
-| **WhatsApp Service** | `8002` | 👂 Gateway | Conexión con YCloud/Meta. | Python (FastAPI) |
-| **TiendaNube Service** | `8003` | 🛒 Tool | Conector oficial API Tienda Nube (Catálogos, Órdenes). | Python (FastAPI) |
-| **BFF Service** | `3000` | 🔌 Proxy | Backend for Frontend (SSE, Estado). | Node.js (Express) |
-| **Frontend React** | `80` | 🖥️ UI | Panel de Control Visual (Vite). | React / Nginx |
+| **Orchestrator** | `8000` | 🧠 Cerebro | Core de lógica, Gestión de Tenants, API Maestra. | Python (FastAPI) |
+| **BFF Service** | `3000` | 🔌 Sistema Nervioso | Backend for Frontend. Streaming SSE y Proxy inteligente. | Node.js (Express) |
+| **Agent Service** | `8001` | ⚡ Músculos | Motor de ejecución de Agentes y Herramientas. | LangChain / OpenAI |
+| **Frontend React** | `80` | 🖥️ Ojos | Panel HUD Minimalista (Vite + Protocolo Omega CSS). | React / Nginx |
+| **WhatsApp Service** | `8002` | 📞 Vínculo | Integración nativa con Meta / YCloud. | Python (FastAPI) |
+| **TiendaNube Service** | `8003` | 🛒 Brazo Mercantil | Conector de e-commerce sincronizado. | Python (FastAPI) |
 
 ---
 
-## 🚀 Guía de Inicio Rápido (Despliegue)
+## 🚀 Guía de Inicio Rápido
 
-El sistema está optimizado para **EasyPanel** (Docker Swarm/Compose).
+El sistema está optimizado para **EasyPanel**.
 
-### 1. Variables de Entorno Críticas
-Ver `INFRASTRUCTURE.md` para la lista completa y segura.
+### 1. Variables de Seguridad (Doble Factor)
+Para que el sistema funcione, el `ADMIN_TOKEN` debe coincidir en ambos lados del puente:
+1.  **Orchestrator**: Variable de entorno `ADMIN_TOKEN`.
+2.  **Frontend React**: Argumento de construcción (**Build Argument**) `VITE_ADMIN_TOKEN`.
 
-```bash
-# Seguridad
-ADMIN_TOKEN=...              # Token Maestro (Debe coincidir en Frontend y Backend)
-INTERNAL_API_TOKEN=...       # Token entre servicios (Orchestrator <-> Agent)
-ENCRYPTION_KEY=...           # 32-char string para cifrado DB
-
-# Infraestructura
-POSTGRES_DSN=postgresql+asyncpg://...
-REDIS_URL=redis://redis:6379
-
-# IA & Integraciones
-OPENAI_API_KEY=sk-...
-```
-
-### 2. Protocolo Omega (Resiliencia)
-El sistema implementa **Auto-Reparación de Esquema**. Al reiniciar el Orquestador:
-1.  Verifica la integridad de la BD.
-2.  Crea tablas faltantes (`system_events`, `active_agents`).
-3.  Migra columnas si hay desviación de esquema (Schema Drift).
+### 2. URL de API
+El Frontend debe apuntar a la URL pública del Orquestador mediante el Build Argument `VITE_API_BASE_URL`.
 
 ---
 
 ## 📚 Documentación Viva
-Para profundizar en áreas específicas, consulta las guías especializadas:
-
-*   **[INFRASTRUCTURE.md](./INFRASTRUCTURE.md)**: Mapa de puertos, seguridad de red y configuración.
-*   **[AGENTS.md](./AGENTS.md)**: Guía de desarrollo de nuevas herramientas y lógica de agentes.
-*   **[WORKFLOW_GUIDE.md](./WORKFLOW_GUIDE.md)**: Manual de operaciones para dar de alta tiendas.
-*   **[DATABASE_EVOLUTION_GUIDE.md](./DATABASE_EVOLUTION_GUIDE.md)**: Filosofía de "Schema Drift".
+*   **[INFRASTRUCTURE.md](./INFRASTRUCTURE.md)**: Topología de red y seguridad de nivel militar.
+*   **[Manual de Vuelo v4.0](./Manual%20de%20Vuelo%20Nexus%20v4.0.md)**: Operación diaria y onboarding.
+*   **[AGENTS.md](./AGENTS.md)**: Cómo programar la mente de tus agentes.
+*   **[FRONTEND_DYNAMIC_CONFIG.md](./FRONTEND_DYNAMIC_CONFIG.md)**: Detalles sobre el motor de inyección Vite.
 
 ---
 
-> **Mantenimiento**: Este proyecto sigue la metodología "GitOps". No realices cambios manuales en el servidor. Haz commit/push y deja que EasyPanel despliegue.
+> **Mantenimiento**: Este proyecto sigue la metodología "GitOps". No realices cambios manuales. Todo se despliega vía Push a `master`.
 
 **© 2025 Platform AI Solutions - Nexus Architecture**

@@ -1,64 +1,38 @@
-# Estrategia de Configuración Dinámica en Frontend (`frontend_react`)
+# Estrategia de Inyección de Configuración (Nexus v4.0)
 
-> **Estado**: `Production Ready` | **Estrategia**: `Runtime Injection` | **Framework**: `Vite + React`
+> **Estado**: `Stable` | **Estrategia**: `Build-Time Injection` | **Framework**: `Vite + Docker`
 
-Para garantizar la portabilidad del contenedor Docker (`build once, deploy anywhere`), el frontend no "quema" las variables de entorno durante el build. En su lugar, las resuelve dinámicamente en el navegador del usuario.
+Para garantizar la seguridad y el rendimiento, Nexus v4.0 utiliza una inyección de variables durante la fase de construcción (Build Time). Esto evita que el frontend "adivine" configuraciones y asegura que el token de administración esté sellado dentro del bundle de JavaScript.
 
-## 1. El Problema: Docker vs. REACT_APP_
-En un build tradicional de React, `import.meta.env.VITE_API_URL` se reemplaza por texto estático al ejecutar `npm run build`. Esto obliga a reconstruir la imagen para cada entorno (Staging, Prod, Cliente X).
+## 1. El Flujo de Construcción
 
-## 2. La Solución: Triple Redundancia
+1. **Easypanel** envía los `Build Arguments` al `Dockerfile`.
+2. El `Dockerfile` captura estos argumentos (`ARG`) y los exporta como variables de entorno (`ENV`).
+3. **Vite** lee estas variables y las reemplaza estáticamente en el código fuente durante `npm run build`.
+4. El servidor **Nginx** sirve los archivos resultantes.
 
-El hook `useApi.ts` implementa una estrategia de resolución de 3 capas para encontrar al Backend:
+## 2. Variables Requeridas
 
-### Capa 1: Inyección Explícita (Runtime)
-Si el contenedor inyecta un objeto global `window.env` (usando un script `env.sh` al inicio de Nginx), este tiene prioridad absoluta.
-```typescript
-const RUNTIME_API = window.env?.API_BASE_URL;
-```
+| Variable | Descripción |
+| :--- | :--- |
+| `VITE_ADMIN_TOKEN` | El token secreto para autenticar peticiones al Orquestador. |
+| `VITE_API_BASE_URL` | La URL pública (HTTPS) donde vive el Orquestador. |
 
-### Capa 2: Variables de Entorno (Vite)
-Si no hay inyección en runtime, se usa la variable definida en EasyPanel/Docker.
-```typescript
-const ENV_API = import.meta.env.VITE_API_BASE_URL;
-```
+## 3. Resolución de API (`useApi.ts`)
 
-### Capa 3: Inferencia Inteligente (Self-Hosting)
-Si todo falla, el frontend "adivina" dónde está el backend basándose en su propio dominio.
+Aunque se use inyección en build-time, el hook `useApi` mantiene mecanismos de resiliencia:
 
-*   Si estoy en `app.midominio.com` -> Backend en `api.midominio.com`
-*   Si estoy en `frontend.midominio.com` -> Backend en `orchestrator.midominio.com`
-*   Si estoy en `localhost` -> Backend en `http://localhost:3000` (BFF)
+1. **Prioridad Local**: Si detecta `localhost`, apunta automáticamente al puerto `3000` (BFF local).
+2. **Prioridad Inyectada**: Usa `VITE_API_BASE_URL` para despliegues de producción.
+3. **Fallback Relativo**: Usa `/api` si no hay URL definida, delegando el ruteo al proxy inverso de Nginx.
 
----
+## 4. Guía de Reparación de Errores 401
 
-## 3. Implementación Actual (`src/hooks/useApi.ts`)
-
-```typescript
-function detectApiBase() {
-    // 1. Localhost (Desarrollo)
-    if (window.location.hostname === 'localhost') return 'http://localhost:3000';
-
-    // 2. Legacy / EasyPanel Auto-Discovery
-    const host = window.location.hostname;
-    
-    // Regla: "frontend" -> "orchestrator"
-    if (host.includes('frontend')) {
-        return window.location.protocol + '//' + host.replace('frontend', 'orchestrator');
-    }
-
-    // Default: Asumir que existe un proxy inverso en /api
-    return '/api';
-}
-```
-
-## 4. Guía para Nuevos Entornos
-
-Si despliegas en un nuevo servidor, solo asegúrate de configurar estas variables en EasyPanel/Docker:
-
-*   `VITE_ADMIN_TOKEN`: Debe coincidir con el `ADMIN_TOKEN` del backend.
-*   `VITE_API_BASE_URL`: (Opcional) Solo si la inferencia automática falla.
+Si ves "Invalid Admin Token" en la consola:
+1. Verifica que el `ADMIN_TOKEN` en el Orquestador sea idéntico al `VITE_ADMIN_TOKEN` del Frontend.
+2. Asegúrate de haber agregado los valores en la sección **Build Arguments** de Easypanel, no solo en Environment.
+3. Realiza un **Redeploy** manual del frontend para reconstruir el bundle con los nuevos valores.
 
 ---
 
-> **Nota**: Esta arquitectura permite que el mismo contenedor `frontend_react:latest` funcione instantáneamente en cualquier despliegue nuevo sin reconfiguración manual.
+**© 2025 Platform AI Solutions - Nexus Frontend Architecture**
