@@ -106,21 +106,29 @@ async def get_tools():
         for t in REGISTERED_TOOLS
     ]
     
-    # 3. Merge
-    # We map DB keys to match UI expectations
-    formatted_db_tools = []
-    for t in db_tools:
-        formatted_db_tools.append({
-            "name": t['name'],
-            "description": t.get('description', 'Custom Tool'),
-            "type": t['type'],
-            "service_url": t.get('service_url'),
-            "prompt_injection": t.get('prompt_injection', ''),
-            "config": json.loads(t['config']) if t.get('config') else {},
-            "id": t['id']
-        })
+    # 3. Merge (System tools are overridden by DB tools if name matches)
+    db_tool_map = {t['name']: t for t in formatted_db_tools}
+    
+    final_tools = []
+    # System tools first (potentially modified by DB)
+    for st in system_tools:
+        if st['name'] in db_tool_map:
+            # Overwrite with DB version (prompt_injection, config, etc.)
+            st.update({
+                "prompt_injection": db_tool_map[st['name']]['prompt_injection'],
+                "config": db_tool_map[st['name']]['config'],
+                "id": db_tool_map[st['name']]['id'],
+                "service_url": db_tool_map[st['name']]['service_url'] or st['service_url']
+            })
+        final_tools.append(st)
         
-    return system_tools + formatted_db_tools
+    # Add unique DB tools
+    system_tool_names = {st['name'] for st in system_tools}
+    for dt in formatted_db_tools:
+        if dt['name'] not in system_tool_names:
+            final_tools.append(dt)
+            
+    return final_tools
 
 @router.get("/tenants", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
@@ -264,12 +272,14 @@ class ToolCreate(BaseModel):
 async def create_tool(tool: ToolCreate):
     try:
         # Check uniqueness against system tools
-        if any(t.name == tool.name for t in REGISTERED_TOOLS):
-             raise HTTPException(400, "Cannot override system tool name")
-             
+        # Protocol Omega: Allow overriding system tool INJECTIONS, but type/name are fixed.
+        is_system = any(t.name == tool.name for t in REGISTERED_TOOLS)
+        
         q = """
         INSERT INTO tools (tenant_id, name, type, config, service_url, description, prompt_injection)
         VALUES (NULL, $1, $2, $3, $4, $5, $6)
+        ON CONFLICT (tenant_id, name) WHERE tenant_id IS NULL
+        DO UPDATE SET prompt_injection = EXCLUDED.prompt_injection, config = EXCLUDED.config, description = EXCLUDED.description, service_url = EXCLUDED.service_url
         RETURNING id
         """
         # Note: NULL tenant_id implies Global Tool for now. Future: ContextVar injection.
@@ -2202,11 +2212,62 @@ async def report_assisted_gmv(tenant_id: Optional[str] = None, days: int = 30):
             "status": "degraded_mode"
         }
 
+# --- AI ASSISTANCE (Nexus v4.5) ---
+class PromptImproveRequest(BaseModel):
+    text: str
+    context: str = "tool" # 'tool' or 'catalog'
+
+@router.post("/ai/improve-prompt", dependencies=[Depends(verify_admin_token)])
+async def improve_prompt(req: PromptImproveRequest):
+    """Refines a user prompt using LLM for professional tactical clarity."""
+    try:
+        from langchain_openai import ChatOpenAI
+        from langchain.schema import SystemMessage, HumanMessage
+        
+        llm = ChatOpenAI(model="gpt-4o", temperature=0.5)
+        
+        system_msg = "Eres un experto en ingeniería de prompts para agentes de IA de e-commerce. Tu objetivo es refinar el texto del usuario para que sea claro, directo y efectivo. "
+        if req.context == "tool":
+            system_msg += "El contexto es una instrucción para una herramienta (tool injection). Debe ser imperativo y técnico."
+        else:
+            system_msg += "El contexto es la descripción de un catálogo o tienda. Debe ser estructurado, mencionando categorías y tipos de productos formalmente."
+
+        response = await llm.ainvoke([
+            SystemMessage(content=system_msg),
+            HumanMessage(content=f"Refina este texto: {req.text}")
+        ])
+        
+        return {"status": "ok", "refined_text": response.content}
+    except Exception as e:
+        logger.error(f"Error improving prompt: {e}")
+        raise HTTPException(500, f"Error improving prompt: {e}")
+
+
 # --- AGENTS CRUD (Nexus v3) ---
 @router.post("/agents", dependencies=[Depends(verify_admin_token)])
 @require_role('SuperAdmin')
 async def create_agent(agent: AgentModel):
     try:
+        # Pre-fill system prompt if empty (Protocol Omega Default)
+        if not agent.system_prompt_template:
+            agent.system_prompt_template = """Eres el asistente virtual de {STORE_NAME}.
+
+REGLAS CRÍTICAS DE RESPUESTA:
+1. SALIDA: Responde SIEMPRE con el formato JSON de OrchestratorResponse (una lista de objetos "messages").
+2. ESTILO: Tus respuestas deben ser naturales y amigables.
+3. FORMATO DE LINKS: NUNCA uses formato markdown. Escribe la URL completa en su propia línea.
+4. SECUENCIA DE BURBUJAS: Usa el sistema de 8 pasos para mostrar productos (Burbuja 1: Intro, Burbuja 2: Imagen, Burbuja 3: Detalles/Link, etc.).
+
+REGLA DE BÚSQUEDA (Protocolo Omega): 
+Para que la búsqueda en Tienda Nube funcione, DEBES construir el parámetro `q` de las herramientas usando las categorías y tipos de productos exactos que definiste en tu catálogo. 
+Ejemplo: Si el catálogo dice 'Categoría: Laptops, Marca: Dell', busca como `search_specific_products('Laptops Dell')`. Nunca inventes términos que no coincidan con la estructura de tu tienda.
+
+CONTEXTO DE LA TIENDA:
+{STORE_DESCRIPTION}
+
+CATALOGO:
+{STORE_CATALOG_KNOWLEDGE}"""
+
         q = """
         INSERT INTO agents (name, role, tenant_id, whatsapp_number, model_provider, model_version, temperature, system_prompt_template, enabled_tools, channels, config, is_active, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12, NOW())

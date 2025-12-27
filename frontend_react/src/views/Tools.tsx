@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Modal } from '../components/Modal';
-import { Wrench, Plus, Settings } from 'lucide-react';
+import { Wrench, Plus, Settings, Sparkles, HelpCircle } from 'lucide-react';
 
 interface Tool {
     name: string;
@@ -35,6 +35,24 @@ export const Tools: React.FC = () => {
         // Only allow editing descriptions/prompts for now, name is locked for consistency if system
         setFormData({ ...tool });
         setIsModalOpen(true);
+    };
+
+    const [improving, setImproving] = useState(false);
+
+    const handleImprovePrompt = async (field: string) => {
+        const text = field === 'prompt' ? formData.prompt_injection : '';
+        if (!text) return;
+        setImproving(true);
+        try {
+            const res = await fetchApi('/admin/ai/improve-prompt', { method: 'POST', body: { text, context: 'tool' } });
+            if (res.refined_text) {
+                setFormData({ ...formData, prompt_injection: res.refined_text });
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setImproving(false);
+        }
     };
 
     const openForNew = () => {
@@ -134,14 +152,29 @@ export const Tools: React.FC = () => {
                     </div>
 
                     <div className="form-group">
-                        <label>Prompt Injection (System Prompt)</label>
-                        <div className="input-hint">Estas instrucciones se inyectarán en el cerebro del Agente cuando esta herramienta esté activa.</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                Prompt Injection (System Prompt)
+                                <HelpCircle size={14} style={{ opacity: 0.5 }} title="Estas instrucciones le dicen al Agente CÓMO usar esta herramienta específica." />
+                            </label>
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ padding: '2px 8px', fontSize: '10px', height: 'auto', border: '1px solid var(--accent)' }}
+                                onClick={() => handleImprovePrompt('prompt')}
+                                disabled={improving || !formData.prompt_injection}
+                            >
+                                <Sparkles size={10} style={{ marginRight: '4px' }} />
+                                {improving ? 'Mejorando...' : 'Mejorar con IA'}
+                            </button>
+                        </div>
+                        <div className="input-hint">Define el "comportamiento táctico" del agente con esta herramienta.</div>
                         <textarea
                             rows={4}
                             value={formData.prompt_injection}
                             onChange={e => setFormData({ ...formData, prompt_injection: e.target.value })}
-                            placeholder="Ej: Úsalo siempre para dar precios exactos. No inventes datos."
-                            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', fontFamily: 'monospace' }}
+                            placeholder="Ej: Deberías usar esta herramienta siempre que el cliente pregunte por precios exactos..."
+                            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', fontFamily: 'monospace', marginTop: '8px' }}
                         />
                     </div>
 

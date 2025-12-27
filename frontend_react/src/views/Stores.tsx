@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Modal } from '../components/Modal';
-import { Store, ShoppingBag, Plus, Trash2, Edit2, CheckCircle, XCircle } from 'lucide-react';
+import { Store, ShoppingBag, Plus, Trash2, Edit2, CheckCircle, XCircle, Sparkles, HelpCircle, BookOpen } from 'lucide-react';
 
 interface Tenant {
     id?: number;
@@ -33,6 +33,25 @@ export const Stores: React.FC = () => {
         store_description: '',
         store_catalog_knowledge: ''
     });
+
+    const [improving, setImproving] = useState<string | null>(null);
+
+    const handleImprovePrompt = async (field: 'description' | 'catalog') => {
+        const text = field === 'description' ? formData.store_description : formData.store_catalog_knowledge;
+        if (!text) return;
+        setImproving(field);
+        try {
+            const res = await fetchApi('/admin/ai/improve-prompt', { method: 'POST', body: { text, context: 'catalog' } });
+            if (res.refined_text) {
+                if (field === 'description') setFormData({ ...formData, store_description: res.refined_text });
+                else setFormData({ ...formData, store_catalog_knowledge: res.refined_text });
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setImproving(null);
+        }
+    };
 
     const loadTenants = async () => {
         try {
@@ -195,9 +214,29 @@ export const Stores: React.FC = () => {
                         <input value={formData.store_website} onChange={e => setFormData({ ...formData, store_website: e.target.value })} placeholder="https://..." />
                     </div>
 
-                    <h4 style={{ color: 'var(--accent)', margin: '20px 0 10px', fontSize: '14px' }}>Base de Conocimiento (IA/RAG)</h4>
+                    <h4 style={{ color: 'var(--accent)', margin: '20px 0 10px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <BookOpen size={16} /> Base de Conocimiento (IA/RAG)
+                    </h4>
+
+                    <div className="p-3 mb-4 rounded border border-accent/20 bg-accent/5 text-xs text-secondary-foreground leading-relaxed">
+                        <strong className="text-accent underline">Guía Maestra:</strong> Para que el robot venda correctamente, usa las <strong>Categorías</strong> y <strong>Marcas</strong> exactas de tu tienda.
+                        Ejemplo: "Vendo <em>Zapatillas</em> de marca <em>Adidas</em> y <em>Nike</em>". Esto permite que la IA construya búsquedas precisas (<code>q=Zapatillas Adidas</code>) en lugar de inventar términos.
+                    </div>
+
                     <div className="form-group">
-                        <label>Descripción del Negocio</label>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label>Descripción del Negocio</label>
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ padding: '2px 8px', fontSize: '10px', height: 'auto' }}
+                                onClick={() => handleImprovePrompt('description')}
+                                disabled={improving !== null || !formData.store_description}
+                            >
+                                <Sparkles size={10} style={{ marginRight: '4px' }} />
+                                {improving === 'description' ? 'Mejorando...' : 'IA: Refinar'}
+                            </button>
+                        </div>
                         <textarea
                             className="bg-black/40 border border-white/10 rounded p-2 text-sm text-white w-full h-24 outline-none"
                             value={formData.store_description}
@@ -205,13 +244,29 @@ export const Stores: React.FC = () => {
                             placeholder="Ej: Somos una tienda de moda sustentable..."
                         />
                     </div>
+
                     <div className="form-group" style={{ marginTop: '10px' }}>
-                        <label>Guía de búsqueda de Catálogo (API Tienda Nube)</label>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                Catálogo y Estructura Técnica
+                                <HelpCircle size={14} style={{ opacity: 0.5 }} title="Lista aquí tipos de productos y marcas. Crucial para búsquedas precisas." />
+                            </label>
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ padding: '2px 8px', fontSize: '10px', height: 'auto' }}
+                                onClick={() => handleImprovePrompt('catalog')}
+                                disabled={improving !== null || !formData.store_catalog_knowledge}
+                            >
+                                <Sparkles size={10} style={{ marginRight: '4px' }} />
+                                {improving === 'catalog' ? 'Mejorando...' : 'IA: Refinar'}
+                            </button>
+                        </div>
                         <textarea
                             className="bg-black/40 border border-white/10 rounded p-2 text-sm text-white w-full h-32 outline-none"
                             value={formData.store_catalog_knowledge}
                             onChange={e => setFormData({ ...formData, store_catalog_knowledge: e.target.value })}
-                            placeholder="Ej: Si preguntan por 'vestidos', busca con el término 'summer-dress'. Los talles se buscan como 'size-XL'. Esto ayuda al agente a armar la query correcta."
+                            placeholder="Ej: Tenemos Botas, Sandalias y Zapatillas. Marcas: Nike, Adidas, Timberland."
                         />
                     </div>
 

@@ -1245,6 +1245,13 @@ ACCIÓN REQUERIDA:
     
     return handoff_msg
 
+# --- Tactical Prompt Injections (Omega Protocol Defaults) ---
+search_specific_products.prompt_injection = "TÁCTICA: Cuando busques productos, usa SIEMPRE el parámetro 'q' con el nombre del producto, categoría o marca exacta. Si el cliente pregunta de forma vaga, pide precisión antes de buscar."
+search_by_category.prompt_injection = "TÁCTICA: Selecciona la categoría correcta del catálogo para el parámetro 'category'. Si no estás seguro, usa 'search_specific_products' en su lugar."
+browse_general_storefront.prompt_injection = "TÁCTICA: Usa esta herramienta solo para dar una visión general. Si el cliente menciona un producto específico, detente y usa 'search_specific_products'."
+derivhumano.prompt_injection = "TÁCTICA: Activa esta herramienta si detectas frustración extrema, si el cliente pide hablar con un humano explícitamente, o si hay un problema técnico que no puedes resolver."
+orders.prompt_injection = "TÁCTICA: Para buscar órdenes, solicita al cliente el ID numérico sin el símbolo #. Informa el estado actual de forma clara."
+
 tools = [search_specific_products, search_by_category, browse_general_storefront, cupones_list, orders, sendemail, derivhumano]
 
 # Register tools for Code Reflection (Nexus v3)
