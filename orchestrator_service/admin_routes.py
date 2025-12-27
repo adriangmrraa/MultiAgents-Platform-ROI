@@ -971,21 +971,35 @@ async def get_logs(limit: int = 50):
 
 @router.get("/chats", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
-async def list_chats():
+async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = None):
     """
     List conversations for the WhatsApp-like view.
     Derived strictly from `chat_conversations`.
     """
-    query = """
+    where_clauses = []
+    params = []
+    
+    if tenant_id:
+        where_clauses.append(f"tenant_id = ${len(params) + 1}")
+        params.append(tenant_id)
+        
+    if channel and channel != 'all':
+        where_clauses.append(f"channel_source = ${len(params) + 1}")
+        params.append(channel)
+
+    where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+    query = f"""
         SELECT 
             id, tenant_id, channel, channel_source, external_user_id, 
             display_name, avatar_url, status, meta,
             human_override_until, last_message_at, last_message_preview
         FROM chat_conversations
+        {where_sql}
         ORDER BY last_message_at DESC NULLS LAST
     """
     try:
-        rows = await db.pool.fetch(query)
+        rows = await db.pool.fetch(query, *params)
     
         results = []
         now = datetime.now().astimezone()

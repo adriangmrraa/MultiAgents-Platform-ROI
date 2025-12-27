@@ -104,14 +104,22 @@ class ToolError(BaseModel):
     details: Optional[Dict[str, Any]] = None
 
 
+class MediaObject:
+    def __init__(self, url, provider_id, m_type, mime=None, filename=None):
+        self.url = url
+        self.provider_id = str(provider_id)
+        self.type = m_type # image, video, audio, file
+        self.mime_type = mime
+        self.file_name = filename
+
 class SimpleEvent:
-    def __init__(self, from_num, text, msg_id, channel_source='whatsapp', external_cw_id=None, external_acc_id=None, tenant_id=None):
+    def __init__(self, from_num, text, msg_id, channel_source='whatsapp', external_cw_id=None, external_acc_id=None, tenant_id=None, media=None):
         self.from_number = str(from_num) if from_num is not None else None
         self.text = str(text) if text is not None else ""
         self.event_id = str(msg_id) if msg_id is not None else None
         self.customer_name = from_num # Fallback
         self.event_type = "message"
-        self.media = [] # TODO: Parse media
+        self.media = media or []
         self.correlation_id = str(uuid.uuid4())
         self.channel_source = channel_source
         self.external_chatwoot_id = external_cw_id
@@ -1402,6 +1410,22 @@ async def chat_endpoint(
                     tid = int(tid)
                 except:
                     pass
+            # Parse Attachments
+            media_list = []
+            attachments = payload.get("attachments", [])
+            if attachments:
+                for att in attachments:
+                    m_url = att.get("data_url")
+                    m_type = att.get("file_type") # image, audio, video
+                    if m_url:
+                        media_list.append(MediaObject(
+                            url=m_url,
+                            provider_id=att.get("id"),
+                            m_type=m_type,
+                            mime=att.get("content_type"),
+                            filename=f"{m_type}_{att.get('id')}"
+                        ))
+
             event = SimpleEvent(
                 from_num=payload.get("from_number"),
                 text=payload.get("text") or payload.get("content"),
@@ -1409,7 +1433,8 @@ async def chat_endpoint(
                 channel_source=payload.get("channel_source", "whatsapp"),
                 external_cw_id=payload.get("external_chatwoot_id"),
                 external_acc_id=payload.get("external_account_id"),
-                tenant_id=tid
+                tenant_id=tid,
+                media=media_list
             )
             
             # Map Chatwoot Message Type to Role
