@@ -11,6 +11,9 @@ from db import db
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-99")
@@ -868,7 +871,7 @@ async def admin_ops(action: str, payload: dict = {}):
         transcript = []
         for r in history_rows:
             ts = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
-            sender = "BOT" if r['role'] == "assistant" else f"USER ({r.get('from_number') or 'Client'})"
+            sender = "BOT" if r['role'] == "assistant" else f"USER ({r['from_number'] or 'Client'})"
             transcript.append(f"[{ts}] {sender}:\n{r['content']}\n")
         
         transcript_text = "\n".join(transcript)
@@ -1000,7 +1003,7 @@ async def list_chats():
                 "id": str(r['id']),
                 "tenant_id": r['tenant_id'],
                 "channel": r['channel'],
-                "channel_source": r.get('channel_source', 'whatsapp'),
+                "channel_source": r['channel_source'] if 'channel_source' in r else 'whatsapp',
                 "external_user_id": r['external_user_id'],
                 "display_name": r['display_name'] or r['external_user_id'],
                 "avatar_url": r['avatar_url'],
@@ -1010,10 +1013,11 @@ async def list_chats():
                 "last_message_at": r['last_message_at'].isoformat() if r['last_message_at'] else None,
                 "last_message_preview": r['last_message_preview']
             })
+        logger.info(f"Auditing list_chats: Returning {len(results)} conversations")
         return results
 
     except Exception as e:
-        print(f"ERROR list_chats: {str(e)}")
+        logger.error(f"ERROR list_chats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to list chats: {str(e)}")
 
 @router.get("/chats/{conversation_id}/messages", dependencies=[Depends(verify_admin_token)])
@@ -1068,8 +1072,8 @@ async def get_chat_history(conversation_id: str):
             "created_at": r['created_at'].isoformat(),
             "human_override": r['human_override'],
             "status": r['provider_status'],
-            "channel_source": r.get('channel_source', 'whatsapp'),
-            "meta": json.loads(r['meta']) if r.get('meta') else {},
+            "channel_source": r['channel_source'] if 'channel_source' in r else 'whatsapp',
+            "meta": json.loads(r['meta']) if r['meta'] else {},
             "media": media_obj
         })
     return messages
@@ -2136,31 +2140,28 @@ async def get_chats_summary(
     Supports filtering by tenant and channel.
     """
     query = """
-    WITH RecentMessages AS (
-        SELECT 
-            DISTINCT ON (from_number) from_number, 
-            tenant_id,
-            channel_source,
-            customer_name,
-            created_at, 
-            content
-        FROM chat_messages
-        WHERE 1=1
+    SELECT 
+        DISTINCT ON (m.from_number) m.from_number,
+        m.tenant_id,
+        m.channel_source,
+        m.created_at,
+        m.content,
+        COALESCE(c.display_name, c.external_user_id) as customer_name
+    FROM chat_messages m
+    LEFT JOIN chat_conversations c ON m.conversation_id = c.id
+    WHERE 1=1
     """
     
     params = []
     if tenant_id:
         params.append(tenant_id)
-        query += f" AND tenant_id = ${len(params)}"
+        query += f" AND m.tenant_id = ${len(params)}"
     if channel:
         params.append(channel)
-        query += f" AND channel_source = ${len(params)}"
+        query += f" AND m.channel_source = ${len(params)}"
         
     query += """
-        ORDER BY from_number, created_at DESC
-    )
-    SELECT * FROM RecentMessages
-    ORDER BY created_at DESC
+    ORDER BY m.from_number, m.created_at DESC
     LIMIT $limit_placeholder
     """
     
@@ -2174,8 +2175,8 @@ async def get_chats_summary(
             "phone": r["from_number"],
             "tenant_id": r["tenant_id"],
             "channel": r["channel_source"],
-            "name": r.get("customer_name") or r["from_number"],
-            "last_message": r["content"][:100],
+            "name": r["customer_name"] or r["from_number"],
+            "last_message": r["content"][:100] if r["content"] else "",
             "timestamp": r["created_at"].isoformat(),
             "status": "active"
         } for r in rows]

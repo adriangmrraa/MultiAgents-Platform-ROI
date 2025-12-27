@@ -1393,6 +1393,12 @@ async def chat_endpoint(
     try:
         if payload.get("provider") == "chatwoot":
             # Universal Signal from Gateway
+            tid = payload.get("tenant_id")
+            if tid is not None:
+                try:
+                    tid = int(tid)
+                except:
+                    pass
             event = SimpleEvent(
                 from_num=payload.get("from_number"),
                 text=payload.get("text"),
@@ -1400,7 +1406,7 @@ async def chat_endpoint(
                 channel_source=payload.get("channel_source", "whatsapp"),
                 external_cw_id=payload.get("external_chatwoot_id"),
                 external_acc_id=payload.get("external_account_id"),
-                tenant_id=payload.get("tenant_id")
+                tenant_id=tid
             )
             if payload.get("customer_name"):
                 event.customer_name = payload.get("customer_name")

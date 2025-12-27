@@ -3471,6 +3471,8 @@ async function loadChats() {
 
     try {
         const chats = await adminFetch('/admin/chats');
+        console.log("Nexus Debug - Received Chats:", chats);
+
         if (!chats || chats.length === 0) {
             listContainer.innerHTML = '<div class="chat-empty">No hay conversaciones activas</div>';
             return;
