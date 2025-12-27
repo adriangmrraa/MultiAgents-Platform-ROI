@@ -1246,17 +1246,19 @@ ACCIÓN REQUERIDA:
     return handoff_msg
 
 # --- Tactical Prompt Injections (Omega Protocol Defaults) ---
-search_specific_products.prompt_injection = "TÁCTICA: Cuando busques productos, usa SIEMPRE el parámetro 'q' con el nombre del producto, categoría o marca exacta. Si el cliente pregunta de forma vaga, pide precisión antes de buscar."
-search_by_category.prompt_injection = "TÁCTICA: Selecciona la categoría correcta del catálogo para el parámetro 'category'. Si no estás seguro, usa 'search_specific_products' en su lugar."
-browse_general_storefront.prompt_injection = "TÁCTICA: Usa esta herramienta solo para dar una visión general. Si el cliente menciona un producto específico, detente y usa 'search_specific_products'."
-derivhumano.prompt_injection = "TÁCTICA: Activa esta herramienta si detectas frustración extrema, si el cliente pide hablar con un humano explícitamente, o si hay un problema técnico que no puedes resolver."
-orders.prompt_injection = "TÁCTICA: Para buscar órdenes, solicita al cliente el ID numérico sin el símbolo #. Informa el estado actual de forma clara."
+tactical_injections = {
+    "search_specific_products": "TÁCTICA: Cuando busques productos, usa SIEMPRE el parámetro 'q' con el nombre del producto, categoría o marca exacta. Si el cliente pregunta de forma vaga, pide precisión antes de buscar.",
+    "search_by_category": "TÁCTICA: Selecciona la categoría correcta del catálogo para el parámetro 'category'. Si no estás seguro, usa 'search_specific_products' en su lugar.",
+    "browse_general_storefront": "TÁCTICA: Usa esta herramienta solo para dar una visión general. Si el cliente menciona un producto específico, detente y usa 'search_specific_products'.",
+    "derivhumano": "TÁCTICA: Activa esta herramienta si detectas frustración extrema, si el cliente pide hablar con un humano explícitamente, o si hay un problema técnico que no puedes resolver.",
+    "orders": "TÁCTICA: Para buscar órdenes, solicita al cliente el ID numérico sin el símbolo #. Informa el estado actual de forma clara."
+}
 
 tools = [search_specific_products, search_by_category, browse_general_storefront, cupones_list, orders, sendemail, derivhumano]
 
 # Register tools for Code Reflection (Nexus v3)
-from admin_routes import register_tools
-register_tools(tools)
+from admin_routes import register_tools, SYSTEM_TOOL_INJECTIONS
+register_tools(tools, tactical_injections)
 
 from langchain.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
@@ -1823,6 +1825,20 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", tenant_row['store_catalog_knowledge'] or "Sin catálogo.")
         sys_template = sys_template.replace("{STORE_DESCRIPTION}", tenant_row['store_description'] or "")
         
+        # 3.5. Gather Tool Instructions (Tactical Protocol Injection)
+        # We fetch instructions for tools enabled for THIS agent from BOTH System and DB.
+        tool_instructions_list = []
+        db_tools_rows = await db.pool.fetch("SELECT name, prompt_injection FROM tools")
+        db_tool_map = {r['name']: r['prompt_injection'] for r in db_tools_rows}
+
+        for t_name in enabled_tools:
+            # Prio 1: DB override
+            if t_name in db_tool_map and db_tool_map[t_name]:
+                tool_instructions_list.append(f"[{t_name}]: {db_tool_map[t_name]}")
+            # Prio 2: System Default
+            elif t_name in SYSTEM_TOOL_INJECTIONS:
+                tool_instructions_list.append(f"[{t_name}]: {SYSTEM_TOOL_INJECTIONS[t_name]}")
+        
         # Multichannel Context Injection
         if channel_source == 'instagram':
             sys_template += "\n\nResponde de forma breve y visual, estás en Instagram. Usa emojis."
@@ -1845,6 +1861,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             },
             "agent_config": {
                 "tools": enabled_tools,
+                "tool_instructions": tool_instructions_list,
                 "model": model_config
             },
             "credentials": {

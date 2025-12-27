@@ -79,11 +79,14 @@ def require_role(role: str):
 
 # --- Tools Registry (Code Reflection) ---
 REGISTERED_TOOLS = []
+SYSTEM_TOOL_INJECTIONS = {} # Stores tactical prompt injections for system tools
 
-def register_tools(tools_list):
+def register_tools(tools_list, injections=None):
     """Populates the in-memory tools registry from main.py"""
-    global REGISTERED_TOOLS
+    global REGISTERED_TOOLS, SYSTEM_TOOL_INJECTIONS
     REGISTERED_TOOLS = tools_list
+    if injections:
+        SYSTEM_TOOL_INJECTIONS.update(injections)
 
 # --- Redis Setup for Aggregated Cache ---
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
@@ -102,7 +105,13 @@ async def get_tools():
     
     # 2. System Tools (Registered in memory)
     system_tools = [
-        {"name": t.name, "description": t.description, "type": "system", "service_url": "internal"}
+        {
+            "name": t.name, 
+            "description": t.description, 
+            "type": "system", 
+            "service_url": "internal",
+            "prompt_injection": SYSTEM_TOOL_INJECTIONS.get(t.name, "")
+        }
         for t in REGISTERED_TOOLS
     ]
     
