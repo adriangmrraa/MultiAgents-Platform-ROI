@@ -43,15 +43,29 @@ export const Chats: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     // const [loadingChats, setLoadingChats] = useState(false); // Removed unused, creating lint noise
     const scrollRef = useRef<HTMLDivElement>(null);
+    const lastChatIdRef = useRef<string | null>(null);
 
-    // Auto-scroll logic (Smart Scroll) - Refined for immediate action
+    // Auto-scroll logic (Smart Scroll) - Refined to be non-intrusive
     useEffect(() => {
         if (scrollRef.current) {
-            // Immediate scroll to bottom on first load or new message
-            scrollRef.current.scrollTo({
-                top: scrollRef.current.scrollHeight,
-                behavior: messages.length <= 1 ? 'auto' : 'smooth'
-            });
+            const isNewChat = selectedChatId !== lastChatIdRef.current;
+            lastChatIdRef.current = selectedChatId || null;
+
+            if (isNewChat) {
+                // Immediate jump to bottom on new chat selection
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            } else {
+                // For polling updates, only scroll if user is already at the bottom
+                const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+                const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+
+                if (isNearBottom) {
+                    scrollRef.current.scrollTo({
+                        top: scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }
+            }
         }
     }, [messages, selectedChatId]);
 
@@ -155,14 +169,24 @@ export const Chats: React.FC = () => {
 
     const handleToggleHandoff = async (enabled: boolean) => {
         if (!selectedChatId) return;
+
+        // Optimistic update
+        setChats(prev => prev.map(c =>
+            c.id === selectedChatId ? { ...c, is_locked: enabled } : c
+        ));
+
         try {
             await fetchApi(`/admin/conversations/${selectedChatId}/human-override`, {
                 method: 'POST',
                 body: { enabled }
             });
-            alert(`Human Override ${enabled ? 'Enabled' : 'Disabled'}`);
+            // alert(`Human Override ${enabled ? 'Enabled' : 'Disabled'}`); // Silent success for better UX
         } catch (e) {
             alert('Failed to toggle handoff');
+            // Revert on error
+            setChats(prev => prev.map(c =>
+                c.id === selectedChatId ? { ...c, is_locked: !enabled } : c
+            ));
         }
     };
 
@@ -331,7 +355,12 @@ export const Chats: React.FC = () => {
                                 <div className="flex items-center gap-4">
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <span className="text-sm text-secondary">Agente Activo</span>
-                                        <input type="checkbox" className="toggle" defaultChecked onChange={(e) => handleToggleHandoff(!e.target.checked)} />
+                                        <input
+                                            type="checkbox"
+                                            className="toggle"
+                                            checked={chats.find((c: any) => c.id === selectedChatId)?.is_locked || false}
+                                            onChange={(e) => handleToggleHandoff(e.target.checked)}
+                                        />
                                     </label>
                                 </div>
                             </div>

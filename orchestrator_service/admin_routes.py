@@ -993,7 +993,9 @@ async def get_chats_summary(tenant_id: Optional[int] = None, channel: Optional[s
         "name": c["display_name"] or c["name"],
         "last_message": c["last_message"],
         "timestamp": c["timestamp"],
-        "status": c["status"]
+        "status": c["status"],
+        "is_locked": c["is_locked"],
+        "human_override_until": c["human_override_until"]
     } for c in chats]
 
 @router.get("/chats/{conversation_id}/messages", dependencies=[Depends(verify_admin_token)])
