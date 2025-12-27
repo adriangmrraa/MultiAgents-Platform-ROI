@@ -976,6 +976,10 @@ async def get_logs(limit: int = 50):
 
 # --- HITL Chat Views (New) ---
 
+@router.get("/health")
+async def health_check():
+    return {"status": "ok", "service": "orchestrator", "layer": "admin"}
+
 @router.get("/chats", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
 async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = None):
@@ -1040,12 +1044,18 @@ async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = N
                 "last_message": r['last_message_preview'],
                 "meta": meta_json
             })
+            
+        # DEBUG: Print first result to console to verify ID presence
+        if len(results) > 0:
+            print(f"DEBUG_LIST_CHATS: First item keys: {list(results[0].keys())}")
+            print(f"DEBUG_LIST_CHATS: First ID: {results[0]['id']}")
+            
         logger.info(f"Auditing list_chats: Returning {len(results)} conversations")
         return results
 
     except Exception as e:
-        logger.error(f"ERROR list_chats: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to list chats: {str(e)}")
+        logger.error(f"Error listing chats: {e}")
+        return []
 
 @router.get("/chats/{conversation_id}/messages", dependencies=[Depends(verify_admin_token)])
 @safe_db_call

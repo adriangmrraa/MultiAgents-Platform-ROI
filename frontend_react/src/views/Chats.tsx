@@ -85,6 +85,7 @@ export const Chats: React.FC = () => {
                     // Map Backend keys to Frontend Interface
                     // Backend: id, name (or display_name), last_message, timestamp, external_user_id
                     const mappedData = data.map((d: any) => {
+                        console.log("Raw Chat Item:", d); // DEBUG RESTORED
                         return {
                             ...d,
                             id: d.id, // Explicitly preserve ID
