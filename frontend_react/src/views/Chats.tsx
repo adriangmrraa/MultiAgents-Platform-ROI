@@ -82,12 +82,10 @@ export const Chats: React.FC = () => {
                 if (selectedChannel !== 'all') url += `&channel=${selectedChannel}`;
 
                 const data = await fetchApi(url);
-                console.log("API Response (Chats):", data); // DEBUG LOG
                 if (Array.isArray(data)) {
                     // Map Backend keys to Frontend Interface
                     // Backend: id, name (or display_name), last_message, timestamp, external_user_id
                     const mappedData = data.map((d: any) => {
-                        console.log("Raw Chat Item:", d); // DEBUG LOG
                         return {
                             ...d,
                             id: d.id, // Explicitly preserve ID
@@ -258,7 +256,6 @@ export const Chats: React.FC = () => {
                             <div
                                 key={chat.id}
                                 onClick={() => {
-                                    console.log("Chat clicked:", chat.id);
                                     setSelectedChatId(chat.id);
                                 }}
                                 className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${selectedChatId === chat.id ? 'bg-white/10 border-l-4 border-accent' : ''}`}
@@ -348,14 +345,14 @@ export const Chats: React.FC = () => {
                                         );
                                     } else if (msg.media) {
                                         // Standard Media Rendering (Chatwoot/WhatsApp)
-                                        if (msg.media.type.startsWith('image')) {
+                                        if (msg.media.type && msg.media.type.startsWith('image')) {
                                             contentCmp = (
                                                 <div className="flex flex-col gap-1">
                                                     <img src={msg.media.url} alt="Media" className="max-w-[250px] rounded-lg border border-white/10" />
                                                     {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
                                                 </div>
                                             );
-                                        } else if (msg.media.type.startsWith('video')) {
+                                        } else if (msg.media.type && msg.media.type.startsWith('video')) {
                                             contentCmp = (
                                                 <div className="flex flex-col gap-1">
                                                     <video controls className="max-w-[250px] rounded-lg border border-white/10">
@@ -365,7 +362,7 @@ export const Chats: React.FC = () => {
                                                     {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
                                                 </div>
                                             );
-                                        } else if (msg.media.type.startsWith('audio')) {
+                                        } else if (msg.media.type && msg.media.type.startsWith('audio')) {
                                             contentCmp = (
                                                 <div className="flex flex-col gap-2 min-w-[200px]">
                                                     <div className="flex items-center gap-2 mb-1">
