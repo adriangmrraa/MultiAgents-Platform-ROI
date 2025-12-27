@@ -470,7 +470,12 @@ async def chatwoot_webhook(request: Request):
         channel_source = "facebook"
 
     # Extract PSIDs and IDs
-    psid = sender_data.get("source_id") # Source ID is the PSID (IG/FB specific)
+    # Protocol Omega: psid (source_id) is mandatory for social channels. If missing, fallback to sender id.
+    psid = sender_data.get("source_id") or sender_data.get("id")
+    if not psid:
+         # Last resort: use a stable identifier if possible, or fail gracefully
+         psid = f"cw_contact_{sender_data.get('id') or 'unknown'}"
+         
     chatwoot_conversation_id = message_data.get("id")
     chatwoot_account_id = event.get("account", {}).get("id")
 

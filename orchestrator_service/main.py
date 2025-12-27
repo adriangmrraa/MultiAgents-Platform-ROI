@@ -595,6 +595,25 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Schema evolution for Chatwoot Phase 1 failed';
     END $$;
+    """,
+    # 16. Structural Reinforcement (Nexus v4.2)
+    """
+    DO $$
+    BEGIN
+        -- Relieve constraints for social customers
+        ALTER TABLE customers ALTER COLUMN phone_number DROP NOT NULL;
+        
+        -- Add missing traceability to messages
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS channel_source VARCHAR(32) DEFAULT 'whatsapp';
+        
+        -- Ensure unique constraint on customers is tenant-aware and handles nulls correctly (standard index already does)
+        -- But we might want to ensure the psids are unique too
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_customers_instagram_psid_unique') THEN
+            CREATE UNIQUE INDEX idx_customers_instagram_psid_unique ON customers (tenant_id, instagram_psid) WHERE instagram_psid IS NOT NULL;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Structural reinforcement failed';
+    END $$;
     """
 ]
 
@@ -1512,12 +1531,12 @@ async def chat_endpoint(
         await db.pool.execute("""
             INSERT INTO chat_messages (
                 id, tenant_id, conversation_id, role, content, 
-                human_override, sent_from, sent_context, created_at
+                human_override, sent_from, sent_context, created_at, channel_source
             ) VALUES (
-                $1, (SELECT tenant_id FROM chat_conversations WHERE id=$2), $2, 'human_supervisor', $3,
-                TRUE, 'webhook', 'whatsapp_echo', NOW()
+                $1, $2, $3, 'assistant', $4,
+                TRUE, 'webhook', 'whatsapp_echo', NOW(), $5
             )
-        """, str(uuid.uuid4()), conv_id, event.text)
+        """, str(uuid.uuid4()), tenant_id, conv_id, event.text, event.channel_source)
         
         return OrchestratorResult(status="ignored", send=False, text="Echo handled")
         
@@ -1551,10 +1570,10 @@ async def chat_endpoint(
             id, tenant_id, conversation_id, role, content, 
             correlation_id, created_at, message_type, media_id, from_number, channel_source
         ) VALUES (
-            $1, (SELECT tenant_id FROM chat_conversations WHERE id=$2), $2, 'user', $3,
-            $4, NOW(), $5, $6, $7, $8
+            $1, $2, $3, 'user', $4,
+            $5, NOW(), $6, $7, $8, $9
         )
-    """, uuid.uuid4(), conv_id, content, correlation_id, message_type, media_id, event.from_number, event.channel_source)
+    """, uuid.uuid4(), tenant_id, conv_id, content, correlation_id, message_type, media_id, event.from_number, event.channel_source)
     
     # Update Conversation Metadata
     preview_text = content[:50] if content else f"[{message_type}]"
@@ -1651,9 +1670,13 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         
         # Multichannel Context Injection
         if channel_source == 'instagram':
-            sys_template += "\n\nResponde de forma breve y visual, estás en Instagram."
+            sys_template += "\n\nResponde de forma breve y visual, estás en Instagram. Usa emojis."
+            logger.info("agent_thinking_multichannel", channel="instagram", tone="brief_visual")
         elif channel_source == 'facebook':
-            sys_template += "\n\nResponde de forma natural, estás en Facebook."
+            sys_template += "\n\nResponde de forma natural y cercana, estás en Facebook."
+            logger.info("agent_thinking_multichannel", channel="facebook", tone="natural")
+        else:
+            logger.info("agent_thinking_multichannel", channel="whatsapp", tone="standard")
 
         # 4. Prepare Agent Payload
         agent_request = {
