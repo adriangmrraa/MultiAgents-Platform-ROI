@@ -471,8 +471,8 @@ async def chatwoot_webhook(request: Request):
 
     # Extract PSIDs and IDs
     # Protocol Omega: psid (source_id) is mandatory for social channels. If missing, fallback to sender id.
-    psid = sender_data.get("source_id") or sender_data.get("id")
-    if not psid:
+    psid = str(sender_data.get("source_id") or sender_data.get("id"))
+    if not psid or psid == 'None':
          # Last resort: use a stable identifier if possible, or fail gracefully
          psid = f"cw_contact_{sender_data.get('id') or 'unknown'}"
          

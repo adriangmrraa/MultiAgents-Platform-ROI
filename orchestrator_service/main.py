@@ -106,9 +106,9 @@ class ToolError(BaseModel):
 
 class SimpleEvent:
     def __init__(self, from_num, text, msg_id, channel_source='whatsapp', external_cw_id=None, external_acc_id=None, tenant_id=None):
-        self.from_number = from_num
-        self.text = text
-        self.event_id = msg_id
+        self.from_number = str(from_num) if from_num is not None else None
+        self.text = str(text) if text is not None else ""
+        self.event_id = str(msg_id) if msg_id is not None else None
         self.customer_name = from_num # Fallback
         self.event_type = "message"
         self.media = [] # TODO: Parse media
@@ -1444,7 +1444,7 @@ async def chat_endpoint(
             customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, phone_number, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.from_number, event.customer_name)
 
     # --- 1. Conversation & Lockout Management ---
-    channel = "whatsapp" # Base routing channel
+    channel = event.channel_source # Use real channel source
     
     # Try to find existing conversation using tenant_id from Protocol Omega
     # Enhanced lookup: by PSID/Phone OR by Chatwoot ID
@@ -1481,9 +1481,9 @@ async def chat_endpoint(
                 id, tenant_id, customer_id, channel, channel_source, external_user_id, 
                 external_chatwoot_id, external_account_id, display_name, status, created_at, updated_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', NOW(), NOW()
+                $1, $2, $3, $4, $4, $5, $6, $7, $8, 'open', NOW(), NOW()
             ) RETURNING id
-        """, new_conv_id, tenant_id, customer_id, channel, source, event.from_number, event.external_chatwoot_id, 
+        """, new_conv_id, tenant_id, customer_id, channel, event.from_number, event.external_chatwoot_id, 
            event.external_account_id, event.customer_name or event.from_number)
 
     # --- 2. Handle Echoes (Human Messages from App) ---
