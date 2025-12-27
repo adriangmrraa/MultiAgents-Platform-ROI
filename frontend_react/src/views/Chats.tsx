@@ -32,7 +32,7 @@ interface Message {
 
 export const Chats: React.FC = () => {
     const { fetchApi, loading, error } = useApi();
-    const [selectedTenant, setSelectedTenant] = useState<number | null>(9); // 9 is current active
+    const [selectedTenant, setSelectedTenant] = useState<number | null>(null); // Default to All (or wait for load)
     const [selectedChannel, setSelectedChannel] = useState<string>('all');
     const [tenants, setTenants] = useState<{ id: number, store: string }[]>([]);
     const [chats, setChats] = useState<Chat[]>([]);
@@ -73,12 +73,16 @@ export const Chats: React.FC = () => {
         }
     }, [messages, selectedChatId]);
 
-    // Auto-select first tenant if none selected
+    // Auto-select first tenant logic (Optional: Comment out if 'All' should be default)
+    /* 
     useEffect(() => {
-        if (!selectedTenant && tenants.length > 0) {
+        if (selectedTenant === null && tenants.length > 0) {
             setSelectedTenant(tenants[0].id);
         }
     }, [tenants]);
+    */
+    // We prefer default "All" (null/0) for Supervisor View
+
 
     // Load Tenants for filter
     useEffect(() => {
@@ -180,7 +184,7 @@ export const Chats: React.FC = () => {
         if (!selectedChatId) return;
 
         // Optimistic update
-        setChats(prev => prev.map(c =>
+        setChats((prev: Chat[]) => prev.map(c =>
             c.id === selectedChatId ? { ...c, is_locked: enabled } : c
         ));
 
@@ -193,7 +197,7 @@ export const Chats: React.FC = () => {
         } catch (e) {
             alert('Failed to toggle handoff');
             // Revert on error
-            setChats(prev => prev.map(c =>
+            setChats((prev: Chat[]) => prev.map(c =>
                 c.id === selectedChatId ? { ...c, is_locked: !enabled } : c
             ));
         }
@@ -224,7 +228,7 @@ export const Chats: React.FC = () => {
             }]);
 
             // Optimistic chat list reorder
-            setChats(prev => {
+            setChats((prev: Chat[]) => {
                 const existing = prev.find(c => c.id === selectedChatId);
                 if (existing) {
                     const updated = { ...existing, last_message: newMessage, timestamp: new Date().toISOString() };

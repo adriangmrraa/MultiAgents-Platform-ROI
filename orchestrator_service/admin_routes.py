@@ -124,10 +124,28 @@ async def get_tools():
 @router.get("/tenants", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
 async def list_tenants(limit: int = 100):
-   """Lista todos los inquilinos con detalles básicos."""
+   """Lista todos los inquilinos con detalles básicos.
+      Protocolo Omega: Sanitización de secretos y parseo de tipos."""
    query = "SELECT * FROM tenants ORDER BY id ASC LIMIT $1"
    rows = await db.pool.fetch(query,limit)
-   return [dict(r) for r in rows]
+   results = []
+   for row in rows:
+       r = dict(row)
+       
+       # 1. JSONB Parsing (Asyncpg returns string by default)
+       if r.get('handoff_policy') and isinstance(r['handoff_policy'], str):
+           try: r['handoff_policy'] = json.loads(r['handoff_policy'])
+           except: r['handoff_policy'] = {}
+           
+       # 2. Secret Sanitization (Prevent double-encryption loop)
+       # We return NULL so the frontend sees it as empty.
+       # If user keeps it empty, UPDATE skips it.
+       # If user types a new one, UPDATE encrypts it.
+       r['tiendanube_access_token'] = None
+       
+       results.append(r)
+       
+   return results
 
 @router.put("/tenants/{tenant_id}", dependencies=[Depends(verify_admin_token)])
 @require_role("SuperAdmin")
@@ -176,18 +194,31 @@ async def update_tenant(tenant_id: int, data: TenantModel):
 @require_role("SuperAdmin")
 async def delete_tenant(tenant_id: int):
     try:
-        # 1. Cleanup Dependent Data (Preventive Cascade)
-        # We delete agents first as they reference the tenant
+        # 1. Cleanup Dependent Data (Preventive Cascade / Deep Clean)
+        # Protocol Omega: Manual Cascade for tables lacking FK ON DELETE CASCADE
+        
+        # A. Conversations (Blocks deletion if not removed)
+        # Note: chat_messages will auto-delete via its own cascade on conversation_id
+        await db.pool.execute("DELETE FROM chat_conversations WHERE tenant_id = $1", tenant_id)
+        
+        # B. Agents
         await db.pool.execute("DELETE FROM agents WHERE tenant_id = $1", tenant_id)
         
-        # 2. Delete Tenant
+        # C. Business Assets (orphaned if not FK linked)
+        # Cast to text as business_assets uses varchar tenant_id
+        await db.pool.execute("DELETE FROM business_assets WHERE tenant_id = $1::text", str(tenant_id))
+        
+        # 2. Delete Tenant (Triggers Cascade for Credentials, Tools, Customers)
         row = await db.pool.fetchrow("DELETE FROM tenants WHERE id = $1 RETURNING id", tenant_id)
         if not row:
             raise HTTPException(404, "Tenant not found")
             
-        return {"status": "ok", "message": f"Tenant {tenant_id} and associated agents deleted"}
+        return {"status": "ok", "message": f"Tenant {tenant_id} and all associated data deleted (Deep Clean)"}
     except Exception as e:
         logger.error(f"Error deleting tenant: {e}")
+        # Improve error message for FK violations if they still happen
+        if "foreign key constraint" in str(e).lower():
+            raise HTTPException(409, f"Dependency Error: {str(e)}")
         raise HTTPException(500, str(e))
 
 
@@ -1333,8 +1364,41 @@ async def get_tenant(phone: str):
 
 @router.delete("/tenants", dependencies=[Depends(verify_admin_token)])
 async def delete_all_tenants():
-    await db.pool.execute("DELETE FROM tenants")
-    return {"status": "ok"}
+    """
+    Protocol Omega: Deep Clean / Factory Reset.
+    Wipes ALL data to start fresh.
+    """
+    try:
+        async with db.pool.acquire() as conn:
+            async with conn.transaction():
+                # 1. Transactions & History
+                await conn.execute("TRUNCATE chat_messages CASCADE")
+                await conn.execute("TRUNCATE chat_conversations CASCADE")
+                
+                # 2. Operational Assets
+                await conn.execute("TRUNCATE agents CASCADE")
+                await conn.execute("TRUNCATE business_assets CASCADE")
+                await conn.execute("TRUNCATE tenant_human_handoff_config CASCADE")
+                await conn.execute("TRUNCATE tools CASCADE")
+                
+                # 3. Core Identity
+                await conn.execute("TRUNCATE credentials CASCADE")
+                await conn.execute("TRUNCATE tenants CASCADE")
+                
+                # 4. System Logs (Optional, but "Empty Database" usually implies this)
+                await conn.execute("TRUNCATE system_events CASCADE")
+
+        # 5. Redis Flush
+        try:
+             REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
+             redis_client = redis.from_url(REDIS_URL)
+             redis_client.flushdb()
+        except: pass
+        
+        return {"status": "ok", "message": "System Factory Reset Complete (All Data Wiped)"}
+    except Exception as e:
+        logger.error(f"Deep Clean Failed: {e}")
+        raise HTTPException(500, f"Reset Failed: {e}")
 
 @router.delete("/tenants/{identifier}", dependencies=[Depends(verify_admin_token)])
 async def delete_tenant(identifier: str):
