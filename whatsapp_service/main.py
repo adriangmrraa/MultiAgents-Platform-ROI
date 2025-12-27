@@ -461,6 +461,15 @@ async def chatwoot_webhook(request: Request):
     sender_data = event.get("sender", {})
     content = event.get("content")
     
+    # Protocol Omega: Anti-Loop & Echo Filter
+    # Only process incoming messages from real users. Ignore bot/system/outgoing echoes.
+    is_private = event.get("private", False)
+    message_type = event.get("message_type") # incoming/outgoing
+    sender_type = sender_data.get("type") # contact/user/bot
+    
+    if is_private or message_type == "outgoing" or sender_type == "bot":
+        return {"status": "ignored_echo", "reason": f"type_{message_type}_sender_{sender_type}"}
+    
     # Detect Channel
     raw_channel = message_data.get("channel", "")
     channel_source = "whatsapp"

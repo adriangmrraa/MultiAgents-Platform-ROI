@@ -1732,6 +1732,20 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             
             for msg_obj in final_messages:
                 text_content = msg_obj.get("text", "")
+                
+                # Protocol Omega: JSON Sanitizer
+                # If the agent accidentally returns a JSON string as text, try to extract the real text.
+                if text_content.strip().startswith("{") and '"text":' in text_content:
+                    try:
+                        potential_json = json.loads(text_content)
+                        if isinstance(potential_json, dict):
+                            # Try to find text in different places
+                            text_content = potential_json.get("text") or \
+                                          (potential_json.get("messages", [{}])[0].get("text")) or \
+                                          text_content
+                    except:
+                        pass # Not valid JSON or parsing failed, keep original text
+                
                 if "HUMAN_HANDOFF_REQUESTED:" in text_content:
                     reason = text_content.split("HUMAN_HANDOFF_REQUESTED:")[1].strip()
                     await trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, customer_name)
