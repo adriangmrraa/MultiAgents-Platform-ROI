@@ -1,8 +1,8 @@
 # 🧠 Platform AI Solutions (Nexus v4.4) - Protocol Omega
 
-> **Estado del Sistema**: `STABLE` | **Versión**: `v4.4.0-omega` | **Arquitectura**: `Hybrid Microservices (Python/React)`
+> **Estado del Sistema**: `STABLE` | **Versión**: `v4.2-omega` | **Arquitectura**: `Hybrid Microservices (Python/React)`
 
-Este repositorio aloja el ecosistema **Nexus v4.4**, una plataforma de orquestación de Agentes de IA Omnicanal diseñada para operar con **Resiliencia Extrema (Protocolo Omega)** sobre infraestructura Docker/EasyPanel.
+Este repositorio aloja el ecosistema **Nexus v4.2**, una plataforma de orquestación de Agentes de IA Omnicanal diseñada para operar con **Resiliencia Extrema (Protocolo Omega)** sobre infraestructura Docker/EasyPanel.
 
 ---
 

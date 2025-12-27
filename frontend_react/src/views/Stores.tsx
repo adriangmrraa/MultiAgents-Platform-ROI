@@ -13,6 +13,8 @@ interface Tenant {
     store_website?: string;
     store_description?: string;
     store_catalog_knowledge?: string;
+    handoff_enabled?: boolean;
+    handoff_target_email?: string;
 }
 
 export const Stores: React.FC = () => {
@@ -212,6 +214,33 @@ export const Stores: React.FC = () => {
                             placeholder="Ej: Si preguntan por 'vestidos', busca con el término 'summer-dress'. Los talles se buscan como 'size-XL'. Esto ayuda al agente a armar la query correcta."
                         />
                     </div>
+
+                    <h4 style={{ color: 'var(--accent)', margin: '20px 0 10px', fontSize: '14px' }}>Derivación a Humano (Gmail)</h4>
+                    <div className="flex items-center gap-2 mb-4">
+                        <input
+                            type="checkbox"
+                            checked={formData.handoff_enabled}
+                            onChange={e => setFormData({ ...formData, handoff_enabled: e.target.checked })}
+                        />
+                        <label className="text-sm">Habilitar Handoff por Email</label>
+                    </div>
+                    {formData.handoff_enabled && (
+                        <div className="form-group">
+                            <label>Email de Destino (Gmail)</label>
+                            <input
+                                type="email"
+                                value={formData.handoff_target_email || ''}
+                                onChange={e => setFormData({ ...formData, handoff_target_email: e.target.value })}
+                                placeholder="humano@mitienda.com"
+                            />
+                            <p className="text-xs text-secondary mt-1">
+                                Se enviará un correo cuando el agente active la tool <code>derivhumano</code>.
+                            </p>
+                            <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-xs text-yellow-200">
+                                <strong>Nota:</strong> Asegúrate de que las credenciales SMTP estén configuradas en las variables de entorno del servidor (TIENDANUBE_SERVICE_URL).
+                            </div>
+                        </div>
+                    )}
 
                     <div style={{ marginTop: '30px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                         <button type="button" className="btn-secondary" onClick={() => setIsModalOpen(false)}>Cancelar</button>

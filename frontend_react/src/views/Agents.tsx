@@ -217,7 +217,7 @@ export const Agents: React.FC = () => {
                     <div className="form-group">
                         <label>Herramientas Habilitadas (RAG)</label>
                         <div className="flex flex-col gap-2 mt-2 p-2 glass rounded">
-                            {['search_specific_products', 'browse_general_storefront', 'search_by_category', 'orders', 'cupones_list'].map(tool => (
+                            {['search_specific_products', 'browse_general_storefront', 'search_by_category', 'orders', 'cupones_list', 'derivhumano'].map(tool => (
                                 <label key={tool} className="flex items-center gap-2 cursor-pointer">
                                     <input
                                         type="checkbox"

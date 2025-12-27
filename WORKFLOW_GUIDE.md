@@ -1,4 +1,4 @@
-# 🤝 Guía de Operaciones Nexus v3.3 (Manual de Vuelo)
+# 🤝 Guía de Operaciones Nexus v4.2 (Manual de Vuelo)
 
 Este documento es el manual operativo para el despliegue, mantenimiento y uso diario de la plataforma.
 

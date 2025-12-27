@@ -1,4 +1,4 @@
-# Nexus v4.4 Backend Technical Specification (Protocol Omega)
+# Nexus v4.2 Backend Technical Specification (Protocol Omega)
 
 > **Purpose**: This document serves as the absolute reference for Frontend-Backend integration. It defines the expected contracts, authentication methods, and data filtering logic to prevent "Ghost Code" or mapping errors.
 
@@ -100,6 +100,15 @@ Internal microservices communicate via a secret handshake.
 ---
 
 ## 3. Data Models (Schema Reference)
+
+### `customers` (PostgreSQL) - v4.2 Strict
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | UUID | Primary Key |
+| `tenant_id` | Integer | Partition Key |
+| `phone_number` | Varchar | **Nullable** (v4.2). Unique per Tenant. |
+| `instagram_psid`| Varchar | **Nullable**. Unique per Tenant. |
+| `facebook_psid` | Varchar | **Nullable**. Unique per Tenant. |
 
 ### `chat_conversations` (PostgreSQL)
 | Column | Type | Description |

@@ -1,4 +1,4 @@
-# ✈️ Manual de Vuelo Nexus v4.4 (Protocolo Omega)
+# ✈️ Manual de Vuelo Nexus v4.2 (Protocolo Omega)
 
 Este es el manual operativo oficial para la gestión del ecosistema Nexus v4.4.
 

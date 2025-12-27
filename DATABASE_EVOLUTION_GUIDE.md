@@ -1,4 +1,4 @@
-# 🧬 Database Evolution Guide (Nexus v3 - Protocol Omega)
+# 🧬 Database Evolution Guide (Nexus v4.2 - Protocol Omega)
 
 Este documento define la **Filosofía de Gestión de Datos** para la plataforma. En Nexus v3, la base de datos es la **Única Fuente de Verdad (SSOT)**.
 

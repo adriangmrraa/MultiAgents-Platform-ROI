@@ -69,6 +69,8 @@ def main():
         apply_sql_script(conn, "scripts/migration_nexus_partitioning.sql")
         # Segundo: Soporte de Canales (Nexus Routing)
         apply_sql_script(conn, "scripts/migration_nexus_channels.sql")
+        # Tercero: Soporte Handoff (Gmail)
+        apply_sql_script(conn, "scripts/migration_nexus_handoff.sql")
         
     finally:
         if conn:

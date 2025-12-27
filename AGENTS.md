@@ -9,6 +9,7 @@ El **Agent Service** es el núcleo de inteligencia "Apátrida" (Stateless) de la
 El Agente no mantiene memoria entre turnos. Cada solicitud (`POST /v1/agent/execute`) contiene:
 
 *   **Tenant Context**: Quién es la tienda, su catálogo y su Prompt del Sistema.
+*   **Channel Context**: Origen (IG/FB/WA) identificado para adaptar el tono.
 *   **Credentials**: Claves de API (OpenAI, Tienda Nube) inyectadas dinámicamente.
 *   **Chat History**: Los últimos N mensajes de la conversación.
 

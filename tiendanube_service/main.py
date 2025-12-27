@@ -124,6 +124,7 @@ class OrderSearch(BaseModel):
     q: str = Field(..., description="Search query for orders (usually order number).")
 
 class Email(BaseModel):
+    to_email: str
     subject: str
     text: str
 

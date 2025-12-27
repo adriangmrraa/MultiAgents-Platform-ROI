@@ -17,7 +17,9 @@ Nexus opera sobre una red virtual privada, protegiendo la lógica de negocio y e
 ### 🔒 Red Interna (Docker DNS)
 - `http://orchestrator:8000` (Centro de Gravedad)
 - `http://agent_service:8001` (Neural Core)
+- `http://chatwoot_service:8002` (Gateway Universal)
 - `redis://redis:6379` (Telemetry & State)
+- **Resolver DNS**: `127.0.0.11` (Docker Embedded)
 
 ---
 

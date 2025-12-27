@@ -1,4 +1,4 @@
-# Nexus v4.4 - Guía de Integración con Chatwoot
+# Nexus v4.2 - Guía de Integración con Chatwoot
 
 Este documento detalla la arquitectura, implementación y configuración de **Chatwoot** como centro de mensajería omnicanal para la plataforma Nexus.
 

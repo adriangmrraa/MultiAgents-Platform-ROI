@@ -622,6 +622,7 @@ CATALOGO:
     BEGIN
         -- Relieve constraints for social customers
         ALTER TABLE customers ALTER COLUMN phone_number DROP NOT NULL;
+        ALTER TABLE customers ALTER COLUMN phone_number SET DEFAULT NULL;
         
         -- Add missing traceability to messages
         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS channel_source VARCHAR(32) DEFAULT 'whatsapp';
@@ -1391,11 +1392,10 @@ async def chat_endpoint(
     2. Event is processed relative to that Tenant.
     """
     # 1. Verification (Internal Token) - Optional if using Webhook Secret
-    if INTERNAL_SECRET_KEY and x_internal_token != INTERNAL_SECRET_KEY:
-         # Allow webhook providers if they don't send this header?
-         # Usually webhooks use signature verification.
-         # For now, we trust the Dependency resolution + Logic.
-         pass
+    if INTERNAL_SECRET_KEY:
+         if x_internal_token != INTERNAL_SECRET_KEY:
+             logger.warning("unauthorized_webhook_attempt", reason="invalid_internal_token")
+             raise HTTPException(status_code=401, detail="Unauthorized: Invalid Internal Token")
          
     try:
         payload = await request.json()
@@ -1895,6 +1895,34 @@ async def trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, cust
     """, uuid.uuid4(), tenant_id, conv_id, f"Solicitud de derivación humana: {reason}")
     
     logger.info("notifying_admins_of_handoff", tenant_id=tenant_id, customer=customer_name)
+    
+    # Check for Gmail Handoff
+    try:
+        tenant_settings = await db.pool.fetchrow("""
+             SELECT handoff_enabled, handoff_target_email, store_name FROM tenants WHERE id = $1
+        """, tenant_id)
+        
+        if tenant_settings and tenant_settings['handoff_enabled'] and tenant_settings['handoff_target_email']:
+             # Disable handoff email if no email provided
+             email_payload = {
+                 "to_email": tenant_settings['handoff_target_email'],
+                 "subject": f"🚨 Solicitud de Humano: {tenant_settings['store_name']}",
+                 "text": f"El cliente {customer_name} ({from_number}) solicita atención humana.\nMotivo: {reason}\n\nIngresa al panel para responder: https://app.nexus-ai.com"
+             }
+             
+             # Call TiendaNube Service (Tool Holder) to send email
+             tn_service_url = os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003")
+             internal_token = os.getenv("INTERNAL_API_TOKEN", "")
+             
+             async with httpx.AsyncClient(timeout=10.0) as client:
+                 await client.post(
+                     f"{tn_service_url}/tools/sendemail", 
+                     json=email_payload,
+                     headers={"X-Internal-Secret": internal_token}
+                 )
+             logger.info("handoff_email_sent", email=tenant_settings['handoff_target_email'])
+    except Exception as e:
+        logger.error("handoff_email_failed", error=str(e))
 
 # --- Repair: Add System Prompt + Agent Columns per "Agente Soberano" Spec ---
 migration_steps.append("""

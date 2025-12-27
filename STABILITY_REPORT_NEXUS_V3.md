@@ -39,6 +39,7 @@ La plataforma ha completado exitosamente la transición al **Protocolo Omega**. 
 ## 4. Conclusion
 System is **STABLE** and **ROBUST**. Ready for Production High-Load.
 *   **[OK] Timeout Exemption**: Inferencia de IA permitida hasta 300s.
+*   **[OK] Forense DB**: Columna `phone_number` marcada como `nullable=True` (DEFAULT NULL) para soportar payloads sociales (IG/FB) sin colisiones.
 
 ### 5. Backend y Lógica
 *   **[OK] Aggregated Cache**: Analytics usa Redis (300s TTL) con Fallback automático a DB.
