@@ -12,9 +12,10 @@ Nexus v4.4 abraza el **Minimalismo Interactivo** y la **Omnicanalidad Total**. E
 
 ### 🚀 Novedades v4.4 (Current Release)
 - **Omnicanalidad Unificada**: Soporte nativo y visualización fluida para WA, IG y FB en una sola caja de chat.
+- **Persistencia de Intervención Humana**: El estado del bot se guarda en la base de datos y sobrevive a reinicios de sesión.
+- **Smart Scroll No Intrusivo**: Desplazamiento inteligente que respeta la navegación histórica del usuario.
 - **Protocolo Omega UUID**: Migración total a identificadores universales para garantizar la integridad de los datos.
 - **Auto-Reparación de Infraestructura**: El sistema audita y repara su propio esquema de base de datos en cada arranque.
-- **Desplazamiento Inteligente**: Chat HUD con auto-scroll y carga de medios optimizada.
 
 ---
 

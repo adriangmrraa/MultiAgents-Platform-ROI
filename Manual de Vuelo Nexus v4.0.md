@@ -20,13 +20,19 @@ Para activar un nuevo cliente/tienda en la plataforma:
 
 ---
 
-## 2. Gestión de Chats y Mensajería
+## 2. Gestión de Chats (UX Avanzada)
 
-Con la implementación de la **Omnicanalidad Nexus v4.4**:
+Nexus v4.4 introduce mejoras críticas en la interacción:
 
-- **Estructura de ID**: Se utilizan UUIDs estrictos para todas las conversaciones.
-- **Canales**: Soporte nativo para WhatsApp, Instagram y Facebook.
-- **Identity Link**: Todas las conversaciones están vinculadas a un `customer_id` único para trazabilidad 360°.
+### A. Smart Scroll (Desplazamiento Inteligente)
+- **Carga de Chat**: Al seleccionar una conversación, el sistema te lleva automáticamente al final.
+- **Navegación Histórica**: Si subes para leer mensajes antiguos, el sistema **no te forzará a bajar** cuando lleguen nuevos mensajes (polling).
+- **Auto-Update**: Solo volverás al fondo automáticamente si ya te encuentras al final de la charla cuando llega un mensaje nuevo.
+
+### B. Intervención Humana (Human Override)
+- **Botón "Agente Activo"**: Al desactivarlo, bloqueas la IA para ese chat específico.
+- **Persistencia Total**: El estado de bloqueo se guarda en la base de datos y se mantiene incluso tras refrescar la página (`F5`).
+- **Trazabilidad**: Los mensajes enviados manualmente quedan registrados con su `channel_source` (WA, IG, FB) para auditoría.
 
 ---
 
