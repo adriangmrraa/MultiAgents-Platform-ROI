@@ -80,13 +80,16 @@ def require_role(role: str):
 # --- Tools Registry (Code Reflection) ---
 REGISTERED_TOOLS = []
 SYSTEM_TOOL_INJECTIONS = {} # Stores tactical prompt injections for system tools
+SYSTEM_TOOL_RESPONSE_GUIDES = {} # Stores response/extraction instructions for system tools
 
-def register_tools(tools_list, injections=None):
+def register_tools(tools_list, injections=None, response_guides=None):
     """Populates the in-memory tools registry from main.py"""
-    global REGISTERED_TOOLS, SYSTEM_TOOL_INJECTIONS
+    global REGISTERED_TOOLS, SYSTEM_TOOL_INJECTIONS, SYSTEM_TOOL_RESPONSE_GUIDES
     REGISTERED_TOOLS = tools_list
     if injections:
         SYSTEM_TOOL_INJECTIONS.update(injections)
+    if response_guides:
+        SYSTEM_TOOL_RESPONSE_GUIDES.update(response_guides)
 
 # --- Redis Setup for Aggregated Cache ---
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
@@ -110,7 +113,8 @@ async def get_tools():
             "description": t.description, 
             "type": "system", 
             "service_url": "internal",
-            "prompt_injection": SYSTEM_TOOL_INJECTIONS.get(t.name, "")
+            "prompt_injection": SYSTEM_TOOL_INJECTIONS.get(t.name, ""),
+            "response_guide": SYSTEM_TOOL_RESPONSE_GUIDES.get(t.name, "")
         }
         for t in REGISTERED_TOOLS
     ]
@@ -122,9 +126,10 @@ async def get_tools():
     # System tools first (potentially modified by DB)
     for st in system_tools:
         if st['name'] in db_tool_map:
-            # Overwrite with DB version (prompt_injection, config, etc.)
+            # Overwrite with DB version (prompt_injection, response_guide, config, etc.)
             st.update({
                 "prompt_injection": db_tool_map[st['name']]['prompt_injection'],
+                "response_guide": db_tool_map[st['name']].get('response_guide', ""),
                 "config": db_tool_map[st['name']]['config'],
                 "id": db_tool_map[st['name']]['id'],
                 "service_url": db_tool_map[st['name']]['service_url'] or st['service_url']
@@ -275,6 +280,7 @@ class ToolCreate(BaseModel):
     config: Dict[str, Any]
     service_url: Optional[str] = None
     prompt_injection: Optional[str] = ""
+    response_guide: Optional[str] = ""
     description: Optional[str] = "User defined tool"
 
 @router.post("/tools", dependencies=[Depends(verify_admin_token)])
@@ -285,14 +291,19 @@ async def create_tool(tool: ToolCreate):
         is_system = any(t.name == tool.name for t in REGISTERED_TOOLS)
         
         q = """
-        INSERT INTO tools (tenant_id, name, type, config, service_url, description, prompt_injection)
-        VALUES (NULL, $1, $2, $3, $4, $5, $6)
+        INSERT INTO tools (tenant_id, name, type, config, service_url, description, prompt_injection, response_guide)
+        VALUES (NULL, $1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (tenant_id, name) WHERE tenant_id IS NULL
-        DO UPDATE SET prompt_injection = EXCLUDED.prompt_injection, config = EXCLUDED.config, description = EXCLUDED.description, service_url = EXCLUDED.service_url
+        DO UPDATE SET 
+            prompt_injection = EXCLUDED.prompt_injection, 
+            response_guide = EXCLUDED.response_guide,
+            config = EXCLUDED.config, 
+            description = EXCLUDED.description, 
+            service_url = EXCLUDED.service_url
         RETURNING id
         """
         # Note: NULL tenant_id implies Global Tool for now. Future: ContextVar injection.
-        row = await db.pool.fetchrow(q, tool.name, tool.type, json.dumps(tool.config), tool.service_url, tool.description, tool.prompt_injection)
+        row = await db.pool.fetchrow(q, tool.name, tool.type, json.dumps(tool.config), tool.service_url, tool.description, tool.prompt_injection, tool.response_guide)
         return {"status": "ok", "id": row['id']}
     except Exception as e:
         logger.error(f"Error creating tool: {e}")

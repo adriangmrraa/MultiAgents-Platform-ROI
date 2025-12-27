@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Modal } from '../components/Modal';
-import { Wrench, Plus, Settings, Sparkles, HelpCircle } from 'lucide-react';
+import { Wrench, Plus, Settings, Sparkles, HelpCircle, Activity } from 'lucide-react';
 
 interface Tool {
     name: string;
     type: string;
     service_url?: string;
     prompt_injection?: string;
+    response_guide?: string;
     config?: any;
     id?: number;
 }
@@ -19,6 +20,15 @@ const TACTICAL_TEMPLATES: Record<string, string> = {
     'orders': "TÁCTICA: Para buscar órdenes, solicita al cliente el ID numérico sin el símbolo #. \n\nInforma el estado actual de forma clara (Ej: 'Tu orden está en preparación').",
     'cupones_list': "TÁCTICA: Muestra los cupones disponibles pero aclara siempre sus condiciones de uso y fecha de expiración.",
     'derivhumano': "TÁCTICA: Activa esta herramienta si detectas frustración extrema (insultos, múltiples 'no entiendo'), o si el cliente pide hablar con un humano explícitamente. \n\nResume la situación para el operador humano."
+};
+
+const RESPONSE_TEMPLATES: Record<string, string> = {
+    'search_specific_products': "GUÍA DE RESPUESTA: Extrae el nombre, precio y URL de los productos. Si no hay stock, indícalo claramente. Presenta los 3 mejores resultados con links directos.",
+    'search_by_category': "GUÍA DE RESPUESTA: Lista de forma atractiva las subcategorías encontradas y pregunta al usuario cuál desea explorar.",
+    'browse_general_storefront': "GUÍA DE RESPUESTA: Resalta los primeros 3 productos de la tienda con sus precios y un link general 'Ver todo'.",
+    'orders': "GUÍA DE RESPUESTA: Extrae estado del pago, estado del envío y fecha de creación. Traduce tags técnicos a lenguaje humano amigable.",
+    'cupones_list': "GUÍA DE RESPUESTA: Muestra el código en negrita y explica brevemente cómo aplicarlo en el checkout.",
+    'derivhumano': "GUÍA DE RESPUESTA: Avisa al cliente que 'X' operador ha sido alertado y que recibirá una respuesta a la brevedad."
 };
 
 export const Tools: React.FC = () => {
@@ -193,6 +203,28 @@ export const Tools: React.FC = () => {
                             value={formData.prompt_injection}
                             onChange={e => setFormData({ ...formData, prompt_injection: e.target.value })}
                             placeholder="Ej: Deberías usar esta herramienta siempre que el cliente pregunte por precios exactos..."
+                            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', fontFamily: 'monospace', marginTop: '8px' }}
+                        />
+
+                        <div className="mt-6 mb-2 flex items-center gap-2 text-accent font-bold">
+                            <Activity size={16} /> 2. PROTOCOLO DE RESPUESTA / EXTRACCIÓN
+                        </div>
+                        <div className="input-hint">Define cómo el agente debe procesar la salida de esta herramienta y qué datos debe presentar al usuario.</div>
+                        {RESPONSE_TEMPLATES[formData.name] && !formData.response_guide && (
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ margin: '8px 0', fontSize: '10px', background: 'rgba(16, 185, 129, 0.1)' }}
+                                onClick={() => setFormData({ ...formData, response_guide: RESPONSE_TEMPLATES[formData.name] })}
+                            >
+                                <Plus size={10} className="mr-1" /> Cargar Plantilla Extracción para {formData.name}
+                            </button>
+                        )}
+                        <textarea
+                            rows={6}
+                            value={formData.response_guide}
+                            onChange={e => setFormData({ ...formData, response_guide: e.target.value })}
+                            placeholder="Ej: Extrae solo el ID de seguimiento y dáselo al cliente resaltado..."
                             style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', fontFamily: 'monospace', marginTop: '8px' }}
                         />
                     </div>

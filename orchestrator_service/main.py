@@ -688,6 +688,15 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Failed to repair agents table schema';
     END $$;
+    """,
+    # 20. Tool Response Guidance (Nexus v4.6.2)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE tools ADD COLUMN IF NOT EXISTS response_guide TEXT;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to add response_guide to tools';
+    END $$;
     """
 ]
 
@@ -1254,11 +1263,21 @@ tactical_injections = {
     "orders": "TÁCTICA: Para buscar órdenes, solicita al cliente el ID numérico sin el símbolo #. Informa el estado actual de forma clara."
 }
 
+# --- Response Extraction Guides (Omega Protocol Defaults) ---
+response_guides = {
+    "search_specific_products": "GUÍA DE RESPUESTA: Extrae el nombre, precio y URL de los productos. Si no hay stock, indícalo. Si hay múltiples, presenta los 3 más relevantes con links directos.",
+    "search_by_category": "GUÍA DE RESPUESTA: Resume las categorías encontradas y ofrece ver los productos destacados de cada una.",
+    "browse_general_storefront": "GUÍA DE RESPUESTA: Menciona las novedades más llamativas (primeros 3 items) y sus precios.",
+    "orders": "GUÍA DE RESPUESTA: Extrae el estado (Ej: 'Pagado', 'Enviado') y la fecha estimada de entrega si está disponible.",
+    "cupones_list": "GUÍA DE RESPUESTA: Extrae el código del cupón y el porcentaje de descuento de forma muy visible.",
+    "derivhumano": "GUÍA DE RESPUESTA: Confirma al usuario que un humano revisará el caso y que el chat quedará pausado por 24h."
+}
+
 tools = [search_specific_products, search_by_category, browse_general_storefront, cupones_list, orders, sendemail, derivhumano]
 
 # Register tools for Code Reflection (Nexus v3)
-from admin_routes import register_tools, SYSTEM_TOOL_INJECTIONS
-register_tools(tools, tactical_injections)
+from admin_routes import register_tools, SYSTEM_TOOL_INJECTIONS, SYSTEM_TOOL_RESPONSE_GUIDES
+register_tools(tools, tactical_injections, response_guides)
 
 from langchain.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
@@ -1828,16 +1847,30 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         # 3.5. Gather Tool Instructions (Tactical Protocol Injection)
         # We fetch instructions for tools enabled for THIS agent from BOTH System and DB.
         tool_instructions_list = []
-        db_tools_rows = await db.pool.fetch("SELECT name, prompt_injection FROM tools")
-        db_tool_map = {r['name']: r['prompt_injection'] for r in db_tools_rows}
+        db_tools_rows = await db.pool.fetch("SELECT name, prompt_injection, response_guide FROM tools")
+        db_tool_map = {r['name']: r for r in db_tools_rows}
 
         for t_name in enabled_tools:
+            tactical = ""
+            response_g = ""
+            
             # Prio 1: DB override
-            if t_name in db_tool_map and db_tool_map[t_name]:
-                tool_instructions_list.append(f"[{t_name}]: {db_tool_map[t_name]}")
-            # Prio 2: System Default
-            elif t_name in SYSTEM_TOOL_INJECTIONS:
-                tool_instructions_list.append(f"[{t_name}]: {SYSTEM_TOOL_INJECTIONS[t_name]}")
+            if t_name in db_tool_map:
+                tactical = db_tool_map[t_name]['prompt_injection']
+                response_g = db_tool_map[t_name].get('response_guide')
+            
+            # Prio 2: System Default (if DB is empty)
+            if not tactical and t_name in SYSTEM_TOOL_INJECTIONS:
+                tactical = SYSTEM_TOOL_INJECTIONS[t_name]
+            if not response_g and t_name in SYSTEM_TOOL_RESPONSE_GUIDES:
+                response_g = SYSTEM_TOOL_RESPONSE_GUIDES[t_name]
+                
+            instr = f"[{t_name}]:"
+            if tactical: instr += f" TÁCTICA: {tactical}"
+            if response_g: instr += f" RESPUESTA/EXTRACCIÓN: {response_g}"
+            
+            if tactical or response_g:
+                tool_instructions_list.append(instr)
         
         # Multichannel Context Injection
         if channel_source == 'instagram':
