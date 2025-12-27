@@ -8,7 +8,7 @@ Resumen de estrategia para avanzar seguro:
 • Paso Actual: Terminar la reparación estructural (Base de Datos).
 • Paso Siguiente: Implementar los Endpoints Administrativos (/admin/analytics/summary, etc.) para eliminar las "Interfaces Fantasma".
 • Paso Final: Configurar las herramientas de usabilidad para dueños de tiendas (Tienda Nube)
-
+    
 inalmente, ajusta el nginx.conf para usar el Docker Internal DNS Resolver (127.0.0.11) con una re-validación de 30 segundos. Esto asegura que el sistema sea Auto-reparable ante reinicios de contenedores, cumpliendo con la Variante A de despliegue
 
 
