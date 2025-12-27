@@ -3493,8 +3493,16 @@ async function loadChats() {
             const statusClass = isLocked ? 'status-locked' : 'status-auto';
             const isActive = activeChatId === chat.id;
 
+            const channelSource = chat.channel_source || 'whatsapp';
+            let channelIcon = '📱'; // Default WhatsApp
+            if (channelSource === 'instagram') channelIcon = '📸';
+            if (channelSource === 'facebook') channelIcon = '👥';
+
             const innerHTML = `
-                <div class="chat-item-avatar">${chat.avatar_url || '👤'}</div>
+                <div class="chat-item-avatar">
+                    ${chat.avatar_url || '👤'}
+                    <span class="channel-badge" title="${channelSource}">${channelIcon}</span>
+                </div>
                 <div class="chat-item-info">
                     <div class="chat-item-header">
                         <span class="chat-name">${chat.display_name || chat.external_user_id}</span>
@@ -3706,10 +3714,18 @@ function createBubbleElement(msg, container) {
 
     const timeStr = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+    // Multichannel Tag (Omnichannel Memory)
+    let channelTag = '';
+    if (msg.channel_source && msg.channel_source !== 'whatsapp') {
+        const tagColor = msg.channel_source === 'instagram' ? '#E1306C' : '#4267B2';
+        channelTag = `<span style="font-size: 0.7em; font-weight: bold; color: ${tagColor}; margin-right: 8px;">[${msg.channel_source.toUpperCase()}]</span>`;
+    }
+
     // Meta Label / Icon + Thinking Log Toggle if applicable
     let thinkingToggle = '';
-    // if (msg.meta && msg.meta.reasoning) { // Backend to be updated
-    if (isAssistant && msg.content && !isHuman) { // Temporary: Show for all assistant messages to test UI
+    const hasReasoning = msg.meta && msg.meta.reasoning && msg.meta.reasoning.length > 0;
+
+    if (isAssistant && hasReasoning) {
         thinkingToggle = `
             <button class="thinking-log-toggle" onclick="showThinkingLog('${msg.id}')" title="Ver razonamiento">
                 🧠
@@ -3718,8 +3734,8 @@ function createBubbleElement(msg, container) {
     }
 
     div.innerHTML = `
-        <div class="message-label">
-            ${metaLabel ? `<span>${metaLabel}</span>` : ''}
+        <div class="message-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <div>${channelTag}</div>
             ${thinkingToggle}
         </div>
         <div class="bubble-content">
@@ -3740,25 +3756,30 @@ async function showThinkingLog(messageId) {
     openModal('thinking-log-modal');
 
     try {
-        // In the future, we will fetch this from the message meta
-        // For now, let's simulate or fallback to generic info
-        // const msg = await adminFetch(`/admin/messages/${messageId}`);
-        // let reasoning = msg.meta?.reasoning || [];
+        const messages = await adminFetch(`/admin/chats/${activeChatId}/messages`);
+        const msg = messages.find(m => m.id == messageId);
 
-        // Mocking reasoning steps for demonstration
-        let reasoning = [
-            { type: 'thought', text: 'El usuario pregunta por el estado de su pedido.' },
-            { type: 'tool', text: 'Llamando a herramienta orders(q="1234")' },
-            { type: 'observation', text: 'Pedido #1234: Despachado el 22/12.' },
-            { type: 'thought', text: 'Informar al usuario que su pedido ya fue enviado.' }
-        ];
+        if (!msg || !msg.meta || !msg.meta.reasoning) {
+            content.innerHTML = '<div class="chat-empty">No hay razonamiento disponible para este mensaje.</div>';
+            return;
+        }
 
-        content.innerHTML = reasoning.map(step => `
-            <div class="thought-step">
-                <div class="thought-type">${step.type}</div>
-                <div class="thought-text">${step.text}</div>
-            </div>
-        `).join('');
+        const reasoning = msg.meta.reasoning;
+
+        content.innerHTML = reasoning.map(step => {
+            const stepType = step.type || 'thought';
+            let typeColor = '#a1a1aa';
+            if (stepType === 'tool') typeColor = '#60a5fa';
+            if (stepType === 'observation') typeColor = '#34d399';
+            if (stepType === 'thought') typeColor = '#c084fc';
+
+            return `
+                <div class="thought-step" style="border-left: 2px solid ${typeColor}; padding-left: 10px; margin-bottom: 12px;">
+                    <div class="thought-type" style="color: ${typeColor}; font-size: 0.7em; text-transform: uppercase; font-weight: bold;">${stepType}</div>
+                    <div class="thought-text" style="color: #e4e4e7; font-size: 0.9em; line-height: 1.4;">${step.text || step.content || JSON.stringify(step)}</div>
+                </div>
+            `;
+        }).join('');
     } catch (err) {
         content.innerHTML = `<div class="chat-error">Error al cargar: ${err.message}</div>`;
     }

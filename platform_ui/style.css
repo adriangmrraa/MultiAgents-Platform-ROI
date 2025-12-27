@@ -2835,6 +2835,35 @@ input:checked+.slider:before {
     border-color: var(--accent);
 }
 
+.chat-item-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    position: relative;
+    margin-right: 15px;
+}
+
+.channel-badge {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    background: var(--bg-dark);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    border: 1px solid var(--border-glass);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
 .chat-item-header {
     display: flex;
     justify-content: space-between;
@@ -3233,19 +3262,36 @@ input:checked+.slider:before {
     height: 12px;
     border-radius: 3px;
 }
+
 /* --- Nexus v3 Dashboard Enhancements --- */
 
 /* Red/Green Status Pulses */
 @keyframes pulse-green {
-    0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-    70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+    0% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+    }
+
+    70% {
+        box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    }
 }
 
 @keyframes pulse-red {
-    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-    70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+
+    70% {
+        box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
 }
 
 .chat-status-indicator.status-auto {
@@ -3316,3 +3362,20 @@ input:checked+.slider:before {
     color: var(--text-primary);
 }
 
+/* Scrollbar tweaks */
+#thinking-log-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+#thinking-log-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#thinking-log-content::-webkit-scrollbar-thumb {
+    background: var(--border-glass);
+    border-radius: 3px;
+}
+
+#thinking-log-content::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-glow);
+}
