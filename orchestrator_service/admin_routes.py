@@ -2122,70 +2122,90 @@ async def delete_tool(tool_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def get_chats_summary(limit: int = 50):
-    """Get a summary of recent conversations (Distinct by phone)."""
-    # 1. Get unique phones from recent messages
+@router.get("/chats/summary")
+async def get_chats_summary(
+    tenant_id: Optional[int] = None, 
+    channel: Optional[str] = None,
+    limit: int = 50
+):
+    """
+    Get a summary of recent conversations.
+    Supports filtering by tenant and channel.
+    """
     query = """
     WITH RecentMessages AS (
         SELECT 
             DISTINCT ON (from_number) from_number, 
+            tenant_id,
+            channel_source,
+            customer_name,
             created_at, 
-            content,
-            role,
-            correlation_id
+            content
         FROM chat_messages
-        WHERE role = 'user'
+        WHERE 1=1
+    """
+    
+    params = []
+    if tenant_id:
+        params.append(tenant_id)
+        query += f" AND tenant_id = ${len(params)}"
+    if channel:
+        params.append(channel)
+        query += f" AND channel_source = ${len(params)}"
+        
+    query += """
         ORDER BY from_number, created_at DESC
     )
     SELECT * FROM RecentMessages
     ORDER BY created_at DESC
-    LIMIT $1
+    LIMIT $limit_placeholder
     """
+    
+    # Adapt limit parameter
+    params.append(limit)
+    query = query.replace("$limit_placeholder", f"${len(params)}")
+
     try:
-        rows = await db.pool.fetch(query, limit)
-        chats = []
-        for r in rows:
-            # Check if this phone is in "human_override" mode (requires redis/db check)
-            # For simplistic approach, we just return the row. The UI can fetch status later or we join.
-            chats.append({
-                "phone": r["from_number"],
-                "last_message": r["content"][:50] + "..." if len(r["content"]) > 50 else r["content"],
-                "timestamp": r["created_at"].isoformat(),
-                "status": "active" # Placeholder
-            })
-        return chats
+        rows = await db.pool.fetch(query, *params)
+        return [{
+            "phone": r["from_number"],
+            "tenant_id": r["tenant_id"],
+            "channel": r["channel_source"],
+            "name": r.get("customer_name") or r["from_number"],
+            "last_message": r["content"][:100],
+            "timestamp": r["created_at"].isoformat(),
+            "status": "active"
+        } for r in rows]
     except Exception as e:
-        print(f"Error fetching chats: {e}")
+        logger.error(f"Error fetching chats summary: {e}")
         return []
 
 @router.get("/chats/{phone}/history", dependencies=[Depends(verify_admin_token)])
 async def get_chat_history(phone: str, limit: int = 50):
-    """Get full history for a specific phone number."""
-    query = """
-    SELECT role, content, created_at, correlation_id
-    FROM chat_messages
-    WHERE from_number = $1 OR (role = 'assistant' AND correlation_id IN (
-        SELECT correlation_id FROM chat_messages WHERE from_number = $1
-    ))
-    ORDER BY created_at ASC
-    LIMIT $2
     """
-    # Simplified query: assuming 'from_number' tracks the user ID effectively
-    # A better approach for the future is a Conversation ID column
-    query_simple = "SELECT role, content, created_at FROM chat_messages WHERE from_number = $1 OR (role = 'assistant' AND content LIKE $2) ORDER BY created_at ASC LIMIT $3"
-    
-    # Correction: The current schema stores only inbound messages with 'from_number'.
-    # Outbound messages (role='assistant') often lack 'from_number' in simple schemas unless explicitly added.
-    # We will fetch everything for now and filter client-side if needed, OR relies on the fact that assistant replies are usually close in time.
-    # BEST EFFORT CHECK:
+    Get full history for a specific identity (phone or PSID).
+    We fetch all messages where the from_number matches or where 
+    it's an assistant response to that identity.
+    """
     try:
-        rows = await db.pool.fetch("SELECT * FROM chat_messages WHERE from_number = $1 ORDER BY created_at ASC LIMIT $2", phone, limit)
+        # Improved query: Fetch messages where either sender is the user OR is a response in the same context
+        # For simplicity in Phase 4.2, we filter by from_number (which is PSID for social)
+        query = """
+            SELECT role, content, created_at, channel_source 
+            FROM chat_messages 
+            WHERE from_number = $1 
+            ORDER BY created_at ASC 
+            LIMIT $2
+        """
+        rows = await db.pool.fetch(query, phone, limit)
         return [{
             "role": r["role"],
             "content": r["content"],
-            "timestamp": r["created_at"].isoformat()
+            "timestamp": r["created_at"].isoformat(),
+            "channel": r.get("channel_source", "whatsapp")
         } for r in rows]
     except Exception as e:
+        logger.error(f"Error fetching history for {phone}: {e}")
         return []
 
 @router.post("/handoff/toggle", dependencies=[Depends(verify_admin_token)])

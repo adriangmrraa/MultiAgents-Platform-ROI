@@ -589,6 +589,9 @@ CATALOGO:
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_customers_facebook') THEN
             CREATE INDEX idx_customers_facebook ON customers (facebook_psid);
         END IF;
+
+        -- Relaxation: phone_number is no longer mandatory for social customers
+        ALTER TABLE customers ALTER COLUMN phone_number DROP NOT NULL;
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Schema evolution for Chatwoot Phase 1 failed';
     END $$;
@@ -1300,17 +1303,6 @@ async def ready():
 @app.get("/health")
 def health(): return {"status": "ok"}
 
-@app.get("/diag/tenants")
-async def diag_tenants():
-    """
-    Diagnostic endpoint to list all available tenants and their IDs.
-    """
-    try:
-        rows = await db.pool.fetch("SELECT id, store_name, bot_phone_number FROM tenants")
-        return [{"id": r["id"], "store": r["store_name"], "phone": r["bot_phone_number"]} for r in rows]
-    except Exception as e:
-        return {"error": str(e)}
-
 # --- Meta Compliance Endpoints ---
 
 @app.get("/api/v1/auth/meta/deauthorize")
@@ -1723,6 +1715,10 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                 """, conv_id)
 
                 if conv_meta:
+                    logger.info("delivery_metadata_fetched", 
+                                channel=conv_meta['channel_source'], 
+                                cw_id=conv_meta['external_chatwoot_id'],
+                                account_id=conv_meta['external_account_id'])
                     async with httpx.AsyncClient() as gateway_client:
                         try:
                             wh_url = os.getenv("WH_SERVICE_URL", "http://whatsapp_service:8002")
@@ -1733,14 +1729,18 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                                 "external_chatwoot_id": conv_meta['external_chatwoot_id'],
                                 "external_account_id": conv_meta['external_account_id']
                             }
-                            await gateway_client.post(
+                            logger.info("sending_to_gateway", url=f"{wh_url}/messages/send", payload_keys=list(delivery_payload.keys()))
+                            resp = await gateway_client.post(
                                 f"{wh_url}/messages/send",
                                 json=delivery_payload,
                                 headers={"X-Internal-Token": str(INTERNAL_SECRET_KEY)}
                             )
+                            logger.info("gateway_response_received", status=resp.status_code, body=resp.text)
                             logger.info("agent_response_delivered_to_gateway", channel=conv_meta['channel_source'])
                         except Exception as de:
                             logger.error("gateway_delivery_failed", error=str(de))
+                else:
+                    logger.warning("conv_meta_not_found_for_delivery", conv_id=str(conv_id))
 
         # Track Usage
         await db.pool.execute("UPDATE tenants SET total_tool_calls = total_tool_calls + 1 WHERE id = $1", tenant_id)

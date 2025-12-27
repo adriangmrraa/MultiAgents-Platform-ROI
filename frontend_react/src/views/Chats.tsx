@@ -17,17 +17,35 @@ interface Message {
 
 export const Chats: React.FC = () => {
     const { fetchApi, loading, error } = useApi();
-    const [chats, setChats] = useState<ChatSummary[]>([]);
+    const [selectedTenant, setSelectedTenant] = useState<number | null>(9); // 9 is current active
+    const [selectedChannel, setSelectedChannel] = useState<string>('all');
+    const [tenants, setTenants] = useState<{ id: number, store: string }[]>([]);
+    const [chats, setChats] = useState<any[]>([]);
     const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+    // Load Tenants for filter
+    useEffect(() => {
+        const loadTenants = async () => {
+            try {
+                const data = await fetchApi('/diag/tenants'); // Using diagnostic but should be /admin/tenants later
+                if (Array.isArray(data)) setTenants(data);
+            } catch (e) { }
+        };
+        loadTenants();
+    }, [fetchApi]);
+
     // Load Chat List
     useEffect(() => {
         const loadChats = async () => {
             try {
-                const data = await fetchApi('/admin/chats/summary'); // Matches newly created endpoint
+                let url = `/admin/chats/summary?limit=50`;
+                if (selectedTenant) url += `&tenant_id=${selectedTenant}`;
+                if (selectedChannel !== 'all') url += `&channel=${selectedChannel}`;
+
+                const data = await fetchApi(url);
                 if (Array.isArray(data)) {
                     setChats(data);
                 }
@@ -37,10 +55,18 @@ export const Chats: React.FC = () => {
         };
         loadChats();
 
-        // Auto-refresh every 10s
         const interval = setInterval(loadChats, 10000);
         return () => clearInterval(interval);
-    }, [fetchApi, refreshTrigger]);
+    }, [fetchApi, refreshTrigger, selectedTenant, selectedChannel]);
+
+    // Icon helper
+    const getChannelIcon = (channel: string) => {
+        switch (channel?.toLowerCase()) {
+            case 'instagram': return <span className="text-pink-500 text-xs font-bold border border-pink-500/30 px-1 rounded">IG</span>;
+            case 'facebook': return <span className="text-blue-500 text-xs font-bold border border-blue-500/30 px-1 rounded">FB</span>;
+            default: return <span className="text-green-500 text-xs font-bold border border-green-500/30 px-1 rounded">WA</span>;
+        }
+    };
 
     // Load Conversation History
     useEffect(() => {
@@ -75,12 +101,17 @@ export const Chats: React.FC = () => {
     const handleSendMessage = async () => {
         if (!selectedPhone || !newMessage.trim()) return;
 
+        const chat = chats.find(c => c.phone === selectedPhone);
+
         try {
             await fetchApi('/admin/whatsapp/send', {
                 method: 'POST',
                 body: {
                     phone: selectedPhone,
-                    message: newMessage
+                    message: newMessage,
+                    channel_source: chat?.channel || 'whatsapp',
+                    external_chatwoot_id: chat?.cw_id || chat?.external_chatwoot_id,
+                    external_account_id: chat?.account_id || chat?.external_account_id
                 }
             });
 
@@ -98,26 +129,50 @@ export const Chats: React.FC = () => {
 
     return (
         <div className="view active animate-fade-in">
-            <h1 className="view-title">Gestión de Conversaciones (Human Handoff)</h1>
+            <h1 className="view-title">Gestión Multicanal Nexus v4.2</h1>
 
             <div className="chats-layout" style={{
                 display: 'grid',
-                gridTemplateColumns: '300px 1fr',
+                gridTemplateColumns: '350px 1fr',
                 gap: '20px',
                 minHeight: '600px',
                 maxHeight: 'calc(100vh - 150px)'
             }}>
                 {/* Left: List */}
                 <div className="glass" style={{ padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                    <div className="p-4 border-b border-white/5 flex justify-between items-center">
-                        <input
-                            type="text"
-                            placeholder="Buscar..."
-                            className="bg-black/20 border border-white/10 rounded px-3 py-1 text-sm w-full"
-                        />
-                        <button onClick={() => setRefreshTrigger(p => p + 1)} className="ml-2 text-white/50 hover:text-white">
-                            <RefreshCw size={16} />
-                        </button>
+                    <div className="p-4 border-b border-white/5 space-y-3">
+                        <div className="flex gap-2">
+                            <select
+                                className="bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none flex-1"
+                                value={selectedTenant || ''}
+                                onChange={(e) => setSelectedTenant(Number(e.target.value))}
+                            >
+                                <option value="">Todas las tiendas</option>
+                                {tenants.map(t => (
+                                    <option key={t.id} value={t.id}>{t.store}</option>
+                                ))}
+                            </select>
+                            <select
+                                className="bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none"
+                                value={selectedChannel}
+                                onChange={(e) => setSelectedChannel(e.target.value)}
+                            >
+                                <option value="all">Canales</option>
+                                <option value="whatsapp">WhatsApp</option>
+                                <option value="instagram">Instagram</option>
+                                <option value="facebook">Facebook</option>
+                            </select>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <input
+                                type="text"
+                                placeholder="Buscar..."
+                                className="bg-black/20 border border-white/10 rounded-lg px-3 py-1.5 text-sm w-full"
+                            />
+                            <button onClick={() => setRefreshTrigger(p => p + 1)} className="ml-2 text-white/50 hover:text-white">
+                                <RefreshCw size={16} />
+                            </button>
+                        </div>
                     </div>
                     <div className="overflow-y-auto flex-1">
                         {chats.map(chat => (
@@ -127,10 +182,13 @@ export const Chats: React.FC = () => {
                                 className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${selectedPhone === chat.phone ? 'bg-white/10 border-l-4 border-accent' : ''}`}
                             >
                                 <div className="flex justify-between items-start mb-1">
-                                    <span className="font-semibold text-white">{chat.phone}</span>
-                                    <span className="text-xs text-secondary opacity-70">{new Date(chat.timestamp).toLocaleTimeString()}</span>
+                                    <div className="flex items-center gap-2">
+                                        {getChannelIcon(chat.channel)}
+                                        <span className="font-semibold text-white">{chat.name || chat.phone}</span>
+                                    </div>
+                                    <span className="text-[10px] text-secondary opacity-70 uppercase font-mono">{new Date(chat.timestamp).toLocaleTimeString()}</span>
                                 </div>
-                                <p className="text-sm text-secondary truncate opacity-80">{chat.last_message}</p>
+                                <p className="text-sm text-secondary truncate opacity-80 pl-8">{chat.last_message}</p>
                             </div>
                         ))}
                         {chats.length === 0 && !loading && (
