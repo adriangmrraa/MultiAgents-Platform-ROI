@@ -41,6 +41,12 @@ export const Chats: React.FC = () => {
     const [newMessage, setNewMessage] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
+
+    // Pagination State
+    const [offset, setOffset] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const LIMIT = 20;
+
     // humanOverrideFilter removed to unify with selectedChannel
     // const [loadingChats, setLoadingChats] = useState(false); // Removed unused, creating lint noise
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -96,62 +102,79 @@ export const Chats: React.FC = () => {
     }, [fetchApi]);
 
     // Load Chat List
-    useEffect(() => {
-        const loadChats = async () => {
-            if (!selectedTenant) return;
-            try {
-                let url = `/admin/chats/summary?v=${refreshTrigger}`;
-                // v=refreshTrigger hack to force re-fetch
 
-                console.log("DEBUG_CHATS_FETCH", { selectedTenant, selectedChannel, refreshTrigger });
+    const loadChats = async (isRefresh = false) => {
+        // If refreshing, reset offset/list. If loading more, append.
+        const currentOffset = isRefresh ? 0 : offset;
 
-                if (selectedTenant) {
-                    url += `&tenant_id=${selectedTenant}`;
-                } if (selectedChannel === 'human_override') {
-                    url += `&human_override=true`;
-                } else if (selectedChannel !== 'all') {
-                    url += `&channel=${selectedChannel}`;
-                }
+        try {
+            let url = `/admin/chats/summary?limit=${LIMIT}&offset=${currentOffset}&v=${refreshTrigger}`;
 
-                const data = await fetchApi(url);
-                if (Array.isArray(data)) {
-                    // Map Backend keys to Frontend Interface
-                    // Backend: id, name (or display_name), last_message, timestamp, external_user_id
-                    const mappedData = data.map((d: any) => {
-                        console.log("Raw Chat Item:", d); // DEBUG RESTORED
-                        return {
-                            ...d,
-                            id: d.id, // Explicitly preserve ID
-                            name: d.name || d.display_name || d.external_user_id || 'Unknown',
-                            avatar_url: d.avatar_url, // Map Avatar
-                            human_override_until: d.human_override_until, // Map Timer
-                            last_message: d.last_message || d.last_message_preview || '',
-                            timestamp: d.timestamp || d.last_message_at || new Date().toISOString(),
-                            phone: d.external_user_id || '',
-                            is_locked: d.is_locked || false
-                        };
-                    });
+            if (selectedTenant) url += `&tenant_id=${selectedTenant}`;
 
-                    // Client-side search if backend search missing
-                    let filtered = mappedData;
-                    if (searchTerm) {
-                        const lower = searchTerm.toLowerCase();
-                        filtered = mappedData.filter((c: any) =>
-                            (c.phone && c.phone.toLowerCase().includes(lower)) ||
-                            (c.name && c.name.toLowerCase().includes(lower))
-                        );
-                    }
-                    setChats(filtered);
-                }
-            } catch (err) {
-                console.error("Failed to load chats:", err);
+            if (selectedChannel === 'human_override') {
+                url += `&human_override=true`;
+            } else if (selectedChannel !== 'all') {
+                url += `&channel=${selectedChannel}`;
             }
-        };
-        loadChats();
 
-        const interval = setInterval(loadChats, 3000);
-        return () => clearInterval(interval);
-    }, [fetchApi, refreshTrigger, selectedTenant, selectedChannel, searchTerm]);
+            const data = await fetchApi(url);
+
+            if (Array.isArray(data)) {
+                const mappedData = data.map((d: any) => ({
+                    id: d.id,
+                    tenant_id: d.tenant_id,
+                    name: d.name || d.display_name || d.external_user_id || 'Unknown',
+                    avatar_url: d.avatar_url,
+                    human_override_until: d.human_override_until,
+                    last_message: d.last_message || d.last_message_preview || '',
+                    timestamp: d.timestamp || d.last_message_at || new Date().toISOString(),
+                    phone: d.external_user_id || '',
+                    is_locked: d.is_locked || false,
+                    channel: d.channel // Ensure channel is mapped
+                }));
+
+                // Client-side search (Optional: ideally move to backend)
+                // For pagination, we apply search only on loaded items or we should send search param to backend.
+                // For now, let's skip searching on server for this iteration to avoid backend search logic changes unless needed.
+                // We will filter *incoming* data if we want, but typically search + pagination requires backend search.
+                // Let's just set the data for now.
+
+                if (isRefresh) {
+                    setChats(mappedData);
+                    setOffset(LIMIT);
+                } else {
+                    setChats(prev => {
+                        // Avoid duplicates if any
+                        const newChats = mappedData.filter((n: any) => !prev.some(p => p.id === n.id));
+                        return [...prev, ...newChats];
+                    });
+                    setOffset(prev => prev + LIMIT);
+                }
+
+                setHasMore(data.length === LIMIT);
+            }
+
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    // Initial Load & Filter Change
+    useEffect(() => {
+        setOffset(0);
+        setHasMore(true);
+        loadChats(true);
+    }, [selectedTenant, selectedChannel, refreshTrigger]);
+
+    // Cleanup interval if it existed (we removed it for infinite scroll)
+
+    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+        if (scrollHeight - scrollTop - clientHeight < 50 && hasMore) {
+            loadChats(false);
+        }
+    };
 
     // Icon helper
     const getChannelIcon = (channel: string) => {
@@ -266,9 +289,9 @@ export const Chats: React.FC = () => {
                                 value={selectedTenant || ''}
                                 onChange={(e) => setSelectedTenant(Number(e.target.value))}
                             >
-                                <option value="">Todas las tiendas</option>
+                                <option value="" className="bg-black text-white">Todas las tiendas</option>
                                 {tenants.map(t => (
-                                    <option key={t.id} value={t.id}>{t.store}</option>
+                                    <option key={t.id} value={t.id} className="bg-black text-white">{t.store}</option>
                                 ))}
                             </select>
                             <select
@@ -276,11 +299,11 @@ export const Chats: React.FC = () => {
                                 value={selectedChannel}
                                 onChange={(e) => setSelectedChannel(e.target.value)}
                             >
-                                <option value="all">Canales</option>
-                                <option value="whatsapp">WhatsApp</option>
-                                <option value="instagram">Instagram</option>
-                                <option value="facebook">Facebook</option>
-                                <option value="human_override">⚠️ Intervención</option>
+                                <option value="all" className="bg-black text-white">Canales</option>
+                                <option value="whatsapp" className="bg-black text-white">WhatsApp</option>
+                                <option value="instagram" className="bg-black text-white">Instagram</option>
+                                <option value="facebook" className="bg-black text-white">Facebook</option>
+                                <option value="human_override" className="bg-black text-white">⚠️ Intervención</option>
                             </select>
                         </div>
                         <div className="flex justify-between items-center">
@@ -296,7 +319,7 @@ export const Chats: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                    <div className="overflow-y-auto flex-1">
+                    <div className="overflow-y-auto flex-1" onScroll={handleScroll}>
                         {chats.map(chat => (
                             <div
                                 key={chat.id}

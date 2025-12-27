@@ -994,9 +994,15 @@ async def health_check():
 
 @router.get("/chats", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
-async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = None, human_override: Optional[bool] = None):
+async def list_chats(
+    tenant_id: Optional[int] = None, 
+    channel: Optional[str] = None, 
+    human_override: Optional[bool] = None,
+    limit: int = 20,
+    offset: int = 0
+):
     """
-    List conversations for the WhatsApp-like view.
+    List conversations for the WhatsApp-like view with Infinite Scroll.
     Derived strictly from `chat_conversations`.
     """
     where_clauses = []
@@ -1018,6 +1024,9 @@ async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = N
 
     where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
+    # Add Pagination params to list (must match order of $ usage)
+    # Using simple appending logic
+    
     query = f"""
         SELECT 
             id, tenant_id, channel, channel_source, external_user_id, 
@@ -1026,7 +1035,11 @@ async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = N
         FROM chat_conversations
         {where_sql}
         ORDER BY last_message_at DESC NULLS LAST
+        LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
     """
+    params.append(limit)
+    params.append(offset)
+    
     try:
         rows = await db.pool.fetch(query, *params)
     
@@ -1066,12 +1079,7 @@ async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = N
                 "meta": meta_json
             })
             
-        # DEBUG: Print first result to console to verify ID presence
-        if len(results) > 0:
-            print(f"DEBUG_LIST_CHATS: First item keys: {list(results[0].keys())}")
-            print(f"DEBUG_LIST_CHATS: First ID: {results[0]['id']}")
-            
-        logger.info(f"Auditing list_chats: Returning {len(results)} conversations")
+        logger.info(f"Auditing list_chats: Returning {len(results)} conversations (Limit: {limit}, Offset: {offset})")
         return results
 
     except Exception as e:
@@ -1080,12 +1088,24 @@ async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = N
 
 @router.get("/chats/summary", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
-async def get_chats_summary(tenant_id: Optional[int] = None, channel: Optional[str] = None, human_override: Optional[bool] = None):
+async def get_chats_summary(
+    tenant_id: Optional[int] = None, 
+    channel: Optional[str] = None, 
+    human_override: Optional[bool] = None,
+    limit: int = 20,
+    offset: int = 0
+):
     """
     Versión de compatibilidad de list_chats para el frontend actual.
     Cumple con el Protocolo Omega (UUID id).
     """
-    chats = await list_chats(tenant_id=tenant_id, channel=channel, human_override=human_override)
+    chats = await list_chats(
+        tenant_id=tenant_id, 
+        channel=channel, 
+        human_override=human_override,
+        limit=limit,
+        offset=offset
+    )
     # Adaptar a lo que esperaba el resumen de chat clásico pero con IDs Omega
     return [{
         "id": c["id"],
