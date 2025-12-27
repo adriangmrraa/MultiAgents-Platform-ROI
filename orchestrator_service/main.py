@@ -105,7 +105,7 @@ class ToolError(BaseModel):
 
 
 class SimpleEvent:
-    def __init__(self, from_num, text, msg_id, channel_source='whatsapp', external_cw_id=None, external_acc_id=None):
+    def __init__(self, from_num, text, msg_id, channel_source='whatsapp', external_cw_id=None, external_acc_id=None, tenant_id=None):
         self.from_number = from_num
         self.text = text
         self.event_id = msg_id
@@ -116,6 +116,7 @@ class SimpleEvent:
         self.channel_source = channel_source
         self.external_chatwoot_id = external_cw_id
         self.external_account_id = external_acc_id
+        self.tenant_id = tenant_id
 
 # FastAPI App
 from contextlib import asynccontextmanager
@@ -1376,7 +1377,8 @@ async def chat_endpoint(
                 msg_id=payload.get("event_id"),
                 channel_source=payload.get("channel_source", "whatsapp"),
                 external_cw_id=payload.get("external_chatwoot_id"),
-                external_acc_id=payload.get("external_account_id")
+                external_acc_id=payload.get("external_account_id"),
+                tenant_id=payload.get("tenant_id")
             )
             if payload.get("customer_name"):
                 event.customer_name = payload.get("customer_name")

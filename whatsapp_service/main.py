@@ -435,8 +435,9 @@ async def chatwoot_webhook(request: Request):
     """
     Universal Inbound Gateway for Chatwoot (Instagram/Facebook).
     """
-    # 1. Security Check (Omega Protocol: Simple token validation via query param)
     secret = request.query_params.get("secret")
+    tenant_id = request.query_params.get("tenant_id")
+    
     if secret != (INTERNAL_SECRET_KEY or "internal-secret"):
          logger.warning("chatwoot_auth_failed", reason="invalid_secret_param")
          raise HTTPException(status_code=401, detail="Unauthorized")
@@ -487,6 +488,7 @@ async def chatwoot_webhook(request: Request):
         "channel_source": channel_source,
         "external_chatwoot_id": chatwoot_conversation_id,
         "external_account_id": chatwoot_account_id,
+        "tenant_id": tenant_id,
         "meta": {
              "chatwoot_inbox_id": message_data.get("inbox_id"),
              "channel_type": raw_channel

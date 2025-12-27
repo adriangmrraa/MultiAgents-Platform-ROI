@@ -45,9 +45,24 @@ async def get_current_tenant_webhook(request: Request, db: AsyncSession = Depend
         # Malformed JSON
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
+    # 2. Strategy: Extract Tenant Identity
+    target_tenant_id = body.get("tenant_id")
+    if target_tenant_id:
+        try:
+            result = await db.execute(select(Tenant).where(Tenant.id == int(target_tenant_id)))
+            tenant_orm = result.scalar_one_or_none()
+            if tenant_orm:
+                if not tenant_orm.is_active:
+                    raise HTTPException(status_code=403, detail="Tenant is inactive")
+                tenant_data = TenantInternal.model_validate(tenant_orm)
+                tenant_context.set(tenant_data)
+                return tenant_data
+        except ValueError:
+            pass
+
     target_phone = None
     
-    # 2. Strategy: Extract Bot Phone Number
+    # 3. Strategy: Extract Bot Phone Number (Fallback)
     # Note: Structure depends on YCloud/Meta. We look for commonly used fields.
     try:
         # Meta Standard
