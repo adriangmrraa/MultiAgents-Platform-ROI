@@ -18,7 +18,7 @@ Gracias a la **UI Unificada**, ya no es necesario tocar la base de datos manualm
     *   **Tienda Nube ID & Token**: Credenciales API.
     *   **System Prompt**: Define la personalidad (ej. "Eres un vendedor experto en zapatos...").
 5.  **Guardar**. El sistema validará y cifrará las credenciales automáticamente.
-
+    
 ### Paso B: Conexión WhatsApp (YCloud)
 1.  En el dashboard de YCloud, configura el **Webhook URL**:
     *   `https://api.tusistema.com/chat/webhook`
