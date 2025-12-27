@@ -93,6 +93,13 @@ async def get_tools():
         
     return system_tools + formatted_db_tools
 
+@router.get("/tenants", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
+async def list_tenants(limit: int = 100):
+   query = "SELECT id, store_name, platform FROM tenants ORDER BY id ASC LIMIT $1"
+   rows = await db.pool.fetch(query, limit)
+   return [dict(r) for r in rows]
+
 class CredentialModel(BaseModel):
     name: str
     value: str
