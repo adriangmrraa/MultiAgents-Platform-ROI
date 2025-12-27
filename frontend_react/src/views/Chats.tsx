@@ -325,7 +325,7 @@ export const Chats: React.FC = () => {
                             <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-black/10 scroll-smooth">
                                 {messages.map((msg, idx) => {
                                     // Audio Protocol Parsing
-                                    const audioMatch = msg.content.match(/\[AUDIO_URL:\s*(.*?)\s*\|\s*TRANSCRIPT:\s*(.*?)\]/);
+                                    const audioMatch = (msg.content || '').match(/\[AUDIO_URL:\s*(.*?)\s*\|\s*TRANSCRIPT:\s*(.*?)\]/);
                                     let contentCmp = <p className="text-sm">{msg.content}</p>;
 
                                     if (audioMatch) {
