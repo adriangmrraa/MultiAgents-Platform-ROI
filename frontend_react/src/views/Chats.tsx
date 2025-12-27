@@ -27,6 +27,15 @@ export const Chats: React.FC = () => {
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
     const [loadingChats, setLoadingChats] = useState(false);
+    const messagesEndRef = React.useRef<HTMLDivElement>(null);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
 
     // Auto-select first tenant if none selected
     useEffect(() => {
