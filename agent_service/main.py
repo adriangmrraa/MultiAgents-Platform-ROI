@@ -212,29 +212,7 @@ async def execute_agent(
     )
     
     # 4. Construct Agent
-class AgentConfig(BaseModel):
-    tools: Optional[List[str]] = None
-    model: Optional[Dict[str, Any]] = None
 
-class AgentThinkRequest(BaseModel):
-    tenant_id: int
-    message: str
-    history: List[Dict[str, str]]
-    context: AgentContext
-    credentials: AgentCredentials
-    agent_config: Optional[AgentConfig] = None
-    # internal_secret removed - passed via header
-
-# ... (inside execute_agent)
-    
-    # 3. Initialize LLM
-    llm = ChatOpenAI(
-        model="gpt-4o-mini",
-        api_key=request.credentials.openai_api_key,
-        temperature=0
-    )
-    
-    # 4. Construct Agent
     all_tools = [
         search_specific_products, 
         browse_general_storefront, 
@@ -248,7 +226,7 @@ class AgentThinkRequest(BaseModel):
     if request.agent_config and request.agent_config.tools is not None:
         allowed_names = set(request.agent_config.tools)
         tools_list = [t for t in all_tools if t.name in allowed_names]
-        if not tools_list and released_names:
+        if not tools_list and allowed_names:
              # Fallback: If verification fails or all disabled, maybe minimal tools? 
              # Or respect "no tools".
              # User expectation: "Solamente en ese caso". So if empty, then empty.
