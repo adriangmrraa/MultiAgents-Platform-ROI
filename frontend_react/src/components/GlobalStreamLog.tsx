@@ -91,19 +91,20 @@ export const GlobalStreamLog: React.FC = () => {
                     let borderColor = 'border-slate-800';
                     let label = 'SYSTEM';
 
-                    if (log.message.includes('Planning') || log.message.includes('Reasoning')) {
+                    const msg = log.message || ''; // Safe fallback
+                    if (msg.includes('Planning') || msg.includes('Reasoning')) {
                         icon = <span className="text-lg">🦉</span>;
                         borderColor = 'border-purple-500/50';
                         label = 'COGNITION';
-                    } else if (log.message.includes('Tool') || log.message.includes('Executing')) {
+                    } else if (msg.includes('Tool') || msg.includes('Executing')) {
                         icon = <span className="text-lg">🛠️</span>;
                         borderColor = 'border-cyan-500/50';
                         label = 'TOOL USE';
-                    } else if (log.message.includes('RAG') || log.message.includes('Retrieving')) {
+                    } else if (msg.includes('RAG') || msg.includes('Retrieving')) {
                         icon = <span className="text-lg">🐢</span>;
                         borderColor = 'border-emerald-500/50';
                         label = 'MEMORY';
-                    } else if (log.message.includes('Response') || log.message.includes('Speaking')) {
+                    } else if (msg.includes('Response') || msg.includes('Speaking')) {
                         icon = <span className="text-lg">🗣️</span>;
                         borderColor = 'border-pink-500/50';
                         label = 'RESPONSE';
