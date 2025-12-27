@@ -354,10 +354,12 @@ export const Chats: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <label className="flex items-center gap-2 cursor-pointer">
-                                        <span className="text-sm text-secondary">Agente Activo</span>
+                                        <span className={`text-sm transition-all duration-300 ${chats.find((c: any) => c.id === selectedChatId)?.is_locked ? 'text-amber-500 font-bold' : 'text-secondary'}`}>
+                                            {chats.find((c: any) => c.id === selectedChatId)?.is_locked ? 'Intervención Humana' : 'Agente Activo'}
+                                        </span>
                                         <input
                                             type="checkbox"
-                                            className="toggle"
+                                            className="toggle toggle-accent"
                                             checked={chats.find((c: any) => c.id === selectedChatId)?.is_locked || false}
                                             onChange={(e) => handleToggleHandoff(e.target.checked)}
                                         />
