@@ -343,6 +343,7 @@ migration_steps = [
         id UUID PRIMARY KEY,
         tenant_id INTEGER REFERENCES tenants(id),
         channel VARCHAR(32) NOT NULL, 
+        channel_source VARCHAR(32) NOT NULL DEFAULT 'whatsapp',
         external_user_id VARCHAR(128) NOT NULL,
         display_name VARCHAR(255),
         avatar_url TEXT,
@@ -350,6 +351,7 @@ migration_steps = [
         human_override_until TIMESTAMPTZ,
         last_message_at TIMESTAMPTZ,
         last_message_preview TEXT,
+        meta JSONB DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         UNIQUE (channel, external_user_id) 
@@ -360,9 +362,11 @@ migration_steps = [
     DO $$
     BEGIN
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_message_preview TEXT;
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS channel_source VARCHAR(32) DEFAULT 'whatsapp';
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMPTZ;
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS avatar_url TEXT;
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS human_override_until TIMESTAMPTZ;
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT '{}';
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES customers(id); -- Fix Identity Link
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Schema repair failed for chat_conversations';
@@ -413,7 +417,9 @@ migration_steps = [
         provider_status VARCHAR(32),
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         correlation_id TEXT,
-        from_number VARCHAR(128)
+        from_number VARCHAR(128),
+        meta JSONB DEFAULT '{}',
+        channel_source VARCHAR(32) DEFAULT 'whatsapp'
     );
     """,
     # 9b. Chat Messages Repair (Comprehensive Repair to avoid missing columns and fix legacy ID type)
@@ -446,7 +452,9 @@ migration_steps = [
         provider_status VARCHAR(32),
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         correlation_id TEXT,
-        from_number VARCHAR(128)
+        from_number VARCHAR(128),
+        meta JSONB DEFAULT '{}',
+        channel_source VARCHAR(32) DEFAULT 'whatsapp'
     );
     """,
     # Ensure columns in case table existed but was missing those
@@ -458,6 +466,7 @@ migration_steps = [
         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS message_type VARCHAR(32) DEFAULT 'text';
         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS media_id UUID;
         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT '{}';
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS channel_source VARCHAR(32) DEFAULT 'whatsapp';
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Schema repair failed for chat_messages';
     END $$;

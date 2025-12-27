@@ -951,12 +951,15 @@ async def list_chats(tenant_id: Optional[int] = None, channel: Optional[str] = N
                 "channel": r['channel'],
                 "channel_source": r['channel_source'] if 'channel_source' in r else 'whatsapp',
                 "external_user_id": r['external_user_id'],
+                "display_name": r['display_name'] or r['external_user_id'],
                 "name": r['display_name'] or r['external_user_id'],
                 "avatar_url": r['avatar_url'],
                 "status": status,
                 "is_locked": is_locked,
                 "human_override_until": lockout.isoformat() if lockout else None,
+                "last_message_at": r['last_message_at'].isoformat() if r['last_message_at'] else None,
                 "timestamp": r['last_message_at'].isoformat() if r['last_message_at'] else None,
+                "last_message_preview": r['last_message_preview'],
                 "last_message": r['last_message_preview'],
                 "meta": meta_json
             })
