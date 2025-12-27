@@ -979,7 +979,7 @@ async def list_chats():
     query = """
         SELECT 
             id, tenant_id, channel, channel_source, external_user_id, 
-            display_name, avatar_url, status, 
+            display_name, avatar_url, status, meta,
             human_override_until, last_message_at, last_message_preview
         FROM chat_conversations
         ORDER BY last_message_at DESC NULLS LAST
@@ -999,6 +999,11 @@ async def list_chats():
                 is_locked = True
                 status = 'human_override'
                 
+            try:
+                meta_json = json.loads(r['meta']) if r['meta'] else {}
+            except:
+                meta_json = {}
+
             results.append({
                 "id": str(r['id']),
                 "tenant_id": r['tenant_id'],
@@ -1011,7 +1016,8 @@ async def list_chats():
                 "is_locked": is_locked,
                 "human_override_until": lockout.isoformat() if lockout else None,
                 "last_message_at": r['last_message_at'].isoformat() if r['last_message_at'] else None,
-                "last_message_preview": r['last_message_preview']
+                "last_message_preview": r['last_message_preview'],
+                "meta": meta_json
             })
         logger.info(f"Auditing list_chats: Returning {len(results)} conversations")
         return results
@@ -1414,6 +1420,140 @@ async def test_message(phone: str):
     # For now, we return OK to satisfy the UI.
     # In a real scenario, this should use the new send endpoint logic
     return {"status": "ok", "message": f"Test message sent to {phone}"}
+
+@router.post("/whatsapp/send", dependencies=[Depends(verify_admin_token)])
+async def admin_send_message(request: Request):
+    """
+    Endpoint used by Frontend Chats.tsx to send manual messages.
+    """
+    data = await request.json()
+    phone = data.get("phone")
+    text = data.get("message")
+    tenant_id = data.get("tenant_id") 
+    channel = data.get("channel_source", "whatsapp")
+    
+    if not phone or not text:
+        raise HTTPException(400, "Phone and message required")
+
+    # If tenant_id missing, try to resolve from phone
+    if not tenant_id:
+        # Resolve tenant from conversation
+        row = await db.pool.fetchrow("SELECT tenant_id FROM chat_conversations WHERE external_user_id = $1 LIMIT 1", phone)
+        if row:
+            tenant_id = row['tenant_id']
+        else:
+            # Default to 1 or fail
+            tenant_id = 1 
+    
+    # Generate correlation ID
+    correlation_id = str(uuid.uuid4())
+    
+    # 1. Resolve/Create Conversation
+    conv_row = await db.pool.fetchrow("""
+        SELECT id, meta, channel_source FROM chat_conversations 
+        WHERE channel = $1 AND external_user_id = $2
+    """, channel, phone)
+    
+    if not conv_row:
+         conv_id = await db.pool.fetchval("""
+            INSERT INTO chat_conversations (id, tenant_id, channel, external_user_id, status, channel_source)
+            VALUES ($1, $2, $3, $4, 'human_override', $5)
+            RETURNING id
+         """, str(uuid.uuid4()), tenant_id, channel, phone, channel) # Default channel_source = channel
+    else:
+         conv_id = conv_row['id']
+         # If channel_source is missing in DB but present in payload, update it? 
+         # Only if conv_row channel_source is null. For now trust DB.
+
+    # 2. Persist in DB as 'human_supervisor'
+    await db.pool.execute(
+        """
+        INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number)
+        VALUES ($1, $2, $3, 'human_supervisor', $4, $5, NOW(), $6)
+        """,
+        str(uuid.uuid4()), tenant_id, conv_id, text, correlation_id, phone
+    )
+
+    # 3. Routing Logic: Chatwoot vs YCloud/WhatsApp
+    # Check payload first, then DB meta
+    cw_conversation_id = data.get("external_chatwoot_id")
+    cw_account_id = data.get("external_account_id")
+    
+    if not cw_conversation_id and conv_row and conv_row.get("meta"):
+        try:
+             meta_json = json.loads(conv_row["meta"])
+             cw_conversation_id = meta_json.get("chatwoot_conversation_id")
+             cw_account_id = meta_json.get("chatwoot_account_id")
+        except: pass
+
+    # Decision Matrix
+    use_chatwoot = False
+    
+    if channel in ['instagram', 'facebook']:
+        use_chatwoot = True
+    elif channel == 'whatsapp':
+        # If we have explicit Chatwoot IDs, assume it's a Chatwoot-managed number
+        if cw_conversation_id:
+            use_chatwoot = True
+    
+    if use_chatwoot:
+        # --- CHATWOOT SEND ---
+        if not cw_conversation_id:
+             logger.error(f"Cannot send to Chatwoot: Missing Conversation ID for {phone}")
+             raise HTTPException(400, "Missing Chatwoot Conversation ID")
+             
+        cw_url = os.getenv("CHATWOOT_BASE_URL", "https://app.chatwoot.com")
+        cw_token = os.getenv("CHATWOOT_API_TOKEN")
+        
+        # Check Creds in DB if needed
+        if not cw_token:
+             cw_token = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_API_TOKEN' LIMIT 1")
+             
+        if not cw_token:
+             raise HTTPException(500, "Chatwoot API Token not configured")
+             
+        # Default Account ID if missing (try env or 1)
+        if not cw_account_id:
+            cw_account_id = os.getenv("CHATWOOT_ACCOUNT_ID", "1")
+            
+        target_url = f"{cw_url}/api/v1/accounts/{cw_account_id}/conversations/{cw_conversation_id}/messages"
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                res = await client.post(
+                    target_url,
+                    json={"content": text, "message_type": "outgoing"},
+                    headers={"api_access_token": cw_token},
+                    timeout=10.0
+                )
+                if res.status_code not in [200, 201]:
+                    logger.error(f"Chatwoot API Error {res.status_code}: {res.text}")
+                    # Don't fail the UI request, but log error
+            except Exception as e:
+                logger.error(f"Chatwoot Send Exception: {e}")
+
+    else:
+        # --- YCLOUD / WHATSAPP SERVICE SEND ---
+        wa_url = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:8002")
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                res = await client.post(
+                    f"{wa_url}/messages/send",
+                    json={"to": phone, "text": text},
+                    headers={
+                        "X-Internal-Token": os.getenv("INTERNAL_API_TOKEN", "internal-secret"),
+                        "X-Correlation-Id": correlation_id
+                    },
+                    timeout=10.0
+                )
+                if res.status_code != 200:
+                    logger.error(f"Failed to upstream message: {res.text}")
+            except Exception as e:
+                logger.error(f"Failed to upstream message: {str(e)}")
+
+    return {"status": "sent", "correlation_id": correlation_id}
+
 
 @router.post("/messages/send", dependencies=[Depends(verify_admin_token)])
 async def send_manual_message(data: dict):

@@ -131,6 +131,7 @@ export const Chats: React.FC = () => {
                 body: {
                     phone: selectedPhone,
                     message: newMessage,
+                    tenant_id: chat?.tenant_id,
                     channel_source: chat?.channel || 'whatsapp',
                     external_chatwoot_id: chat?.cw_id || chat?.external_chatwoot_id,
                     external_account_id: chat?.account_id || chat?.external_account_id
@@ -296,6 +297,7 @@ export const Chats: React.FC = () => {
                                         </div>
                                     );
                                 })}
+                                <div ref={messagesEndRef} />
                             </div>
 
                             {/* Input */}
