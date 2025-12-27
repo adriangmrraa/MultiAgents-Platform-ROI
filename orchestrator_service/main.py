@@ -1300,6 +1300,17 @@ async def ready():
 @app.get("/health")
 def health(): return {"status": "ok"}
 
+@app.get("/diag/tenants")
+async def diag_tenants():
+    """
+    Diagnostic endpoint to list all available tenants and their IDs.
+    """
+    try:
+        rows = await db.pool.fetch("SELECT id, store_name, bot_phone_number FROM tenants")
+        return [{"id": r["id"], "store": r["store_name"], "phone": r["bot_phone_number"]} for r in rows]
+    except Exception as e:
+        return {"error": str(e)}
+
 # --- Meta Compliance Endpoints ---
 
 @app.get("/api/v1/auth/meta/deauthorize")
