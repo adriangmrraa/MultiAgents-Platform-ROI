@@ -636,6 +636,18 @@ CATALOGO:
         RAISE NOTICE 'Structural reinforcement failed';
     END $$;
     """
+    """,
+    # 17. Tool Prompt Injection (Nexus v4.5)
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tools' AND column_name='prompt_injection') THEN
+            ALTER TABLE tools ADD COLUMN prompt_injection TEXT DEFAULT '';
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Tool Prompt Injection evolution failed';
+    END $$;
+    """
 ]
 
 @asynccontextmanager

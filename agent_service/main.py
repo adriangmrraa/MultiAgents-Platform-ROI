@@ -53,6 +53,7 @@ class AgentCredentials(BaseModel):
 
 class AgentConfig(BaseModel):
     tools: Optional[List[str]] = None
+    tool_instructions: Optional[List[str]] = None
     model: Optional[Dict[str, Any]] = None
 
 class AgentThinkRequest(BaseModel):
@@ -197,8 +198,15 @@ async def execute_agent(
             history.append(AIMessage(content=m['content']))
             
     # 2. Build Prompt
+    # Protocol Omega: Inject Tool Instructions
+    final_system_prompt = request.context.system_prompt
+    if request.agent_config and request.agent_config.tool_instructions:
+        final_system_prompt += "\n\n### PROTOCOLO DE HERRAMIENTAS ACTIVAS:"
+        for instr in request.agent_config.tool_instructions:
+            final_system_prompt += f"\n- {instr}"
+
     prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content=request.context.system_prompt),
+        SystemMessage(content=final_system_prompt),
         MessagesPlaceholder(variable_name="chat_history"),
         ("user", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
@@ -263,7 +271,45 @@ async def execute_agent(
         if "HUMAN_HANDOFF_REQUESTED:" in output_text:
             messages.append(OrchestratorMessage(text=output_text, metadata=metadata))
         else:
-            messages.append(OrchestratorMessage(text=output_text, metadata=metadata))
+            # Protocol Omega: Multi-Bubble Support (|||) & Image Extraction
+            import re
+            
+            # Split by explicit delimiter first
+            raw_parts = output_text.split("|||")
+            
+            for i, raw_part in enumerate(raw_parts):
+                clean_part = raw_part.strip()
+                if not clean_part:
+                    continue
+
+                # Metadata strategy: Only last bubble gets the full metadata (CoT)
+                is_last_main_part = (i == len(raw_parts) - 1)
+                
+                # Regex for Markdown Images: ![alt](url)
+                image_pattern = r'!\[(.*?)\]\((.*?)\)'
+                matches = list(re.finditer(image_pattern, clean_part))
+                
+                last_idx = 0
+                for j, match in enumerate(matches):
+                    # 1. Text before image
+                    pre_text = clean_part[last_idx:match.start()].strip()
+                    if pre_text:
+                        messages.append(OrchestratorMessage(text=pre_text))
+                    
+                    # 2. The Image
+                    image_url = match.group(2)
+                    messages.append(OrchestratorMessage(imageUrl=image_url))
+                    
+                    last_idx = match.end()
+                
+                # 3. Text after last image
+                remaining_text = clean_part[last_idx:].strip()
+                if remaining_text:
+                    msg_meta = metadata if is_last_main_part else {}
+                    messages.append(OrchestratorMessage(text=remaining_text, metadata=msg_meta))
+                elif is_last_main_part and not matches:
+                    if messages:
+                         messages[-1].metadata = metadata
             
         return {"messages": [m.dict() for m in messages]}
         

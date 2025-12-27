@@ -115,6 +115,7 @@ async def get_tools():
             "description": t.get('description', 'Custom Tool'),
             "type": t['type'],
             "service_url": t.get('service_url'),
+            "prompt_injection": t.get('prompt_injection', ''),
             "config": json.loads(t['config']) if t.get('config') else {},
             "id": t['id']
         })
@@ -256,6 +257,7 @@ class ToolCreate(BaseModel):
     type: str # 'http', 'tienda_nube', etc.
     config: Dict[str, Any]
     service_url: Optional[str] = None
+    prompt_injection: Optional[str] = ""
     description: Optional[str] = "User defined tool"
 
 @router.post("/tools", dependencies=[Depends(verify_admin_token)])
@@ -266,12 +268,12 @@ async def create_tool(tool: ToolCreate):
              raise HTTPException(400, "Cannot override system tool name")
              
         q = """
-        INSERT INTO tools (tenant_id, name, type, config, service_url, description)
-        VALUES (NULL, $1, $2, $3, $4, $5)
+        INSERT INTO tools (tenant_id, name, type, config, service_url, description, prompt_injection)
+        VALUES (NULL, $1, $2, $3, $4, $5, $6)
         RETURNING id
         """
         # Note: NULL tenant_id implies Global Tool for now. Future: ContextVar injection.
-        row = await db.pool.fetchrow(q, tool.name, tool.type, json.dumps(tool.config), tool.service_url, tool.description)
+        row = await db.pool.fetchrow(q, tool.name, tool.type, json.dumps(tool.config), tool.service_url, tool.description, tool.prompt_injection)
         return {"status": "ok", "id": row['id']}
     except Exception as e:
         logger.error(f"Error creating tool: {e}")
