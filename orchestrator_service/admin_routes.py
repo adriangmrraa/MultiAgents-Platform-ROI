@@ -481,31 +481,31 @@ async def magic_onboarding(data: MagicOnboardingRequest):
             "name": "Ventas Expert",
             "role": "sales",
             "sys_prompt": "Eres un experto vendedor. Tu objetivo es cerrar la venta guiando al cliente.",
-            "tools": ["catalog_search", "order_status"]
+            "tools": ["search_specific_products", "orders", "browse_general_storefront", "search_knowledge_base"]
         },
         {
             "name": "Soporte Nivel 1",
             "role": "support",
             "sys_prompt": "Eres un asistente de soporte empático. Resuelve dudas sobre envíos y garantías.",
-            "tools": ["order_track", "faq_search"]
+            "tools": ["orders", "search_specific_products", "search_knowledge_base"]
         },
         {
             "name": "Especialista de Talles",
             "role": "fitting",
             "sys_prompt": "Eres experto en talles y calce. Pide medidas y recomienda el talle exacto.",
-            "tools": ["size_chart_lookup"]
+            "tools": ["search_specific_products"]
         },
         {
             "name": "Gerente de Logística",
             "role": "shipping",
             "sys_prompt": "Gestionas problemas complejos de envíos y devoluciones. Autoridad para cambios.",
-            "tools": ["logistic_override"]
+            "tools": ["orders", "derivhumano"]
         },
         {
             "name": "Supervisor General",
             "role": "supervisor",
             "sys_prompt": "Supervisas la conversación. Si hay hostilidad, derivas a humano.",
-            "tools": ["human_handoff"]
+            "tools": ["derivhumano", "orders"]
         }
     ]
     
@@ -2666,6 +2666,82 @@ async def get_business_assets(tenant_id: str):
     # 3. Cache
     redis_client.setex(cache_key, 5, json.dumps(assets)) # Short TTL (5s) to allow updates during generation
     return assets
+
+@router.get("/rag/galaxy", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
+async def get_rag_galaxy(tenant_id: str):
+    """
+    Returns nodes for the RAG Knowledge Map (Galaxy View).
+    Extracts semantic descriptions from ChromaDB and business assets.
+    """
+    try:
+        from app.core.rag import RAGCore
+        rag = RAGCore(tenant_id)
+        
+        # In a real scenario, we would sample ChromaDB. 
+        # For MVP/Didactic view, we generate nodes from the catalog and assets.
+        
+        # 1. Fetch Assets
+        rows = await db.pool.fetch("SELECT asset_type, content FROM business_assets WHERE tenant_id = $1", tenant_id)
+        assets = {r['asset_type']: json.loads(r['content']) for r in rows}
+        
+        nodes = []
+        import random
+        
+        # Add Asset Nodes
+        for atype, acontent in assets.items():
+            nodes.append({
+                "id": f"asset-{atype}",
+                "x": random.randint(10, 90),
+                "y": random.randint(10, 90),
+                "size": 8,
+                "category": "Neural Asset",
+                "description": f"Propuesta de {atype} autogenerada por Nexus.",
+                "meta": atype.upper(),
+                "color": "#a855f7" # Purple
+            })
+            
+        # Add RAG Nodes (Sample products)
+        # Fetch some products from the database context or just mock 5-10 nodes if RAG is populated
+        try:
+            count = rag.count_vectors()
+            if count > 0:
+                # Mock nodes representing the vector space density
+                for i in range(min(count, 15)):
+                    nodes.append({
+                        "id": f"vec-{i}",
+                        "x": random.randint(5, 95),
+                        "y": random.randint(5, 95),
+                        "size": 5,
+                        "category": "Knowledge",
+                        "description": f"Vector de conocimiento semántico del catálogo #{i}.",
+                        "meta": "VECTOR",
+                        "color": "#22d3ee" # Cyan
+                    })
+        except:
+            pass
+            
+        return nodes
+
+    except Exception as e:
+        logger.error(f"RAG_GALAXY_FAIL: {e}")
+        return []
+
+@router.get("/rag/search", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
+async def search_rag(tenant_id: str, q: str, k: int = 5):
+    """
+    Semantic search across the tenant's vector store.
+    Used by agents to query enriched knowledge.
+    """
+    try:
+        from app.core.rag import RAGCore
+        rag = RAGCore(tenant_id)
+        context = rag.search(q, k=k)
+        return {"ok": True, "context": context}
+    except Exception as e:
+        logger.error(f"RAG_SEARCH_FAIL: {e}")
+        return {"ok": False, "error": str(e)}
 
 @router.get("/engine/analytics", dependencies=[Depends(verify_admin_token)])
 @safe_db_call

@@ -163,6 +163,29 @@ async def orders(q: str):
             return f"Excepción en herramienta: {str(e)}"
 
 @tool
+async def search_knowledge_base(q: str):
+    """
+    SEARCH the internal knowledge base for policies, brand information, or specific non-product data.
+    Use this for questions about 'how do you handle X' or 'what is the return policy'.
+    """
+    # We call the orchestrator's RAG search endpoint through the BFF/Bridge or directly if allowed.
+    # In this architecture, we call the orchestrator (which holds the RAGCore).
+    # We use ctx_service_url as a base, but orchestrator is usually at 8000.
+    orch_url = os.getenv("ORCHESTRATOR_URL", "http://orchestrator_service:8000")
+    headers = {"X-Internal-Secret": ctx_internal_token.get(), "x-admin-token": os.getenv("ADMIN_TOKEN", "admin-secret-99")}
+    params = {"tenant_id": ctx_store_id.get(), "q": q}
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            resp = await client.get(f"{orch_url}/admin/rag/search", params=params, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("ok"): return data.get("context")
+            return f"Error en búsqueda de conocimiento: {resp.text}"
+        except Exception as e:
+            return f"Excepción en herramienta RAG: {str(e)}"
+
+@tool
 async def derivhumano(reason: str):
     """ACTIVATE human handoff. Use when the user specifically asks for a person or is frustrated."""
     return f"HUMAN_HANDOFF_REQUESTED: {reason}"

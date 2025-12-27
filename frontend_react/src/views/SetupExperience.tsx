@@ -88,11 +88,16 @@ const VisualGrid = ({ data }: { data: any }) => (
     <div className="grid grid-cols-2 gap-2">
         {data.social_posts?.map((post: any, i: number) => (
             <div key={i} className="bg-slate-800 rounded p-2 text-xs relative overflow-hidden group">
-                <div className="aspect-square bg-slate-700 flex items-center justify-center mb-2">
-                    <Image size={24} className="text-slate-500" />
+                <div className="aspect-square bg-slate-700 flex items-center justify-center mb-2 overflow-hidden rounded">
+                    {post.base_image ? (
+                        <img src={post.base_image} alt={post.caption} className="w-full h-full object-cover opacity-80 hover:opacity-100 transition-opacity" />
+                    ) : (
+                        <Image size={24} className="text-slate-500" />
+                    )}
                 </div>
                 <p className="font-bold text-white truncate">{post.caption}</p>
-                <p className="text-slate-500 text-[10px]">{post.prompt}</p>
+                <p className="text-slate-400 text-[10px] italic">{post.type || 'Flyer'}</p>
+                <p className="text-slate-500 text-[9px] line-clamp-1">{post.prompt}</p>
             </div>
         ))}
     </div>
