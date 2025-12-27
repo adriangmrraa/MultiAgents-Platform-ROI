@@ -86,26 +86,37 @@ Instead of traditional migration files (`alembic`, etc.), the Orchestrator imple
 ### Core Tables
 *   `tenants` (Config & Credentials)
 *   `business_assets` (Generated content, cached JSONB)
-*   `chat_conversations` / `chat_messages` (History)
+*   `chat_conversations` / `chat_messages` (History - Omnichannel UUID)
 
-**Definición (SSOT)**:
+**Definición de Conversaciones (Nexus v4.4)**:
 ```sql
-CREATE TABLE IF NOT EXISTS business_assets (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Protocol Omega Standard
-    tenant_id TEXT NOT NULL,
-    asset_type TEXT NOT NULL, -- 'branding', 'script', 'image', 'roi_report'
-    content JSONB NOT NULL,   -- El contenido estructurado (paleta, prompt, texto)
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS chat_conversations (
+    id UUID PRIMARY KEY,
+    tenant_id INTEGER REFERENCES tenants(id),
+    channel VARCHAR(32) NOT NULL, 
+    channel_source VARCHAR(32) NOT NULL DEFAULT 'whatsapp',
+    display_name VARCHAR(255),
+    meta JSONB DEFAULT '{}', -- Extended Context
+    last_message_preview TEXT,
+    last_message_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- Index for fast retrieval by UI
-CREATE INDEX idx_business_assets_tenant ON business_assets(tenant_id);
 ```
 
-### Error: `NotNullViolation`
-*   **Causa**: Agregaste una columna obligatoria a una tabla con datos existentes.
-*   **Solución**: Haz la columna `nullable=True` o asigna un `DEFAULT`.
+**Definición de Mensajes (Nexus v4.4)**:
+```sql
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id UUID PRIMARY KEY,
+    conversation_id UUID REFERENCES chat_conversations(id) ON DELETE CASCADE,
+    role VARCHAR(32) NOT NULL,
+    message_type VARCHAR(32) NOT NULL DEFAULT 'text',
+    content TEXT,
+    media_id UUID REFERENCES chat_media(id),
+    channel_source VARCHAR(32) DEFAULT 'whatsapp',
+    meta JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
 
 ---
 

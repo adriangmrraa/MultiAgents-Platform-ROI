@@ -1,65 +1,45 @@
-# 🛡️ Nexus v4.0 Infrastructure Guide (Protocol Omega)
+# 🛡️ Nexus v4.4 Infrastructure Guide (Protocol Omega)
 
-Este documento define la **Topología de Red** (Submarino Presurizado) y las **Políticas de Seguridad** para el despliegue de Nexus v4.0.
+Este documento define la **Topología de Red** y las **Políticas de Seguridad** para el despliegue de Nexus v4.4.
 
 ---
 
-## 1. Topología de Red (Aislamiento de Microservicios)
+## 1. Topología de Red (Omnicanalidad Nexus)
 
-Nexus opera sobre una red virtual privada de Docker. Solo los puntos de entrada estratégicos están expuestos.
+Nexus opera sobre una red virtual privada, protegiendo la lógica de negocio y exponiendo solo lo necesario.
 
 ### 🌍 Puntos de Entrada Públicos
 | Servicio | Rol | Acceso |
 | :--- | :--- | :--- |
 | **Frontend React** | UI Administrativa | `https://multiagents-frontend...` |
-| **Orchestrator** | API & Webhooks | `https://multiagents-orchestrator...` |
-| **BFF Service** | Real-time Stream | `https://multiagents-bff...` |
+| **Orchestrator** | API, Webhooks & SSE | `https://multiagents-orchestrator...` |
 
 ### 🔒 Red Interna (Docker DNS)
-La comunicación entre servicios no sale a internet. Se utiliza el DNS interno de Docker:
-- `http://orchestrator:8000`
-- `http://agent_service:8001`
-- `http://bff_service:3000`
-- `redis://redis:6379`
+- `http://orchestrator:8000` (Centro de Gravedad)
+- `http://agent_service:8001` (Neural Core)
+- `redis://redis:6379` (Telemetry & State)
 
 ---
 
-## 2. Gestión de Seguridad (Build-Time Protocol)
+## 2. Gestión de Seguridad v4.4
 
-### 🔐 El Token de Administración (`ADMIN_TOKEN`)
-En v4.0, la seguridad se basa en una coincidencia exacta de tokens entre el cliente y el servidor.
+### 🔐 Autenticación Maestro-Satélite
+- **Admin API**: Requiere `X-Admin-Token` en todas las peticiones a `/admin/*`.
+- **SSE Stream**: Permite `?token=` en la URL para el stream de consola (necesario para compatibilidad nativa de `EventSource`).
 
-> [!IMPORTANT]
-> **Doble Configuración Requerida**:
-> 1. **Backend (Orchestrator)**: Configurado en **Environment Variables** como `ADMIN_TOKEN`.
-> 2. **Frontend (React)**: Configurado en **Build Arguments** como `VITE_ADMIN_TOKEN`. 
-
-Si estos tokens no coinciden, el sistema devolverá errores `401 Unauthorized` al intentar listar agentes o tiendas.
-
-### 🏗️ Build Arguments (Easypanel)
-Dado que el frontend es estático, el `Dockerfile` v4.0 requiere capturar las variables durante el proceso de construcción:
-- `VITE_ADMIN_TOKEN`: Tu secreto de acceso.
-- `VITE_API_BASE_URL`: URL pública del Orquestador.
+### 🏗️ Build Arguments
+- `VITE_ADMIN_TOKEN`: Inyectado en la construcción del frontend.
+- `VITE_API_BASE_URL`: Apunta al Orquestador.
 
 ---
 
-## 3. Matriz de Variables por Servicio
+## 3. Matriz de Resiliencia
 
-### Orchestrator (Python)
-- `ADMIN_TOKEN`: Secreto maestro.
-- `DATABASE_URL`: Conexión de persistencia.
-- `REDIS_URL`: Sistema de mensajes/cache.
-
-### BFF (Node.js)
-- `ORCHESTRATOR_URL`: `http://orchestrator:8000` (Interno).
-- `ADMIN_TOKEN`: Debe coincidir con el Orquestador.
-
-### Frontend (Build-Time)
-- `VITE_ADMIN_TOKEN`: Se inyecta en el JS durante `npm run build`.
-- `VITE_API_BASE_URL`: Destino de todas las llamadas API.
+Nexus v4.4 implementa **Auto-Reparación Estructural**:
+1.  **Arranque**: El orquestador audita el esquema de la base de datos.
+2.  **Reparación**: Si falta el soporte para multicanalidad (`channel_source`, `meta`), el sistema inyecta las columnas automáticamente.
+3.  **Omega Standard**: Uso estricto de UUIDs para garantizar que la telemetría nunca sufra colisiones de ID.
 
 ---
-
-> **Nota de Resiliencia**: Nexus v4.0 implementa **Auto-Reparación de Infraestructura**. Si un servicio cae, Docker lo reinicia automáticamente; si la base de datos se desvía, el orquestador recompone el esquema en el próximo arranque.
 
 **© 2025 Platform AI Solutions - Nexus Architecture**

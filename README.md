@@ -1,21 +1,20 @@
-# 🧠 Platform AI Solutions (Nexus v4.0) - Protocol Omega
+# 🧠 Platform AI Solutions (Nexus v4.4) - Protocol Omega
 
-> **Estado del Sistema**: `STABLE` | **Versión**: `v4.0.0-omega` | **Arquitectura**: `Hybrid Microservices (Python/Node/React)`
+> **Estado del Sistema**: `STABLE` | **Versión**: `v4.4.0-omega` | **Arquitectura**: `Hybrid Microservices (Python/React)`
 
-Este repositorio aloja el ecosistema **Nexus v4.0**, una plataforma de orquestación de Agentes de IA Multi-Tenant diseñada para operar con **Resiliencia Extrema (Protocolo Omega)** sobre infraestructura Docker/EasyPanel.
+Este repositorio aloja el ecosistema **Nexus v4.4**, una plataforma de orquestación de Agentes de IA Omnicanal diseñada para operar con **Resiliencia Extrema (Protocolo Omega)** sobre infraestructura Docker/EasyPanel.
 
 ---
 
 ## 🌟 Visión: "Simplicidad Radical, Inteligencia Invisible"
 
-A diferencia de las versiones anteriores, Nexus v4.0 abraza el **Minimalismo Interactivo**. El sistema opera con una interfaz "HUD" dinámica, ocultando la complejidad técnica para centrarse en el flujo de pensamiento de los agentes y el retorno de inversión (ROI) en tiempo real.
+Nexus v4.4 abraza el **Minimalismo Interactivo** y la **Omnicanalidad Total**. El sistema gestiona conversaciones de múltiples canales (WhatsApp, Instagram, Facebook) de forma unificada, vinculando cada interacción a un ecosistema centralizado de IA.
 
-### 🚀 Novedades v4.0 (Current Release)
-- **Nexus Minimalist Sidebar**: Navegación por hover "sensible" y tooltips dinámicos de alto detalle.
-- **Mobile HUD v2**: Interfaz adaptativa con auto-ocultamiento para control desde dispositivos móviles.
-- **Neural Stream Logs**: Visualización de pensamientos de IA vía SSE a través del BFF Service.
-- **Build-Time Injection**: Protocolo de seguridad reforzado mediante Docker Build Arguments.
-- **Protocolo de Auto-Reparación**: Auditoría automática de esquemas de base de datos y estados de salud.
+### 🚀 Novedades v4.4 (Current Release)
+- **Omnicanalidad Unificada**: Soporte nativo y visualización fluida para WA, IG y FB en una sola caja de chat.
+- **Protocolo Omega UUID**: Migración total a identificadores universales para garantizar la integridad de los datos.
+- **Auto-Reparación de Infraestructura**: El sistema audita y repara su propio esquema de base de datos en cada arranque.
+- **Desplazamiento Inteligente**: Chat HUD con auto-scroll y carga de medios optimizada.
 
 ---
 
@@ -23,12 +22,9 @@ A diferencia de las versiones anteriores, Nexus v4.0 abraza el **Minimalismo Int
 
 | Servicio | Puerto | Tipo | Función | Tecnología |
 | :--- | :--- | :--- | :--- | :--- |
-| **Orchestrator** | `8000` | 🧠 Cerebro | Core de lógica, Gestión de Tenants, API Maestra. | Python (FastAPI) |
-| **BFF Service** | `3000` | 🔌 Sistema Nervioso | Backend for Frontend. Streaming SSE y Proxy inteligente. | Node.js (Express) |
+| **Orchestrator** | `8000` | 🧠 Cerebro | Core de lógica, Gestión de Tenants, API Maestra y Auto-Reparación. | Python (FastAPI) |
 | **Agent Service** | `8001` | ⚡ Músculos | Motor de ejecución de Agentes y Herramientas. | LangChain / OpenAI |
-| **Frontend React** | `80` | 🖥️ Ojos | Panel HUD Minimalista (Vite + Protocolo Omega CSS). | React / Nginx |
-| **WhatsApp Service** | `8002` | 📞 Vínculo | Integración nativa con Meta / YCloud. | Python (FastAPI) |
-| **TiendaNube Service** | `8003` | 🛒 Brazo Mercantil | Conector de e-commerce sincronizado. | Python (FastAPI) |
+| **Frontend React** | `80` | 🖥️ Ojos | Panel HUD Minimalista Omnicanal. | React / Vite |
 
 ---
 
@@ -36,24 +32,20 @@ A diferencia de las versiones anteriores, Nexus v4.0 abraza el **Minimalismo Int
 
 El sistema está optimizado para **EasyPanel**.
 
-### 1. Variables de Seguridad (Doble Factor)
-Para que el sistema funcione, el `ADMIN_TOKEN` debe coincidir en ambos lados del puente:
-1.  **Orchestrator**: Variable de entorno `ADMIN_TOKEN`.
-2.  **Frontend React**: Argumento de construcción (**Build Argument**) `VITE_ADMIN_TOKEN`.
+### 1. Variables de Seguridad
+La comunicación administrativa se asegura mediante el `ADMIN_TOKEN`, que debe configurarse en el Orquestador (`ENV`) y en el Frontend (`Build Argument`).
 
-### 2. URL de API
-El Frontend debe apuntar a la URL pública del Orquestador mediante el Build Argument `VITE_API_BASE_URL`.
+### 2. Despliegue GitOps
+Simplemente haz `git push origin master`. El sistema detectará los cambios, reconstruirá los contenedores y migrará la base de datos automáticamente.
 
 ---
 
 ## 📚 Documentación Viva
-*   **[INFRASTRUCTURE.md](./INFRASTRUCTURE.md)**: Topología de red y seguridad de nivel militar.
-*   **[Manual de Vuelo v4.0](./Manual%20de%20Vuelo%20Nexus%20v4.0.md)**: Operación diaria y onboarding.
-*   **[AGENTS.md](./AGENTS.md)**: Cómo programar la mente de tus agentes.
-*   **[FRONTEND_DYNAMIC_CONFIG.md](./FRONTEND_DYNAMIC_CONFIG.md)**: Detalles sobre el motor de inyección Vite.
+*   **[BACKEND_SPECIFICATION.md](./BACKEND_SPECIFICATION.md)**: El contrato absoluto de integración.
+*   **[Manual de Vuelo v4.4](./Manual%20de%20Vuelo%20Nexus%20v4.0.md)**: Guía operativa diaria.
+*   **[DATABASE_EVOLUTION_GUIDE.md](./DATABASE_EVOLUTION_GUIDE.md)**: Cómo evoluciona el esquema SSOT.
+*   **[MAINTENANCE_AGENT.md](./MAINTENANCE_AGENT.md)**: Prompt para ingenieros de soporte IA.
 
 ---
-
-> **Mantenimiento**: Este proyecto sigue la metodología "GitOps". No realices cambios manuales. Todo se despliega vía Push a `master`.
 
 **© 2025 Platform AI Solutions - Nexus Architecture**

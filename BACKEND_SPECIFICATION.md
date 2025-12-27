@@ -59,6 +59,11 @@ Internal microservices communicate via a secret handshake.
 ```
 > **Mapping Rule**: The frontend uses `name` -> `display_name` -> `external_user_id` as fallback priority.
 
+**`GET /admin/chats/summary`**
+- **Purpose**: Efficiently load the chat list with summary info (Protocol Omega).
+- **Query Params**: `tenant_id`, `limit`, `channel`.
+- **Response**: `Array<ChatSummary>` (Same structure as `/admin/chats` but optimized).
+
 **`GET /admin/chats/{conversation_id}/messages`**
 - **Params**: `conversation_id` (UUID).
 - **Response**: `Array<ChatMessage>`
@@ -103,6 +108,8 @@ Internal microservices communicate via a secret handshake.
 | `tenant_id` | Integer | Link to `tenants` table |
 | `customer_id` | UUID | Link to `customers` (Identity Link) |
 | `human_override_until`| Timestamp | If > NOW(), chat is locked for AI |
+| `channel_source` | Varchar | `whatsapp`, `instagram`, `facebook` |
+| `meta` | JSONB | Extended context (e.g., ticket IDs) |
 
 ### `chat_messages`
 | Column | Type | Description |
@@ -110,6 +117,8 @@ Internal microservices communicate via a secret handshake.
 | `id` | UUID | Unique Message ID |
 | `message_type` | Varchar | `text`, `image`, `audio`, `video` |
 | `human_override` | Boolean | True if handled by human agent |
+| `channel_source` | Varchar | Origin channel for this specific message |
+| `meta` | JSONB | Message-specific metadata |
 
 ---
 
