@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
 import { MessageSquare, User, RefreshCw } from 'lucide-react';
 
@@ -42,14 +42,21 @@ export const Chats: React.FC = () => {
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
     // const [loadingChats, setLoadingChats] = useState(false); // Removed unused, creating lint noise
-    const messagesEndRef = React.useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
-
+    // Auto-scroll logic (Smart Scroll)
     useEffect(() => {
-        scrollToBottom();
+        if (scrollRef.current) {
+            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+            const isNearBottom = scrollHeight - scrollTop - clientHeight < 150; // Chat specific threshold
+
+            if (isNearBottom) {
+                scrollRef.current.scrollTo({
+                    top: scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
+        }
     }, [messages]);
 
     // Auto-select first tenant if none selected
@@ -335,7 +342,7 @@ export const Chats: React.FC = () => {
                             </div>
 
                             {/* Messages */}
-                            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-black/10 scroll-smooth">
+                            <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-black/10 scroll-smooth">
                                 {messages.map((msg, idx) => {
                                     // Audio Protocol Parsing
                                     const audioMatch = (msg.content || '').match(/\[AUDIO_URL:\s*(.*?)\s*\|\s*TRANSCRIPT:\s*(.*?)\]/);
@@ -408,7 +415,6 @@ export const Chats: React.FC = () => {
                                         </div>
                                     );
                                 })}
-                                <div ref={messagesEndRef} />
                             </div>
 
                             {/* Input */}

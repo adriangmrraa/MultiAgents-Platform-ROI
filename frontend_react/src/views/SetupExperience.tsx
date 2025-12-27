@@ -142,11 +142,21 @@ export const SetupExperience: React.FC = () => {
         tiendanube_access_token: ''
     });
 
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
-    // Auto-scroll logs
+    // Auto-scroll logs (Smart Scroll)
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (scrollRef.current) {
+            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+            const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+
+            if (isNearBottom) {
+                scrollRef.current.scrollTo({
+                    top: scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
+        }
     }, [logs]);
 
     const handleConnect = async () => {
@@ -322,7 +332,7 @@ export const SetupExperience: React.FC = () => {
                                 <Brain size={16} /> Thinking Process
                             </h3>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4 font-mono text-xs text-slate-400 space-y-2">
+                        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 font-mono text-xs text-slate-400 space-y-2">
                             {logs.map((log, i) => (
                                 <div key={i} className="border-l-2 border-cyan-500/20 pl-2">
                                     <span className="text-cyan-600">[{new Date().toLocaleTimeString()}]</span> {log}

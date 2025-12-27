@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Terminal, Play, Pause, Trash2, Filter } from 'lucide-react';
+import { ADMIN_TOKEN } from '../hooks/useApi';
 
 interface LogEvent {
     id: number;
@@ -12,7 +13,7 @@ interface LogEvent {
 }
 
 export const Console: React.FC = () => {
-    const { token } = useApi(); // access raw token for SSE
+    const { fetchApi } = useApi();
     const [events, setEvents] = useState<LogEvent[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
     const [autoScroll, setAutoScroll] = useState(true);
@@ -55,11 +56,11 @@ export const Console: React.FC = () => {
     useEffect(() => {
         if (isStreaming) {
             const apiBase = (window as any).env?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '';
-            const streamUrl = `${apiBase}/admin/console/stream?token=${token}`;
+            const streamUrlRaw = `${apiBase}/admin/console/stream?token=${ADMIN_TOKEN}`;
+            const streamUrlLog = streamUrlRaw.replace(ADMIN_TOKEN || '', '***');
+            console.log("Starting Real-time Stream:", streamUrlLog);
 
-            console.log("Starting Real-time Stream:", streamUrl.replace(token || '', '***'));
-
-            const es = new EventSource(streamUrl);
+            const es = new EventSource(streamUrlRaw);
             eventSourceRef.current = es;
 
             es.onmessage = (event) => {
@@ -97,9 +98,19 @@ export const Console: React.FC = () => {
         }
     }, [isStreaming, token]);
 
+    const scrollRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
-        if (autoScroll && bottomRef.current) {
-            bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+        if (autoScroll && scrollRef.current) {
+            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+            const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+
+            if (isNearBottom) {
+                scrollRef.current.scrollTo({
+                    top: scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
         }
     }, [events, autoScroll]);
 
@@ -133,7 +144,7 @@ export const Console: React.FC = () => {
                 </div>
             </div>
 
-            <div className="glass flex-1 overflow-auto font-mono text-xs p-4 bg-black/40 rounded-lg custom-scrollbar relative">
+            <div ref={scrollRef} className="glass flex-1 overflow-auto font-mono text-xs p-4 bg-black/40 rounded-lg custom-scrollbar relative">
                 {filteredEvents.length === 0 && (
                     <div className="flex flex-col items-center justify-center h-full text-secondary opacity-50">
                         <Terminal size={48} className="mb-4" />

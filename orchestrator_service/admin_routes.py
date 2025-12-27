@@ -1438,10 +1438,10 @@ async def admin_send_message(request: Request):
     # 2. Persist in DB as 'human_supervisor'
     await db.pool.execute(
         """
-        INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number)
-        VALUES ($1, $2, $3, 'human_supervisor', $4, $5, NOW(), $6)
+        INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number, channel_source)
+        VALUES ($1, $2, $3, 'human_supervisor', $4, $5, NOW(), $6, $7)
         """,
-        str(uuid.uuid4()), tenant_id, conv_id, text, correlation_id, phone
+        str(uuid.uuid4()), tenant_id, conv_id, text, correlation_id, phone, channel
     )
 
     # 3. Routing Logic: Chatwoot vs YCloud/WhatsApp

@@ -52,10 +52,21 @@ export const GlobalStreamLog: React.FC = () => {
         return () => clearInterval(interval);
     }, [fetchApi]);
 
-    // Auto-scroll
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Auto-scroll logic (Smart Scroll)
     useEffect(() => {
-        if (bottomRef.current) {
-            bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+        if (scrollRef.current) {
+            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+            // Solo scroll si el usuario está cerca del final (threshold de 100px)
+            const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+
+            if (isNearBottom) {
+                scrollRef.current.scrollTo({
+                    top: scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
         }
     }, [logs]);
 
@@ -74,7 +85,7 @@ export const GlobalStreamLog: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 font-mono text-xs bg-black/40 relative">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 font-mono text-xs bg-black/40 relative">
                 {/* Background Grid */}
                 <div className="absolute inset-0 hud-grid-bg opacity-10 pointer-events-none"></div>
 
