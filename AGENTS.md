@@ -1,4 +1,4 @@
-# 🧠 Guía de Desarrollo de Agentes (Nexus v4.6)
+# 🦍 Guía de Desarrollo de Agentes (Nexus v5)
 
 El **Agent Service** es el núcleo de inteligencia "Apátrida" (Stateless) de la plataforma. Diseñado bajo el **Protocolo Omega**, escala horizontalmente y procesa cada solicitud de forma aislada, recibiendo todo el contexto necesario del Orquestador.
 

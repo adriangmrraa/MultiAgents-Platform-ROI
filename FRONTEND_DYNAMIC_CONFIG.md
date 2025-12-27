@@ -1,4 +1,4 @@
-# Estrategia de Inyección de Configuración (Nexus v4.0)
+# Estrategia de Inyección de Configuración (Nexus v5)
 
 > **Estado**: `Stable` | **Estrategia**: `Build-Time Injection` | **Framework**: `Vite + Docker`
 

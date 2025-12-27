@@ -1,4 +1,4 @@
-# Nexus v4.4 Frontend Technical Specification (Protocol Omega)
+# Nexus v5 Frontend Technical Specification (Titan Protocol)
 
 > **Purpose**: This document defines the Frontend Architecture, acting as the "Client Contract" to be compared against the Backend Specification.
 

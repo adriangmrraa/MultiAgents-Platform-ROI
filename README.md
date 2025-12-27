@@ -1,8 +1,8 @@
-# 🧠 Platform AI Solutions (Nexus v4.6) - Protocol Omega
+# 🦍 Platform AI Solutions (Nexus v5) - Titan Protocol
 
-> **Estado del Sistema**: `STABLE` | **Versión**: `v4.6.2-omega` | **Arquitectura**: `Hybrid Microservices (Python/React)`
+> **Estado del Sistema**: `STABLE` | **Versión**: `v5.0.0-titan` | **Arquitectura**: `Hybrid Microservices (Python/React)`
 
-Este repositorio aloja el ecosistema **Nexus v4.6**, una plataforma de orquestación de Agentes de IA Omnicanal diseñada para operar con **Resiliencia Extrema y Control Táctico** sobre infraestructura Docker/EasyPanel.
+Este repositorio aloja el ecosistema **Nexus v5**, el pináculo de la orquestación de Agentes de IA Omnicanal. Diseñado bajo el **Protocolo Titan**, escala la inteligencia administrativa a niveles de autonomía total.
 
 ---
 

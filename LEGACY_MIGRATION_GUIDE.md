@@ -1,6 +1,6 @@
 # Guía de Migración: Legacy UI a React UI (Completado)
 
-> **Estado**: `COMPLETED` | **Fecha**: `Diciembre 2025` | **Versión Destino**: `Nexus v4.0`
+> **Estado**: `COMPLETED` | **Fecha**: `Diciembre 2025` | **Versión Destino**: `Nexus v5.0`
 
 ## ✅ Resumen de la Migración
 

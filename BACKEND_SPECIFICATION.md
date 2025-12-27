@@ -1,4 +1,4 @@
-# Nexus v4.6 Backend Technical Specification (Protocol Omega)
+# Nexus v5 Backend Technical Specification (Titan Protocol)
 
 > **Purpose**: This document serves as the absolute reference for Frontend-Backend integration. It defines the expected contracts, authentication methods, and data filtering logic to prevent "Ghost Code" or mapping errors.
 

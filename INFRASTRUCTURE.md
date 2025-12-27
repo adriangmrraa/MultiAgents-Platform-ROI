@@ -1,4 +1,4 @@
-# 🛡️ Nexus v4.4 Infrastructure Guide (Protocol Omega)
+# 🛡️ Nexus v5 Infrastructure Guide (Titan Protocol)
 
 Este documento define la **Topología de Red** y las **Políticas de Seguridad** para el despliegue de Nexus v4.4.
 
