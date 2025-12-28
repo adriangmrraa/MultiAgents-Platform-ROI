@@ -38,18 +38,28 @@ class NexusEngine:
              try:
                  # Internal Call to TiendaNube Service via Protocol Omega (Secret Handshake)
                  service_url = os.getenv('TIENDANUBE_SERVICE_URL', 'http://tiendanube_service:8003')
+                 token = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY") or "super-secret-internal-token"
+                 
+                 logger.info("product_fetch_attempt", url=service_url, store_id=tn_store_id)
+                 
                  async with httpx.AsyncClient(timeout=30.0) as client:
                      resp = await client.post(
                          f"{service_url}/tools/productsall",
                          json={"store_id": tn_store_id, "access_token": tn_token},
-                         headers={"X-Internal-Secret": os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY") or "super-secret-internal-token"}
+                         headers={"X-Internal-Secret": token}
                      )
                      if resp.status_code == 200:
                          tool_resp = resp.json()
                          if tool_resp.get("ok"):
                              products = tool_resp.get("data", [])
+                             logger.info("product_fetch_success", count=len(products))
+                         else:
+                             logger.error("product_fetch_error_api", error=tool_resp.get("error"))
+                     else:
+                         logger.error("product_fetch_http_error", status=resp.status_code, body=resp.text)
+                         
              except Exception as e:
-                 logger.error("product_fetch_failed", error=str(e))
+                 logger.error("product_fetch_failed", error=str(e), url=service_url)
 
         # Enrich context for agents
         self.context['catalog'] = products
