@@ -7,7 +7,7 @@ from typing import List, Optional, Any, Dict
 from fastapi import APIRouter, Header, HTTPException, Depends, Request, Response
 from pydantic import BaseModel
 import httpx
-import redis
+
 from db import db, redis_client
 import smtplib
 from email.mime.text import MIMEText
