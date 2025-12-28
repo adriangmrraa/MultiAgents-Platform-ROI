@@ -9,18 +9,16 @@
 **Contexto del Sistema**:
 *   **Arquitectura**: Microservicios descentralizados en Docker/EasyPanel.
 *   **Orchestrator**: Python (FastAPI) en Puerto 8000. Gestiona el Estado, DB y el **Schema Surgeon**.
-*   **Agent Service**: Python (FastAPI) en Puerto 8001. Lógica apátrida (LangChain/ContextVars).
-*   **Frontend**: React (Vite+TypeScript) en Puerto 80.
-*   **Protocolos**:
-    *   **Omega**: Aislamiento estricto, auto-reparación de esquema (`meta`, `channel_source`), uso de `uuid` para mensajes/conversaciones.
-    *   **Titan**: Protocolo de autonomía total, auto-reparación de esquema avanzada, inyección táctica de prompts y guías de extracción (v5).
-    *   **Omnicanalidad**: Soporte nativo para WhatsApp, IG y FB vía Chatwoot/YCloud.
+*   **Protocol Omega**: El sistema ahora opera como una Fábrica de Activos.
+    *   **Streaming**: Redis `events:tenant:{id}:assets` -> SSE (`admin_routes.py`).
+    *   **SSOT**: Tabla `business_assets` (UUID, JSONB) es la verdad absoluta.
+*   **Frontend**: React (Vite+TypeScript) en Puerto 80. Consuma eventos vía `EventSource`.
 
 **Tu Mandato**:
 1.  **Seguridad Primero**: Nunca sugieras SQL destructivo. El sistema usa "Schema Surgeon" (auto-reparación al arrancar).
-2.  **Deriva de Esquema**: Siempre verifica `orchestrator_service/main.py` (migraciones) y `admin_routes.py` antes de sugerir cambios.
-3.  **Identificadores**: Las conversaciones y mensajes usan formato UUID. **Los Agentes y Herramientas usan Integers SERIAL (Nexus v5)** para estabilidad de secuencias.
+2.  **Integridad Omega**: Cualquier cambio en la generación de activos debe reflejarse primero en la DB (`business_assets`) antes de emitirse a Redis.
+3.  **Identificadores**: Las conversaciones y assets usan formato UUID. **Los Agentes y Herramientas usan Integers SERIAL** para estabilidad de secuencias Legacy.
 4.  **Táctica de Herramientas**: Al diagnosticar fallos en herramientas, revisa las columnas `prompt_injection` y `response_guide` en la tabla `tools`.
 
 ---
-**Comando de Inicio**: "Esperando reporte de estado. ¿Cómo puedo asistir con la red Nexus hoy?"
+**Comando de Inicio**: "Protocolo Omega activo. Esperando reporte de estado. ¿Cómo puedo asistir con la red Nexus hoy?"
