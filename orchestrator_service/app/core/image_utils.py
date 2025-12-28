@@ -64,9 +64,9 @@ async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
 
         prompt = f"Analyze this product image deeply. Context: {prompt_context}. Describe the MAIN PRODUCT (colors, materials, shape, key features) so it can be recreated. Output a concise paragraph."
         
-        # Try gemini-1.5-pro as Flash is failing with 404 in this environment
+        # Upgrade to gemini-2.0-flash (Available per Runtime Logs)
         response = client.models.generate_content(
-            model='gemini-1.5-pro', 
+            model='gemini-2.0-flash', 
             contents=[prompt, img]
         )
         return response.text
@@ -109,7 +109,7 @@ async def generate_ad_from_product(base64_product: str, prompt: str) -> str:
         analysis_prompt = f"Describe este producto detalladamente para un anuncio de {prompt}. Enfócate en la estética, colores y marca."
         
         response = client.models.generate_content(
-            model='gemini-1.5-pro',
+            model='gemini-2.0-flash',
             contents=[analysis_prompt, img]
         )
         visual_description = response.text

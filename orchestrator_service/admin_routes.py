@@ -2872,7 +2872,8 @@ async def get_products(tenant_id: str):
         if tenant_id.isdigit() and len(tenant_id) < 6:
              tenant_int_id = tenant_id
         else:
-             row = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1 OR tenant_id = $1::text", tenant_id)
+             # PROTOCOL OMEGA FIX: 'tenant_id' column does not exist. Use CAST(id AS TEXT) for ID lookup.
+             row = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1 OR CAST(id AS TEXT) = $1", tenant_id)
              if row: tenant_int_id = str(row['id'])
         
         if not tenant_int_id: tenant_int_id = tenant_id # Fallback
@@ -2916,7 +2917,8 @@ async def stream_engine_events(request: Request, tenant_id_phone: str, token: Op
         # Resolve from DB
         try:
              # Clean phone (remove +) if needed, but usually stored with +
-             row = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1 OR tenant_id = $1::text", tenant_id_phone) # Handle legacy text ID too
+             # PROTOCOL OMEGA FIX: 'tenant_id' column does not exist. Use CAST(id AS TEXT).
+             row = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1 OR CAST(id AS TEXT) = $1", tenant_id_phone) 
              if row:
                  tenant_int_id = str(row['id'])
         except Exception as e:
