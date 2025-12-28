@@ -12,6 +12,7 @@ import { YCloudSettings } from './views/YCloudSettings'; // v3.3 Settings Module
 import { MetaSettings } from './views/MetaSettings'; // v3.3 Settings Module
 import { Analytics } from './views/Analytics'; // v3.3 Analytics Module
 import { MagicOnboarding } from './views/MagicOnboarding'; // v3.4 Magic Module
+import { BusinessForge } from './views/BusinessForge'; // Negrocio Module
 import { Agents } from './views/Agents'; // v3.5 Agents Module
 import { Console } from './views/Console';
 import { Handoff } from './views/Handoff';
@@ -25,6 +26,7 @@ function App() {
           <Route path="/setup" element={<Setup />} />
           <Route path="/nexus-setup" element={<SetupExperience />} />
           <Route path="/magic" element={<MagicOnboarding />} />
+          <Route path="/forge" element={<BusinessForge />} />
           <Route path="/stores" element={<Stores />} />
           <Route path="/agents" element={<Agents />} /> {/* Added missing route */}
           <Route path="/logs" element={<Logs />} />

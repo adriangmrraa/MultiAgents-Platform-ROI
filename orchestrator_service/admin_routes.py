@@ -605,8 +605,155 @@ async def run_rag_ingestion(tenant_id, store_id, token):
         await db.pool.execute("INSERT INTO system_events (event_type, severity, message, tenant_id, occurred_at) VALUES ('rag_failed', 'ERROR', $1, $2, NOW())", str(e), tenant_id)
 
 
-# Endpoints de agentes consolidados al final del archivo (Nexus v4.4)
-pass
+
+# --- ASSETS & PRODUCTS (BUSINESS FORGE) ---
+
+@router.get("/assets", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
+async def get_business_assets(tenant_id: Optional[str] = None, asset_type: Optional[str] = None):
+    """
+    Fetch generated business assets.
+    Protocol Omega: Filter by tenant_id if provided (SuperAdmin can see all or filter).
+    """
+    try:
+        query = "SELECT * FROM business_assets"
+        params = []
+        conditions = []
+        
+        if tenant_id:
+            conditions.append(f"tenant_id = ${len(params) + 1}::text")
+            params.append(tenant_id)
+            
+        if asset_type:
+             conditions.append(f"asset_type = ${len(params) + 1}")
+             params.append(asset_type)
+             
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+            
+        query += " ORDER BY created_at DESC"
+        
+        rows = await db.pool.fetch(query, *params)
+        
+        # Parse JSON content
+        results = []
+        for r in rows:
+            data = dict(r)
+            if isinstance(data['content'], str):
+                try: 
+                    data['content'] = json.loads(data['content'])
+                except: pass
+            results.append(data)
+            
+        return results
+    except Exception as e:
+        logger.error(f"Error fetching assets: {e}")
+        raise HTTPException(500, str(e))
+
+@router.get("/products", dependencies=[Depends(verify_admin_token)])
+async def get_store_products(tenant_id: str):
+    """
+    Fetch store products.
+    Protocol Omega: Real-time proxy to TiendaNube if credentials exist, else Mock.
+    """
+    try:
+        # 1. Get Credentials
+        q = "SELECT tiendanube_store_id, tiendanube_access_token FROM tenants WHERE id = $1 OR bot_phone_number = $1"
+        # Try ID first, then phone
+        row = None
+        if tenant_id.isdigit():
+             row = await db.pool.fetchrow(q, int(tenant_id))
+        if not row:
+             row = await db.pool.fetchrow("SELECT tiendanube_store_id, tiendanube_access_token FROM tenants WHERE bot_phone_number = $1", tenant_id)
+             
+        if not row:
+            # Fallback Mocks for Demo
+            return [
+                {"id": 991, "name": {"es": "Camiseta CyberPunk Gen1"}, "images": [{"src": "https://via.placeholder.com/300/000000/00ffff?text=CyberTee"}], "categories": [{"id": 1, "name": {"es": "Ropa"}}]},
+                {"id": 992, "name": {"es": "Zapatillas Neon Runner"}, "images": [{"src": "https://via.placeholder.com/300/111111/ff00ff?text=NeonShoes"}], "categories": [{"id": 1, "name": {"es": "Calzado"}}]}
+            ]
+            
+        store_id = row['tiendanube_store_id']
+        from utils import decrypt_password
+        token = decrypt_password(row['tiendanube_access_token'])
+        
+        # 2. Fetch from TN
+        url = f"https://api.tiendanube.com/v1/{store_id}/products?per_page=50"
+        headers = {"Authentication": f"bearer {token}", "User-Agent": "Nexus Bot"}
+        
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                return resp.json()
+            else:
+                logger.warning(f"TN Fetch Failed: {resp.text}")
+                # Return empty list or fallbacks? Return empty to avoid confusion.
+                return []
+                
+    except Exception as e:
+        logger.error(f"Error fetching products: {e}")
+        raise HTTPException(500, str(e))
+
+@router.get("/engine/stream/{tenant_id}")
+async def engine_stream(request: Request, tenant_id: str, token: Optional[str] = None):
+    """
+    SSE Stream for Magic Onboarding (Nexus Engine output).
+    Protocol Omega: Public endpoint (no auth header) for EventSource, but secured via tenant knowledge.
+    """
+    # Security: Verify Admin Token (Protocol Omega)
+    admin_token = request.headers.get("x-admin-token") or token
+    if admin_token != ADMIN_TOKEN:
+        logger.warning(f"Unauthorized stream access attempt for {tenant_id}")
+        raise HTTPException(status_code=401, detail="Unauthorized stream access")
+
+    async def event_generator():
+        # 1. Subscribe to Redis Channel for this Tenant
+        pubsub = redis_client.pubsub()
+        channel = f"nexus_engine:{tenant_id}"
+        pubsub.subscribe(channel)
+        
+        yield {
+            "event": "log",
+            "data": json.dumps({"event_type": "info", "message": f"Connected to Nexus Stream for {tenant_id}"})
+        }
+        
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                    
+                message = pubsub.get_message(ignore_subscribe_messages=True)
+                if message:
+                    # Redis message format: {'type': 'message', 'pattern': None, 'channel': b'nexus_engine:123', 'data': b'{...}'}
+                    raw_data = message['data']
+                    if isinstance(raw_data, bytes):
+                        raw_data = raw_data.decode('utf-8')
+                    
+                    # Logic to determine event type from payload content if possible
+                    # We expect the Engine to publish JSON like: {"type": "branding", "data": {...}}
+                    try:
+                        payload = json.loads(raw_data)
+                        event_type = payload.get("type", "log")
+                        
+                        yield {
+                            "event": event_type,
+                            "data": json.dumps(payload)
+                        }
+                    except:
+                         yield {
+                            "event": "log",
+                            "data": json.dumps({"event_type": "raw", "message": raw_data})
+                        }
+                        
+                await asyncio.sleep(0.1)
+        except Exception as e:
+            logger.error(f"Stream Error: {e}")
+            yield {
+                "event": "error", 
+                "data": json.dumps({"message": str(e)})
+            }
+            
+    return EventSourceResponse(event_generator())
 
 # --- CONSOLE STREAMING ---
 from sse_starlette.sse import EventSourceResponse
