@@ -8,6 +8,7 @@ from uuid import uuid4
 from typing import Dict, Any, List
 from db import db, redis_client 
 from app.core.rag import RAGCore
+from langchain_openai import ChatOpenAI
 
 logger = structlog.get_logger()
 
@@ -38,6 +39,7 @@ class NexusEngine:
              try:
                  potential_urls = [
                      os.getenv('TIENDANUBE_SERVICE_URL'), 
+                     'http://tiendanube_service:8003',
                      'http://tiendanube-service:8003',
                      'http://multiagents-tiendanube-service:8003'
                  ]
@@ -71,42 +73,49 @@ class NexusEngine:
 
         self.context['catalog'] = products
 
-        # 2. Parallel Execution (The "Magnificent Seven" Swarm)
-        # Agents: DNA(1), Creative(2), Copy(3), Growth(4), Social(5), Librarian(6), Guardian(7)
+        # 2. Step-by-Step Execution (Nexus v3.3 - Sequential Protocol)
+        # Sequence: Scrutiny -> Ingestion -> Generation -> Compliance
         
-        # Phase 1: Neural Sync & DNA
-        dna_task = self._agent_dna_extractor()
-        rag_task = self._agent_librarian()
+        # Step 1: DNA Extractor (web/brand analysis)
+        logger.info("engine_step_1_dna")
+        dna_res = await self._agent_dna_extractor()
+        final_summary = {} # Initialize final_summary here
+        final_summary["branding"] = dna_res.get("data")
         
-        # Phase 2: Generation Swarm
-        creative_task = self._agent_creative_director()
-        copy_task = self._agent_copywriter()
-        growth_task = self._agent_growth_architect()
-        social_task = self._agent_social_media_strategist()
+        # Step 2: Librarian (RAG Ingestion & Sync)
+        logger.info("engine_step_2_rag")
+        rag_res = await self._agent_librarian()
+        final_summary["rag_sync"] = rag_res.get("data")
         
-        results = await asyncio.gather(
-            dna_task,
-            creative_task, 
-            copy_task,
-            growth_task,
-            social_task,
-            rag_task,
+        # Step 3: Creative Director (Visual Alchemy)
+        # Now has DNA/RAG context available
+        logger.info("engine_step_3_creative")
+        creative_res = await self._agent_creative_director()
+        final_summary["visuals"] = creative_res.get("data")
+        
+        # Step 4: Copywriter Maestro
+        logger.info("engine_step_4_copy")
+        copy_res = await self._agent_copywriter()
+        final_summary["scripts"] = copy_res.get("data")
+        
+        # Step 5: Growth & Social (Parallelized as they are strategy extensions)
+        logger.info("engine_step_5_strategy")
+        strategy_results = await asyncio.gather(
+            self._agent_growth_architect(),
+            self._agent_social_media_strategist(),
             return_exceptions=True
         )
-        
-        # 3. Aggregation & Compliance
-        final_summary = {}
-        for res in results:
+        for res in strategy_results:
             if isinstance(res, Exception):
-                logger.error("agent_crash", error=str(res))
-                continue
-            if res and "type" in res:
+                logger.error("strategy_agent_crash", error=str(res))
+            elif res and "type" in res:
                 final_summary[res["type"]] = res.get("data")
-                
-        # Agent 7: Guardián de la Verdad (Compliance & Safety)
+
+        # Step 6: Guardián de la Verdad (Compliance & Safety)
+        logger.info("engine_step_6_compliance")
         await self._agent_compliance_guardian(final_summary)
         
-        # Signal Completion
+        # 3. Finalization
         await self._publish_event("task_completed", {"status": "success", "summary_count": len(final_summary)})
 
         try:
@@ -141,29 +150,63 @@ class NexusEngine:
 
     # --- AGENT 1: Extractor de ADN de Marca (Web & API Scraper) ---
     async def _agent_dna_extractor(self):
-        """Misión: Decodificar el 'alma' de la tienda."""
+        """Misión: Decodificar el 'alma' de la tienda usando LLM."""
         try:
             store_name = self.context.get("store_name", "Brand")
             store_url = self.context.get("store_website", "N/A")
-            
-            # Logic: Analysis by First Principles / Ockham's Razor
-            # (Heuristic simulation for DNA, would normally be an LLM call with scraped data)
+            store_desc = self.context.get("store_description", "")
             products = self.context.get("catalog", [])
-            main_category = products[0].get("categories", [{}])[0].get("name", {}).get("es", "General") if products else "E-commerce"
             
-            dna_data = {
-                "uvp": f"Solución líder en {main_category}. Calidad y servicio garantizado para el cliente exigente.",
-                "brand_voice": "Experta, Confiable, Resolutiva",
-                "archetype": "The Sage / The Hero",
-                "methodology": "Producto/Audiencia/Oferta Segmentation",
-                "_meta_mental_model": "Ockham's Razor & First Principles"
-            }
+            # Simple Catalog Summary for LLM
+            catalog_summary = []
+            for p in products[:5]:
+                name = p.get("name", {}).get("es", "N/A")
+                price = p.get("price", "N/A")
+                catalog_summary.append(f"- {name} (${price})")
+            
+            prompt = f"""
+            Analiza esta tienda y define su ADN de marca.
+            Nombre: {store_name}
+            URL: {store_url}
+            Descripción: {store_desc}
+            Muestra de productos:
+            {"\n".join(catalog_summary)}
+
+            Basado en esto, devuelve un JSON con:
+            - uvp: Propuesta Única de Valor (concisa).
+            - brand_voice: Tono de voz (3 palabras).
+            - archetype: Arquetipo de marca (ej: El Mago, El Explorador).
+            - methodology: Breve descripción de su enfoque comercial.
+            """
+            
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+            resp = await llm.ainvoke(prompt)
+            
+            # Extract JSON from response
+            try:
+                # Clean prefix/suffix if LLM wraps in markdown
+                res_text = resp.content.strip()
+                if "```json" in res_text:
+                    res_text = res_text.split("```json")[1].split("```")[0].strip()
+                dna_data = json.loads(res_text)
+            except:
+                # Fallback
+                dna_data = {
+                    "uvp": f"Solución líder en E-commerce. Calidad y servicio garantizado.",
+                    "brand_voice": "Experta, Confiable, Resolutiva",
+                    "archetype": "The Sage / The Hero",
+                    "methodology": "Omnichannel Expansion Strategy"
+                }
+
+            dna_data["_meta_mental_model"] = "First Principles Analysis"
             
             await self._persist_asset("branding", dna_data)
+            # Store in context for future agents
+            self.context['dna'] = dna_data
             return {"type": "branding", "data": dna_data}
         except Exception as e:
             logger.error("dna_agent_failed", error=str(e))
-            raise e
+            return {"type": "branding", "data": {"uvp": "Nexus Native Brand DNA"}}
 
     # --- AGENT 2: Director Creativo de Performance (Visual Alchemy - Nano Banana) ---
     async def _agent_creative_director(self):
@@ -179,13 +222,19 @@ class NexusEngine:
                 img_src = p.get("images", [{}])[0].get("src")
                 if not img_src: continue
                 
+                # Get DNA Context
+                dna = self.context.get("dna", {})
+                brand_voice = dna.get("brand_voice", "Professional")
+                uvp = dna.get("uvp", "")
+
                 # Model Mentals: Gestalt & Neuroaesthetics
                 # Lighting decision-tree based on description
-                lighting = "Cinematic Soft Lighting" if "luxury" in store_desc.lower() else "High Dynamic Contrast"
+                lighting = "Cinematic Soft Lighting" if ("luxury" in store_desc.lower() or "premium" in uvp.lower()) else "High Dynamic Contrast"
                 
                 fusion_prompt = (
-                    f"Professional ad background for {p.get('name', {}).get('es')}. "
-                    f"Atmosphere: {lighting}, luxury minimal setting. "
+                    f"Professional high-impact ad for {p.get('name', {}).get('es')}. "
+                    f"Brand Voice Context: {brand_voice}. "
+                    f"Atmosphere: {lighting}, {uvp}. "
                     f"Golden Ratio composition, 35mm f/1.8 lens mood, high aspiration, visual stop."
                 )
                 
@@ -207,32 +256,50 @@ class NexusEngine:
 
     # --- AGENT 3: Copywriter Maestro (Direct Response Specialist) ---
     async def _agent_copywriter(self):
-        """Misión: Redactar copys usando Eugene Schwartz (AIDA/PAS/Awareness)."""
-        store_name = self.context.get("store_name")
-        catalog_summary = f"{len(self.context.get('catalog', []))} productos detectados"
-        
-        data = {
-            "specialty": "Direct Response (Eugene Schwartz)",
-            "scripts": [
-                {
-                    "stage": "TOFU (Atracción)",
-                    "framework": "AIDA",
-                    "copy": f"Atención: Descubre {store_name}. La nueva forma de vivir el estilo y la calidad sin compromisos.",
-                },
-                {
-                    "stage": "MOFU (Consideración)",
-                    "framework": "PAS (Problem-Agitation-Solution)",
-                    "copy": "¿Cansado de productos que no cumplen lo que prometen? En {store_name} garantizamos excelencia en cada detalle.",
-                },
-                {
-                    "stage": "BOFU (Cierre)",
-                    "framework": "Escasez & Urgencia",
-                    "copy": "¡Últimas unidades! Reserva la tuya ahora en la web oficial y asegura el mejor precio de la temporada.",
+        """Misión: Redactar copys persuasivos usando el ADN de marca y LLM."""
+        try:
+            dna = self.context.get("dna", {})
+            store_name = self.context.get("store_name", "Brand")
+            products = self.context.get("catalog", [])
+            
+            # Context for LLM
+            brand_voice = dna.get("brand_voice", "Professional")
+            uvp = dna.get("uvp", "Quality Products")
+            
+            prompt = f"""
+            Eres un Copywriter Maestro experto en Respuesta Directa (Eugene Schwartz).
+            Marca: {store_name}
+            Voz: {brand_voice}
+            UVP: {uvp}
+            Productos: {len(products)} unidades detectadas.
+
+            Misión: Escribe 3 copys persuasivos (AIDA, PAS, Escasez).
+            Formato: JSON con una lista 'scripts' que contiene objetos {{stage, framework, copy}}.
+            """
+            
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+            resp = await llm.ainvoke(prompt)
+            
+            try:
+                res_text = resp.content.strip()
+                if "```json" in res_text:
+                    res_text = res_text.split("```json")[1].split("```")[0].strip()
+                data = json.loads(res_text)
+            except:
+                # Fallback matching the structure
+                data = {
+                    "scripts": [
+                        {"stage": "TOFU", "framework": "AIDA", "copy": f"Descubre {store_name}. {uvp}."},
+                        {"stage": "BOFU", "framework": "Cierre", "copy": f"¡Aprovecha hoy en {store_name}!"}
+                    ]
                 }
-            ]
-        }
-        await self._persist_asset("scripts", data)
-        return {"type": "scripts", "data": data}
+
+            data["specialty"] = "Direct Response (Eugene Schwartz)"
+            await self._persist_asset("scripts", data)
+            return {"type": "scripts", "data": data}
+        except Exception as e:
+            logger.error("copywriter_failed", error=str(e))
+            return {"type": "scripts", "data": {"scripts": []}}
 
     # --- AGENT 4: Arquitecto de Crecimiento (Growth & ROI) ---
     async def _agent_growth_architect(self):

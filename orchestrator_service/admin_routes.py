@@ -1,4 +1,5 @@
 import os
+import re
 import asyncio
 import json
 import uuid
@@ -540,24 +541,31 @@ async def magic_onboarding(data: MagicOnboardingRequest):
     
     # Context hydration for the engine
     decrypted_token = data.tiendanube_access_token # We have it raw here
+    
+    # Robust URL Strategy (Sync with ignite_engine)
+    store_website = data.store_url
+    if not store_website:
+        slug = re.sub(r'[^a-z0-9]', '', data.store_name.lower())
+        store_website = f"https://{slug}.mitiendanube.com"
+        logger.info("magic_url_guessed", slug=slug)
+
     context = {
         "store_name": data.store_name,
-        "store_website": data.store_url or f"https://{data.tiendanube_store_id}.mytiendanube.com",
+        "store_website": store_website,
         "credentials": {
             "tiendanube_store_id": data.tiendanube_store_id,
             "tiendanube_access_token": decrypted_token
         }
     }
     
-    engine = NexusEngine(provisional_phone, context)
-    # We await ignition to ensure assets are ready for the user immediately (Standard Omega requirement)
-    # Or should we background it? The user said "printing in front of their eyes". 
-    # Engine.ignite is relatively fast (except maybe visuals). 
-    # We will await it to ensure the "Done" screen actually has data to show.
+    # Use real DB ID for Engine (Safe for RAG/Chroma)
+    engine = NexusEngine(str(tenant_id), context)
+    # Sequential ignite
     await engine.ignite()
 
     # 4. TRIGGER RAG BACKGROUND JOB (Async)
-    asyncio.create_task(run_rag_ingestion(tenant_id, provisional_phone, data.tiendanube_store_id, data.tiendanube_access_token))
+    # Using real tenant_id
+    asyncio.create_task(run_rag_ingestion(tenant_id, str(tenant_id), data.tiendanube_store_id, data.tiendanube_access_token))
     
     return {
         "status": "success",
@@ -2809,9 +2817,20 @@ async def ignite_engine(request: Request):
     # We prefer the Freshly updated values
     final_tn_token = decrypt_password(row['tiendanube_access_token']) if row['tiendanube_access_token'] else None
     
+    # Robust URL Strategy: Payload > Guessed
+    # Tienda Nube store IDs are numeric, but subdomains are usually derived from store_name or a separate field.
+    # We try common patterns.
+    store_website = payload.get("store_website")
+    if not store_website:
+        # Guess: numerical ID is RARELY the subdomain for mitiendanube.com
+        # Attempt to use store_name slugified
+        slug = re.sub(r'[^a-z0-9]', '', store_name.lower())
+        store_website = f"https://{slug}.mitiendanube.com"
+        logger.info("engine_url_guessed", slug=slug)
+
     context = {
         "store_name": store_name,
-        "store_website": f"https://{tn_store_id}.mytiendanube.com", # Default guess, agent will refine
+        "store_website": store_website,
         "credentials": {
             "tiendanube_store_id": row['tiendanube_store_id'],
             "tiendanube_access_token": final_tn_token

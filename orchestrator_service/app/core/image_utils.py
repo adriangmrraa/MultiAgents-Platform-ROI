@@ -67,8 +67,10 @@ async def generate_image_dalle3(full_prompt: str, image_url: str = None) -> str:
                 if resp.status_code == 200:
                     img_bytes = resp.content
                     reference_images.append(
-                        types.SubjectReferenceImage(
-                            image=types.Image(image_bytes=img_bytes)
+                        types.ReferenceImage(
+                            subject_reference_image=types.SubjectReferenceImage(
+                                image=types.Image(image_bytes=img_bytes)
+                            )
                         )
                     )
 
