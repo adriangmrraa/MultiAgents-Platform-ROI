@@ -2896,6 +2896,14 @@ async def get_products(tenant_id: str):
         logger.error(f"smart_catalog_fetch_fail: {e}")
         return []
 
+@router.get("/engine/stream/{tenant_id_phone}")
+async def stream_engine_events_legacy(request: Request, tenant_id_phone: str, token: Optional[str] = None):
+    """
+    Legacy Stream Endpoint (V1) - Protocol Omega Compatibility Layer.
+    Redirects/Aliases to V2 logic for frontends that missed the update.
+    """
+    return await stream_engine_events(request, tenant_id_phone, token)
+
 @router.get("/engine/stream/v2/{tenant_id_phone}")
 async def stream_engine_events(request: Request, tenant_id_phone: str, token: Optional[str] = None):
     """

@@ -64,9 +64,9 @@ async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
 
         prompt = f"Analyze this product image deeply. Context: {prompt_context}. Describe the MAIN PRODUCT (colors, materials, shape, key features) so it can be recreated. Output a concise paragraph."
         
-        # Upgrade to gemini-2.0-flash (Available per Runtime Logs)
+        # Upgrade to gemini-2.5-flash (Available per Runtime Logs) to bypass 2.0-flash Quota/429
         response = client.models.generate_content(
-            model='gemini-2.0-flash', 
+            model='gemini-2.5-flash', 
             contents=[prompt, img]
         )
         return response.text
