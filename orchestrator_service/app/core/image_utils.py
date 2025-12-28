@@ -96,8 +96,8 @@ async def generate_ad_from_product(base64_product: str, prompt: str) -> str:
              logger.info("gemini_gen_ad_list_start")
              items = []
              for m in client.models.list():
-                 if 'generateContent' in m.supported_generation_methods:
-                     items.append(f"{m.name} ({m.display_name})")
+                 # Protocol Omega: Blind listing to avoid AttributeError
+                 items.append(f"{m.name}")
              logger.info("gemini_available_models_gen_ad", models=items)
         except Exception as e:
              logger.error("gemini_list_failed_gen_ad", error=str(e))

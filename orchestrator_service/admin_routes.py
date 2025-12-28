@@ -2860,10 +2860,10 @@ async def ignite_engine(request: Request):
         "engine_result": result
     }
 
-@router.get("/engine/stream/{tenant_id_phone}")
+@router.get("/engine/stream/v2/{tenant_id_phone}")
 async def stream_engine_events(request: Request, tenant_id_phone: str, token: Optional[str] = None):
     """
-    Real-time Engine Event Stream (Protocol Omega Fix).
+    Real-time Engine Event Stream V2 (Protocol Omega Fix).
     Resolves Phone -> ID -> Redis Channel.
     """
     # 1. Auth Check (Query or Header)
