@@ -5,24 +5,24 @@ import { useNavigate } from 'react-router-dom';
 
 // --- Skeleton Components ---
 
-const SkeletonAssetCard = ({ icon: Icon }: { icon: any }) => (
+const SkeletonAssetCard = ({ icon: Icon, title }: { icon: any, title: string }) => (
     <div className="asset-card skeleton-pulse" style={{
         background: 'rgba(0, 20, 40, 0.4)',
-        border: '1px solid rgba(0, 255, 200, 0.05)',
-        padding: '20px',
+        border: '1px solid rgba(255, 255, 255, 0.05)',
         borderRadius: '12px',
-        marginBottom: '16px',
-        height: '200px',
+        padding: '24px',
+        height: '280px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '12px'
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: '16px'
     }}>
-        <div style={{ display: 'flex', alignItems: 'center', color: 'rgba(34, 211, 238, 0.3)' }}>
-            <Icon size={20} style={{ marginRight: '8px' }} />
-            <div style={{ height: '20px', width: '120px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}></div>
+        <div style={{ opacity: 0.2 }}>
+            <Icon size={48} />
         </div>
-        <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}></div>
-        <div style={{ height: '40px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}></div>
+        <div style={{ height: '16px', background: 'rgba(255,255,255,0.1)', width: '120px', borderRadius: '4px' }}></div>
+        <div className="text-xs text-slate-600 font-bold tracking-widest">{title} PENDING...</div>
     </div>
 );
 
@@ -102,7 +102,7 @@ const RoiBlock = ({ data }: { data: any }) => (
 );
 
 const AssetCard = ({ title, icon: Icon, children }: any) => (
-    <div className="asset-card fade-in" style={{
+    <div className="asset-card magic-appear" style={{
         background: 'rgba(0, 20, 40, 0.6)',
         border: '1px solid rgba(0, 255, 200, 0.2)',
         padding: '20px',
@@ -163,59 +163,72 @@ export const MagicOnboarding: React.FC = () => {
 
     const handleConnect = async () => {
         setStep('igniting');
-        setPendingAssets(['branding', 'scripts', 'visuals', 'roi']); // Reset
         setAssets([]);
         setPercent(0);
 
         try {
             // A. Trigger Ignition
             const payload = { ...formData, tenant_id: formData.bot_phone_number };
-            await fetchApi('/admin/onboarding/magic', { method: 'POST', body: payload }); // Updated path to match admin_routes
+            await fetchApi('/admin/onboarding/magic', { method: 'POST', body: payload });
 
-            // B. Connect to Stream (BFF)
-            // We use /api/admin/engine/stream as the standard path through Nginx/BFF
-            // Protocol Omega: Pass token via query param for EventSource
+            // B. Protocol Omega Stream Connection
             const streamUrl = `/api/admin/engine/stream/${formData.bot_phone_number}?token=${ADMIN_TOKEN}`;
             const evtSource = new EventSource(streamUrl);
 
             evtSource.onopen = () => {
-                setLogs(prev => [...prev, ">> SYSTEM: Secure Link Established. Protocol Omega Active."]);
+                setLogs(prev => [...prev, ">> SYSTEM: Secure Protocol Omega Link Established."]);
             };
 
-            const handleAsset = (e: any, type: string) => {
+            // 1. Handle Spec-Compliant 'asset_generated' Event
+            evtSource.addEventListener("asset_generated", (e: any) => {
                 try {
-                    const content = JSON.parse(e.data);
+                    const payload = JSON.parse(e.data);
+                    // Payload: { asset_id: "...", asset_type: "visuals", content: {...} }
+                    const type = payload.asset_type;
+                    const content = payload.content;
 
-                    // Add to assets
                     setAssets(prev => {
-                        if (prev.some(a => a.type === type || a.asset_type === type)) return prev;
-                        const normalized = { type: type, content: content.content || content.data || content };
-                        return [...prev, normalized];
+                        // Idempotency check
+                        if (prev.some(a => a.type === type)) return prev;
+                        // Normalize for UI
+                        return [...prev, { type, content }];
                     });
 
-                    setLogs(prev => [...prev, `>> ASSET: ${type.toUpperCase()} Generated Successfully.`]);
+                    setLogs(prev => [...prev, `>> ASSET: ${type.toUpperCase()} Materialized.`]);
                     setPercent(prev => Math.min(prev + 20, 95));
 
-                } catch (err) { console.error(err); }
+                } catch (err) { console.error("Stream Parse Error", err); }
+            });
+
+            // 2. Handle Task Completion & Redirect
+            evtSource.addEventListener("task_completed", (e: any) => {
+                setLogs(prev => [...prev, ">> SYSTEM: Design Tasks Completed. Initializing Forge..."]);
+                setPercent(100);
+
+                // Magic Delay before Redirect
+                setTimeout(() => {
+                    evtSource.close();
+                    navigate('/forge');
+                }, 2000);
+            });
+
+            // 3. Fallback/Legacy Logging
+            evtSource.addEventListener("log", (e: any) => {
+                try {
+                    const log = JSON.parse(e.data);
+                    setLogs(prev => [...prev, `[${log.event_type}] ${log.message}`]);
+                } catch { }
+            });
+
+            evtSource.onerror = (e) => {
+                // EventSource doesn't give error details, but connection lost
+                // We rely on Keep-Alive to maintain it, or manual retry
+                console.error("Stream Error", e);
             };
 
-            evtSource.addEventListener("log", (e: any) => {
-                const log = JSON.parse(e.data);
-                setLogs(prev => [...prev, `[${log.event_type}] ${log.message}`]);
-            });
-
-            evtSource.addEventListener("branding", (e: any) => handleAsset(e, "branding"));
-            evtSource.addEventListener("scripts", (e: any) => handleAsset(e, "scripts"));
-            evtSource.addEventListener("visuals", (e: any) => handleAsset(e, "visuals"));
-            evtSource.addEventListener("roi", (e: any) => handleAsset(e, "roi"));
-            evtSource.addEventListener("rag", (e: any) => {
-                setLogs(prev => [...prev, ">> RAG: Knowledge Base Vectorized. System Ready."]);
-                setPercent(100);
-            });
-
-        } catch (e: any) {
-            console.error(e);
-            setLogs(prev => [...prev, `>> CRITICAL ERROR: ${e.message}`]);
+        } catch (error: any) {
+            console.error(error);
+            setLogs(prev => [...prev, `>> CRITICAL ERROR: ${error.message}`]);
         }
     };
 

@@ -3,7 +3,7 @@ import { useApi } from '../hooks/useApi';
 import {
     LayoutDashboard, ShoppingBag, Package, Search,
     Palette, FileText, Image as ImageIcon,
-    BarChart3, RefreshCw, Layers, Sparkles
+    BarChart3, RefreshCw, Layers, Sparkles, Wand2, Loader2
 } from 'lucide-react';
 
 // --- Types ---
@@ -50,7 +50,60 @@ const ForgeHeader = ({ activeTab, onTabChange }: { activeTab: string, onTabChang
     </div>
 );
 
-const AssetCard = ({ asset }: { asset: Asset }) => {
+// New Component: Fusion Card for Visuals
+const FusionItem = ({ item, onFuse }: { item: any, onFuse: (prompt: string, img: string) => Promise<string> }) => {
+    const [generating, setGenerating] = useState(false);
+    const [resultUrl, setResultUrl] = useState<string | null>(null);
+
+    const handleClick = async () => {
+        if (generating || resultUrl) return;
+        setGenerating(true);
+        try {
+            const url = await onFuse(item.prompt, item.base_image);
+            setResultUrl(url);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setGenerating(false);
+        }
+    };
+
+    return (
+        <div className="bg-black/40 rounded-lg p-3 mb-3 border border-white/5">
+            <div className="flex gap-3 mb-3">
+                {item.base_image && (
+                    <div className="w-16 h-16 rounded overflow-hidden bg-slate-800 shrink-0">
+                        <img src={item.base_image} className="w-full h-full object-cover opacity-60" alt="Base" />
+                    </div>
+                )}
+                <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-white text-sm truncate">{item.title || item.type}</h4>
+                    <p className="text-xs text-slate-400 line-clamp-2">{item.prompt}</p>
+                </div>
+            </div>
+
+            {resultUrl ? (
+                <div className="w-full aspect-square rounded overflow-hidden border border-cyan-500/30 relative group">
+                    <img src={resultUrl} className="w-full h-full object-cover" alt="Generated Ad" />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <a href={resultUrl} target="_blank" rel="noreferrer" className="px-3 py-1 bg-white text-black text-xs font-bold rounded">View Full</a>
+                    </div>
+                </div>
+            ) : (
+                <button
+                    onClick={handleClick}
+                    disabled={generating}
+                    className="w-full py-2 bg-gradient-to-r from-purple-600 to-cyan-600 hover:opacity-90 rounded text-xs text-white font-bold flex items-center justify-center gap-2 transition-all"
+                >
+                    {generating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+                    {generating ? 'FUSING...' : 'IGNITE FUSION'}
+                </button>
+            )}
+        </div>
+    );
+};
+
+const AssetCard = ({ asset, onFuse }: { asset: Asset, onFuse: (p: string, i: string) => Promise<string> }) => {
     let Icon = Layers;
     let color = "text-slate-400";
     let title = asset.asset_type.toUpperCase();
@@ -59,6 +112,8 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
     else if (asset.asset_type === 'scripts') { Icon = FileText; color = "text-yellow-400"; }
     else if (asset.asset_type === 'visuals') { Icon = ImageIcon; color = "text-cyan-400"; }
     else if (asset.asset_type === 'roi') { Icon = BarChart3; color = "text-green-400"; }
+
+    const isVisuals = asset.asset_type === 'visuals' && asset.content.social_posts;
 
     return (
         <div className="glass p-6 rounded-xl hover:bg-white/5 transition-all group animate-fade-in-up border border-white/5 hover:border-white/10 relative overflow-hidden">
@@ -76,46 +131,78 @@ const AssetCard = ({ asset }: { asset: Asset }) => {
                 </div>
             </div>
 
-            <div className="relative z-10 text-sm text-slate-300 max-h-40 overflow-y-auto custom-scrollbar">
-                {typeof asset.content === 'object' ? (
-                    <pre className="text-[10px] bg-black/40 p-2 rounded">{JSON.stringify(asset.content, null, 2)}</pre>
+            <div className="relative z-10 text-sm text-slate-300 max-h-96 overflow-y-auto custom-scrollbar">
+                {isVisuals ? (
+                    asset.content.social_posts.map((post: any, idx: number) => (
+                        <FusionItem key={idx} item={post} onFuse={onFuse} />
+                    ))
                 ) : (
-                    <p>{String(asset.content).substring(0, 150)}...</p>
+                    typeof asset.content === 'object' ? (
+                        <pre className="text-[10px] bg-black/40 p-2 rounded whitespace-pre-wrap">{JSON.stringify(asset.content, null, 2)}</pre>
+                    ) : (
+                        <p>{String(asset.content).substring(0, 150)}...</p>
+                    )
                 )}
             </div>
 
-            <button className="mt-4 w-full py-2 bg-white/5 hover:bg-white/10 rounded text-xs text-white font-bold transition-colors">
-                VIEW DETAILS
-            </button>
+            {!isVisuals && (
+                <button className="mt-4 w-full py-2 bg-white/5 hover:bg-white/10 rounded text-xs text-white font-bold transition-colors">
+                    VIEW DETAILS
+                </button>
+            )}
         </div>
     );
 };
 
-const ProductCard = ({ product }: { product: Product }) => (
-    <div className="glass p-4 rounded-xl hover:bg-white/5 transition-all animate-fade-in-up border border-white/5 hover:border-white/10">
-        <div className="aspect-square bg-slate-800 rounded mb-4 overflow-hidden relative">
-            <img
-                src={product.images[0]?.src || 'https://via.placeholder.com/300?text=No+Image'}
-                alt={product.name.es}
-                className="w-full h-full object-cover transition-transform hover:scale-105 duration-500"
-            />
-            <div className="absolute top-2 right-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-xs font-mono text-white">
-                ${product.price}
+const ProductCard = ({ product, onFuse }: { product: Product, onFuse: (p: string, i: string) => Promise<string> }) => {
+    const [generating, setGenerating] = useState(false);
+
+    const handleQuickFuse = async () => {
+        if (generating) return;
+        setGenerating(true);
+        // Quick fusion for catalog items
+        const prompt = `Professional advertising shot of ${product.name.es}, cinematic lighting, luxury product photography style, 8k resolution.`;
+        const img = product.images[0]?.src;
+        if (img) {
+            try {
+                const url = await onFuse(prompt, img);
+                window.open(url, '_blank');
+            } catch (e) { console.error(e); }
+        }
+        setGenerating(false);
+    };
+
+    return (
+        <div className="glass p-4 rounded-xl hover:bg-white/5 transition-all animate-fade-in-up border border-white/5 hover:border-white/10">
+            <div className="aspect-square bg-slate-800 rounded mb-4 overflow-hidden relative group">
+                <img
+                    src={product.images[0]?.src || 'https://via.placeholder.com/300?text=No+Image'}
+                    alt={product.name.es}
+                    className="w-full h-full object-cover transition-transform hover:scale-105 duration-500"
+                />
+                <div className="absolute top-2 right-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-xs font-mono text-white">
+                    ${product.price}
+                </div>
+            </div>
+            <h3 className="font-bold text-white mb-1 truncate">{product.name.es}</h3>
+            <p className="text-xs text-slate-500 mb-2">{product.categories[0]?.name.es || 'Uncategorized'}</p>
+
+            <div className="flex gap-2">
+                <button
+                    onClick={handleQuickFuse}
+                    disabled={generating}
+                    className="flex-1 py-1.5 bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 rounded text-xs transition-colors flex items-center justify-center gap-1"
+                >
+                    {generating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                    {generating ? 'Fusing...' : 'Generate Ad'}
+                </button>
+                <button className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 rounded text-xs text-white transition-colors">
+                    Details
+                </button>
             </div>
         </div>
-        <h3 className="font-bold text-white mb-1 truncate">{product.name.es}</h3>
-        <p className="text-xs text-slate-500 mb-2">{product.categories[0]?.name.es || 'Uncategorized'}</p>
-
-        <div className="flex gap-2">
-            <button className="flex-1 py-1.5 bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 rounded text-xs transition-colors flex items-center justify-center gap-1">
-                <Sparkles size={12} /> Generate Ad
-            </button>
-            <button className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 rounded text-xs text-white transition-colors">
-                Details
-            </button>
-        </div>
-    </div>
-);
+    );
+};
 
 export const BusinessForge = () => {
     const { fetchApi } = useApi();
@@ -150,6 +237,20 @@ export const BusinessForge = () => {
             console.error("Error loading forge data", e);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleFusion = async (prompt: string, image_url: string): Promise<string> => {
+        try {
+            const res = await fetchApi('/admin/generate-image', {
+                method: 'POST',
+                body: { prompt, image_url }
+            });
+            if (res.status === 'success') return res.url;
+            throw new Error("Generation failed");
+        } catch (e) {
+            console.error(e);
+            throw e;
         }
     };
 
@@ -215,7 +316,7 @@ export const BusinessForge = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {activeTab === 'canvas' && (
                         filteredAssets.length > 0 ? (
-                            filteredAssets.map(asset => <AssetCard key={asset.id} asset={asset} />)
+                            filteredAssets.map(asset => <AssetCard key={asset.id} asset={asset} onFuse={handleFusion} />)
                         ) : (
                             <div className="col-span-full text-center py-20 text-slate-500">
                                 <Package size={48} className="mx-auto mb-4 opacity-50" />
@@ -226,7 +327,7 @@ export const BusinessForge = () => {
 
                     {activeTab === 'catalog' && (
                         filteredProducts.length > 0 ? (
-                            filteredProducts.map(product => <ProductCard key={product.id} product={product} />)
+                            filteredProducts.map(product => <ProductCard key={product.id} product={product} onFuse={handleFusion} />)
                         ) : (
                             <div className="col-span-full text-center py-20 text-slate-500">
                                 <ShoppingBag size={48} className="mx-auto mb-4 opacity-50" />

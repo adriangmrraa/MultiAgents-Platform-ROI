@@ -3,8 +3,10 @@ import structlog
 import os
 import json
 import httpx
+from datetime import datetime
+from uuid import uuid4
 from typing import Dict, Any, List
-from db import db 
+from db import db, redis_client 
 from app.core.rag import RAGCore
 
 logger = structlog.get_logger()
@@ -71,22 +73,49 @@ class NexusEngine:
                 continue
             if res and "type" in res:
                 final_summary[res["type"]] = res.get("data")
-                
+        
+        # Protocol Omega: Signal Completion
+        await self._publish_event("task_completed", {"status": "success", "summary_count": len(final_summary)})
+
         return {"status": "ignited", "summary": final_summary}
 
     async def _persist_asset(self, asset_type: str, content: Any):
-        """Helper to save asset to DB (Persistence Requirement)."""
+        """Helper to save asset to DB (Persistence Requirement) & Stream."""
         try:
+            # 1. SSOT Persistence (Postgres)
+            asset_id = str(uuid4()) # Generate ID early for event
             await db.pool.execute("""
-                INSERT INTO business_assets (tenant_id, asset_type, content, is_active, created_at, updated_at)
-                VALUES ($1, $2, $3, True, NOW(), NOW())
+                INSERT INTO business_assets (id, tenant_id, asset_type, content, is_active, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, True, NOW(), NOW())
                 ON CONFLICT (tenant_id, asset_type) 
                 DO UPDATE SET content = EXCLUDED.content, updated_at = NOW()
-            """, self.tenant_id, asset_type, json.dumps(content))
+            """, asset_id, self.tenant_id, asset_type, json.dumps(content))
+            
+            # 2. Protocol Omega Streaming (Redis Pub/Sub)
+            await self._publish_event("asset_generated", {
+                "asset_id": asset_id,
+                "asset_type": asset_type,
+                "content": content
+            })
+            
             return True
         except Exception as e:
             logger.error("asset_persist_failed", asset_type=asset_type, error=str(e))
             return False
+
+    async def _publish_event(self, event_type: str, data: Any):
+        """Protocol Omega: Strict Event Publishing"""
+        try:
+            channel = f"events:tenant:{self.tenant_id}:assets"
+            payload = {
+                "event_id": str(uuid4()),
+                "timestamp": datetime.utcnow().isoformat(),
+                "type": event_type,
+                "data": data
+            }
+            await redis_client.publish(channel, json.dumps(payload))
+        except Exception as e:
+            logger.error("redis_publish_failed", error=str(e))
 
     async def _starter_branding(self):
         """Task 1: Branding Manual (Identity & Style Selection)"""
@@ -153,43 +182,62 @@ class NexusEngine:
         return {"type": "scripts", "data": data}
 
     async def _starter_visuals(self):
-        """Task 3: Visuals Generation (Product-centric Flyers)"""
-        await asyncio.sleep(2)
-        products = self.context.get("catalog", [])
+        """Task 3: Visuals Generation (REAL-TIME FUSION for 5 Products)"""
+        # Note: User explicitly requested full generation during onboarding despite API costs.
+        # UPDATED: Added staggered delays to prevent 429 Rate Limits from OpenAI.
+        from app.core.image_utils import analyze_image_with_gpt4o, generate_image_dalle3
         
+        await asyncio.sleep(1)
+        products = self.context.get("catalog", [])
+        store_name = self.context.get("store_name", "Brand")
+        
+        # Select top 5
+        top_products = products[:5]
         social_posts = []
         
-        # Scenario A: Product Showcase (using catalog image)
-        if products:
-            p = products[0]
-            images = p.get("images", [])
-            p_img = images[0].get("src") if images else None
-            p_name = p.get("name", {}).get("es", "Producto")
-            
-            social_posts.append({
-                "type": "Product Flyer",
-                "caption": f"Descubre lo nuevo: {p_name} 🌟",
-                "prompt": f"Elegant social media layout highlighting {p_name}, luxury aesthetic",
-                "base_image": p_img
-            })
-            
-            # Scenario B: Lifestyle (using another product if available)
-            if len(products) > 1:
-                p2 = products[1]
-                images2 = p2.get("images", [])
-                p_img2 = images2[0].get("src") if images2 else None
+        # Sequential Processing with Delay
+        for i, p in enumerate(top_products):
+            try:
+                # Rate Limit Safety: Sleep 2s between requests (except first)
+                if i > 0: await asyncio.sleep(2)
+                
+                images = p.get("images", [])
+                p_img = images[0].get("src") if images else None
+                p_name = p.get("name", {}).get("es", "Producto")
+                
+                if not p_img: continue
+
+                # 1. Vision Analysis (Describe product)
+                description = await analyze_image_with_gpt4o(p_img, f"Product for {store_name}")
+                
+                # 2. Construct Fusion Prompt
+                fusion_prompt = f"Professional advertising photography of {p_name}. The product features: {description}. Context: Luxury minimal studio setting, cinematic soft lighting, 8k resolution, commercial aesthetic."
+                
+                # 3. Generate Image (DALL-E 3)
+                gen_url = await generate_image_dalle3(fusion_prompt)
+                
                 social_posts.append({
-                    "type": "Lifestyle Mockup",
-                    "caption": "Calidad en cada detalle. ✨",
-                    "prompt": "Highly realistic mockup of product in a modern home environment",
-                    "base_image": p_img2
+                    "type": "Ad Fusion",
+                    "title": f"{p_name} Campaign",
+                    "caption": f"Descubre {p_name}. Calidad que inspira.",
+                    "prompt": fusion_prompt,
+                    "base_image": p_img,
+                    "generated_url": gen_url,
+                    "product_name": p_name
                 })
+                
+                # Report Progress via Logging (Optional for debugging)
+                logger.info("visual_gen_success", product=p_name)
+                
+            except Exception as e:
+                logger.error("fusion_item_failed", product=p.get("id"), error=str(e))
+                # Continue loop despite error
+                continue
         
-        # Fallback if no images
+        # Fallback if no products or all failed
         if not social_posts:
-            social_posts = [
-                {"type": "Brand Awareness", "caption": "Bienvenidos a la nueva era 🚀", "prompt": "Futuristic abstract brand background"},
-                {"type": "Promo", "caption": "Oferta de Lanzamiento ⚡", "prompt": "Minimalist typography luxury style"}
+             social_posts = [
+                {"type": "Brand Awareness", "title": "Brand Launch", "caption": "Bienvenidos a la nueva era 🚀", "prompt": "Futuristic abstract brand background", "generated_url": None},
             ]
 
         data = {"social_posts": social_posts}

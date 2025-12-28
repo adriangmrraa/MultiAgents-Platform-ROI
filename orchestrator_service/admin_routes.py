@@ -606,6 +606,36 @@ async def run_rag_ingestion(tenant_id, store_id, token):
 
 
 
+@router.post("/generate-image", dependencies=[Depends(verify_admin_token)])
+async def generate_ad_image(request: Request):
+    """
+    Ad Image Fusion: GPT-4o Vision + DALL-E 3.
+    """
+    try:
+        data = await request.json()
+        prompt = data.get("prompt")
+        image_url = data.get("image_url")
+        
+        if not prompt or not image_url:
+             raise HTTPException(400, "Missing prompt or image_url")
+
+        from app.core.image_utils import analyze_image_with_gpt4o, generate_image_dalle3
+        
+        # 1. Vision Analysis
+        description = await analyze_image_with_gpt4o(image_url, prompt)
+        
+        # 2. fusion Prompt
+        final_prompt = f"Professional Product Photography. {prompt}. The product features: {description}. High resolution, cinematic lighting, 8k."
+        
+        # 3. Generate
+        generated_url = await generate_image_dalle3(final_prompt)
+        
+        return {"status": "success", "url": generated_url, "description": description}
+        
+    except Exception as e:
+        logger.error(f"Image Gen Error: {e}")
+        raise HTTPException(500, str(e))
+
 # --- ASSETS & PRODUCTS (BUSINESS FORGE) ---
 
 @router.get("/assets", dependencies=[Depends(verify_admin_token)])
@@ -707,42 +737,63 @@ async def engine_stream(request: Request, tenant_id: str, token: Optional[str] =
         raise HTTPException(status_code=401, detail="Unauthorized stream access")
 
     async def event_generator():
-        # 1. Subscribe to Redis Channel for this Tenant
-        pubsub = redis_client.pubsub()
-        channel = f"nexus_engine:{tenant_id}"
-        pubsub.subscribe(channel)
-        
         yield {
             "event": "log",
-            "data": json.dumps({"event_type": "info", "message": f"Connected to Nexus Stream for {tenant_id}"})
+            "data": json.dumps({"event_type": "info", "message": f"Connected to Protocol Omega Stream for {tenant_id}"})
         }
+
+        # 1. Subscribe to Redis Channel for this Tenant
+        pubsub = redis_client.pubsub()
+        # Updated Channel Name per Specification: events:tenant:{id}:assets
+        channel = f"events:tenant:{tenant_id}:assets"
+        await pubsub.subscribe(channel)
         
         try:
             while True:
+                # Check for disconnection
                 if await request.is_disconnected():
                     break
-                    
-                message = pubsub.get_message(ignore_subscribe_messages=True)
+                
+                # Get message from Redis (wait with timeout for keep-alive)
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=5.0)
+                
                 if message:
-                    # Redis message format: {'type': 'message', 'pattern': None, 'channel': b'nexus_engine:123', 'data': b'{...}'}
-                    raw_data = message['data']
-                    if isinstance(raw_data, bytes):
-                        raw_data = raw_data.decode('utf-8')
-                    
-                    # Logic to determine event type from payload content if possible
-                    # We expect the Engine to publish JSON like: {"type": "branding", "data": {...}}
                     try:
-                        payload = json.loads(raw_data)
-                        event_type = payload.get("type", "log")
+                        data_str = message["data"]
+                        if isinstance(data_str, bytes):
+                             data_str = data_str.decode('utf-8')
+                        payload = json.loads(data_str)
                         
-                        yield {
-                            "event": event_type,
-                            "data": json.dumps(payload)
-                        }
-                    except:
-                         yield {
-                            "event": "log",
-                            "data": json.dumps({"event_type": "raw", "message": raw_data})
+                        event_type = payload.get("type")
+                        
+                        # Protocol Omega: Strict mapping of event types
+                        if event_type == "asset_generated":
+                            yield {
+                                "event": "asset_generated",
+                                "data": json.dumps(payload["data"])
+                            }
+                        elif event_type == "task_completed":
+                             yield {
+                                "event": "task_completed",
+                                "data": json.dumps(payload["data"])
+                             }
+                        else:
+                            # Forward unknown events as logs or generic data
+                            yield {
+                                "event": "log",
+                                "data": json.dumps({"event_type": "debug", "message": f"Event: {event_type}"})
+                            }
+                            
+                    except json.JSONDecodeError:
+                        yield {"event": "log", "data": json.dumps({"event_type": "error", "message": "Invalid JSON from Engine"})}
+                else:
+                    # Keep-Alive Ping (Anti-Timeout)
+                    yield {"event": "ping", "data": "keep-alive"}
+                    
+        except asyncio.CancelledError:
+             logger.info(f"Stream disconnected for {tenant_id}")
+        finally:
+            await pubsub.unsubscribe(channel)
                         }
                         
                 await asyncio.sleep(0.1)
