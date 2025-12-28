@@ -456,12 +456,10 @@ class MagicOnboardingRequest(BaseModel):
     bot_phone_number: str = "TBD" # Will be updated later
 
 @router.post("/onboarding/magic", dependencies=[Depends(verify_admin_token)])
-async def magic_onboarding(data: MagicOnboardingRequest):
+async def ignite_engine(data: MagicOnboardingRequest, background_tasks: BackgroundTasks):
     """
-    The 'Big Bang' endpoint.
-    1. Compiles Tenant
-    2. Ingests Knowledge (RAG)
-    3. Spawns 5 Agents
+    Protocol Omega Central Ignition V3 (Non-Blocking).
+    Starts the autonomous sequence in background so UI can stream events immediately.
     """
     logger.info("magic_onboarding_start", store=data.store_name)
     
@@ -567,19 +565,17 @@ async def magic_onboarding(data: MagicOnboardingRequest):
     
     # Use real DB ID for Engine (Safe for RAG/Chroma)
     engine = NexusEngine(str(tenant_id), context)
-    # Sequential ignite
-    await engine.ignite()
-
-    # 4. TRIGGER RAG BACKGROUND JOB (Async)
-    # Using real tenant_id
-    asyncio.create_task(run_rag_ingestion(tenant_id, str(tenant_id), data.tiendanube_store_id, data.tiendanube_access_token))
     
+    # Nexus v3.3 Fix: Use BackgroundTasks to prevent UI freeze and allow EventSource connection.
+    # The engine.ignite() method now handles Librarian (RAG) internally, so redundant task removed.
+    background_tasks.add_task(engine.ignite)
+
     return {
         "status": "success",
         "message": f"Magic unleashed for {data.store_name}",
         "tenant_id": tenant_id,
         "agents_spawned": spawned_count,
-        "rag_status": "ingestion_started"
+        "magic_status": "ignited"
     }
 
 async def run_rag_ingestion(tenant_id: int, identifier: str, store_id: str, token: str):
@@ -2849,15 +2845,16 @@ async def ignite_engine(request: Request):
         }
     }
     
-    # 5. Ignite
-    # We pass the INTEGER ID to the engine (or string if Engine supports it, let's keep it robust)
+    # 5. Ignite (Async / Non-Blocking)
     engine = NexusEngine(str(real_tenant_id_int), context)
-    result = await engine.ignite()
+    
+    # Run in background so request returns and Stream can start
+    background_tasks.add_task(engine.ignite)
     
     return {
-        "status": "ignited", 
+        "status": "ignition_started", 
         "tenant_int_id": real_tenant_id_int, 
-        "engine_result": result
+        "message": "Engine ignited in background. Connect to stream for updates."
     }
 
 @router.get("/products", dependencies=[Depends(verify_admin_token)])

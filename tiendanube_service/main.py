@@ -204,7 +204,7 @@ class GenericTenantRequest(BaseModel):
 @app.post("/tools/productsall", response_model=ToolResponse)
 async def productsall(req: GenericTenantRequest, token: str = Depends(verify_token)):
     url = f"https://api.tiendanube.com/v1/{req.store_id}/products"
-    params = {"per_page": 25}
+    params = {"per_page": 200}
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(url, headers=get_tn_headers(req.access_token), params=params)
@@ -216,7 +216,7 @@ async def productsall(req: GenericTenantRequest, token: str = Depends(verify_tok
 @app.post("/tools/cupones_list", response_model=ToolResponse)
 async def cupones_list(req: GenericTenantRequest, token: str = Depends(verify_token)):
     url = f"https://api.tiendanube.com/v1/{req.store_id}/coupons"
-    params = {"per_page": 25}
+    params = {"per_page": 200}
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(url, headers=get_tn_headers(req.access_token), params=params)

@@ -104,6 +104,9 @@ class RAGCore:
                     "handle": p.get("handle", {}).get("es", "")
                 }
                 docs.append(Document(page_content=text_content, metadata=metadata))
+                
+                # Protocol Omega: Throttle removed (Using Tier 1 limits)
+                pass
             
             # 2. HTML Scraper (Contextual DNA) - Kept robust
             if public_url:

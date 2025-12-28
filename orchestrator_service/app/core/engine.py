@@ -78,7 +78,24 @@ class NexusEngine:
                             continue
                 
                 if not products:
-                    logger.warning("product_fetch_failed_all_using_mock", tried=service_urls)
+                    logger.warning("product_fetch_failed_all_service_trying_direct", tried=service_urls)
+                    await self._publish_log(">> Internal Service link failed. Trying direct TiendaNube Secure Tunnel...")
+                    
+                    # DIRECT FETCH FALLBACK (Protocol Omega: Survival Strat)
+                    try:
+                        direct_url = f"https://api.tiendanube.com/v1/{tn_store_id}/products?per_page=200"
+                        direct_headers = {"Authentication": f"bearer {tn_token}", "User-Agent": "Nexus Engine (Direct Fallback)"}
+                        async with httpx.AsyncClient(timeout=30.0) as client:
+                            resp = await client.get(direct_url, headers=direct_headers)
+                            if resp.status_code == 200:
+                                products = resp.json()
+                                logger.info("product_fetch_direct_success", count=len(products))
+                                await self._publish_log(f">> Direct link established. {len(products)} products synchronized.")
+                    except Exception as de:
+                        logger.error("product_fetch_direct_failed", error=str(de))
+                        await self._publish_log(">> Direct link failed. Using critical fallback data.")
+
+                if not products:
                     products = [
                         {"id": 991, "name": {"es": "Camiseta Demo Magic"}, "description": {"es": "Nexus v3.3 Protocol Omega (Falla de Conexión)"}, "price": "100.00"},
                         {"id": 992, "name": {"es": "Pantalón Demo Magic"}, "description": {"es": "Nexus v3.3 Protocol Omega (Falla de Conexión)"}, "price": "200.00"}
@@ -94,6 +111,7 @@ class NexusEngine:
         
         # Step 1: DNA Extractor (web/brand analysis)
         logger.info("engine_step_1_dna")
+        await self._publish_log(">> Scanning Digital DNA. Decoding brand archetypes...")
         
         # RAG Librarian Check for DNA
         from app.core.cache import TenantAwareCache
@@ -104,33 +122,40 @@ class NexusEngine:
             logger.info("librarian_cache_hit", dna_keys=list(cached_dna.keys()))
             dna_res = {"type": "branding", "data": cached_dna}
             self.context['dna'] = cached_dna 
+            await self._publish_log(">> Brand DNA recovered from Librarian Cache.")
         else:
             logger.info("librarian_cache_miss")
             dna_res = await self._agent_dna_extractor()
             # Cache for future runs
             await cache.set("brand_dna", dna_res.get("data"), ttl=3600)
+            await self._publish_log(">> DNA Extracted successfully. Neural profile updated.")
 
         final_summary = {} # Initialize final_summary here
         final_summary["branding"] = dna_res.get("data")
         
         # Step 2: Librarian (RAG Ingestion & Sync)
         logger.info("engine_step_2_rag")
+        await self._publish_log(">> Librarian initializing Neural Sync. Indexing smart catalog...")
         rag_res = await self._agent_librarian()
         final_summary["rag_sync"] = rag_res.get("data")
+        await self._publish_log(f">> Neural Sync complete. {rag_res.get('data', {}).get('vectors', 0)} vectors indexed.")
         
         # Step 3: Creative Director (Visual Alchemy)
         # Now has DNA/RAG context available
         logger.info("engine_step_3_creative")
+        await self._publish_log(">> Creative Director drafting visual concepts. Generating visuals...")
         creative_res = await self._agent_creative_director()
         final_summary["visuals"] = creative_res.get("data")
         
         # Step 4: Copywriter Maestro
         logger.info("engine_step_4_copy")
+        await self._publish_log(">> Copywriter Maestro crafting persuasive scripts. PAS & AIDA frameworks applied.")
         copy_res = await self._agent_copywriter()
         final_summary["scripts"] = copy_res.get("data")
         
         # Step 5: Growth & Social (Parallelized as they are strategy extensions)
         logger.info("engine_step_5_strategy")
+        await self._publish_log(">> Growth Architect calculating ROI projections. Defining strategy...")
         strategy_results = await asyncio.gather(
             self._agent_growth_architect(),
             self._agent_social_media_strategist(),
@@ -144,9 +169,11 @@ class NexusEngine:
 
         # Step 6: Guardián de la Verdad (Compliance & Safety)
         logger.info("engine_step_6_compliance")
+        await self._publish_log(">> Guardian of Truth performing final safety check. Hallucination filter active.")
         await self._agent_compliance_guardian(final_summary)
         
         # 3. Finalization
+        await self._publish_log(">> Business Magic successfully ignited. System Online.")
         await self._publish_event("task_completed", {"status": "success", "summary_count": len(final_summary)})
 
         try:
@@ -178,6 +205,10 @@ class NexusEngine:
             payload = {"event_id": str(uuid4()), "timestamp": datetime.utcnow().isoformat(), "type": event_type, "data": data}
             await redis_client.publish(channel, json.dumps(payload))
         except Exception: pass
+
+    async def _publish_log(self, message: str, level: str = "INFO"):
+        """Helper to send 'Thinking' logs to the frontend (Cortex Process)."""
+        await self._publish_event("log", {"message": message, "event_type": level})
 
     # --- AGENT 1: Extractor de ADN de Marca (Web & API Scraper) ---
     async def _agent_dna_extractor(self):
