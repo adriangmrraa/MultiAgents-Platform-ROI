@@ -164,13 +164,14 @@ class NexusEngine:
                 price = p.get("price", "N/A")
                 catalog_summary.append(f"- {name} (${price})")
             
+            catalog_str = "\n".join(catalog_summary)
             prompt = f"""
             Analiza esta tienda y define su ADN de marca.
             Nombre: {store_name}
             URL: {store_url}
             Descripción: {store_desc}
             Muestra de productos:
-            {"\n".join(catalog_summary)}
+            {catalog_str}
 
             Basado en esto, devuelve un JSON con:
             - uvp: Propuesta Única de Valor (concisa).
