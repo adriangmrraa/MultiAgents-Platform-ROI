@@ -53,7 +53,7 @@ const ForgeHeader = ({ activeTab, onTabChange }: { activeTab: string, onTabChang
 // New Component: Fusion Card for Visuals
 const FusionItem = ({ item, onFuse }: { item: any, onFuse: (prompt: string, img: string) => Promise<string> }) => {
     const [generating, setGenerating] = useState(false);
-    const [resultUrl, setResultUrl] = useState<string | null>(null);
+    const [resultUrl, setResultUrl] = useState<string | null>(item.generated_url || null);
 
     const handleClick = async () => {
         if (generating || resultUrl) return;
