@@ -1,22 +1,21 @@
-# 🦍 Platform AI Solutions (Nexus v5) - Titan Protocol
+# 🦍 Platform AI Solutions (Nexus v5) - Protocol Omega
 
-> **Estado del Sistema**: `STABLE` | **Versión**: `v5.0.0-titan` | **Arquitectura**: `Hybrid Microservices (Python/React)`
+> **Estado del Sistema**: `STABLE` | **Versión**: `v5.0.0-omega` | **Arquitectura**: `Hybrid Microservices (Python/React)`
 
-Este repositorio aloja el ecosistema **Nexus v5**, el pináculo de la orquestación de Agentes de IA Omnicanal. Diseñado bajo el **Protocolo Titan**, escala la inteligencia administrativa a niveles de autonomía total.
+Este repositorio aloja el ecosistema **Nexus v5**, el pináculo de la orquestación de Agentes de IA Omnicanal. Diseñado bajo el **Protocolo Omega**, introduce la autonomía total en la generación de activos visuales y estratégicos.
 
 ---
 
-## 🌟 Visión: "Simplicidad Radical, Inteligencia Invisible"
+## 🌟 Visión: "The Industrial AI Revolution"
 
-Nexus v4.4 abraza el **Minimalismo Interactivo** y la **Omnicanalidad Total**. El sistema gestiona conversaciones de múltiples canales (WhatsApp, Instagram, Facebook) de forma unificada, vinculando cada interacción a un ecosistema centralizado de IA.
+Nexus v5 evoluciona más allá de la gestión de conversaciones para convertirse en una **Fábrica de Negocios Autónoma**. El sistema no solo responde, sino que *crea* campañas, estrategias y activos visuales de alto impacto en tiempo real.
 
-### 🚀 Novedades v4.6 (Intelligence & Guidance)
-- **Protocolo de Extracción (Response Guide)**: Control absoluto sobre cómo el agente extrae y presenta datos de las herramientas.
-- **Táctica de Herramientas (Tactical Injection)**: Instrucciones específicas por herramienta para optimizar cuándo y cómo usarlas.
-- **Herramientas Dinámicas**: Sincronización automática entre la Armería (Admin) y la configuración de los Agentes.
-- **AI-Powered Refinement**: Integración de GPT-4o para mejorar prompts de sistema y descripciones de catálogos con un clic.
-- **Guía UI Contextual**: Banners de protocolo y manuales de operaciones integrados en el dashboard administrativo.
-- **Optimización de Identidad**: Ajuste de identificadores seriales para Agentes para una gestión de secuencias libre de fricción.
+### 🚀 Novedades v5.0 (Protocol Omega)
+- **Business Forge ("Negrocio")**: Un centro de comando unificado (`/forge`) donde se materializa la estrategia del negocio.
+- **Ad Image Fusion**: Motor de generación visual `GPT-4o Vision` + `DALL-E 3` que crea anuncios publicitarios reales a partir de productos del catálogo.
+- **Magic Onboarding**: Flujo de inicialización autónomo que genera Identidad, Guiones, Anuncios y Proyecciones ROI en < 60 segundos.
+- **Protocol Omega Streaming**: Arquitectura de transmisión en tiempo real (`Redis Pub/Sub` + `SSE`) con aislamiento de tenants y efectos visuales "Magic Reveal".
+- **Smart Catalog**: Explorador de productos con capacidad de generación de contenido on-demand.
 
 ---
 
@@ -25,8 +24,8 @@ Nexus v4.4 abraza el **Minimalismo Interactivo** y la **Omnicanalidad Total**. E
 | Servicio | Puerto | Tipo | Función | Tecnología |
 | :--- | :--- | :--- | :--- | :--- |
 | **Orchestrator** | `8000` | 🧠 Cerebro | Core de lógica, Gestión de Tenants, API Maestra y Auto-Reparación. | Python (FastAPI) |
-| **Agent Service** | `8001` | ⚡ Músculos | Motor de ejecución de Agentes y Herramientas. | LangChain / OpenAI |
-| **Frontend React** | `80` | 🖥️ Ojos | Panel HUD Minimalista Omnicanal. | React / Vite |
+| **Agent Service** | `8001` | ⚡ Músculos | Motor de ejecución de Agentes y Herramientas (LangChain). | LangChain / OpenAI |
+| **Frontend React** | `80` | 🖥️ Ojos | Panel HUD Minimalista con Business Forge integrado. | React / Vite |
 
 ---
 
@@ -43,8 +42,8 @@ Simplemente haz `git push origin master`. El sistema detectará los cambios, rec
 ---
 
 ## 📚 Documentación Viva
-*   **[BACKEND_SPECIFICATION.md](./BACKEND_SPECIFICATION.md)**: El contrato absoluto de integración.
-*   **[Manual de Vuelo v4.4](./Manual%20de%20Vuelo%20Nexus%20v4.0.md)**: Guía operativa diaria.
+*   **[BACKEND_SPECIFICATION.md](./BACKEND_SPECIFICATION.md)**: El contrato absoluto de integración (Protocol Omega).
+*   **[Manual de Vuelo v5.0](./Manual%20de%20Vuelo%20Nexus%20v5.md)**: Guía operativa diaria y Business Forge.
 *   **[DATABASE_EVOLUTION_GUIDE.md](./DATABASE_EVOLUTION_GUIDE.md)**: Cómo evoluciona el esquema SSOT.
 *   **[MAINTENANCE_AGENT.md](./MAINTENANCE_AGENT.md)**: Prompt para ingenieros de soporte IA.
 

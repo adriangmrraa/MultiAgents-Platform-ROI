@@ -794,16 +794,7 @@ async def engine_stream(request: Request, tenant_id: str, token: Optional[str] =
              logger.info(f"Stream disconnected for {tenant_id}")
         finally:
             await pubsub.unsubscribe(channel)
-                        }
-                        
-                await asyncio.sleep(0.1)
-        except Exception as e:
-            logger.error(f"Stream Error: {e}")
-            yield {
-                "event": "error", 
-                "data": json.dumps({"message": str(e)})
-            }
-            
+
     return EventSourceResponse(event_generator())
 
 # --- CONSOLE STREAMING ---
