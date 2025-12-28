@@ -378,7 +378,7 @@ async def save_credential(cred: CredentialModel):
         
         # Performance: Invalidate Redis Cache
         cache_key = f"settings:{cred.category}"
-        redis_client.delete(cache_key)
+        await redis_client.delete(cache_key)
         
         return {"status": "ok", "id": str(row['id_uuid'])}
     except Exception as e:
@@ -390,7 +390,7 @@ async def list_credentials(category: Optional[str] = None):
     # Performance: Try Redis Cache (Aggregated Cache Pattern)
     cache_key = f"settings:{category or 'all'}"
     try:
-        cached = redis_client.get(cache_key)
+        cached = await redis_client.get(cache_key)
         if cached:
             return json.loads(cached)
     except: pass
@@ -410,7 +410,7 @@ async def list_credentials(category: Optional[str] = None):
         
         # Performance: Cache result
         try:
-            redis_client.setex(cache_key, 300, json.dumps(data, default=str))
+            await redis_client.setex(cache_key, 300, json.dumps(data, default=str))
         except: pass
         
         return data
@@ -1006,7 +1006,7 @@ async def get_stats():
     
     # 1. Try Redis Cache
     try:
-        cached = redis_client.get(cache_key)
+        cached = await redis_client.get(cache_key)
         if cached:
             return json.loads(cached)
     except Exception as e:
@@ -1665,9 +1665,7 @@ async def delete_all_tenants():
 
         # 5. Redis Flush
         try:
-             REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
-             redis_client = redis.from_url(REDIS_URL)
-             redis_client.flushdb()
+             await redis_client.flushdb()
         except: pass
         
         return {"status": "ok", "message": "System Factory Reset Complete (All Data Wiped)"}
@@ -1720,16 +1718,13 @@ async def delete_tenant(identifier: str):
                 
         # 5. Redis Cleanup (Outside SQL transaction, following Protocol Omega)
         try:
-            REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
-            redis_client = redis.from_url(REDIS_URL)
-            
             # Delete tenant-specific keys (e.g., conversation state, locks)
             # Scan for keys matching the tenant pattern
             cursor = 0
             while True:
-                cursor, keys = redis_client.scan(cursor=cursor, match=f"tenant:{tenant_id}:*", count=100)
+                cursor, keys = await redis_client.scan(cursor=cursor, match=f"tenant:{tenant_id}:*", count=100)
                 if keys:
-                    redis_client.delete(*keys)
+                    await redis_client.delete(*keys)
                 if cursor == 0:
                     break
         except Exception as redis_err:
@@ -2097,7 +2092,7 @@ async def analytics_summary(tenant_id: int = 1, from_date: str = None, to_date: 
     
     # Try Cache
     try:
-        cached = redis_client.get(cache_key)
+        cached = await redis_client.get(cache_key)
         if cached:
             return json.loads(cached)
     except Exception:
@@ -2129,7 +2124,7 @@ async def analytics_summary(tenant_id: int = 1, from_date: str = None, to_date: 
         
         # Set Cache (TTL 5 minutes)
         try:
-            redis_client.setex(cache_key, 300, json.dumps(res))
+            await redis_client.setex(cache_key, 300, json.dumps(res))
         except:
             pass
             

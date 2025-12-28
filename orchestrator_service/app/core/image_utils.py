@@ -66,12 +66,16 @@ async def generate_ad_from_product(base64_product: str, prompt: str) -> str:
     
     payload = {
         "contents": [{
+            "role": "user",
             "parts": [
-                { "text": f"Genera un anuncio de lujo para este producto: {prompt}" },
+                { "text": f"Transforma este producto en un anuncio profesional de alto impacto: {prompt}" },
                 { "inlineData": { "mimeType": "image/png", "data": base64_product } }
             ]
         }],
-        "generationConfig": { "responseModalities": ["IMAGE"] }
+        "generationConfig": { 
+            "responseModalities": ["TEXT", "IMAGE"],
+            "responseMimeType": "application/json"
+        }
     }
 
     # Exponential Backoff Logic
@@ -87,14 +91,28 @@ async def generate_ad_from_product(base64_product: str, prompt: str) -> str:
                 
                 if resp.status_code == 200:
                     data = resp.json()
-                    # Gemini multimodal output extraction
-                    # Structure usually: candidates[0].content.parts[0].inlineData.data
+                    # Gemini multimodal output extraction (JSON response contains parts)
                     try:
-                        img_data = data['candidates'][0]['content']['parts'][0]['inlineData']['data']
+                        # Protocol Omega: Search for the inlineData part in the response candidates
+                        candidates = data.get('candidates', [])
+                        if not candidates:
+                             raise Exception("No candidates in Gemini response")
+                        
+                        parts = candidates[0].get('content', {}).get('parts', [])
+                        img_data = None
+                        for part in parts:
+                            if 'inlineData' in part:
+                                img_data = part['inlineData']['data']
+                                break
+                        
+                        if not img_data:
+                            logger.error("gemini_multimodal_image_missing", response=str(data)[:500])
+                            raise Exception("Image part missing in Gemini response")
+                            
                         return f"data:image/png;base64,{img_data}"
-                    except (KeyError, IndexError):
-                        logger.error("gemini_multimodal_parse_failed", response=str(data)[:200])
-                        raise Exception("Failed to parse visual response from Gemini")
+                    except Exception as pe:
+                        logger.error("gemini_multimodal_parse_failed", error=str(pe), response=str(data)[:200])
+                        raise Exception(f"Failed to parse visual response: {str(pe)}")
                 
                 elif resp.status_code in [429, 500, 502, 503, 504]:
                     wait_time = 2 ** attempt

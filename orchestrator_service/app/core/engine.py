@@ -38,11 +38,11 @@ class NexusEngine:
         if tn_store_id and tn_token:
              try:
                  potential_urls = [
-                     os.getenv('TIENDANUBE_SERVICE_URL'), 
-                     'http://tiendanube-service:8003', # Standard
+                     'http://tiendanube_service:8003', # Primary (Docker Internal)
+                     'http://tiendanube-service:8003', # Fallback Dash
                      'http://multiagents-tiendanube-service:8003', # App Name
-                     'http://tiendanube_service:8003', # Underscore variant
-                     'https://multiagents-tiendanube-service.yn8wow.easypanel.host' # Public
+                     os.getenv('TIENDANUBE_SERVICE_URL'), 
+                     'https://multiagents-tiendanube-service.yn8wow.easypanel.host' # Public Fallback
                  ]
                  # Robust cleanup: filter empty, remove duplicates, strip trailing slashes, ensure http schema
                  service_urls = []
@@ -374,6 +374,8 @@ class NexusEngine:
         """Misión: Mantener la coherencia técnica y sincronización neural."""
         products = self.context.get("catalog", [])
         store_url = self.context.get("store_website")
+        tn_store_id = self.context.get('credentials', {}).get('tiendanube_store_id')
+        tn_token = self.context.get('credentials', {}).get('tiendanube_access_token')
         
         # Robust URL resolution for Librarian
         if not store_url or "mitiendanube.com" in store_url:
@@ -383,10 +385,17 @@ class NexusEngine:
                   
         logger.info("librarian_rag_start", url=store_url)
         
-        if products:
-             # Direct ingestion in the engine flow
-             # self.rag is initialized in __init__
-             await self.rag.ingest_store(products, store_url)
+        if products and tn_token:
+             # Protocol Omega: Call the ingestion wrapper with correct 4 arguments
+             # We use a localized version to avoid circular imports from admin_routes
+             from app.core.rag import RAGCore
+             rag = RAGCore(self.tenant_id)
+             await rag.ingest_store(products, store_url)
+             
+             # Log event similar to what run_rag_ingestion does
+             try:
+                 await db.pool.execute("INSERT INTO system_events (event_type, severity, message, tenant_id, occurred_at) VALUES ('rag_completed', 'INFO', 'Magic Ingestion Done', $1, NOW())", int(self.tenant_id))
+             except: pass
              
         data = {
             "status": "Neural Sync Active",
