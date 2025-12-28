@@ -549,7 +549,7 @@ async def magic_onboarding(data: MagicOnboardingRequest):
         }
     }
     
-    engine = NexusEngine(str(tenant_id), context)
+    engine = NexusEngine(provisional_phone, context)
     # We await ignition to ensure assets are ready for the user immediately (Standard Omega requirement)
     # Or should we background it? The user said "printing in front of their eyes". 
     # Engine.ignite is relatively fast (except maybe visuals). 
@@ -557,7 +557,7 @@ async def magic_onboarding(data: MagicOnboardingRequest):
     await engine.ignite()
 
     # 4. TRIGGER RAG BACKGROUND JOB (Async)
-    asyncio.create_task(run_rag_ingestion(tenant_id, data.tiendanube_store_id, data.tiendanube_access_token))
+    asyncio.create_task(run_rag_ingestion(tenant_id, provisional_phone, data.tiendanube_store_id, data.tiendanube_access_token))
     
     return {
         "status": "success",
@@ -567,13 +567,13 @@ async def magic_onboarding(data: MagicOnboardingRequest):
         "rag_status": "ingestion_started"
     }
 
-async def run_rag_ingestion(tenant_id, store_id, token):
+async def run_rag_ingestion(tenant_id: int, identifier: str, store_id: str, token: str):
     """
     Background Task: Fetch Products -> Transform -> Vectorize
     """
     try:
         from app.core.rag import RAGCore
-        rag = RAGCore(str(tenant_id))
+        rag = RAGCore(identifier)
         
         # 1. Fetch from Tienda Nube (Mocked or Real)
         # Real: https://api.tiendanube.com/v1/{store_id}/products
@@ -618,18 +618,13 @@ async def generate_ad_image(request: Request):
         if not prompt or not image_url:
              raise HTTPException(400, "Missing prompt or image_url")
 
-        from app.core.image_utils import analyze_image_with_gpt4o, generate_image_dalle3
+        from app.core.image_utils import generate_image_dalle3
         
-        # 1. Vision Analysis
-        description = await analyze_image_with_gpt4o(image_url, prompt)
+        # 1. Image-to-Image Generation (One Model Approach - Nano Banana)
+        # We pass image_url as a reference to Imagen 3
+        generated_url = await generate_image_dalle3(prompt, image_url)
         
-        # 2. fusion Prompt
-        final_prompt = f"Professional Product Photography. {prompt}. The product features: {description}. High resolution, cinematic lighting, 8k."
-        
-        # 3. Generate
-        generated_url = await generate_image_dalle3(final_prompt)
-        
-        return {"status": "success", "url": generated_url, "description": description}
+        return {"status": "success", "url": generated_url, "description": "Reference-based image generation (Nano Banana)"}
         
     except Exception as e:
         logger.error(f"Image Gen Error: {e}")
