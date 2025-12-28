@@ -60,38 +60,15 @@ async def generate_image_dalle3(full_prompt: str, image_url: str = None) -> str:
 
     try:
         # 2. Call Imagen 3 (Nano Banana)
-        # We use the new SDK pattern: client.models.generate_image
-        # If generate_image is not directly in models, we check if it's under imagen or similar
-        # TODO: Fix ReferenceImage when types are verified in the environment
-        # For now, we use a simple prompt-to-image without reference to avoid AttributeError
+        # As per sdk_inspection logs, the method is 'generate_images' (plural)
+        # And 'include_rai_reasoning' is NOT permitted in the config
         config = {
             'number_of_images': 1,
-            'include_rai_reasoning': True,
             'output_mime_type': 'image/png'
         }
         
-        # Robust method resolution for different SDK versions
-        # Standard: client.models.generate_image
-        gen_method = None
-        
-        # Diagnostic Log: What's actually available?
-        models_dir = [m for m in dir(client.models) if not m.startswith('_')]
-        client_dir = [m for m in dir(client) if not m.startswith('_')]
-        logger.info("sdk_inspection", models_methods=models_dir, client_methods=client_dir)
-
-        if hasattr(client, 'models') and hasattr(client.models, 'generate_image'):
-            gen_method = client.models.generate_image
-        elif hasattr(client, 'models') and hasattr(client.models, 'generate_images'):
-             gen_method = client.models.generate_images
-        elif hasattr(client, 'generate_image'):
-            gen_method = client.generate_image
-        elif hasattr(client, 'imagen') and hasattr(client.imagen, 'generate_image'):
-             gen_method = client.imagen.generate_image
-
-        if not gen_method:
-            raise Exception(f"The google-genai SDK does not have a recognized 'generate_image' method. Available in .models: {models_dir}")
-
-        response = gen_method(
+        # We know it's in client.models.generate_images from the logs
+        response = client.models.generate_images(
             model='imagen-3.0-generate-001',
             prompt=full_prompt,
             config=config

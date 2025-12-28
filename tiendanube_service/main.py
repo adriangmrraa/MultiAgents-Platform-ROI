@@ -85,9 +85,14 @@ def ready():
          raise HTTPException(status_code=503, detail="Configuration missing")
     return {"status": "ok"}
     
+@app.get("/")
+def read_root():
+    return {"service": "tiendanube_service", "version": "1.0.2", "status": "active"}
+
 @app.get("/health")
+@app.get("/admin/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "service": "tiendanube_service"}
 
 # ... existing code ...
 
@@ -286,3 +291,8 @@ def sendemail(email: Email, token: str = Depends(verify_token)):
     except Exception as e:
         logger.error("email_send_failed", error=str(e))
         return ToolResponse(ok=False, error=handle_generic_error(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    logger.info("starting_tiendanube_service", port=8003)
+    uvicorn.run(app, host="0.0.0.0", port=8003)

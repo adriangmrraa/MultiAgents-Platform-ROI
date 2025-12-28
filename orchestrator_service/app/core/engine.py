@@ -39,17 +39,19 @@ class NexusEngine:
              try:
                  potential_urls = [
                      os.getenv('TIENDANUBE_SERVICE_URL'), 
-                     'http://tiendanube-service:8003',
+                     'http://tiendanube-service:8003', # Prioritize 8003
+                     'multiagents-tiendanube-service:8003', # Public fallback for 8003
                      'http://tiendanube_service:8003',
-                     'https://multiagents-tiendanube-service.yn8wow.easypanel.host',
-                     'http://tiendanube-service:8001',
-                     'http://tiendanube_service:8001'
+                     'https://multiagents-tiendanube-service.yn8wow.easypanel.host'
                  ]
-                 # Robust cleanup: filter empty, remove duplicates, strip trailing slashes
+                 # Robust cleanup: filter empty, remove duplicates, strip trailing slashes, ensure http schema
                  service_urls = []
                  for u in potential_urls:
                      if u and u.strip():
                          cleaned = u.strip().rstrip('/')
+                         # Auto-prefix http if missing for simple service names
+                         if not cleaned.startswith('http'):
+                              cleaned = f"http://{cleaned}"
                          if cleaned not in service_urls:
                              service_urls.append(cleaned)
                  
