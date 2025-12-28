@@ -1255,6 +1255,7 @@ ACCIÓN REQUERIDA:
     return handoff_msg
 
 # --- Tactical Prompt Injections (Omega Protocol Defaults) ---
+prompt_injections = {
     "search_specific_products": "TÁCTICA: Cuando busques productos, usa SIEMPRE el parámetro 'q' con el nombre del producto, categoría o marca exacta. Si el cliente pregunta de forma vaga, pide precisión antes de buscar.",
     "search_by_category": "TÁCTICA: Selecciona la categoría correcta del catálogo para el parámetro 'category'. Si no estás seguro, usa 'search_specific_products' en su lugar.",
     "browse_general_storefront": "TÁCTICA: Usa esta herramienta solo para dar una visión general. Si el cliente menciona un producto específico, detente y usa 'search_specific_products'.",
