@@ -127,6 +127,10 @@ class Email(BaseModel):
     to_email: str
     subject: str
     text: str
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
 
 def_headers = {
     "Authentication": f"bearer {TIENDANUBE_API_KEY}",
@@ -251,9 +255,33 @@ def orders(search: OrderSearch, token: str = Depends(verify_token)):
 
 @app.post("/tools/sendemail", response_model=ToolResponse)
 def sendemail(email: Email, token: str = Depends(verify_token)):
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
     try:
-        # Mock implementation
-        print(f"Sending email with subject: {email.subject} and text: {email.text}")
-        return ToolResponse(ok=True, data={"status": "email sent (mock)", "subject": email.subject})
+        # Prio 1: Use provided SMTP config from request
+        host = email.smtp_host or os.getenv("SMTP_HOST")
+        port = email.smtp_port or int(os.getenv("SMTP_PORT", "587"))
+        user = email.smtp_user or os.getenv("SMTP_USER")
+        password = email.smtp_password or os.getenv("SMTP_PASS")
+
+        if not all([host, port, user, password]):
+            return ToolResponse(ok=False, error=ToolError(code="SMTP_CONFIG_MISSING", message="SMTP configuration is incomplete", retryable=False))
+
+        msg = MIMEMultipart()
+        msg['From'] = user
+        msg['To'] = email.to_email
+        msg['Subject'] = email.subject
+        msg.attach(MIMEText(email.text, 'plain'))
+
+        with smtplib.SMTP(host, port) as server:
+            server.starttls()
+            server.login(user, password)
+            server.send_message(msg)
+
+        logger.info("email_sent_successfully", to=email.to_email)
+        return ToolResponse(ok=True, data={"status": "email sent", "to": email.to_email})
     except Exception as e:
+        logger.error("email_send_failed", error=str(e))
         return ToolResponse(ok=False, error=handle_generic_error(e))

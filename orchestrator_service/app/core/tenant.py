@@ -21,6 +21,7 @@ class TenantContext(BaseModel):
     store_description: Optional[str] = None
     
     handoff_policy: Dict = Field(default_factory=dict)
+    tool_config: Dict = Field(default_factory=dict)
     
     def __repr__(self):
         # Override repr to ensure no keys leak in logs

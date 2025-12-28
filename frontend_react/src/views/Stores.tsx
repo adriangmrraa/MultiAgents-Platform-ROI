@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Modal } from '../components/Modal';
-import { Store, ShoppingBag, Plus, Trash2, Edit2, CheckCircle, XCircle, Sparkles, HelpCircle, BookOpen } from 'lucide-react';
+import { Store, ShoppingBag, Plus, Trash2, Edit2, CheckCircle, XCircle, Sparkles, HelpCircle, BookOpen, Wrench, Save } from 'lucide-react';
 
 interface Tenant {
     id?: number;
@@ -22,6 +22,13 @@ export const Stores: React.FC = () => {
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+
+    // Tool Config State
+    const [isToolModalOpen, setIsToolModalOpen] = useState(false);
+    const [selectedTenantTools, setSelectedTenantTools] = useState<Tenant | null>(null);
+    const [availableTools, setAvailableTools] = useState<any[]>([]);
+    const [toolConfigs, setToolConfigs] = useState<Record<string, any>>({});
+    const [loadingTools, setLoadingTools] = useState(false);
 
     const [formData, setFormData] = useState<Tenant>({
         store_name: '',
@@ -118,6 +125,37 @@ export const Stores: React.FC = () => {
         setIsModalOpen(true);
     };
 
+    const openToolConfig = async (tenant: Tenant) => {
+        setSelectedTenantTools(tenant);
+        setLoadingTools(true);
+        setIsToolModalOpen(true);
+        try {
+            const [toolsData, configData] = await Promise.all([
+                fetchApi('/admin/tools'),
+                fetchApi(`/admin/tenants/${tenant.id}/tools/config`)
+            ]);
+            setAvailableTools(toolsData || []);
+            setToolConfigs(configData || {});
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoadingTools(false);
+        }
+    };
+
+    const handleSaveToolConfig = async () => {
+        if (!selectedTenantTools) return;
+        try {
+            await fetchApi(`/admin/tenants/${selectedTenantTools.id}/tools/config`, {
+                method: 'POST',
+                body: toolConfigs
+            });
+            setIsToolModalOpen(false);
+        } catch (e) {
+            alert('Error al guardar configuración de herramientas');
+        }
+    };
+
 
     return (
         <div className="view active">
@@ -162,6 +200,9 @@ export const Stores: React.FC = () => {
                                     <td>
                                         <div style={{ display: 'flex', gap: '8px' }}>
                                             <button className="btn-secondary" style={{ padding: '6px' }} onClick={() => openEdit(t)} title="Editar"><Edit2 size={14} /></button>
+                                            <button className="btn-secondary" style={{ padding: '6px', color: 'var(--accent)' }} onClick={() => openToolConfig(t)} title="Configurar Herramientas">
+                                                <Wrench size={14} />
+                                            </button>
                                             <button className="btn-delete" style={{ padding: '6px' }} onClick={() => handleDelete(t.id!)} title="Eliminar"><Trash2 size={14} /></button>
                                         </div>
                                     </td>
@@ -290,6 +331,8 @@ export const Stores: React.FC = () => {
                             />
                             <p className="text-xs text-secondary mt-1">
                                 Se enviará un correo cuando el agente active la tool <code>derivhumano</code>.
+                                <br />
+                                <span className="text-accent/80">Nota: Configura el Host/Password SMTP desde el botón de herramientas <Wrench size={10} style={{ display: 'inline' }} /> en la lista de tiendas.</span>
                             </p>
                             <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-xs text-yellow-200">
                                 <strong>Nota:</strong> Asegúrate de que las credenciales SMTP estén configuradas en las variables de entorno del servidor (TIENDANUBE_SERVICE_URL).
@@ -302,6 +345,68 @@ export const Stores: React.FC = () => {
                         <button type="submit" className="btn-primary">Guardar Tienda</button>
                     </div>
                 </form>
+            </Modal>
+
+            <Modal isOpen={isToolModalOpen} onClose={() => setIsToolModalOpen(false)} title={`Configurar Herramientas: ${selectedTenantTools?.store_name}`}>
+                <div style={{ marginBottom: '20px' }}>
+                    <p className="text-secondary text-sm mb-4">
+                        Aquí puedes personalizar cómo cada herramienta se comporta para esta tienda específica.
+                        Estas instrucciones tienen prioridad sobre las globales.
+                    </p>
+
+                    {loadingTools ? (
+                        <div style={{ textAlign: 'center', padding: '20px' }}>Cargando herramientas...</div>
+                    ) : (
+                        <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '10px' }} className="custom-scrollbar">
+                            {availableTools.map(tool => (
+                                <div key={tool.name} className="glass p-4 mb-4 border-l-2 border-accent/30">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h5 className="font-bold text-accent">{tool.name}</h5>
+                                        <span className="badge text-[10px]">{tool.type}</span>
+                                    </div>
+                                    <div className="form-group mb-3">
+                                        <label className="text-[10px] uppercase opacity-60">Táctica Personalizada</label>
+                                        <textarea
+                                            rows={2}
+                                            className="text-xs bg-black/20 border border-white/5 w-full p-2 rounded"
+                                            value={toolConfigs[tool.name]?.tactical || ''}
+                                            onChange={e => setToolConfigs({
+                                                ...toolConfigs,
+                                                [tool.name]: { ...toolConfigs[tool.name], tactical: e.target.value }
+                                            })}
+                                            placeholder="Ej: Para esta tienda, pide siempre el talle antes de buscar..."
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="text-[10px] uppercase opacity-60">Guía de Respuesta Personalizada</label>
+                                        <textarea
+                                            rows={2}
+                                            className="text-xs bg-black/20 border border-white/5 w-full p-2 rounded"
+                                            value={toolConfigs[tool.name]?.response_guide || ''}
+                                            onChange={e => setToolConfigs({
+                                                ...toolConfigs,
+                                                [tool.name]: { ...toolConfigs[tool.name], response_guide: e.target.value }
+                                            })}
+                                            placeholder="Ej: Muestra el precio en cuotas sin interés si es posible..."
+                                        />
+                                    </div>
+
+                                    {tool.name === 'derivhumano' && (
+                                        <div className="mt-2 p-2 bg-blue-900/20 border border-blue-700/50 rounded text-xs text-blue-200">
+                                            <strong>Nota:</strong> Para configurar el envío de correos (SMTP), crea una credencial tipo <code>SMTP</code> en la sección de Credenciales y asígnala a esta tienda.
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                    <button type="button" className="btn-secondary" onClick={() => setIsToolModalOpen(false)}>Cancelar</button>
+                    <button type="button" className="btn-primary" onClick={handleSaveToolConfig}>
+                        <Save size={14} className="mr-2" /> Guardar Configuración
+                    </button>
+                </div>
             </Modal>
         </div>
     );

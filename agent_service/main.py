@@ -250,6 +250,7 @@ async def execute_agent(
         search_by_category, 
         cupones_list, 
         orders, 
+        search_knowledge_base,
         derivhumano
     ]
     

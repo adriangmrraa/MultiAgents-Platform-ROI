@@ -94,7 +94,8 @@ class OrchestratorResult(BaseModel):
 
 class SendMessage(BaseModel):
     to: str
-    text: str
+    text: Optional[str] = None
+    imageUrl: Optional[str] = None
     channel_source: str = "whatsapp"
     external_chatwoot_id: Optional[int] = None
     external_account_id: Optional[int] = None
@@ -581,7 +582,12 @@ async def send_message(message: SendMessage, request: Request):
             client = YCloudClient(v_ycloud, business_number)
             
             # Send
-            await client.send_text(message.to, message.text, correlation_id)
+            if message.imageUrl:
+                 await client.send_image(message.to, message.imageUrl, correlation_id)
+            
+            if message.text:
+                 await client.send_text(message.to, message.text, correlation_id)
+                 
             return {"status": "sent_via_ycloud", "correlation_id": correlation_id}
         
     except Exception as e:

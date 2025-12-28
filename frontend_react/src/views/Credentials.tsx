@@ -35,6 +35,9 @@ export const Credentials: React.FC = () => {
         tenant_id: null
     });
 
+    // SMTP Form State
+    const [smtpData, setSmtpData] = useState({ host: '', port: '587', user: '', pass: '' });
+
     const loadData = async () => {
         try {
             const [credsData, tenantsData] = await Promise.all([
@@ -80,9 +83,18 @@ export const Credentials: React.FC = () => {
                 // So POST handles both create and update (upsert) or just create?
                 // Logic in app.js: "const res = await adminFetch('/admin/credentials', 'POST', data);"
                 // So it's a POST.
-                await fetchApi('/admin/credentials', { method: 'POST', body: formData });
+                // If SMTP, pack into value
+                let submissionData = { ...formData };
+                if (formData.category === 'smtp') {
+                    submissionData.value = JSON.stringify(smtpData);
+                }
+                await fetchApi('/admin/credentials', { method: 'POST', body: submissionData });
             } else {
-                await fetchApi('/admin/credentials', { method: 'POST', body: formData });
+                let submissionData = { ...formData };
+                if (formData.category === 'smtp') {
+                    submissionData.value = JSON.stringify(smtpData);
+                }
+                await fetchApi('/admin/credentials', { method: 'POST', body: submissionData });
             }
             setIsModalOpen(false);
             loadData();
@@ -104,6 +116,21 @@ export const Credentials: React.FC = () => {
     const openEdit = (cred: Credential) => {
         setEditingCred(cred);
         setFormData(cred);
+
+        if (cred.category === 'smtp') {
+            try {
+                const parsed = JSON.parse(cred.value);
+                setSmtpData({
+                    host: parsed.host || '',
+                    port: parsed.port || '587',
+                    user: parsed.user || '',
+                    pass: parsed.pass || ''
+                });
+            } catch {
+                setSmtpData({ host: '', port: '587', user: '', pass: '' });
+            }
+        }
+
         setIsModalOpen(true);
     };
 
@@ -187,16 +214,43 @@ export const Credentials: React.FC = () => {
                             placeholder="Ej: OpenAI Key Principal"
                         />
                     </div>
-                    <div className="form-group">
-                        <label>Valor (Token/Key)</label>
-                        <input
-                            required
-                            type="password"
-                            value={formData.value}
-                            onChange={e => setFormData({ ...formData, value: e.target.value })}
-                            placeholder="sk-..."
-                        />
-                    </div>
+
+                    {formData.category === 'smtp' ? (
+                        <div className="p-3 bg-white/5 rounded mb-4 border border-white/10">
+                            <h5 className="text-xs font-bold text-accent mb-2">Configuración SMTP</h5>
+                            <div className="form-grid">
+                                <div className="form-group">
+                                    <label>Host</label>
+                                    <input value={smtpData.host} onChange={e => setSmtpData({ ...smtpData, host: e.target.value })} placeholder="smtp.gmail.com" />
+                                </div>
+                                <div className="form-group">
+                                    <label>Puerto</label>
+                                    <input value={smtpData.port} onChange={e => setSmtpData({ ...smtpData, port: e.target.value })} placeholder="587" />
+                                </div>
+                            </div>
+                            <div className="form-grid">
+                                <div className="form-group">
+                                    <label>Usuario</label>
+                                    <input value={smtpData.user} onChange={e => setSmtpData({ ...smtpData, user: e.target.value })} placeholder="email@dominio.com" />
+                                </div>
+                                <div className="form-group">
+                                    <label>Contraseña</label>
+                                    <input type="password" value={smtpData.pass} onChange={e => setSmtpData({ ...smtpData, pass: e.target.value })} />
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="form-group">
+                            <label>Valor (Token/Key)</label>
+                            <input
+                                required
+                                type="password"
+                                value={formData.value}
+                                onChange={e => setFormData({ ...formData, value: e.target.value })}
+                                placeholder="sk-..."
+                            />
+                        </div>
+                    )}
                     <div className="form-grid">
                         <div className="form-group">
                             <label>Categoría</label>
@@ -208,6 +262,7 @@ export const Credentials: React.FC = () => {
                                 <option value="whatsapp_cloud">WhatsApp Cloud API</option>
                                 <option value="tiendanube">Tienda Nube</option>
                                 <option value="database">Database</option>
+                                <option value="smtp">SMTP (Email)</option>
                                 <option value="other">Otro</option>
                             </select>
                         </div>

@@ -277,8 +277,8 @@ class AgentModel(BaseModel):
 
 class ToolCreate(BaseModel):
     name: str # Must be unique
-    type: str # 'http', 'tienda_nube', etc.
-    config: Dict[str, Any]
+    type: str # system, custom
+    config: Optional[Dict[str, Any]] = {}
     service_url: Optional[str] = None
     prompt_injection: Optional[str] = ""
     response_guide: Optional[str] = ""
@@ -312,15 +312,29 @@ async def create_tool(tool: ToolCreate):
 
 @router.delete("/tools/{name}", dependencies=[Depends(verify_admin_token)])
 async def delete_tool(name: str):
+    # Protect system tools (registered in memory in main.py)
+    system_tool_names = [t.name for t in REGISTERED_TOOLS]
+    if name in system_tool_names:
+        raise HTTPException(status_code=400, detail="Cannot delete a system-level tool. You can only customize its instructions via Tool Config.")
+    
+    await db.pool.execute("DELETE FROM tools WHERE name = $1", name)
+    return {"status": "ok"}
+
+# --- Tool Configuration (Tenant Specific) ---
+
+@router.get("/tenants/{tenant_id}/tools/config", dependencies=[Depends(verify_admin_token)])
+async def get_tenant_tool_config(tenant_id: int):
+    config = await db.pool.fetchval("SELECT tool_config FROM tenants WHERE id = $1", tenant_id)
+    return config or {}
+
+@router.post("/tenants/{tenant_id}/tools/config", dependencies=[Depends(verify_admin_token)])
+async def update_tenant_tool_config(tenant_id: int, request: Request):
     try:
-        # Check if system tool
-        if any(t.name == name for t in REGISTERED_TOOLS):
-             raise HTTPException(403, "Cannot delete system tool")
-             
-        await db.pool.execute("DELETE FROM tools WHERE name = $1", name)
+        data = await request.json()
+        await db.pool.execute("UPDATE tenants SET tool_config = $1 WHERE id = $2", json.dumps(data), tenant_id)
         return {"status": "ok"}
     except Exception as e:
-         raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 # --- Models ---
 from utils import encrypt_password, decrypt_password
@@ -1729,8 +1743,63 @@ pass
 
 # --- Credentials Routes ---
 
-# Gestión de credenciales consolidada al principio del archivo
-pass
+@router.get("/credentials", dependencies=[Depends(verify_admin_token)])
+async def list_credentials():
+    """List all credentials."""
+    try:
+        # Check if table exists first (migration safety)
+        await db.pool.execute("""
+            CREATE TABLE IF NOT EXISTS credentials (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) UNIQUE NOT NULL,
+                value TEXT NOT NULL,
+                category VARCHAR(50) DEFAULT 'other',
+                scope VARCHAR(20) DEFAULT 'global',
+                tenant_id INT,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+        
+        rows = await db.pool.fetch("SELECT * FROM credentials ORDER BY id DESC")
+        return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"Error listing credentials: {e}")
+        raise HTTPException(500, str(e))
+
+@router.post("/credentials", dependencies=[Depends(verify_admin_token)])
+@require_role("SuperAdmin")
+async def create_credential(cred: CredentialModel):
+    try:
+        # Check for upsert by name
+        q = """
+            INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            ON CONFLICT (name) DO UPDATE SET
+                value = EXCLUDED.value,
+                category = EXCLUDED.category,
+                scope = EXCLUDED.scope,
+                tenant_id = EXCLUDED.tenant_id,
+                description = EXCLUDED.description,
+                updated_at = NOW()
+            RETURNING id
+        """
+        row = await db.pool.fetchrow(q, cred.name, cred.value, cred.category, cred.scope, cred.tenant_id, cred.description)
+        return {"status": "ok", "id": row['id']}
+    except Exception as e:
+        logger.error(f"Error creating credential: {e}")
+        raise HTTPException(500, str(e))
+
+@router.delete("/credentials/{cred_id}", dependencies=[Depends(verify_admin_token)])
+@require_role("SuperAdmin")
+async def delete_credential(cred_id: int):
+    try:
+        await db.pool.execute("DELETE FROM credentials WHERE id = $1", cred_id)
+        return {"status": "ok", "message": "Credential deleted"}
+    except Exception as e:
+        logger.error(f"Error deleting credential: {e}")
+        raise HTTPException(500, str(e))
 
 # --- Tools Management ---
 

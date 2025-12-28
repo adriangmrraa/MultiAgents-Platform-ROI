@@ -1255,19 +1255,20 @@ ACCIÓN REQUERIDA:
     return handoff_msg
 
 # --- Tactical Prompt Injections (Omega Protocol Defaults) ---
-tactical_injections = {
     "search_specific_products": "TÁCTICA: Cuando busques productos, usa SIEMPRE el parámetro 'q' con el nombre del producto, categoría o marca exacta. Si el cliente pregunta de forma vaga, pide precisión antes de buscar.",
     "search_by_category": "TÁCTICA: Selecciona la categoría correcta del catálogo para el parámetro 'category'. Si no estás seguro, usa 'search_specific_products' en su lugar.",
     "browse_general_storefront": "TÁCTICA: Usa esta herramienta solo para dar una visión general. Si el cliente menciona un producto específico, detente y usa 'search_specific_products'.",
+    "search_knowledge_base": "TÁCTICA: Usa esta herramienta para responder preguntas sobre políticas, envíos, talles generales o información de la marca que NO sea un producto específico.",
     "derivhumano": "TÁCTICA: Activa esta herramienta si detectas frustración extrema, si el cliente pide hablar con un humano explícitamente, o si hay un problema técnico que no puedes resolver.",
     "orders": "TÁCTICA: Para buscar órdenes, solicita al cliente el ID numérico sin el símbolo #. Informa el estado actual de forma clara."
 }
 
 # --- Response Extraction Guides (Omega Protocol Defaults) ---
 response_guides = {
-    "search_specific_products": "GUÍA DE RESPUESTA: Extrae el nombre, precio y URL de los productos. Si no hay stock, indícalo. Si hay múltiples, presenta los 3 más relevantes con links directos.",
+    "search_specific_products": "GUÍA DE RESPUESTA: Para cada producto, envía PRIMERO la imagen en una burbuja separada usando ![nombre](url) seguido de |||, luego nombre, precio y un detalle breve y fidedigno (máximo 15 palabras). Si no hay stock, indícalo.",
     "search_by_category": "GUÍA DE RESPUESTA: Resume las categorías encontradas y ofrece ver los productos destacados de cada una.",
-    "browse_general_storefront": "GUÍA DE RESPUESTA: Menciona las novedades más llamativas (primeros 3 items) y sus precios.",
+    "browse_general_storefront": "GUÍA DE RESPUESTA: Envía la imagen del primer producto destacado con ![nombre](url) ||| y menciona las 3 novedades más llamativas con sus precios.",
+    "search_knowledge_base": "GUÍA DE RESPUESTA: Proporciona la respuesta basada en el conocimiento de forma concisa y profesional.",
     "orders": "GUÍA DE RESPUESTA: Extrae el estado (Ej: 'Pagado', 'Enviado') y la fecha estimada de entrega si está disponible.",
     "cupones_list": "GUÍA DE RESPUESTA: Extrae el código del cupón y el porcentaje de descuento de forma muy visible.",
     "derivhumano": "GUÍA DE RESPUESTA: Confirma al usuario que un humano revisará el caso y que el chat quedará pausado por 24h."
@@ -1756,6 +1757,51 @@ async def chat_endpoint(
     
     return OrchestratorResult(status="ok", send=False, text="Debouncing...", meta={"correlation_id": correlation_id})
 
+async def classify_intent(message: str, history: List[Dict[str, str]], agents: List[Any], store_name: str) -> Optional[Any]:
+    """
+    Uses a fast LLM call to classify user intent and select the best Agent Specialist.
+    Part of the Nexus v5 'Armada' Coordination logic.
+    """
+    if not agents: return None
+    if len(agents) == 1: return agents[0]
+
+    agent_options = "\n".join([f"- {a['name']} (ID: {a['id']}, Role: {a['role']}): {a['system_prompt_template'][:100]}..." for a in agents])
+    
+    prompt = f"""
+Eres el ENRUTADOR MAESTRO de la tienda '{store_name}'. 
+Tu tarea es decidir qué AGENTE ESPECIALISTA debe responder al siguiente mensaje del usuario.
+
+AGENTES DISPONIBLES:
+{agent_options}
+
+MENSAJE DEL USUARIO:
+{message}
+
+HISTORIAL RECIENTE (Contexto):
+{json.dumps(history[-3:]) if history else "Sin historial"}
+
+REGLAS:
+1. Responde ÚNICAMENTE con el ID del agente elegido.
+2. Si la intención no es clara, elige al 'Supervisor General' o al 'Ventas Expert' por defecto.
+3. Si el usuario pregunta por talles, elige al 'Especialista de Talles'.
+4. Si el usuario está enojado o pide hablar con un humano, elige al 'Supervisor General'.
+5. Si el usuario pregunta por su paquete o envío, elige al 'Gerente de Logística'.
+
+ID DEL AGENTE ELEGIDO:"""
+
+    try:
+        llm = ChatOpenAI(model="gpt-4o-mini", api_key=OPENAI_API_KEY, temperature=0, max_tokens=10)
+        resp = await llm.ainvoke(prompt)
+        chosen_id = resp.content.strip()
+        
+        for a in agents:
+            if str(a['id']) == chosen_id or a['name'].lower() in chosen_id.lower() or a['role'].lower() in chosen_id.lower():
+                return a
+        return agents[0] # Fallback
+    except Exception as e:
+        logger.error("intent_classification_failed", error=str(e))
+        return agents[0]
+
 
 async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id, content, customer_name, channel_source='whatsapp'):
     """
@@ -1790,9 +1836,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
              else:
                   remote_history.append({"role": role, "content": content_h})
 
-        # 2b. Fetch Active Agent (Nexus v3) with Channel Routing
-        # Logic: Prefer specific match for channel. Fallback to generic (channels is null or empty).
-        # We fetch all active agents for tenant and filter in code for flexibility (usually few agents per tenant)
+        # 2b. Fetch Active Agent (Nexus v3) with Intent Routing
         agents = await db.pool.fetch("""
             SELECT * FROM agents 
             WHERE tenant_id = $1 AND is_active = TRUE 
@@ -1801,25 +1845,13 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         
         agent_row = None
         
-        # Priority 1: Exact Channel Match
-        for a in agents:
-            channels = json.loads(a['channels']) if a.get('channels') else []
-            # Check if current_channel is in list (case insensitive)
-            if channels and channel_source.lower() in [c.lower() for c in channels]:
-                agent_row = a
-                break
-        
-        # Priority 2: Universal Agent (No channels defined or empty list)
-        if not agent_row:
-             for a in agents:
-                channels = json.loads(a['channels']) if a.get('channels') else []
-                if not channels: 
-                    agent_row = a
-                    break
-                    
-        # Priority 3: First available (Desperation Fallback)
-        if not agent_row and agents:
-            agent_row = agents[0]
+        if agents:
+            # Protocol Omega: Intent-Based Routing (The "Armada" Coordinator)
+            agent_row = await classify_intent(content, remote_history, agents, tenant_row['store_name'])
+            if agent_row:
+                 logger.info("agent_routed_by_intent", chosen_agent=agent_row['name'], role=agent_row['role'])
+            else:
+                 agent_row = agents[0]
 
         # 3. Construct System Prompt & Config
         if agent_row:
@@ -1845,21 +1877,35 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         sys_template = sys_template.replace("{STORE_DESCRIPTION}", tenant_row['store_description'] or "")
         
         # 3.5. Gather Tool Instructions (Tactical Protocol Injection)
-        # We fetch instructions for tools enabled for THIS agent from BOTH System and DB.
+        # We fetch instructions for tools enabled for THIS agent from BOTH System, DB and Tenant Config.
         tool_instructions_list = []
         db_tools_rows = await db.pool.fetch("SELECT name, prompt_injection, response_guide FROM tools")
         db_tool_map = {r['name']: r for r in db_tools_rows}
+        
+        # Prio 0: Tenant Specific Tool Config (Custom Guides UI)
+        tenant_tool_config = {}
+        if tenant_row.get('tool_config'):
+             try:
+                 tenant_tool_config = json.loads(tenant_row['tool_config']) if isinstance(tenant_row['tool_config'], str) else tenant_row['tool_config']
+             except: pass
 
         for t_name in enabled_tools:
             tactical = ""
             response_g = ""
             
-            # Prio 1: DB override
-            if t_name in db_tool_map:
-                tactical = db_tool_map[t_name]['prompt_injection']
-                response_g = db_tool_map[t_name].get('response_guide')
+            # Prio 1/0: Tenant Configuration Override (Custom Guides UI)
+            if t_name in tenant_tool_config:
+                 tactical = tenant_tool_config[t_name].get('tactical') or tenant_tool_config[t_name].get('prompt_injection', "")
+                 response_g = tenant_tool_config[t_name].get('response_guide')
             
-            # Prio 2: System Default (if DB is empty)
+            # Prio 2: DB Centralized tools table override
+            if not tactical and t_name in db_tool_map:
+                tactical = db_tool_map[t_name]['prompt_injection']
+                # If we still don't have a response guide from tenant_config, try DB
+                if not response_g:
+                    response_g = db_tool_map[t_name].get('response_guide')
+            
+            # Prio 3: System Default (hardcoded in main.py)
             if not tactical and t_name in SYSTEM_TOOL_INJECTIONS:
                 tactical = SYSTEM_TOOL_INJECTIONS[t_name]
             if not response_g and t_name in SYSTEM_TOOL_RESPONSE_GUIDES:
@@ -1967,6 +2013,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                             delivery_payload = {
                                 "to": conv_meta['external_user_id'],
                                 "text": text_content,
+                                "imageUrl": msg_obj.get("imageUrl"),
                                 "channel_source": conv_meta['channel_source'],
                                 "external_chatwoot_id": conv_meta['external_chatwoot_id'],
                                 "external_account_id": conv_meta['external_account_id']
@@ -2013,11 +2060,31 @@ async def trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, cust
         """, tenant_id)
         
         if tenant_settings and tenant_settings['handoff_enabled'] and tenant_settings['handoff_target_email']:
-             # Disable handoff email if no email provided
+             # 1. Try to fetch SMTP config from Credentials (priority: tenant > global)
+             smtp_cred_json = await db.pool.fetchval("""
+                 SELECT value FROM credentials 
+                 WHERE category = 'smtp' 
+                 AND (tenant_id = $1 OR (scope = 'global' AND tenant_id IS NULL))
+                 ORDER BY CASE WHEN tenant_id IS NOT NULL THEN 0 ELSE 1 END
+                 LIMIT 1
+             """, tenant_id)
+             
+             smtp_cfg = {}
+             if smtp_cred_json:
+                 try: smtp_cfg = json.loads(smtp_cred_json)
+                 except: pass
+             
+             # 2. Fallback to Env Vars (handled by TiendaNube Service if not passed)
+             # But if we found creds, we pass them.
+             
              email_payload = {
                  "to_email": tenant_settings['handoff_target_email'],
                  "subject": f"🚨 Solicitud de Humano: {tenant_settings['store_name']}",
-                 "text": f"El cliente {customer_name} ({from_number}) solicita atención humana.\nMotivo: {reason}\n\nIngresa al panel para responder: https://app.nexus-ai.com"
+                 "text": f"El cliente {customer_name} ({from_number}) solicita atención humana.\nMotivo: {reason}\n\nIngresa al panel para responder: https://app.nexus-ai.com",
+                 "smtp_host": smtp_cfg.get("host"),
+                 "smtp_port": int(smtp_cfg.get("port")) if smtp_cfg.get("port") else None,
+                 "smtp_user": smtp_cfg.get("user"),
+                 "smtp_password": smtp_cfg.get("pass")
              }
              
              # Call TiendaNube Service (Tool Holder) to send email
@@ -2086,6 +2153,11 @@ BEGIN
     -- Identity Link (Repair Roto)
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='chat_conversations') THEN
          ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES customers(id);
+    END IF;
+
+    -- Tool Config (The "Custom Guides" Requirement)
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='tenants') THEN
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tool_config JSONB DEFAULT '{}';
     END IF;
 
 END $$;
