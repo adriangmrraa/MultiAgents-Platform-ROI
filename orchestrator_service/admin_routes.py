@@ -1013,7 +1013,7 @@ async def get_stats():
         
         # 3. Cache result
         try:
-            redis_client.setex(cache_key, 300, json.dumps(stats_data))
+            await redis_client.setex(cache_key, 300, json.dumps(stats_data))
         except Exception as e:
             print(f"WARN: Redis cache error (set): {e}")
 
@@ -1109,10 +1109,10 @@ async def admin_ops(action: str, payload: dict = {}):
                 pattern = f"dashboard:{pattern}"
         
         try:
-            keys = redis_client.keys(pattern)
+            keys = await redis_client.keys(pattern)
             count = 0
             if keys:
-                redis_client.delete(*keys)
+                await redis_client.delete(*keys)
                 count = len(keys)
             return {"status": "ok", "cleared": count, "pattern": pattern}
         except Exception as e:
@@ -2458,18 +2458,18 @@ async def report_assisted_gmv(tenant_id: Optional[str] = None, days: int = 30):
     try:
         # 1. Thermal Shield: Try Cache
         try:
-            cached = redis_client.get(CACHE_KEY)
+            cached = await redis_client.get(CACHE_KEY)
             if cached:
                 return json.loads(cached)
         except Exception as e:
-            logger.warning("roi_cache_miss_redis_down", error=str(e))
+            logger.warning("roi_cache_miss_redis_down", extra={"error": str(e)})
 
         # 2. Database Fetch
         data = await fetch_roi_from_db()
         
         # 3. Refill Cache (Async-safe best effort)
         try:
-            redis_client.setex(CACHE_KEY, 300, json.dumps(data))
+            await redis_client.setex(CACHE_KEY, 300, json.dumps(data))
         except: pass
         
         return data
@@ -2626,7 +2626,7 @@ async def get_rag_galaxy(tenant_id: Optional[str] = None):
     CACHE_KEY = f"rag:galaxy:{tenant_id}"
     try:
         # 1. Thermal Shield
-        cached = redis_client.get(CACHE_KEY)
+        cached = await redis_client.get(CACHE_KEY)
         if cached:
             return json.loads(cached)
             
@@ -2685,7 +2685,7 @@ async def get_rag_galaxy(tenant_id: Optional[str] = None):
             
         # 3. Cache (short TTL for live updates)
         try:
-            redis_client.setex(CACHE_KEY, 30, json.dumps(nodes))
+            await redis_client.setex(CACHE_KEY, 30, json.dumps(nodes))
         except: pass
         
         return nodes
@@ -2925,7 +2925,7 @@ async def get_business_assets(tenant_id: str):
     cache_key = f"assets:{tenant_id}"
     
     # 1. Try Cache (Instant Vis)
-    cached = redis_client.get(cache_key)
+    cached = await redis_client.get(cache_key)
     if cached:
         return json.loads(cached)
         
@@ -2947,7 +2947,7 @@ async def get_business_assets(tenant_id: str):
         pass 
             
     # 3. Cache
-    redis_client.setex(cache_key, 5, json.dumps(assets)) # Short TTL (5s) to allow updates during generation
+    await redis_client.setex(cache_key, 5, json.dumps(assets)) # Short TTL (5s) to allow updates during generation
     return assets
 
 @router.get("/rag/galaxy", dependencies=[Depends(verify_admin_token)])
@@ -3035,7 +3035,7 @@ async def get_engine_analytics():
     """
     # 1. Try Cache
     cache_key = "engine:analytics:summary"
-    cached = redis_client.get(cache_key)
+    cached = await redis_client.get(cache_key)
     if cached: return json.loads(cached)
 
     # 2. Real Aggregation
@@ -3057,7 +3057,7 @@ async def get_engine_analytics():
         }
         
         # 3. Cache (TTL 300s)
-        redis_client.setex(cache_key, 300, json.dumps(data))
+        await redis_client.setex(cache_key, 300, json.dumps(data))
         return data
 
     except Exception as e:
