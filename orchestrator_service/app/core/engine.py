@@ -36,7 +36,7 @@ class NexusEngine:
         # 1. Fetch Products (Agent 0: The Scout)
         products = []
         if tn_store_id and tn_token:
-             try:
+            try:
                 potential_urls = [
                     "http://tiendanube_service:8003", # Primary (Matches docker-compose service name)
                     "http://tiendanube-service:8003", # Fallback Dash
@@ -44,47 +44,46 @@ class NexusEngine:
                     "https://multiagents-tiendanube-service.yn8wow.easypanel.host", # Public fallback
                     "http://localhost:8003"
                 ]
-                 # Robust cleanup: filter empty, remove duplicates, strip trailing slashes, ensure http schema
-                 service_urls = []
-                 for u in potential_urls:
-                     if u and u.strip():
-                         cleaned = u.strip().rstrip('/')
-                         # Auto-prefix http if missing for simple service names
-                         if not cleaned.startswith('http'):
-                              cleaned = f"http://{cleaned}"
-                         if cleaned not in service_urls:
-                             service_urls.append(cleaned)
-                 
-                 token = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY") or "super-secret-internal-token"
-                 async with httpx.AsyncClient(timeout=15.0) as client:
-                     for service_url in service_urls:
-                         try:
-                             logger.info("product_fetch_attempt", url=service_url)
-                             resp = await client.post(
-                                 f"{service_url}/tools/productsall",
-                                 json={"store_id": tn_store_id, "access_token": tn_token},
-                                 headers={"X-Internal-Secret": token}
-                             )
-                             if resp.status_code == 200 and resp.json().get("ok"):
-                                 products = resp.json().get("data", [])
-                                 logger.info("product_fetch_success", url=service_url, count=len(products))
-                                 break 
-                             else:
-                                 logger.warning("product_fetch_bad_response", url=service_url, status=resp.status_code, body=resp.text[:200])
-                         except Exception as fe: 
-                             logger.warning("product_fetch_failed_single", url=service_url, error=str(fe))
-                             continue
-                     
-                     if not products:
-                         logger.warning("product_fetch_failed_all_using_mock", tried=service_urls)
-                         products = [
-                             {"id": "mock_1", "name": {"es": "Producto Premium Alpha"}, "description": {"es": "Calidad superior."}, "images": [{"src": "https://placehold.co/600x600.png?text=Alpha"}], "price": "100.00", "categories": [{"name": {"es": "Destacados"}}]},
-                             {"id": "mock_2", "name": {"es": "Producto Beta"}, "description": {"es": "Versatilidad y estilo."}, "images": [{"src": "https://placehold.co/600x600.jpg?text=Beta"}], "price": "250.00", "categories": [{"name": {"es": "Nueva Colección"}}]}
-                         ]
-
-             except Exception as e:
-                 logger.error("product_fetch_critical", error=str(e))
-                 products = [{"id": "mock_crit", "name": {"es": "Producto Respaldo"}, "images": [], "categories": []}]
+                # Robust cleanup: filter empty, remove duplicates, strip trailing slashes, ensure http schema
+                service_urls = []
+                for u in potential_urls:
+                    if u and u.strip():
+                        cleaned = u.strip().rstrip('/')
+                        # Auto-prefix http if missing for simple service names
+                        if not cleaned.startswith('http'):
+                            cleaned = f"http://{cleaned}"
+                        if cleaned not in service_urls:
+                            service_urls.append(cleaned)
+                
+                token = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY") or "super-secret-internal-token"
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    for service_url in service_urls:
+                        try:
+                            logger.info("product_fetch_attempt", url=service_url)
+                            resp = await client.post(
+                                f"{service_url}/tools/productsall",
+                                json={"store_id": tn_store_id, "access_token": tn_token},
+                                headers={"X-Internal-Secret": token}
+                            )
+                            if resp.status_code == 200 and resp.json().get("ok"):
+                                products = resp.json().get("data", [])
+                                logger.info("product_fetch_success", url=service_url, count=len(products))
+                                break 
+                            else:
+                                logger.warning("product_fetch_bad_response", url=service_url, status=resp.status_code, body=resp.text[:200])
+                        except Exception as fe: 
+                            logger.warning("product_fetch_failed_single", url=service_url, error=str(fe))
+                            continue
+                
+                if not products:
+                    logger.warning("product_fetch_failed_all_using_mock", tried=service_urls)
+                    products = [
+                        {"id": 991, "name": {"es": "Camiseta Demo Magic"}, "description": {"es": "Nexus v3.3 Protocol Omega (Falla de Conexión)"}, "price": "100.00"},
+                        {"id": 992, "name": {"es": "Pantalón Demo Magic"}, "description": {"es": "Nexus v3.3 Protocol Omega (Falla de Conexión)"}, "price": "200.00"}
+                    ]
+            except Exception as e:
+                logger.error("product_fetch_critical", error=str(e))
+                products = [{"id": "mock_crit", "name": {"es": "Producto Respaldo"}, "images": [], "categories": []}]
 
         self.context['catalog'] = products
 
