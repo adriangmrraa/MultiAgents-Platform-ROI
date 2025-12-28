@@ -697,6 +697,17 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Failed to add response_guide to tools';
     END $$;
+    """,
+    # 21. Business Assets constraint repair (Protocol Omega)
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_tenant_asset_type') THEN
+            ALTER TABLE business_assets ADD CONSTRAINT unique_tenant_asset_type UNIQUE (tenant_id, asset_type);
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to add unique constraint to business_assets';
+    END $$;
     """
 ]
 
