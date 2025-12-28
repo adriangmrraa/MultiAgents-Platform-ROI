@@ -13,7 +13,7 @@ load_dotenv()
 TIENDANUBE_API_KEY = os.getenv("TIENDANUBE_API_KEY")
 # ...
 TIENDANUBE_USER_AGENT = os.getenv("TIENDANUBE_USER_AGENT", "Nexus-MultiTenant-Service (Nexus v3)")
-INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
+INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY")
 
 # Removed hardcoded TIENDANUBE_STORE_ID
 

@@ -2001,7 +2001,7 @@ async def get_media(media_id: str):
     if not v_ycloud:
          # Try internal lookup
          try:
-            val = await get_internal_credential("YCLOUD_API_KEY", os.getenv("INTERNAL_API_TOKEN"))
+            val = await get_internal_credential("YCLOUD_API_KEY", os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY"))
             v_ycloud = val["value"]
          except:
             pass
