@@ -38,10 +38,11 @@ class NexusEngine:
         if tn_store_id and tn_token:
             try:
                 potential_urls = [
-                    "http://tiendanube-service:8003", # Protocol Omega: Priority Dash resolution (Verified in logs)
-                    "http://tiendanube_service:8003", # Fallback Underscore
-                    "http://tiendanube-service:8000", # Port Fallback
-                    "http://multiagents-tiendanube-service:8003",
+                    "http://tiendanube-service:8003", # Protocol Omega: Priority Dash (8003)
+                    "http://tiendanube-service:8001", # Fallback 8001 (User reported env override)
+                    "http://tiendanube_service:8003", # Fallback Underscore (8003)
+                    "http://tiendanube_service:8001", # Fallback Underscore (8001)
+                    "http://tiendanube-service:8000", # Port Fallback Standard
                     "https://multiagents-tiendanube-service.yn8wow.easypanel.host", # Public fallback
                     "http://localhost:8003"
                 ]
