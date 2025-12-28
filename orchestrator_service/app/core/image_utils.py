@@ -15,8 +15,8 @@ logger = structlog.get_logger()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 client = None
 if GOOGLE_API_KEY:
-    # Protocol Omega: Stabilized SDK Init (v5.9.113) - Force v1 via http_options
-    client = genai.Client(api_key=GOOGLE_API_KEY, http_options={'api_version': 'v1'})
+    # Protocol Omega: Revert to default SDK (v1beta) but use explicit model version
+    client = genai.Client(api_key=GOOGLE_API_KEY)
 
 async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
     """
@@ -43,7 +43,7 @@ async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
         prompt = f"Analyze this product image deeply. Context: {prompt_context}. Describe the MAIN PRODUCT (colors, materials, shape, key features) so it can be recreated. Output a concise paragraph."
         
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-1.5-flash-001',
             contents=[prompt, img]
         )
         return response.text
@@ -73,7 +73,7 @@ async def generate_ad_from_product(base64_product: str, prompt: str) -> str:
         analysis_prompt = f"Describe este producto detalladamente para un anuncio de {prompt}. Enfócate en la estética, colores y marca."
         
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-1.5-flash-001',
             contents=[analysis_prompt, img]
         )
         visual_description = response.text
