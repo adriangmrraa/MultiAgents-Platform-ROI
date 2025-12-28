@@ -482,11 +482,13 @@ async def magic_onboarding(data: MagicOnboardingRequest):
             store_name = EXCLUDED.store_name,
             tiendanube_store_id = EXCLUDED.tiendanube_store_id,
             tiendanube_access_token = EXCLUDED.tiendanube_access_token,
-            store_website = EXCLUDED.store_website,
+            store_website = CASE WHEN EXCLUDED.store_website IS NOT NULL AND EXCLUDED.store_website <> '' THEN EXCLUDED.store_website ELSE tenants.store_website END,
             updated_at = NOW()
-        RETURNING id
+        RETURNING id, store_website
     """
-    tenant_id = await db.pool.fetchval(q_tenant, data.store_name, provisional_phone, data.tiendanube_store_id, encrypted_token, data.store_url)
+    row_tenant = await db.pool.fetchrow(q_tenant, data.store_name, provisional_phone, data.tiendanube_store_id, encrypted_token, data.store_url)
+    tenant_id = row_tenant['id']
+    db_store_website = row_tenant['store_website']
     
     # 2. SPAWN AGENTS (The "Army")
     # We define the Standard 5
@@ -543,7 +545,9 @@ async def magic_onboarding(data: MagicOnboardingRequest):
     decrypted_token = data.tiendanube_access_token # We have it raw here
     
     # Robust URL Strategy (Sync with ignite_engine)
-    store_website = data.store_url
+    # Prefer Payload > Database > Guessed
+    store_website = data.store_url or db_store_website
+    
     if not store_website:
         slug = re.sub(r'[^a-z0-9]', '', data.store_name.lower())
         store_website = f"https://{slug}.mitiendanube.com"
@@ -2796,39 +2800,41 @@ async def ignite_engine(request: Request):
         
     # 3. Tenant Upsert (Auto-Healing / Onboarding)
     # We use bot_phone_number as the unique key for conflict resolution
+    store_website_input = payload.get("store_website") or payload.get("store_url")
+    
     q_upsert = """
         INSERT INTO tenants (
             store_name, bot_phone_number, 
-            tiendanube_store_id, tiendanube_access_token,
+            tiendanube_store_id, tiendanube_access_token, store_website,
             updated_at, onboarding_status
         )
-        VALUES ($1, $2, $3, $4, NOW(), 'ignited')
+        VALUES ($1, $2, $3, $4, $5, NOW(), 'ignited')
         ON CONFLICT (bot_phone_number) 
         DO UPDATE SET 
             store_name = EXCLUDED.store_name,
             tiendanube_store_id = CASE WHEN EXCLUDED.tiendanube_store_id <> '' THEN EXCLUDED.tiendanube_store_id ELSE tenants.tiendanube_store_id END,
             tiendanube_access_token = CASE WHEN EXCLUDED.tiendanube_access_token IS NOT NULL THEN EXCLUDED.tiendanube_access_token ELSE tenants.tiendanube_access_token END,
+            store_website = CASE WHEN EXCLUDED.store_website IS NOT NULL AND EXCLUDED.store_website <> '' THEN EXCLUDED.store_website ELSE tenants.store_website END,
             updated_at = NOW()
-        RETURNING id, tiendanube_store_id, tiendanube_access_token
+        RETURNING id, tiendanube_store_id, tiendanube_access_token, store_website
     """
     
-    row = await db.pool.fetchrow(q_upsert, store_name, tenant_id_phone, tn_store_id, encrypted_token)
+    row = await db.pool.fetchrow(q_upsert, store_name, tenant_id_phone, tn_store_id, encrypted_token, store_website_input)
     real_tenant_id_int = row['id']
     
     # 4. Context Hydration for Engine
     # We prefer the Freshly updated values
     final_tn_token = decrypt_password(row['tiendanube_access_token']) if row['tiendanube_access_token'] else None
     
-    # Robust URL Strategy: Payload > Guessed
-    store_website = payload.get("store_website") or payload.get("store_url")
+    # Robust URL Strategy: Payload / Database > Guessed
+    store_website = row['store_website'] # Already contains the best available (Payload or DB)
+
     if not store_website:
-        # Guess: numerical ID is RARELY the subdomain for mitiendanube.com
-        # Attempt to use store_name slugified
         slug = re.sub(r'[^a-z0-9]', '', store_name.lower())
         store_website = f"https://{slug}.mitiendanube.com"
         logger.info("engine_url_guessed", slug=slug)
     else:
-        logger.info("engine_url_provided", url=store_website)
+        logger.info("engine_url_final", url=store_website)
 
     context = {
         "store_name": store_name,

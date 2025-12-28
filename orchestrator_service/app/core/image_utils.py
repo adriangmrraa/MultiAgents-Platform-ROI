@@ -60,6 +60,8 @@ async def generate_image_dalle3(full_prompt: str, image_url: str = None) -> str:
 
     try:
         # 2. Call Imagen 3 (Nano Banana)
+        # We use the new SDK pattern: client.models.generate_image
+        # If generate_image is not directly in models, we check if it's under imagen or similar
         # TODO: Fix ReferenceImage when types are verified in the environment
         # For now, we use a simple prompt-to-image without reference to avoid AttributeError
         config = {
@@ -67,8 +69,19 @@ async def generate_image_dalle3(full_prompt: str, image_url: str = None) -> str:
             'include_rai_reasoning': True,
             'output_mime_type': 'image/png'
         }
+        
+        # Robust method resolution for different SDK versions
+        # Standard: client.models.generate_image
+        gen_method = None
+        if hasattr(client, 'models') and hasattr(client.models, 'generate_image'):
+            gen_method = client.models.generate_image
+        elif hasattr(client, 'generate_image'):
+            gen_method = client.generate_image
 
-        response = client.models.generate_image(
+        if not gen_method:
+            raise Exception(f"The google-genai SDK (client type: {type(client)}) does not have a recognized 'generate_image' method.")
+
+        response = gen_method(
             model='imagen-3.0-generate-001',
             prompt=full_prompt,
             config=config
