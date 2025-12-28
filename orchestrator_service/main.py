@@ -708,6 +708,15 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Failed to add unique constraint to business_assets';
     END $$;
+    """,
+    # 22. Magic Onboarding State (Protocol Omega)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS onboarding_status TEXT DEFAULT 'pending';
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to add onboarding_status to tenants';
+    END $$;
     """
 ]
 

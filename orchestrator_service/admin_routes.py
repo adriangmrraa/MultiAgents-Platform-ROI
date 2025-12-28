@@ -2876,9 +2876,9 @@ async def ignite_engine(request: Request):
         INSERT INTO tenants (
             store_name, bot_phone_number, 
             tiendanube_store_id, tiendanube_access_token,
-            updated_at
+            updated_at, onboarding_status
         )
-        VALUES ($1, $2, $3, $4, NOW())
+        VALUES ($1, $2, $3, $4, NOW(), 'ignited')
         ON CONFLICT (bot_phone_number) 
         DO UPDATE SET 
             store_name = EXCLUDED.store_name,
@@ -2914,6 +2914,17 @@ async def ignite_engine(request: Request):
         "tenant_int_id": real_tenant_id_int, 
         "engine_result": result
     }
+
+@router.get("/onboarding/{tenant_id_phone}/status", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
+async def get_onboarding_status(tenant_id_phone: str):
+    """Checks the 'Magic' status for a tenant (Protocol Omega Persistence)"""
+    q = "SELECT onboarding_status FROM tenants WHERE bot_phone_number = $1"
+    row = await db.pool.fetchrow(q, tenant_id_phone)
+    if not row:
+         # Implicit check: If not in DB, it's pending/new
+         return {"status": "new"}
+    return {"status": row.get('onboarding_status') or "pending"}
 
 @router.get("/engine/assets/{tenant_id}", dependencies=[Depends(verify_admin_token)])
 @safe_db_call

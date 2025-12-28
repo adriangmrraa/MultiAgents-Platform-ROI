@@ -161,12 +161,36 @@ export const MagicOnboarding: React.FC = () => {
         }
     }, [logs]);
 
+    // Auto-Resume Session (Persistence Check)
+    useEffect(() => {
+        const lastTenant = localStorage.getItem('magic_tenant_id');
+        if (lastTenant) {
+            console.log(">> Resuming Magic Session for:", lastTenant);
+            setFormData(prev => ({ ...prev, bot_phone_number: lastTenant }));
+            setStep('dashboard'); // Jump to dashboard
+
+            // Try to fetch existing assets immediately to populate check
+            fetchApi(`/engine/assets/${lastTenant}`).then(data => {
+                if (data) {
+                    // Convert dict to array format expected by UI
+                    const restoredAssets = Object.entries(data).map(([type, content]) => ({ type, content }));
+                    setAssets(restoredAssets);
+                    setPercent(100);
+                    setLogs(prev => [...prev, `>> SYSTEM: Session Resumed for ${lastTenant}`, ">> ASSETS: Restored from Neural Checkpoint."]);
+                }
+            }).catch(err => console.warn("Could not fetch verification check:", err));
+        }
+    }, []);
+
     const handleConnect = async () => {
         setStep('igniting');
         setAssets([]);
         setPercent(0);
 
         try {
+            // Save Session Checkpoint
+            localStorage.setItem('magic_tenant_id', formData.bot_phone_number);
+
             // A. Trigger Ignition
             const payload = { ...formData, tenant_id: formData.bot_phone_number };
             await fetchApi('/admin/onboarding/magic', { method: 'POST', body: payload });

@@ -77,6 +77,12 @@ class NexusEngine:
         # Protocol Omega: Signal Completion
         await self._publish_event("task_completed", {"status": "success", "summary_count": len(final_summary)})
 
+        # 4. Update Tenant Status (Persistence)
+        try:
+             await db.pool.execute("UPDATE tenants SET onboarding_status = 'completed' WHERE bot_phone_number = $1", self.tenant_id)
+        except Exception as e:
+             logger.error("engine_status_update_failed", error=str(e))
+
         return {"status": "ignited", "summary": final_summary}
 
     async def _persist_asset(self, asset_type: str, content: Any):
