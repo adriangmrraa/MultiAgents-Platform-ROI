@@ -17,6 +17,8 @@ logger = structlog.get_logger()
 CHROMA_PERSIST_DIRECTORY = "/app/data/chroma"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+import re
+
 class RAGCore:
     """
     The 'Stellar Map' of the Nexus Business Engine.
@@ -24,8 +26,12 @@ class RAGCore:
     """
     
     def __init__(self, tenant_id: str):
+        # Sanitize tenant_id for ChromaDB collection naming rules:
+        # 3-512 chars, alphanumeric, underscores, hyphens, dots. Start/end with alphanumeric.
+        # We replace non-alphanumeric with underscores.
+        sanitized_id = re.sub(r'[^a-zA-Z0-9]', '_', str(tenant_id))
         self.tenant_id = tenant_id
-        self.collection_name = f"store_{tenant_id}"
+        self.collection_name = f"store_{sanitized_id}"
         self.embedding_fn = OpenAIEmbeddings(
             model="text-embedding-3-small",
             openai_api_key=OPENAI_API_KEY

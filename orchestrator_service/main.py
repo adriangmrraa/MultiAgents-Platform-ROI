@@ -10,7 +10,6 @@ import time
 import uuid
 import requests
 import re
-import redis
 import structlog
 import httpx
 import smtplib
@@ -51,7 +50,7 @@ from langchain_community.chat_message_histories import RedisChatMessageHistory
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
-from db import db
+from db import db, redis_client
 
 # Configuration & Environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -93,8 +92,6 @@ structlog.configure(
 )
 logger = structlog.get_logger()
 
-# Initialize Redis
-redis_client = redis.from_url(REDIS_URL)
 
 # --- Shared Models ---
 class ToolError(BaseModel):
@@ -746,7 +743,7 @@ async def lifespan(app: FastAPI):
              
         # 3. Connectivity Check: Redis
         try:
-             redis_client.ping()
+             await redis_client.ping()
              logger.info("connectivity_check", service="redis", status="connected")
         except Exception as r_err:
              logger.error("connectivity_check", service="redis", status="failed", error=str(r_err))
@@ -892,14 +889,20 @@ LATENCY = Histogram("http_request_latency_seconds", "Request Latency", ["service
 TOOL_CALLS = Counter("tool_calls_total", "Total Tool Calls", ["tool", "status"])
 
 # --- Tools & Helpers ---
-def get_cached_tool(key: str):
+async def get_cached_tool(key: str):
     try:
-        data = redis_client.get(f"cache:tool:{key}")
+        data = await redis_client.get(f"cache:tool:{key}")
         if data:
             return json.loads(data)
     except Exception as e:
         logger.error("cache_read_error", error=str(e))
     return None
+
+async def set_cached_tool(key: str, data: dict, ttl: int = 300):
+    try:
+        await redis_client.setex(f"cache:tool:{key}", ttl, json.dumps(data))
+    except Exception as e:
+        logger.error("cache_write_error", error=str(e))
 
 # --- Tools & Helpers ---
 MCP_URL = "https://n8n-n8n.qvwxm2.easypanel.host/mcp/d36b3e5f-9756-447f-9a07-74d50543c7e8"
@@ -993,20 +996,6 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
         await log_db("error", "tool_execution_failed", f"MCP Tool {tool_name} failed: {str(e)}", {"tool": tool_name})
         return f"MCP Bridge Exception: {str(e)}"
 
-def get_cached_tool(key: str):
-    try:
-        data = redis_client.get(f"cache:tool:{key}")
-        if data:
-            return json.loads(data)
-    except Exception as e:
-        logger.error("cache_read_error", error=str(e))
-    return None
-
-def set_cached_tool(key: str, data: dict, ttl: int = 300):
-    try:
-        redis_client.setex(f"cache:tool:{key}", ttl, json.dumps(data))
-    except Exception as e:
-        logger.error("cache_write_error", error=str(e))
 
 def simplify_product(p):
     """Keep only essential fields for the LLM to save tokens."""
@@ -1119,10 +1108,10 @@ async def call_tiendanube_api(endpoint: str, params: dict = None):
 async def search_specific_products(q: str):
     """SEARCH for specific products by name, category, or brand. REQUIRED for queries like 'medias', 'zapatillas', 'puntas', 'grishko'. Input 'q' is the keyword."""
     cache_key = f"productsq:{q}"
-    cached = get_cached_tool(cache_key)
+    cached = await get_cached_tool(cache_key)
     if cached: return cached
     result = await call_tiendanube_api("/products", {"q": q, "per_page": 3})
-    if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
+    if isinstance(result, (dict, list)): await set_cached_tool(cache_key, result, ttl=600)
     return result
 
 @tool
@@ -1130,20 +1119,20 @@ async def search_by_category(category: str, keyword: str):
     """Search for products by category and keyword in Tienda Nube. Returns top 3 results simplified."""
     q = f"{category} {keyword}"
     cache_key = f"search_by_category:{category}:{keyword}"
-    cached = get_cached_tool(cache_key)
+    cached = await get_cached_tool(cache_key)
     if cached: return cached
     result = await call_tiendanube_api("/products", {"q": q, "per_page": 3})
-    if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
+    if isinstance(result, (dict, list)): await set_cached_tool(cache_key, result, ttl=600)
     return result
 
 @tool
 async def browse_general_storefront():
     """Browse the generic storefront (latest items). Use ONLY for vague requests like 'what do you have?' or 'show me catalogue'. DO NOT USE for specific items."""
     cache_key = "productsall"
-    cached = get_cached_tool(cache_key)
+    cached = await get_cached_tool(cache_key)
     if cached: return cached
     result = await call_tiendanube_api("/products", {"per_page": 3})
-    if isinstance(result, (dict, list)): set_cached_tool(cache_key, result, ttl=600)
+    if isinstance(result, (dict, list)): await set_cached_tool(cache_key, result, ttl=600)
     return result
 
 @tool
@@ -1437,7 +1426,7 @@ def metrics(): return Response(content=generate_latest(), media_type=CONTENT_TYP
 async def ready():
     try:
         if db.pool: await db.pool.fetchval("SELECT 1")
-        redis_client.ping()
+        await redis_client.ping()
     except Exception as e:
         logger.error("readiness_check_failed", error=str(e))
         raise HTTPException(status_code=503, detail="Dependencies unavailable")
@@ -1573,11 +1562,12 @@ async def chat_endpoint(
         return OrchestratorResult(status="ignore", send=False, text="Unsupported payload structure")
 
     # message deduplication logic...
+    # message deduplication logic...
     event_id = event.event_id
-    if redis_client.get(f"processed:{event_id}"):
+    if await redis_client.get(f"processed:{event_id}"):
         return OrchestratorResult(status="duplicate", send=False)
         
-    redis_client.set(f"processed:{event_id}", "1", ex=86400)
+    await redis_client.set(f"processed:{event_id}", "1", ex=86400)
     
     # --- 0. Protocol Omega: Identity Link (Find or Create Customer) ---
     source = event.channel_source
@@ -1754,20 +1744,20 @@ async def chat_endpoint(
     pending_key = f"pending:{event.from_number}"
     
     if event.text:
-        redis_client.rpush(buffer_key, event.text)
-        redis_client.expire(buffer_key, 60)
+        await redis_client.rpush(buffer_key, event.text)
+        await redis_client.expire(buffer_key, 60)
 
-    if redis_client.get(pending_key):
+    if await redis_client.get(pending_key):
         return OrchestratorResult(status="buffered", send=False, text="Aguarda...")
 
-    redis_client.setex(pending_key, 5, "active")
+    await redis_client.setex(pending_key, 5, "active")
     
     async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_source):
         await asyncio.sleep(2)
         try:
-            messages_raw = redis_client.lrange(buffer_key, 0, -1)
-            redis_client.delete(buffer_key)
-            redis_client.delete(pending_key)
+            messages_raw = await redis_client.lrange(buffer_key, 0, -1)
+            await redis_client.delete(buffer_key)
+            await redis_client.delete(pending_key)
             if not messages_raw: return
             combined_text = "\n".join([m.decode('utf-8') for m in messages_raw])
             await execute_agent_v3_logic(from_num, t_id, c_id, corr_id, combined_text, customer_name, ch_source)

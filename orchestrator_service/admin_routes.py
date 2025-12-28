@@ -2607,87 +2607,6 @@ async def delete_agent(agent_id: str):
         raise HTTPException(500, f"Error deleting agent: {e}")
 
 
-# --- RAG Visuals ---
-
-@router.get("/rag/galaxy", dependencies=[Depends(verify_admin_token)])
-async def get_rag_galaxy(tenant_id: Optional[str] = None):
-    """
-    Returns a 'Star Map' of the Knowledge Base.
-    Protocol Omega: Visualization of Invisible Assets.
-    """
-    if not tenant_id:
-        return []
-        
-    CACHE_KEY = f"rag:galaxy:{tenant_id}"
-    try:
-        # 1. Thermal Shield
-        cached = await redis_client.get(CACHE_KEY)
-        if cached:
-            return json.loads(cached)
-            
-        # 2. Fetch Real "Stars" from Business Assets
-        import hashlib
-        
-        # We fetch assets for this tenant to visualize the actual knowledge base
-        q = "SELECT id, asset_type, content, created_at FROM business_assets WHERE tenant_id = $1::text"
-        rows = await db.pool.fetch(q, str(tenant_id))
-        
-        nodes = []
-        
-        if not rows:
-            # Fallback to a single "Empty Space" node or return empty to show initialization state
-            # But user said "sigo sin ver nada" so listing nothing is technically correct if they have no assets,
-            # however if they DID create assets, we need to ensure we find them.
-            # Maybe tenant_id mismatch? Let's try casting.
-            pass
-
-        for i, row in enumerate(rows):
-            r = dict(row)
-            asset_id = r['id']
-            # Deterministic Position based on ID
-            # Use SHA256 of ID to get u, v, w scalars
-            h = hashlib.sha256(asset_id.encode()).hexdigest()
-            # Parse hex to int for coords
-            hx, hy, hz = int(h[:4], 16), int(h[4:8], 16), int(h[8:12], 16)
-            
-            # Normalize to -500..500 roughly (0..65535 -> 0..1 -> -500..500)
-            x = (hx / 65535.0) * 1000 - 500
-            y = (hy / 65535.0) * 1000 - 500
-            z = (hz / 65535.0) * 1000 - 500
-            
-            # content preview
-            content_str = "Asset Content"
-            try:
-                if isinstance(r['content'], str):
-                    c = json.loads(r['content'])
-                    content_str = str(c)[:100]
-                else:
-                    content_str = str(r['content'])[:100]
-            except:
-                content_str = "Raw Data"
-
-            nodes.append({
-                "id": asset_id,
-                "x": int(x),
-                "y": int(y),
-                "z": int(z),
-                "color": "#ec4899" if r['asset_type'] == 'branding' else "#207cf8", # Branding Pink, others Blue
-                "size": 3,
-                "category": r['asset_type'],
-                "description": content_str,
-                "meta": r['created_at'].strftime("%Y-%m-%d") if r['created_at'] else "N/A"
-            })
-            
-        # 3. Cache (short TTL for live updates)
-        try:
-            await redis_client.setex(CACHE_KEY, 30, json.dumps(nodes))
-        except: pass
-        
-        return nodes
-
-    except Exception as e:
-        logger.error(f"RAG Galaxy Fail: {e}")
-        return []
         
 # --- Sentiment/Frustration Analysis ---
 
@@ -2762,7 +2681,7 @@ async def execute_system_action(action_req: SystemAction):
     
     if action_req.action == "clear_cache":
         try:
-            redis_client.flushdb()
+            await redis_client.flushdb()
             return {"status": "ok", "message": "Global Cache Cleared"}
         except Exception as e:
             return {"status": "error", "message": f"Redis Flush Failed: {str(e)}"}
