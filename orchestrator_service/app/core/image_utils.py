@@ -50,10 +50,23 @@ async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
         if not client:
              raise Exception("Google GenAI Client not initialized")
 
+        # DEBUG: Runtime Model Check (Protocol Omega)
+        # We list models HERE to ensure visibility in request logs
+        try:
+             logger.info("gemini_runtime_list_start")
+             items = []
+             for m in client.models.list():
+                 if 'generateContent' in m.supported_generation_methods:
+                     items.append(f"{m.name} ({m.display_name})")
+             logger.info("gemini_available_models_runtime", models=items)
+        except Exception as e:
+             logger.error("gemini_list_failed", error=str(e))
+
         prompt = f"Analyze this product image deeply. Context: {prompt_context}. Describe the MAIN PRODUCT (colors, materials, shape, key features) so it can be recreated. Output a concise paragraph."
         
+        # Try gemini-1.5-pro as Flash is failing with 404 in this environment
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-1.5-pro', 
             contents=[prompt, img]
         )
         return response.text
@@ -83,7 +96,7 @@ async def generate_ad_from_product(base64_product: str, prompt: str) -> str:
         analysis_prompt = f"Describe este producto detalladamente para un anuncio de {prompt}. Enfócate en la estética, colores y marca."
         
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-1.5-pro',
             contents=[analysis_prompt, img]
         )
         visual_description = response.text

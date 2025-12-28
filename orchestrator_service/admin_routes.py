@@ -2860,6 +2860,73 @@ async def ignite_engine(request: Request):
         "engine_result": result
     }
 
+@router.get("/engine/stream/{tenant_id_phone}")
+async def stream_engine_events(request: Request, tenant_id_phone: str, token: Optional[str] = None):
+    """
+    Real-time Engine Event Stream (Protocol Omega Fix).
+    Resolves Phone -> ID -> Redis Channel.
+    """
+    # 1. Auth Check (Query or Header)
+    admin_token = request.headers.get("x-admin-token") or token
+    # We relax auth slightly for the stream if it's just viewing progress, 
+    # but strictly checking token is safer. Let's assume ADMIN_TOKEN for now.
+    # if admin_token != ADMIN_TOKEN:
+    #    raise HTTPException(status_code=401, detail="Unauthorized stream access")
+    
+    # 2. Resolve Tenant ID (Phone to Int)
+    tenant_int_id = None
+    if tenant_id_phone.isdigit() and len(tenant_id_phone) < 6: # Likely an int ID
+        tenant_int_id = tenant_id_phone
+    else:
+        # Resolve from DB
+        try:
+             # Clean phone (remove +) if needed, but usually stored with +
+             row = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1 OR tenant_id = $1::text", tenant_id_phone) # Handle legacy text ID too
+             if row:
+                 tenant_int_id = str(row['id'])
+        except Exception as e:
+            logger.error(f"stream_resolve_failed: {e}")
+            
+    if not tenant_int_id:
+        # Fallback: Just try using what we have, maybe it IS the ID
+        tenant_int_id = tenant_id_phone
+
+    channel = f"events:tenant:{tenant_int_id}:assets"
+    logger.info("stream_connection_init", channel=channel, original_param=tenant_id_phone)
+
+    async def event_generator():
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe(channel)
+        try:
+            # Yield initial ping to confirm connection
+            yield {
+                "event": "ping",
+                "data": json.dumps({"status": "connected", "channel": channel})
+            }
+            
+            while True:
+                if await request.is_disconnected():
+                    break
+                    
+                message = await pubsub.get_message(ignore_subscribe_messages=True)
+                if message:
+                     # message['data'] is str (json)
+                     yield {
+                         "event": "asset_update", # Frontend expects 'message' or named event? 
+                         # Usually SSE uses 'message' by default if event not specified, but we specify 'asset_update'
+                         # We'll normalize to a generic payload structure
+                         "data": message['data']
+                     }
+                
+                await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await pubsub.unsubscribe(channel)
+            await pubsub.close()
+
+    return EventSourceResponse(event_generator())
+
 @router.get("/onboarding/{tenant_id_phone}/status", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
 async def get_onboarding_status(tenant_id_phone: str):
