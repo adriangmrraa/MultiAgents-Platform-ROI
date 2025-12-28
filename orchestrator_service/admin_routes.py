@@ -632,11 +632,19 @@ async def generate_ad_image(request: Request):
         if not prompt or not image_url:
              raise HTTPException(400, "Missing prompt or image_url")
 
-        from app.core.image_utils import generate_image_dalle3
+        from app.core.image_utils import generate_ad_from_product
+        import base64
         
-        # 1. Image-to-Image Generation (One Model Approach - Nano Banana)
-        # We pass image_url as a reference to Imagen 3
-        generated_url = await generate_image_dalle3(prompt, image_url)
+        # 1. Download Image to Base64 for Multimodal API
+        async with httpx.AsyncClient(timeout=10.0) as http_client:
+            img_resp = await http_client.get(image_url)
+            if img_resp.status_code == 200:
+                b64_product = base64.b64encode(img_resp.content).decode('utf-8')
+            else:
+                raise HTTPException(400, "Could not download product image")
+
+        # 2. Multimodal Transformation via Gemini 2.5
+        generated_url = await generate_ad_from_product(b64_product, prompt)
         
         return {"status": "success", "url": generated_url, "description": "Reference-based image generation (Nano Banana)"}
         

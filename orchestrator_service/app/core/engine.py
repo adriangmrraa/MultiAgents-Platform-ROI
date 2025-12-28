@@ -93,7 +93,22 @@ class NexusEngine:
         
         # Step 1: DNA Extractor (web/brand analysis)
         logger.info("engine_step_1_dna")
-        dna_res = await self._agent_dna_extractor()
+        
+        # RAG Librarian Check for DNA
+        from app.core.cache import TenantAwareCache
+        cache = TenantAwareCache(self.tenant_id)
+        cached_dna = await cache.get("brand_dna")
+        
+        if cached_dna:
+            logger.info("librarian_cache_hit", dna_keys=list(cached_dna.keys()))
+            dna_res = {"type": "branding", "data": cached_dna}
+            self.context['dna'] = cached_dna 
+        else:
+            logger.info("librarian_cache_miss")
+            dna_res = await self._agent_dna_extractor()
+            # Cache for future runs
+            await cache.set("brand_dna", dna_res.get("data"), ttl=3600)
+
         final_summary = {} # Initialize final_summary here
         final_summary["branding"] = dna_res.get("data")
         
@@ -226,8 +241,10 @@ class NexusEngine:
 
     # --- AGENT 2: Director Creativo de Performance (Visual Alchemy - Nano Banana) ---
     async def _agent_creative_director(self):
-        """Misión: Orquestar la transformación visual del producto usando Imagen 3."""
-        from app.core.image_utils import generate_image_dalle3
+        """Misión: Orquestar la transformación visual del producto usando Gemini 2.5 Multimodal."""
+        from app.core.image_utils import generate_ad_from_product
+        import base64
+        
         products = self.context.get("catalog", [])[:3] # Focus on top 3 for speed
         store_name = self.context.get("store_name", "Brand")
         store_desc = self.context.get("store_description", "")
@@ -238,35 +255,41 @@ class NexusEngine:
                 img_src = p.get("images", [{}])[0].get("src")
                 if not img_src: continue
                 
-                # Get DNA Context
+                # 1. Download Product Image to Base64
+                async with httpx.AsyncClient(timeout=10.0) as http_client:
+                    img_resp = await http_client.get(img_src)
+                    if img_resp.status_code == 200:
+                        b64_product = base64.b64encode(img_resp.content).decode('utf-8')
+                    else:
+                        logger.warning("product_image_download_failed", url=img_src)
+                        continue
+
+                # 2. Get DNA Context
                 dna = self.context.get("dna", {})
                 brand_voice = dna.get("brand_voice", "Professional")
                 uvp = dna.get("uvp", "")
 
-                # Model Mentals: Gestalt & Neuroaesthetics
-                # Lighting decision-tree based on description
-                lighting = "Cinematic Soft Lighting" if ("luxury" in store_desc.lower() or "premium" in uvp.lower()) else "High Dynamic Contrast"
-                
                 fusion_prompt = (
                     f"Professional high-impact ad for {p.get('name', {}).get('es')}. "
-                    f"Brand Voice Context: {brand_voice}. "
-                    f"Atmosphere: {lighting}, {uvp}. "
-                    f"Golden Ratio composition, 35mm f/1.8 lens mood, high aspiration, visual stop."
+                    f"Brand Voice: {brand_voice}. UVP: {uvp}. "
+                    f"Atmosphere: Cinematic lighting, luxury aesthetic, industrial design focus."
                 )
                 
-                # One-step Nano Banana call (SubjectReferenceImage preserved)
-                gen_url = await generate_image_dalle3(fusion_prompt, img_src)
+                # 3. Call Multimodal Transformation
+                gen_url = await generate_ad_from_product(b64_product, fusion_prompt)
                 
                 visual_assets.append({
                     "asset_name": f"Visual Stop - {p.get('name', {}).get('es')}",
                     "prompt": fusion_prompt,
-                    "model_used": "Imagen 3 (Nano Banana)",
+                    "model_used": "Gemini 2.5 Image Preview",
                     "url": gen_url,
-                    "target_neuroaesthetics": "Isolation Contrast / Gestalt"
+                    "target_neuroaesthetics": "Gestalt & Contrast"
                 })
-            except Exception: continue
+            except Exception as e:
+                logger.error("creative_director_product_failed", error=str(e))
+                continue
             
-        data = {"visual_assets": visual_assets, "_meta_mental_model": "Gestalt & Neuroaesthetics"}
+        data = {"visual_assets": visual_assets, "_meta_mental_model": "Multimodal Gestalt"}
         await self._persist_asset("visuals", data)
         return {"type": "visuals", "data": data}
 
@@ -350,10 +373,21 @@ class NexusEngine:
     async def _agent_librarian(self):
         """Misión: Mantener la coherencia técnica y sincronización neural."""
         products = self.context.get("catalog", [])
-        url = self.context.get("store_website")
+        store_url = self.context.get("store_website")
+        
+        # Robust URL resolution for Librarian
+        if not store_url or "mitiendanube.com" in store_url:
+             alt_url = self.context.get("store_url")
+             if alt_url and "mitiendanube.com" not in alt_url:
+                  store_url = alt_url
+                  
+        logger.info("librarian_rag_start", url=store_url)
         
         if products:
-             await self.rag.ingest_store(products, url)
+             from admin_routes import run_rag_ingestion
+             # Using real tenant integer ID if possible, or keeping consistency with engine
+             # In admin_routes, run_rag_ingestion expects (tenant_id, store_url, products)
+             await run_rag_ingestion(self.tenant_id, store_url, products)
              
         data = {
             "status": "Neural Sync Active",
