@@ -391,18 +391,34 @@ class NexusEngine:
              # We use a localized version to avoid circular imports from admin_routes
              from app.core.rag import RAGCore
              rag = RAGCore(self.tenant_id)
-             await rag.ingest_store(products, store_url)
-             
-             # Log event similar to what run_rag_ingestion does
+
+             # Optimization V5.9.119: Skip redundant scraping if vectors exist (Speed Boost)
+             vector_count = 0
              try:
-                 await db.pool.execute("INSERT INTO system_events (event_type, severity, message, tenant_id, occurred_at) VALUES ('rag_completed', 'INFO', 'Magic Ingestion Done', $1, NOW())", int(self.tenant_id))
+                 if hasattr(rag, 'count_vectors'):
+                     vector_count = rag.count_vectors()
              except: pass
+
+             # If we have meaningful vectors (roughly catalog size) and proper DNA, skip heavy lift
+             should_skip = vector_count >= len(products) and self.context.get('dna')
+             
+             if should_skip:
+                 logger.info("rag_ingestion_skipped", reason="vectors_exist", count=vector_count)
+             else:
+                 await rag.ingest_store(products, store_url)
+                 try:
+                     await db.pool.execute("INSERT INTO system_events (event_type, severity, message, tenant_id, occurred_at) VALUES ('rag_completed', 'INFO', 'Magic Ingestion Done', $1, NOW())", int(self.tenant_id))
+                 except: pass
+                 # Update count after fresh ingest
+                 if hasattr(rag, 'count_vectors'):
+                     vector_count = rag.count_vectors()
              
         data = {
             "status": "Neural Sync Active",
             "coherence_checked": True,
             "sovereignty": "Verified",
-            "vectors": self.rag.count_vectors() if hasattr(self.rag, 'count_vectors') else 0
+            "vectors": vector_count,
+            "catalog_preview": products  # Protocol Omega: Full visibility for Smart Catalog & Knowledge Map
         }
         await self._persist_asset("rag_sync", data)
         return {"type": "rag_sync", "data": data}
