@@ -21,8 +21,8 @@ if GOOGLE_API_KEY:
     # DEBUG: List available models to find the correct name
     try:
         logger.info("gemini_debug_list_start")
-        # List first 20 models to avoid log spam, focusing on generateContent
-        for m in client.models.list(config={'limit': 20}):
+        # List models (pagination handled automatically)
+        for m in client.models.list(page_size=50):
             if 'generateContent' in m.supported_generation_methods:
                 logger.info("gemini_available_model", name=m.name, display=m.display_name)
     except Exception as e:
