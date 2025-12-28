@@ -190,16 +190,22 @@ const AssetCard = ({ asset, onFuse }: { asset: Asset, onFuse: (p: string, i: str
     );
 };
 
-const ProductCard = ({ product, onFuse }: { product: Product, onFuse: (p: string, i: string) => Promise<string> }) => {
+const ProductCard = ({ product, onFuse }: { product: Product | any, onFuse: (p: string, i: string) => Promise<string> }) => {
     const [generating, setGenerating] = useState(false);
+
+    // Protocol Omega: Robust Accessors
+    const getName = (p: any) => p.name?.es || p.name?.en || (typeof p.name === 'string' ? p.name : 'Untitled Product');
+    const getImage = (p: any) => p.images?.[0]?.src || p.images?.[0]?.url || p.image || 'https://via.placeholder.com/300?text=No+Image';
+    const getPrice = (p: any) => p.price || '0.00';
+    const getCategory = (p: any) => p.categories?.[0]?.name?.es || p.categories?.[0]?.name || (typeof p.categories?.[0] === 'string' ? p.categories[0] : 'Uncategorized');
 
     const handleQuickFuse = async () => {
         if (generating) return;
         setGenerating(true);
         // Quick fusion for catalog items
-        const prompt = `Professional advertising shot of ${product.name.es}, cinematic lighting, luxury product photography style, 8k resolution.`;
-        const img = product.images[0]?.src;
-        if (img) {
+        const prompt = `Professional advertising shot of ${getName(product)}, cinematic lighting, luxury product photography style, 8k resolution.`;
+        const img = getImage(product);
+        if (img && !img.includes('placeholder')) {
             try {
                 const url = await onFuse(prompt, img);
                 window.open(url, '_blank');
@@ -212,16 +218,16 @@ const ProductCard = ({ product, onFuse }: { product: Product, onFuse: (p: string
         <div className="glass p-4 rounded-xl hover:bg-white/5 transition-all animate-fade-in-up border border-white/5 hover:border-white/10">
             <div className="aspect-square bg-slate-800 rounded mb-4 overflow-hidden relative group">
                 <img
-                    src={product.images[0]?.src || 'https://via.placeholder.com/300?text=No+Image'}
-                    alt={product.name.es}
+                    src={getImage(product)}
+                    alt={getName(product)}
                     className="w-full h-full object-cover transition-transform hover:scale-105 duration-500"
                 />
                 <div className="absolute top-2 right-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-xs font-mono text-white">
-                    ${product.price}
+                    ${getPrice(product)}
                 </div>
             </div>
-            <h3 className="font-bold text-white mb-1 truncate">{product.name.es}</h3>
-            <p className="text-xs text-slate-500 mb-2">{product.categories[0]?.name.es || 'Uncategorized'}</p>
+            <h3 className="font-bold text-white mb-1 truncate">{getName(product)}</h3>
+            <p className="text-xs text-slate-500 mb-2">{getCategory(product)}</p>
 
             <div className="flex gap-2">
                 <button
@@ -263,11 +269,14 @@ export const BusinessForge = () => {
                 const data = await fetchApi('/admin/assets');
                 setAssets(data);
             } else {
-                // Assuming we want products for a specific tenant or user based context
-                // For MVP fetch all or mock
-                // TODO: Pass actual tenant ID if context available
-                const data = await fetchApi('/admin/products?tenant_id=54911');
-                setProducts(data);
+                // Protocol Omega: Dynamic Context Linkage
+                const currentTenant = localStorage.getItem('magic_tenant_id');
+                if (currentTenant) {
+                    const data = await fetchApi(`/admin/products?tenant_id=${currentTenant}`);
+                    setProducts(data);
+                } else {
+                    console.warn("No active tenant for catalog");
+                }
             }
         } catch (e) {
             console.error("Error loading forge data", e);
@@ -290,11 +299,21 @@ export const BusinessForge = () => {
         }
     };
 
-    const filteredAssets = assets.filter(a => assetFilter === 'all' || a.asset_type === assetFilter);
-    const filteredProducts = products.filter(p => categoryFilter === 'all' || (p.categories && p.categories.some(c => c.name.es === categoryFilter))); // Simple text match
+    // Protocol Omega: Robust Filtering
+    const getName = (p: any) => p.name?.es || p.name?.en || (typeof p.name === 'string' ? p.name : '');
+    const getCategoryName = (c: any) => c.name?.es || c.name || (typeof c === 'string' ? c : '');
+    const getCategory = (p: any) => getCategoryName(p.categories?.[0]);
 
-    // Extract unique categories
-    const categories = Array.from(new Set(products.flatMap(p => p.categories?.map(c => c.name.es) || [])));
+    const filteredAssets = assets.filter(a => assetFilter === 'all' || a.asset_type === assetFilter);
+    const filteredProducts = products.filter(p => {
+        if (categoryFilter === 'all') return true;
+        // Check all categories of the product
+        const pCats = p.categories || [];
+        return pCats.some((c: any) => getCategoryName(c) === categoryFilter);
+    });
+
+    // Extract unique categories safely
+    const categories = Array.from(new Set(products.flatMap(p => (p.categories || []).map((c: any) => getCategoryName(c))).filter(Boolean)));
 
     return (
         <div className="p-8 min-h-screen bg-[#020617] text-white">

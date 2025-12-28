@@ -219,46 +219,56 @@ export const MagicOnboarding: React.FC = () => {
             const payload = { ...formData, tenant_id: formData.bot_phone_number };
             await fetchApi('/admin/onboarding/magic', { method: 'POST', body: payload });
 
-            // B. Protocol Omega Stream Connection
-            const streamUrl = `/api/admin/engine/stream/${formData.bot_phone_number}?token=${ADMIN_TOKEN}`;
+            // B. Protocol Omega Stream Connection: Use V2 for robustness
+            const streamUrl = `/api/admin/engine/stream/v2/${formData.bot_phone_number}?token=${ADMIN_TOKEN}`;
             const evtSource = new EventSource(streamUrl);
 
             evtSource.onopen = () => {
-                setLogs(prev => [...prev, ">> SYSTEM: Secure Protocol Omega Link Established."]);
+                setLogs(prev => [...prev, ">> SYSTEM: Secure Protocol Omega Link Established (V2)."]);
             };
 
-            // 1. Handle Spec-Compliant 'asset_generated' Event
-            evtSource.addEventListener("asset_generated", (e: any) => {
+            // GENERIC HANDLER (Protocol Omega Standard Payload)
+            // Backend now sends unnamed events (defaults to 'message') for max compatibility
+            evtSource.onmessage = (e) => {
                 try {
-                    const payload = JSON.parse(e.data);
-                    // Payload: { asset_id: "...", asset_type: "visuals", content: {...} }
-                    const type = payload.asset_type;
-                    const content = payload.content;
+                    const rawData = JSON.parse(e.data); // data field from stream
+                    // Redis payload might be stringified inside stream data or direct object
+                    // admin_routes v2 sends: yield { "data": message['data'] } where message['data'] is str(json)
+                    // So e.data is that string string.
+                    const payload = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
 
-                    setAssets(prev => {
-                        // Idempotency check
-                        if (prev.some(a => a.type === type)) return prev;
-                        // Normalize for UI
-                        return [...prev, { type, content }];
-                    });
+                    // Dispatch Logic
+                    if (payload.asset_type) {
+                        // IT IS AN ASSET
+                        const type = payload.asset_type;
+                        const content = payload.content;
 
-                    setLogs(prev => [...prev, `>> ASSET: ${type.toUpperCase()} Materialized.`]);
-                    setPercent(prev => Math.min(prev + 20, 95));
+                        setAssets(prev => {
+                            if (prev.some(a => a.type === type)) return prev;
+                            return [...prev, { type, content }];
+                        });
 
-                } catch (err) { console.error("Stream Parse Error", err); }
-            });
+                        setLogs(prev => [...prev, `>> ASSET: ${type.toUpperCase()} Materialized.`]);
+                        setPercent(prev => Math.min(prev + 20, 95));
 
-            // 2. Handle Task Completion & Redirect
-            evtSource.addEventListener("task_completed", (e: any) => {
-                setLogs(prev => [...prev, ">> SYSTEM: Design Tasks Completed. Initializing Forge..."]);
-                setPercent(100);
+                        if (type === 'compliance') {
+                            setLogs(prev => [...prev, ">> SYSTEM: Design Tasks Completed. Initializing Forge..."]);
+                            setPercent(100);
+                            setTimeout(() => {
+                                evtSource.close();
+                                navigate('/forge');
+                            }, 2000);
+                        }
 
-                // Magic Delay before Redirect
-                setTimeout(() => {
-                    evtSource.close();
-                    navigate('/forge');
-                }, 2000);
-            });
+                    } else if (payload.event_type) {
+                        // IT IS A LOG
+                        setLogs(prev => [...prev, `[${payload.event_type}] ${payload.message}`]);
+                    }
+
+                } catch (err) {
+                    // console.error("Stream Parse Error (Generic):", err, e.data);
+                }
+            };
 
             // 3. Fallback/Legacy Logging
             evtSource.addEventListener("log", (e: any) => {
