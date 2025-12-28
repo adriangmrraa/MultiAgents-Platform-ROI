@@ -45,7 +45,14 @@ class NexusEngine:
                      'http://tiendanube-service:8001',
                      'http://tiendanube_service:8001'
                  ]
-                 service_urls = list(dict.fromkeys(filter(None, potential_urls)))
+                 # Robust cleanup: filter empty, remove duplicates, strip trailing slashes
+                 service_urls = []
+                 for u in potential_urls:
+                     if u and u.strip():
+                         cleaned = u.strip().rstrip('/')
+                         if cleaned not in service_urls:
+                             service_urls.append(cleaned)
+                 
                  token = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY") or "super-secret-internal-token"
                  async with httpx.AsyncClient(timeout=15.0) as client:
                      for service_url in service_urls:
