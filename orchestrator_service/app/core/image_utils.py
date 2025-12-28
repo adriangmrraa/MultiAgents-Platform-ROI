@@ -17,6 +17,16 @@ client = None
 if GOOGLE_API_KEY:
     # Protocol Omega: Revert to default SDK (v1beta) but use explicit model version
     client = genai.Client(api_key=GOOGLE_API_KEY)
+    
+    # DEBUG: List available models to find the correct name
+    try:
+        logger.info("gemini_debug_list_start")
+        # List first 20 models to avoid log spam, focusing on generateContent
+        for m in client.models.list(config={'limit': 20}):
+            if 'generateContent' in m.supported_generation_methods:
+                logger.info("gemini_available_model", name=m.name, display=m.display_name)
+    except Exception as e:
+        logger.error("gemini_debug_list_failed", error=str(e))
 
 async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
     """
