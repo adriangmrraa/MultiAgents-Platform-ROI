@@ -274,7 +274,6 @@ async def sendemail(email: Email, token: str = Depends(verify_token)):
 
 if __name__ == "__main__":
     import uvicorn
-    # Protocol Omega: Enforce Port 8003
-    port = int(os.getenv("PORT", "8003"))
-    logger.info("starting_tiendanube_service_omega", port=port)
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Protocol Omega: Force Port 8003 (Ignore EasyPanel Injection)
+    logger.info("starting_tiendanube_service_omega", port=8003)
+    uvicorn.run(app, host="0.0.0.0", port=8003)
