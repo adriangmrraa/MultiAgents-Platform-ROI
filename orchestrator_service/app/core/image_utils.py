@@ -15,8 +15,8 @@ logger = structlog.get_logger()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 client = None
 if GOOGLE_API_KEY:
-    # Protocol Omega: Stabilized SDK Init (v5.9.111)
-    client = genai.Client(api_key=GOOGLE_API_KEY)
+    # Protocol Omega: Stabilized SDK Init (v5.9.113) - Force v1 via http_options
+    client = genai.Client(api_key=GOOGLE_API_KEY, http_options={'api_version': 'v1'})
 
 async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
     """
