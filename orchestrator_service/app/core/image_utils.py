@@ -51,6 +51,15 @@ async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
         # Fallback to simple context if vision fails
         return f"A distinct product related to {prompt_context}"
 
+async def generate_ad_from_product(base64_product: str, prompt: str) -> str:
+    """
+    Multimodal Transformation: Vision (1.5 Flash) -> Image Generation (Imagen 3)
+    Transforms a real product image into a professional ad based on analysis.
+    Protocol Omega: Stabilized Strategy (v5.9.108).
+    """
+    if not GOOGLE_API_KEY:
+        raise Exception("Missing GOOGLE_API_KEY for Multimodal Transformation")
+
     # Strategy Change: Multimodal Preview is hitting extreme 429 in logs.
     # Protocol Omega Switch: Vision Analysis (Gemini 1.5 Flash) -> Image Generation (Imagen 3)
     try:
