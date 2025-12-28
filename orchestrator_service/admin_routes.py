@@ -2912,9 +2912,7 @@ async def stream_engine_events(request: Request, tenant_id_phone: str, token: Op
                 if message:
                      # message['data'] is str (json)
                      yield {
-                         "event": "asset_update", # Frontend expects 'message' or named event? 
-                         # Usually SSE uses 'message' by default if event not specified, but we specify 'asset_update'
-                         # We'll normalize to a generic payload structure
+                         # "event": "asset_update", # REMOVED: Use default 'message' event for maximum compatibility
                          "data": message['data']
                      }
                 
