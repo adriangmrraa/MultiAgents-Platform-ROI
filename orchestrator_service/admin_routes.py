@@ -93,8 +93,7 @@ def register_tools(tools_list, injections=None, response_guides=None):
         SYSTEM_TOOL_RESPONSE_GUIDES.update(response_guides)
 
 # --- Redis Setup for Aggregated Cache ---
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
-redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+
 
 @router.get("/tools", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
