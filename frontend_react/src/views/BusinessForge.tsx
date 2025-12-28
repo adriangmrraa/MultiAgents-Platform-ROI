@@ -54,6 +54,7 @@ const ForgeHeader = ({ activeTab, onTabChange }: { activeTab: string, onTabChang
 const FusionItem = ({ item, onFuse }: { item: any, onFuse: (prompt: string, img: string) => Promise<string> }) => {
     const [generating, setGenerating] = useState(false);
     const [resultUrl, setResultUrl] = useState<string | null>(item.generated_url || null);
+    const [mode, setMode] = useState<'dream' | 'reality'>('reality'); // Default to Reality (Overlay)
 
     const handleClick = async () => {
         if (generating || resultUrl) return;
@@ -69,24 +70,59 @@ const FusionItem = ({ item, onFuse }: { item: any, onFuse: (prompt: string, img:
     };
 
     return (
-        <div className="bg-black/40 rounded-lg p-3 mb-3 border border-white/5">
+        <div className="bg-black/40 rounded-lg p-3 mb-3 border border-white/5 transition-all hover:bg-black/60">
             <div className="flex gap-3 mb-3">
                 {item.base_image && (
-                    <div className="w-16 h-16 rounded overflow-hidden bg-slate-800 shrink-0">
-                        <img src={item.base_image} className="w-full h-full object-cover opacity-60" alt="Base" />
+                    <div className="w-16 h-16 rounded overflow-hidden bg-slate-800 shrink-0 border border-white/10">
+                        <img src={item.base_image} className="w-full h-full object-cover" alt="Base" />
                     </div>
                 )}
                 <div className="flex-1 min-w-0">
                     <h4 className="font-bold text-white text-sm truncate">{item.title || item.type}</h4>
                     <p className="text-xs text-slate-400 line-clamp-2">{item.prompt}</p>
+
+                    {/* Mode Toggle */}
+                    {resultUrl && (
+                        <div className="flex gap-2 mt-2">
+                            <button
+                                onClick={() => setMode('dream')}
+                                className={`text-[10px] px-2 py-0.5 rounded border ${mode === 'dream' ? 'bg-purple-500/20 border-purple-500 text-purple-300' : 'border-slate-700 text-slate-500'}`}
+                            >
+                                AI Re-Creation
+                            </button>
+                            <button
+                                onClick={() => setMode('reality')}
+                                className={`text-[10px] px-2 py-0.5 rounded border ${mode === 'reality' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300' : 'border-slate-700 text-slate-500'}`}
+                            >
+                                Product Overlay
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
             {resultUrl ? (
-                <div className="w-full aspect-square rounded overflow-hidden border border-cyan-500/30 relative group">
+                <div className="w-full aspect-square rounded overflow-hidden border border-cyan-500/30 relative group bg-slate-900">
+                    {/* 1. Background (AI Generated) */}
                     <img src={resultUrl} className="w-full h-full object-cover" alt="Generated Ad" />
+
+                    {/* 2. Product Overlay (The 'Hard Embedding') */}
+                    {mode === 'reality' && item.base_image && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="relative w-3/4 h-3/4 filter drop-shadow-2xl transition-transform duration-500 hover:scale-105">
+                                <img
+                                    src={item.base_image}
+                                    className="w-full h-full object-contain"
+                                    alt="Product Layer"
+                                />
+                                {/* Lighting Hack */}
+                                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/20 mix-blend-overlay rounded-xl"></div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <a href={resultUrl} target="_blank" rel="noreferrer" className="px-3 py-1 bg-white text-black text-xs font-bold rounded">View Full</a>
+                        <a href={resultUrl} target="_blank" rel="noreferrer" className="px-3 py-1 bg-white text-black text-xs font-bold rounded hover:bg-cyan-50">Save Image</a>
                     </div>
                 </div>
             ) : (
