@@ -105,8 +105,10 @@ class RAGCore:
                 }
                 docs.append(Document(page_content=text_content, metadata=metadata))
                 
-                # Protocol Omega: Throttle removed (Using Tier 1 limits)
-                pass
+                # Protocol Omega: Balanced Throttle (60 RPM) to prevent 429 on lower tiers 
+                # Reduced from 4s to 1s for better UX while remaining safe.
+                import asyncio
+                await asyncio.sleep(1)
             
             # 2. HTML Scraper (Contextual DNA) - Kept robust
             if public_url:
