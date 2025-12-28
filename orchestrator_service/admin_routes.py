@@ -2860,6 +2860,41 @@ async def ignite_engine(request: Request):
         "engine_result": result
     }
 
+@router.get("/products", dependencies=[Depends(verify_admin_token)])
+async def get_products(tenant_id: str):
+    """
+    Smart Catalog Endpoint (Protocol Omega).
+    Retrieves the 'catalog_preview' from the 'rag_sync' asset.
+    """
+    try:
+        # 1. Resolve Tenant ID (Shared Logic)
+        tenant_int_id = None
+        if tenant_id.isdigit() and len(tenant_id) < 6:
+             tenant_int_id = tenant_id
+        else:
+             row = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1 OR tenant_id = $1::text", tenant_id)
+             if row: tenant_int_id = str(row['id'])
+        
+        if not tenant_int_id: tenant_int_id = tenant_id # Fallback
+        
+        # 2. Fetch RAG Asset
+        row = await db.pool.fetchrow("""
+            SELECT content FROM business_assets 
+            WHERE tenant_id = $1 AND asset_type = 'rag_sync' 
+            LIMIT 1
+        """, tenant_int_id)
+        
+        if not row:
+            return []
+            
+        data = json.loads(row['content'])
+        # Return the catalog preview list or empty
+        return data.get('catalog_preview', [])
+
+    except Exception as e:
+        logger.error(f"smart_catalog_fetch_fail: {e}")
+        return []
+
 @router.get("/engine/stream/v2/{tenant_id_phone}")
 async def stream_engine_events(request: Request, tenant_id_phone: str, token: Optional[str] = None):
     """
