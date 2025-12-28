@@ -161,24 +161,48 @@ export const MagicOnboarding: React.FC = () => {
         }
     }, [logs]);
 
-    // Auto-Resume Session (Persistence Check)
+    // Auto-Resume Session (Persistence Check via DB)
     useEffect(() => {
         const lastTenant = localStorage.getItem('magic_tenant_id');
         if (lastTenant) {
-            console.log(">> Resuming Magic Session for:", lastTenant);
-            setFormData(prev => ({ ...prev, bot_phone_number: lastTenant }));
-            setStep('dashboard'); // Jump to dashboard
+            console.log(">> Checking Magic Session for:", lastTenant);
 
-            // Try to fetch existing assets immediately to populate check
-            fetchApi(`/engine/assets/${lastTenant}`).then(data => {
-                if (data) {
-                    // Convert dict to array format expected by UI
-                    const restoredAssets = Object.entries(data).map(([type, content]) => ({ type, content }));
-                    setAssets(restoredAssets);
-                    setPercent(100);
-                    setLogs(prev => [...prev, `>> SYSTEM: Session Resumed for ${lastTenant}`, ">> ASSETS: Restored from Neural Checkpoint."]);
-                }
-            }).catch(err => console.warn("Could not fetch verification check:", err));
+            // 1. Verify Status in DB
+            fetchApi(`/admin/onboarding/${lastTenant}/status`)
+                .then(statusData => {
+                    const status = statusData.status; // 'ignited', 'completed', 'new'
+                    console.log(">> DB Status:", status);
+
+                    if (status === 'ignited' || status === 'completed') {
+                        // 2. Fetch Assets to confirm validity
+                        // FIX: Added /admin prefix to avoid 404
+                        return fetchApi(`/admin/engine/assets/${lastTenant}`).then(assets => {
+                            // CRITICAL: Check if we actually have assets (Zombie Check)
+                            const hasContent = assets && Object.values(assets).some(v => v !== null && v !== undefined);
+
+                            if (hasContent) {
+                                console.log(">> Session Verified & Valid. Resuming...");
+                                setFormData(prev => ({ ...prev, bot_phone_number: lastTenant }));
+                                setAssets(Object.entries(assets).map(([type, content]) => ({ type, content })));
+                                setStep('dashboard');
+                                setPercent(100);
+                            } else {
+                                // ZOMBIE STATE: Marked as done/ignited but empty. RESET.
+                                console.warn(">> Session is 'ghost' (Status ok but Empty Assets). RESETTING.");
+                                localStorage.removeItem('magic_tenant_id');
+                                setLogs(prev => [...prev, ">> WARN: Previous session was empty (Zombie). Resetting to allow retry."]);
+                                // Do not set step to dashboard, let them restart
+                            }
+                        });
+                    } else {
+                        console.log(">> Session Invalid. Clearing.");
+                        localStorage.removeItem('magic_tenant_id');
+                    }
+                })
+                .catch(err => {
+                    console.warn("Session check failed:", err);
+                    localStorage.removeItem('magic_tenant_id'); // Fail safe
+                });
         }
     }, []);
 
