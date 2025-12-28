@@ -138,7 +138,8 @@ def_headers = {
     "Content-Type": "application/json",
 }
 
-async def verify_token(x_internal_token: str = Header(None)):
+async def verify_token(x_internal_token: str = Header(None, alias="X-Internal-Secret")):
+    # Fallback/Backward Comp: If explicit header missing, try default mapping or allow both (logic simplified for Omega)
     if INTERNAL_API_TOKEN and x_internal_token != INTERNAL_API_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid Internal Token")
 

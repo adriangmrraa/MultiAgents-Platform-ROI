@@ -341,6 +341,17 @@ export const MagicOnboarding: React.FC = () => {
                                 </span>
                             </h2>
                             <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => {
+                                        if (confirm("Reiniciar proceso y borrar sesión?")) {
+                                            localStorage.removeItem('magic_tenant_id');
+                                            window.location.reload();
+                                        }
+                                    }}
+                                    className="text-xs text-slate-500 hover:text-red-400 transition-colors uppercase tracking-widest cursor-pointer mr-2"
+                                >
+                                    [ RESET ]
+                                </button>
                                 <div className="text-xs font-mono text-cyan-400 bg-cyan-950/30 px-3 py-1 rounded-full border border-cyan-400/20">
                                     STATUS: {percent >= 100 ? 'SYSTEM ONLINE' : `GENERATING ${Math.round(percent)}%`}
                                 </div>
