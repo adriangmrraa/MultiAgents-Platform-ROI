@@ -38,10 +38,10 @@ class NexusEngine:
         if tn_store_id and tn_token:
             try:
                 potential_urls = [
-                    "http://tiendanube_service:8003", # Protocol Omega: Priority (Requested by User)
-                    "http://tiendanube_service:8001", # Fallback 8001
-                    "http://tiendanube-service:8003", # Fallback Dash
-                    "http://tiendanube-service:8001", # Fallback Dash 8001
+                    "http://tiendanube-service:8003", # Protocol Omega: Priority Dash (Verified stable)
+                    "http://tiendanube-service:8001", # Fallback 8001
+                    "http://tiendanube_service:8003", # Fallback Underscore
+                    "http://tiendanube_service:8001", # Fallback Underscore 8001
                     "http://tiendanube-service:8000",
                     "https://multiagents-tiendanube-service.yn8wow.easypanel.host",
                     "http://localhost:8003"
@@ -391,7 +391,7 @@ class NexusEngine:
              # We use a localized version to avoid circular imports from admin_routes
              from app.core.rag import RAGCore
              rag = RAGCore(self.tenant_id)
-             await rag.ingest_store(products, store_url, token=tn_token)
+             await rag.ingest_store(products, store_url)
              
              # Log event similar to what run_rag_ingestion does
              try:
