@@ -37,13 +37,13 @@ class NexusEngine:
         products = []
         if tn_store_id and tn_token:
              try:
-                 potential_urls = [
-                     "http://tiendanube-service:8003", # Protocol Omega: Priority Dash resolution
-                     "http://tiendanube_service:8003", 
-                     "http://multiagents-tiendanube-service:8003",
-                     "https://multiagents-tiendanube-service.yn8wow.easypanel.host", # Public fallback
-                     "http://localhost:8003"
-                 ]
+                potential_urls = [
+                    "http://tiendanube_service:8003", # Primary (Matches docker-compose service name)
+                    "http://tiendanube-service:8003", # Fallback Dash
+                    "http://multiagents-tiendanube-service:8003",
+                    "https://multiagents-tiendanube-service.yn8wow.easypanel.host", # Public fallback
+                    "http://localhost:8003"
+                ]
                  # Robust cleanup: filter empty, remove duplicates, strip trailing slashes, ensure http schema
                  service_urls = []
                  for u in potential_urls:
