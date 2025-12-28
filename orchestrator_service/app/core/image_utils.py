@@ -73,13 +73,23 @@ async def generate_image_dalle3(full_prompt: str, image_url: str = None) -> str:
         # Robust method resolution for different SDK versions
         # Standard: client.models.generate_image
         gen_method = None
+        
+        # Diagnostic Log: What's actually available?
+        models_dir = [m for m in dir(client.models) if not m.startswith('_')]
+        client_dir = [m for m in dir(client) if not m.startswith('_')]
+        logger.info("sdk_inspection", models_methods=models_dir, client_methods=client_dir)
+
         if hasattr(client, 'models') and hasattr(client.models, 'generate_image'):
             gen_method = client.models.generate_image
+        elif hasattr(client, 'models') and hasattr(client.models, 'generate_images'):
+             gen_method = client.models.generate_images
         elif hasattr(client, 'generate_image'):
             gen_method = client.generate_image
+        elif hasattr(client, 'imagen') and hasattr(client.imagen, 'generate_image'):
+             gen_method = client.imagen.generate_image
 
         if not gen_method:
-            raise Exception(f"The google-genai SDK (client type: {type(client)}) does not have a recognized 'generate_image' method.")
+            raise Exception(f"The google-genai SDK does not have a recognized 'generate_image' method. Available in .models: {models_dir}")
 
         response = gen_method(
             model='imagen-3.0-generate-001',
