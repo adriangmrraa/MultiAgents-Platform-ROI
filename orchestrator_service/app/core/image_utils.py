@@ -51,84 +51,31 @@ async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
         # Fallback to simple context if vision fails
         return f"A distinct product related to {prompt_context}"
 
-async def generate_ad_from_product(base64_product: str, prompt: str) -> str:
-    """
-    Multimodal Transformation: Gemini 2.5 Flash Image Preview
-    Transforms a real product image into a professional ad based on a prompt.
-    Includes Exponential Backoff (Protocol Omega).
-    """
-    if not GOOGLE_API_KEY:
-        raise Exception("Missing GOOGLE_API_KEY for Multimodal Transformation")
+    # Strategy Change: Multimodal Preview is hitting extreme 429 in logs.
+    # Protocol Omega Switch: Vision Analysis (Gemini 1.5 Flash) -> Image Generation (Imagen 3)
+    try:
+        # 1. Vision Analysis (Reusing analyze_image_with_gpt4o logic but with base64)
+        logger.info("gemini_stable_analysis_start")
+        from PIL import Image
+        from io import BytesIO
+        img = Image.open(BytesIO(base64.b64decode(base64_product)))
+        
+        analysis_prompt = f"Describe este producto detalladamente para un anuncio de {prompt}. Enfócate en la estética, colores y marca."
+        
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=[analysis_prompt, img]
+        )
+        visual_description = response.text
+        logger.info("gemini_stable_analysis_done", desc_sample=visual_description[:50])
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={GOOGLE_API_KEY}"
-    # Note: Using gemini-2.0-flash-exp as 2.5 might not be public yet, 
-    # but the structure is the same. Adjusting based on user request.
-    
-    payload = {
-        "contents": [{
-            "role": "user",
-            "parts": [
-                { "text": f"Transforma este producto en un anuncio profesional de alto impacto: {prompt}" },
-                { "inlineData": { "mimeType": "image/png", "data": base64_product } }
-            ]
-        }],
-        "generationConfig": { 
-            "responseModalities": ["TEXT", "IMAGE"],
-            "responseMimeType": "application/json"
-        }
-    }
+        # 2. Image Generation (Imagen 3)
+        final_prompt = f"Professional commercial advertisement for {prompt}. Realistic product photography, high quality, 8k. Context: {visual_description}"
+        return await generate_image_dalle3(final_prompt)
 
-    # Exponential Backoff Logic
-    max_retries = 5
-    for attempt in range(max_retries):
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as http_client:
-                # Truncate base64 for cleaner logs
-                safe_b64 = base64_product[:50] + "..." if base64_product else "None"
-                logger.info("product_to_ad_start", attempt=attempt+1, b64_sample=safe_b64)
-                
-                resp = await http_client.post(url, json=payload)
-                
-                if resp.status_code == 200:
-                    data = resp.json()
-                    # Gemini multimodal output extraction (JSON response contains parts)
-                    try:
-                        # Protocol Omega: Search for the inlineData part in the response candidates
-                        candidates = data.get('candidates', [])
-                        if not candidates:
-                             raise Exception("No candidates in Gemini response")
-                        
-                        parts = candidates[0].get('content', {}).get('parts', [])
-                        img_data = None
-                        for part in parts:
-                            if 'inlineData' in part:
-                                img_data = part['inlineData']['data']
-                                break
-                        
-                        if not img_data:
-                            logger.error("gemini_multimodal_image_missing", response=str(data)[:500])
-                            raise Exception("Image part missing in Gemini response")
-                            
-                        return f"data:image/png;base64,{img_data}"
-                    except Exception as pe:
-                        logger.error("gemini_multimodal_parse_failed", error=str(pe), response=str(data)[:200])
-                        raise Exception(f"Failed to parse visual response: {str(pe)}")
-                
-                elif resp.status_code in [429, 500, 502, 503, 504]:
-                    wait_time = 2 ** attempt
-                    logger.warning("gemini_api_backoff", status=resp.status_code, wait=wait_time)
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.error("gemini_api_error", status=resp.status_code, body=resp.text)
-                    raise Exception(f"Gemini API returned {resp.status_code}")
-                    
-        except Exception as e:
-            if attempt == max_retries - 1:
-                logger.error("gemini_max_retries_reached", error=str(e))
-                raise e
-            await asyncio.sleep(2 ** attempt)
-
-    return "https://placehold.co/1024x1024/1e293b/FFF.png?text=Multimodal+Gen+Failed"
+    except Exception as e:
+        logger.error("gemini_stable_strategy_failed", error=str(e))
+        return "https://placehold.co/1024x1024/1e293b/FFF.png?text=Creative+Director+Offline"
 
 async def generate_image_dalle3(full_prompt: str, image_url: str = None) -> str:
     """

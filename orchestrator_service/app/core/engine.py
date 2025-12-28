@@ -38,11 +38,11 @@ class NexusEngine:
         if tn_store_id and tn_token:
              try:
                  potential_urls = [
-                     'http://tiendanube_service:8003', # Primary (Docker Internal)
-                     'http://tiendanube-service:8003', # Fallback Dash
-                     'http://multiagents-tiendanube-service:8003', # App Name
-                     os.getenv('TIENDANUBE_SERVICE_URL'), 
-                     'https://multiagents-tiendanube-service.yn8wow.easypanel.host' # Public Fallback
+                     "http://tiendanube-service:8003", # Protocol Omega: Priority Dash resolution
+                     "http://tiendanube_service:8003", 
+                     "http://multiagents-tiendanube-service:8003",
+                     "https://multiagents-tiendanube-service.yn8wow.easypanel.host", # Public fallback
+                     "http://localhost:8003"
                  ]
                  # Robust cleanup: filter empty, remove duplicates, strip trailing slashes, ensure http schema
                  service_urls = []

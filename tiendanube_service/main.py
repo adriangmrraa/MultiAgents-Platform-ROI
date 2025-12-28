@@ -137,7 +137,6 @@ class Email(BaseModel):
     smtp_user: Optional[str] = None
     smtp_password: Optional[str] = None
 
-def_headers = {
 async def verify_token(x_internal_token: str = Header(None, alias="X-Internal-Secret")):
     """Security Handshake (Protocol Omega)"""
     if not INTERNAL_API_TOKEN:
