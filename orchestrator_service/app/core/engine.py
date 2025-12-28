@@ -41,7 +41,10 @@ class NexusEngine:
                      os.getenv('TIENDANUBE_SERVICE_URL'), 
                      'http://tiendanube_service:8003',
                      'http://tiendanube-service:8003',
-                     'http://multiagents-tiendanube-service:8003'
+                     'http://multiagents-tiendanube-service:8003',
+                     'http://tiendanube-service.default.svc.cluster.local:8003',
+                     'http://tiendanube-service.default:8003',
+                     'http://localhost:8003'
                  ]
                  service_urls = list(dict.fromkeys(filter(None, potential_urls)))
                  token = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY") or "super-secret-internal-token"
@@ -58,7 +61,11 @@ class NexusEngine:
                                  products = resp.json().get("data", [])
                                  logger.info("product_fetch_success", url=service_url, count=len(products))
                                  break 
-                         except Exception: continue
+                             else:
+                                 logger.warning("product_fetch_bad_response", url=service_url, status=resp.status_code, body=resp.text[:200])
+                         except Exception as fe: 
+                             logger.warning("product_fetch_failed_single", url=service_url, error=str(fe))
+                             continue
                      
                      if not products:
                          logger.warning("product_fetch_failed_all_using_mock", tried=service_urls)

@@ -548,6 +548,8 @@ async def magic_onboarding(data: MagicOnboardingRequest):
         slug = re.sub(r'[^a-z0-9]', '', data.store_name.lower())
         store_website = f"https://{slug}.mitiendanube.com"
         logger.info("magic_url_guessed", slug=slug)
+    else:
+        logger.info("magic_url_provided", url=store_website)
 
     context = {
         "store_name": data.store_name,
@@ -2818,15 +2820,15 @@ async def ignite_engine(request: Request):
     final_tn_token = decrypt_password(row['tiendanube_access_token']) if row['tiendanube_access_token'] else None
     
     # Robust URL Strategy: Payload > Guessed
-    # Tienda Nube store IDs are numeric, but subdomains are usually derived from store_name or a separate field.
-    # We try common patterns.
-    store_website = payload.get("store_website")
+    store_website = payload.get("store_website") or payload.get("store_url")
     if not store_website:
         # Guess: numerical ID is RARELY the subdomain for mitiendanube.com
         # Attempt to use store_name slugified
         slug = re.sub(r'[^a-z0-9]', '', store_name.lower())
         store_website = f"https://{slug}.mitiendanube.com"
         logger.info("engine_url_guessed", slug=slug)
+    else:
+        logger.info("engine_url_provided", url=store_website)
 
     context = {
         "store_name": store_name,
