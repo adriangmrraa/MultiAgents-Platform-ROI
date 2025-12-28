@@ -24,6 +24,9 @@ from fastapi.responses import JSONResponse, Response
 from contextvars import ContextVar
 from pydantic import BaseModel, Field
 
+# PROTOCOL OMEGA DEPLOYMENT TRACKER
+print(">> SYSTEM STARTUP: Protocol Omega v5.9.129 (Stream+SQL Fix Loaded)")
+
 # --- Imports ---
 from app.core.tenant import TenantContext
 from app.api.deps import get_current_tenant_webhook, get_current_tenant_header
