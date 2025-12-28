@@ -49,7 +49,7 @@ class AgentCredentials(BaseModel):
     openai_api_key: str
     tiendanube_store_id: Optional[str] = None
     tiendanube_access_token: Optional[SecretStr] = None
-    tiendanube_service_url: str = "http://tiendanube_service:8003"
+    tiendanube_service_url: str = "http://tiendanube-service:8003"
 
 class AgentConfig(BaseModel):
     tools: Optional[List[str]] = None

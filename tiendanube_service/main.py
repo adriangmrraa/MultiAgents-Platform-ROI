@@ -138,129 +138,108 @@ class Email(BaseModel):
     smtp_password: Optional[str] = None
 
 def_headers = {
-    "Authentication": f"bearer {TIENDANUBE_API_KEY}",
-    "User-Agent": TIENDANUBE_USER_AGENT,
-    "Content-Type": "application/json",
-}
-
 async def verify_token(x_internal_token: str = Header(None, alias="X-Internal-Secret")):
-    # Fallback/Backward Comp: If explicit header missing, try default mapping or allow both (logic simplified for Omega)
-    if INTERNAL_API_TOKEN and x_internal_token != INTERNAL_API_TOKEN:
+    """Security Handshake (Protocol Omega)"""
+    if not INTERNAL_API_TOKEN:
+        logger.error("security_config_missing", detail="INTERNAL_API_TOKEN is not set")
+        raise HTTPException(status_code=500, detail="Security configuration missing on server")
+    
+    if x_internal_token != INTERNAL_API_TOKEN:
+        logger.warning("security_violation", provided=x_internal_token[:5] + "...")
         raise HTTPException(status_code=401, detail="Invalid Internal Token")
 
-def handle_tn_error(e: requests.exceptions.HTTPError) -> ToolError:
-    status_code = e.response.status_code
-    if status_code == 429:
-        return ToolError(code="TN_RATE_LIMIT", message="Rate limit exceeded", retryable=True)
-    elif status_code in [401, 403]:
-        return ToolError(code="TN_UNAUTHORIZED", message="Unauthorized upstream", retryable=False)
-    elif status_code >= 500:
-        return ToolError(code="UPSTREAM_UNAVAILABLE", message="Tienda Nube down", retryable=True)
-    elif status_code in [400, 422]:
-         return ToolError(code="TN_BAD_REQUEST", message="Bad request to Tienda Nube", retryable=False)
-    else:
-        return ToolError(code="TN_UNKNOWN", message=str(e), retryable=False)
+def get_tn_headers(access_token: str) -> Dict[str, str]:
+    """Centralized Tienda Nube Header logic."""
+    return {
+        "Authentication": f"bearer {access_token}",
+        "User-Agent": TIENDANUBE_USER_AGENT,
+        "Content-Type": "application/json",
+    }
 
-def handle_generic_error(e: Exception) -> ToolError:
-    return ToolError(code="INTERNAL_ERROR", message=str(e), retryable=False)
+async def handle_tn_response(response: httpx.Response) -> ToolResponse:
+    """Standardized Upstream Handler."""
+    if response.status_code == 200:
+        return ToolResponse(ok=True, data=response.json())
+    
+    status_code = response.status_code
+    if status_code == 429:
+        err = ToolError(code="TN_RATE_LIMIT", message="Rate limit exceeded", retryable=True)
+    elif status_code in [401, 403]:
+        err = ToolError(code="TN_UNAUTHORIZED", message="Unauthorized upstream", retryable=False)
+    elif status_code >= 500:
+        err = ToolError(code="UPSTREAM_UNAVAILABLE", message="Tienda Nube down", retryable=True)
+    else:
+        err = ToolError(code="TN_ERROR", message=f"Upstream returned {status_code}", retryable=False)
+    
+    return ToolResponse(ok=False, error=err)
 
 @app.post("/tools/productsq", response_model=ToolResponse)
-def productsq(search: ProductSearch, token: str = Depends(verify_token)):
+async def productsq(search: ProductSearch, token: str = Depends(verify_token)):
     url = f"https://api.tiendanube.com/v1/{search.store_id}/products"
-    headers = {
-        "Authentication": f"bearer {search.access_token}",
-        "User-Agent": TIENDANUBE_USER_AGENT,
-        "Content-Type": "application/json",
-    }
     params = {"q": search.q, "per_page": 20}
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=10)
-        response.raise_for_status()
-        return ToolResponse(ok=True, data=response.json())
-    except requests.exceptions.HTTPError as e:
-        return ToolResponse(ok=False, error=handle_tn_error(e))
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=get_tn_headers(search.access_token), params=params)
+            return await handle_tn_response(resp)
     except Exception as e:
-        return ToolResponse(ok=False, error=handle_generic_error(e))
+        logger.error("productsq_failed", error=str(e))
+        return ToolResponse(ok=False, error=ToolError(code="INTERNAL_ERROR", message=str(e), retryable=False))
 
 @app.post("/tools/productsq_category", response_model=ToolResponse)
-def productsq_category(search: ProductCategorySearch, token: str = Depends(verify_token)):
+async def productsq_category(search: ProductCategorySearch, token: str = Depends(verify_token)):
     url = f"https://api.tiendanube.com/v1/{search.store_id}/products"
-    headers = {
-        "Authentication": f"bearer {search.access_token}",
-        "User-Agent": TIENDANUBE_USER_AGENT,
-        "Content-Type": "application/json",
-    }
     query = f"{search.category} {search.keyword}"
     params = {"q": query, "per_page": 20}
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=10)
-        response.raise_for_status()
-        return ToolResponse(ok=True, data=response.json())
-    except requests.exceptions.HTTPError as e:
-        return ToolResponse(ok=False, error=handle_tn_error(e))
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=get_tn_headers(search.access_token), params=params)
+            return await handle_tn_response(resp)
     except Exception as e:
-        return ToolResponse(ok=False, error=handle_generic_error(e))
+        logger.error("productsq_category_failed", error=str(e))
+        return ToolResponse(ok=False, error=ToolError(code="INTERNAL_ERROR", message=str(e), retryable=False))
 
 class GenericTenantRequest(BaseModel):
     store_id: str
     access_token: str
 
 @app.post("/tools/productsall", response_model=ToolResponse)
-def productsall(req: GenericTenantRequest, token: str = Depends(verify_token)):
+async def productsall(req: GenericTenantRequest, token: str = Depends(verify_token)):
     url = f"https://api.tiendanube.com/v1/{req.store_id}/products"
-    headers = {
-        "Authentication": f"bearer {req.access_token}",
-        "User-Agent": TIENDANUBE_USER_AGENT,
-        "Content-Type": "application/json",
-    }
     params = {"per_page": 25}
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=10)
-        response.raise_for_status()
-        return ToolResponse(ok=True, data=response.json())
-    except requests.exceptions.HTTPError as e:
-        return ToolResponse(ok=False, error=handle_tn_error(e))
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=get_tn_headers(req.access_token), params=params)
+            return await handle_tn_response(resp)
     except Exception as e:
-        return ToolResponse(ok=False, error=handle_generic_error(e))
+        logger.error("productsall_failed", error=str(e))
+        return ToolResponse(ok=False, error=ToolError(code="INTERNAL_ERROR", message=str(e), retryable=False))
 
 @app.post("/tools/cupones_list", response_model=ToolResponse)
-def cupones_list(req: GenericTenantRequest, token: str = Depends(verify_token)):
+async def cupones_list(req: GenericTenantRequest, token: str = Depends(verify_token)):
     url = f"https://api.tiendanube.com/v1/{req.store_id}/coupons"
-    headers = {
-        "Authentication": f"bearer {req.access_token}",
-        "User-Agent": TIENDANUBE_USER_AGENT,
-        "Content-Type": "application/json",
-    }
     params = {"per_page": 25}
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=10)
-        response.raise_for_status()
-        return ToolResponse(ok=True, data=response.json())
-    except requests.exceptions.HTTPError as e:
-        return ToolResponse(ok=False, error=handle_tn_error(e))
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=get_tn_headers(req.access_token), params=params)
+            return await handle_tn_response(resp)
     except Exception as e:
-        return ToolResponse(ok=False, error=handle_generic_error(e))
+        logger.error("cupones_list_failed", error=str(e))
+        return ToolResponse(ok=False, error=ToolError(code="INTERNAL_ERROR", message=str(e), retryable=False))
 
 @app.post("/tools/orders", response_model=ToolResponse)
-def orders(search: OrderSearch, token: str = Depends(verify_token)):
+async def orders(search: OrderSearch, token: str = Depends(verify_token)):
     url = f"https://api.tiendanube.com/v1/{search.store_id}/orders"
-    headers = {
-        "Authentication": f"bearer {search.access_token}",
-        "User-Agent": TIENDANUBE_USER_AGENT,
-        "Content-Type": "application/json",
-    }
     params = {"q": search.q}
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=10)
-        response.raise_for_status()
-        return ToolResponse(ok=True, data=response.json())
-    except requests.exceptions.HTTPError as e:
-        return ToolResponse(ok=False, error=handle_tn_error(e))
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=get_tn_headers(search.access_token), params=params)
+            return await handle_tn_response(resp)
     except Exception as e:
-        return ToolResponse(ok=False, error=handle_generic_error(e))
+        logger.error("orders_failed", error=str(e))
+        return ToolResponse(ok=False, error=ToolError(code="INTERNAL_ERROR", message=str(e), retryable=False))
 
 @app.post("/tools/sendemail", response_model=ToolResponse)
-def sendemail(email: Email, token: str = Depends(verify_token)):
+async def sendemail(email: Email, token: str = Depends(verify_token)):
     import smtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
@@ -281,6 +260,8 @@ def sendemail(email: Email, token: str = Depends(verify_token)):
         msg['Subject'] = email.subject
         msg.attach(MIMEText(email.text, 'plain'))
 
+        # Standard SMTP is sync, but we wrap it to not block too much 
+        # Ideally use aiosmtplib but keeping it simple for now
         with smtplib.SMTP(host, port) as server:
             server.starttls()
             server.login(user, password)
@@ -290,9 +271,9 @@ def sendemail(email: Email, token: str = Depends(verify_token)):
         return ToolResponse(ok=True, data={"status": "email sent", "to": email.to_email})
     except Exception as e:
         logger.error("email_send_failed", error=str(e))
-        return ToolResponse(ok=False, error=handle_generic_error(e))
+        return ToolResponse(ok=False, error=ToolError(code="SMTP_ERROR", message=str(e), retryable=False))
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("starting_tiendanube_service", port=8003)
+    logger.info("starting_tiendanube_service_omega", port=8003)
     uvicorn.run(app, host="0.0.0.0", port=8003)

@@ -39,10 +39,10 @@ class NexusEngine:
              try:
                  potential_urls = [
                      os.getenv('TIENDANUBE_SERVICE_URL'), 
-                     'http://tiendanube-service:8003', # Prioritize 8003
-                     'multiagents-tiendanube-service:8003', # Public fallback for 8003
-                     'http://tiendanube_service:8003',
-                     'https://multiagents-tiendanube-service.yn8wow.easypanel.host'
+                     'http://tiendanube-service:8003', # Standard
+                     'http://multiagents-tiendanube-service:8003', # App Name
+                     'http://tiendanube_service:8003', # Underscore variant
+                     'https://multiagents-tiendanube-service.yn8wow.easypanel.host' # Public
                  ]
                  # Robust cleanup: filter empty, remove duplicates, strip trailing slashes, ensure http schema
                  service_urls = []
@@ -384,10 +384,9 @@ class NexusEngine:
         logger.info("librarian_rag_start", url=store_url)
         
         if products:
-             from admin_routes import run_rag_ingestion
-             # Using real tenant integer ID if possible, or keeping consistency with engine
-             # In admin_routes, run_rag_ingestion expects (tenant_id, store_url, products)
-             await run_rag_ingestion(self.tenant_id, store_url, products)
+             # Direct ingestion in the engine flow
+             # self.rag is initialized in __init__
+             await self.rag.ingest_store(products, store_url)
              
         data = {
             "status": "Neural Sync Active",

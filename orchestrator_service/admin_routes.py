@@ -189,6 +189,7 @@ async def update_tenant(tenant_id: int, data: TenantModel):
             # For now, we assume if user sends it, it's fresh.
             encrypted_token = encrypt_password(data.tiendanube_access_token)
 
+
         q = """
             UPDATE tenants SET 
                 store_name = $1,
