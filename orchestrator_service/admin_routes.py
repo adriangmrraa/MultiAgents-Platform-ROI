@@ -291,8 +291,9 @@ async def delete_tenant(tenant_id: int):
         await db.pool.execute("DELETE FROM credentials WHERE tenant_id = $1", tenant_id)
         await db.pool.execute("DELETE FROM system_events WHERE tenant_id = $1", tenant_id)
 
-        # E. Users (Identity Layer)
-        await db.pool.execute("DELETE FROM users WHERE tenant_id = $1", tenant_id)
+        # E. Users (Identity Layer - SAFE DETACH)
+        # Protocol: The Store dies, the User survives.
+        await db.pool.execute("UPDATE users SET tenant_id = NULL WHERE tenant_id = $1", tenant_id)
         
         # 2. Delete Tenant (Triggers Cascade for Credentials, Tools, Customers)
         row = await db.pool.fetchrow("DELETE FROM tenants WHERE id = $1 RETURNING id", tenant_id)

@@ -18,6 +18,7 @@ interface AuthContextType {
     login: (email: string, pass: string) => Promise<void>;
     register: (email: string, pass: string, storeName: string) => Promise<void>;
     logout: () => Promise<void>;
+    refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,6 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsLoading(false);
         }
     };
+
+    // Alias for external use
+    const refreshProfile = checkSession;
 
     useEffect(() => {
         checkSession();
@@ -81,7 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isLoading,
             login,
             register,
-            logout
+            logout,
+            refreshProfile
         }}>
             {children}
         </AuthContext.Provider>

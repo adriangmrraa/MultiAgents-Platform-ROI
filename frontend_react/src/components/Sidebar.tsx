@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { NavLink } from 'react-router-dom';
 import {
     LayoutDashboard,
     Settings,
@@ -8,9 +7,7 @@ import {
     MessageCircle,
     BarChart2,
     Key,
-    Smartphone,
     Wrench,
-    Bot,
     Terminal,
     Mail,
     Zap,
@@ -60,6 +57,7 @@ export const Sidebar: React.FC = () => {
                     <NavItem to="/agents" icon={<Zap size={20} />} label="Agent Squad" desc="Gestión de neuronas" steps={["Activar agentes", "Refinar prompts"]} />
                     <NavItem to="/knowledge" icon={<Database size={20} />} label="Knowledge Base" desc="Cerebro del agente" steps={["Subir PDF/Docs", "Vectorizar"]} />
                     <NavItem to="/chats" icon={<MessageCircle size={20} />} label="Comms Channel" desc="Interceptión neural" steps={["Responder usuarios", "Handoff"]} />
+                    <NavItem to="/settings" icon={<Settings size={20} />} label="Settings" desc="Configuración Global" steps={["Integraciones", "Webhooks"]} />
 
                     <div className="h-px bg-white/5 w-8 mx-auto my-4" />
 
@@ -103,68 +101,10 @@ export const Sidebar: React.FC = () => {
                 </div>
             </div>
 
-            {/* User Profile Section (Bottom) */}
-            <div className="p-4 border-t border-white/5">
-                <UserProfile />
-            </div>
+            {/* User Profile Section REMOVED (Moved to UserProfile.tsx) */}
         </>
     );
 };
-
-const UserProfile: React.FC = () => {
-    const { user, logout } = useAuth();
-    const [isOpen, setIsOpen] = useState(false);
-
-    return (
-        <div className="relative">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
-            >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 p-[1px]">
-                    {user?.avatar_url ? (
-                        <img src={user.avatar_url} alt="Avatar" className="w-full h-full rounded-full object-cover" />
-                    ) : (
-                        <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
-                            <div className="text-xs font-bold text-white">
-                                {user?.full_name ? user.full_name.substring(0, 2).toUpperCase() : (user?.email?.substring(0, 2).toUpperCase() || 'ME')}
-                            </div>
-                        </div>
-                    )}
-                </div>
-                <div className="flex-1 text-left hidden lg:block">
-                    <div className="text-sm font-medium text-white group-hover:text-indigo-400 transition-colors truncate max-w-[120px]">
-                        {user?.full_name || 'My Profile'}
-                    </div>
-                    <div className="text-xs text-white/40 truncate max-w-[120px]">
-                        {user?.store_name || user?.role || 'Tenant Owner'}
-                    </div>
-                </div>
-            </button>
-
-            {isOpen && (
-                <>
-                    <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-                    <div className="absolute bottom-full left-0 mb-2 w-56 bg-[#09090b] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-2">
-                        <NavLink to="/profile" className="px-4 py-3 hover:bg-white/5 flex items-center gap-3 text-sm text-white/80 hover:text-white transition-colors" onClick={() => setIsOpen(false)}>
-                            <Key size={16} /> Account Settings
-                        </NavLink>
-                        <div className="h-px bg-white/5" />
-                        <button
-                            onClick={() => {
-                                logout();
-                                setIsOpen(false);
-                            }}
-                            className="px-4 py-3 hover:bg-red-500/10 text-red-400 hover:text-red-300 flex items-center gap-3 text-sm w-full text-left transition-colors"
-                        >
-                            <Menu size={16} className="rotate-90" /> Log Out
-                        </button>
-                    </div>
-                </>
-            )}
-        </div>
-    )
-}
 
 
 const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; desc?: string; steps?: string[] }> = ({ to, icon, label, desc, steps }) => (

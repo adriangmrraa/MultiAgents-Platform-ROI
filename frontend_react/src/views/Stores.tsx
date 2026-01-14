@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
+import { useAuth } from '../contexts/AuthContext';
 import { Modal } from '../components/Modal';
 import { Store, ShoppingBag, Plus, Trash2, Edit2, CheckCircle, XCircle, Sparkles, HelpCircle, BookOpen, Wrench, Save } from 'lucide-react';
 
@@ -19,6 +20,7 @@ interface Tenant {
 
 export const Stores: React.FC = () => {
     const { fetchApi } = useApi();
+    const { user, refreshProfile } = useAuth();
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
@@ -100,6 +102,13 @@ export const Stores: React.FC = () => {
         if (!confirm('¿Eliminar tienda y todos sus datos?')) return;
         try {
             await fetchApi(`/admin/tenants/${tenantId}`, { method: 'DELETE' });
+
+            // Check if we deleted the active tenant
+            if (user?.tenant_id === tenantId) {
+                console.log("Deleted active tenant. Refreshing profile...");
+                await refreshProfile();
+            }
+
             loadTenants();
         } catch (e: any) {
             alert('Error al eliminar: ' + e.message);
@@ -290,7 +299,9 @@ export const Stores: React.FC = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 Catálogo y Estructura Técnica
-                                <HelpCircle size={14} style={{ opacity: 0.5 }} title="Lista aquí tipos de productos y marcas. Crucial para búsquedas precisas." />
+                                <span title="Lista aquí tipos de productos y marcas. Crucial para búsquedas precisas.">
+                                    <HelpCircle size={14} style={{ opacity: 0.5, cursor: 'help' }} />
+                                </span>
                             </label>
                             <button
                                 type="button"
