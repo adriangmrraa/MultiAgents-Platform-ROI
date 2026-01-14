@@ -20,6 +20,7 @@ chromadb
 beautifulsoup4
 sse-starlette
 passlib[bcrypt]
+bcrypt==3.2.2
 python-jose[cryptography]
 python-multipart
 email-validator
