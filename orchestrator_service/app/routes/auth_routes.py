@@ -3,6 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import timedelta
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.core.database import get_db
 from app.models.auth import User
@@ -196,8 +199,14 @@ async def resend_verification(user_in: UserLogin, db: AsyncSession = Depends(get
         await db.commit()
     
     # Send Email
+    # Send Email
     from app.core.email import EmailService
-    EmailService.send_verification_email(user.email, user.verification_token)
+    try:
+        EmailService.send_verification_email(user.email, user.verification_token)
+    except Exception as e:
+        logger.error("smtp_resend_error", error=str(e))
+        # Return 503 so frontend shows the message (500 is masked by useApi)
+        raise HTTPException(status_code=503, detail="Error al enviar correo: Verifique configuración SMTP")
     
     return {"message": "If account exists, verification email sent."}
 

@@ -70,6 +70,14 @@ export function useApi() {
                 }
 
                 if (!response.ok) {
+                    if (response.status === 500) {
+                        try {
+                            const errText = await response.text();
+                            console.error("CRITICAL BACKEND ERROR (500):", errText);
+                        } catch { }
+                        throw new Error("Error interno del sistema. Nuestro equipo ha sido notificado.");
+                    }
+
                     const errorData = await response.text();
                     if (errorData.trim().startsWith('<!DOCTYPE html') || errorData.trim().startsWith('<html')) {
                         throw new Error(`API Error: ${response.status} (Backend Unreachable)`);

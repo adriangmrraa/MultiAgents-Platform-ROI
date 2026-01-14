@@ -604,6 +604,14 @@ CATALOGO:
         ALTER TABLE business_assets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
     END $$;
     """,
+    # 15. Repair Users Schema for UX Phase (Profile Support)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);
+    END $$;
+    """,
     # 15. Multi-Channel Support (Nexus v4.0 - Chatwoot Phase 1)
     """
     DO $$
