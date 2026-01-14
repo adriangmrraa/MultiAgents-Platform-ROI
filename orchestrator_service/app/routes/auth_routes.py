@@ -36,12 +36,14 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
     """
     # 1. Check if user email exists
     # 1. Check if user email exists
+    logger.info("register_check_email", email=user_in.email)
     result = await db.execute(select(User).where(User.email == user_in.email))
     existing_user = result.scalar_one_or_none()
     
     if existing_user:
         if existing_user.is_verified:
-            raise HTTPException(status_code=400, detail="Email already registered")
+            logger.warning("register_conflict_email_exists", email=user_in.email)
+            raise HTTPException(status_code=409, detail="Email already registered")
         else:
             # Idempotency / Resend Logic for Unverified Users
             # Ensure token exists
