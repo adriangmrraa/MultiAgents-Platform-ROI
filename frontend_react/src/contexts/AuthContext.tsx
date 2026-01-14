@@ -28,7 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const checkSession = async () => {
         try {
             // Don't use global error handler wrapper here to avoid infinite loops if possible
-            const data = await fetchApi('/auth/me');
+            const data = await fetchApi('/auth/me', { skipRedirect: true });
             if (data && data.id) {
                 setUser(data);
             } else {
@@ -60,8 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             method: 'POST',
             body: { email, password: pass, store_name: storeName }
         });
-        // Register auto-logs in
-        await checkSession();
+        // Register NO LONGER auto-logs in (Zero Trust)
+        // await checkSession(); 
     };
 
     const logout = async () => {

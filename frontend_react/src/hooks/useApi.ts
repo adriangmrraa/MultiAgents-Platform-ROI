@@ -29,6 +29,7 @@ interface FetchOptions {
     method?: string;
     body?: any;
     headers?: Record<string, string>;
+    skipRedirect?: boolean;
 }
 
 export function useApi() {
@@ -60,6 +61,9 @@ export function useApi() {
                 });
 
                 if (response.status === 401) {
+                    if (options.skipRedirect) {
+                        throw new Error("Unauthorized");
+                    }
                     console.warn("Unauthorized (401). Redirecting to Login...");
                     window.location.href = '/login';
                     throw new Error("Unauthorized");
