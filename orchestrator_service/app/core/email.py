@@ -156,5 +156,4 @@ class EmailService:
             error_msg = f"❌ SMTP ERROR DETAILED: {str(e)}"
             print(error_msg, flush=True) # Immediate visibility in container logs
             logger.error("email_delivery_failed", error=str(e), host=SMTP_HOST)
-            # We explicitly do NOT re-raise to avoid crashing the background task runner
-            # or the main request (if called synchronously)
+            raise e # RE-RAISE for explicit debugging per user request

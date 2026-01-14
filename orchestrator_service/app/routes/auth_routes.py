@@ -113,26 +113,30 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
     await db.commit()
     await db.refresh(new_user)
     
-    # 4. Send Verification Email (Background)
+    # 4. Send Verification Email (BLOCKING per User Debug Protocol)
     from app.core.email import EmailService
     from datetime import datetime
     
     email_sent = True
     try:
+        # Sync call (blocking) to catch errors immediately
         EmailService.send_verification_email(new_user.email, verification_token)
         new_user.last_verification_email_at = datetime.utcnow()
         await db.commit()
     except Exception as e:
-        logger.warning("smtp_register_error", error=str(e))
+        logger.error("smtp_register_error", error=str(e))
+        # In register we still return success but with email_sent=False to see the detail in response
         email_sent = False
-        # Protocol: Store is created, User is created. Email failure is non-blocking.
+        message = f"User created, but SMTP Failed: {str(e)}"
+    else:
+        message = "User created. System in Spectator Mode until verified."
     
     # 5. Return Success with Email Status
     return {
         "access_token": "pending_verification", 
         "token_type": "bearer",
         "email_sent": email_sent,
-        "message": "User created. System in Spectator Mode until verified."
+        "message": message
     }
 
 @router.post("/login", response_model=Token)
@@ -208,15 +212,21 @@ async def resend_verification(db: AsyncSession = Depends(get_db), current_user: 
     if not current_user.verification_token:
         current_user.verification_token = uuid.uuid4().hex
     
-    # 3. Send Email
+    # 3. Send Email (BLOCKING per User Debug Protocol)
     from app.core.email import EmailService
+    from datetime import datetime
     try:
+        # Sync call (blocking) to catch errors immediately
         EmailService.send_verification_email(current_user.email, current_user.verification_token)
         current_user.last_verification_email_at = datetime.utcnow()
         await db.commit()
     except Exception as e:
         logger.error("smtp_resend_error", error=str(e))
-        raise HTTPException(status_code=503, detail="Error sending email. Check SMTP configuration.")
+        # CRITICAL: Raise detail as requested by user
+        raise HTTPException(
+            status_code=500, 
+            detail=f"DEBUG SMTP ERROR: {str(e)}"
+        )
     
     return {"message": "Verification email sent successfully."}
 
