@@ -32,17 +32,15 @@ interface Message {
 
 export const Chats: React.FC = () => {
     const { fetchApi, loading, error } = useApi();
-    const [selectedTenant, setSelectedTenant] = useState<number | null>(null); // Default to All (or wait for load)
+    // Removed selectedTenant
     const [selectedChannel, setSelectedChannel] = useState<string>('all');
-    const [tenants, setTenants] = useState<{ id: number, store: string }[]>([]);
+    // Removed tenants state
     const [chats, setChats] = useState<Chat[]>([]);
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
-
-    // Pagination State
     const [offset, setOffset] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const LIMIT = 20;
@@ -79,27 +77,7 @@ export const Chats: React.FC = () => {
         }
     }, [messages, selectedChatId]);
 
-    // Auto-select first tenant logic (Optional: Comment out if 'All' should be default)
-    /* 
-    useEffect(() => {
-        if (selectedTenant === null && tenants.length > 0) {
-            setSelectedTenant(tenants[0].id);
-        }
-    }, [tenants]);
-    */
-    // We prefer default "All" (null/0) for Supervisor View
-
-
-    // Load Tenants for filter
-    useEffect(() => {
-        const loadTenants = async () => {
-            try {
-                const data = await fetchApi('/admin/tenants');
-                if (Array.isArray(data)) setTenants(data);
-            } catch (e) { }
-        };
-        loadTenants();
-    }, [fetchApi]);
+    // Load Chat List
 
     // Load Chat List
 

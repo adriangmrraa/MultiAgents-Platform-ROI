@@ -2131,6 +2131,75 @@ async def list_tools():
 
 # --- Analytics / Telemetry ---
 
+@router.get("/stats", dependencies=[Depends(get_current_user)])
+async def get_stats(current_user: User = Depends(get_current_user)):
+    """
+    SaaS Dashboard "CEO View".
+    Returns ROI metrics (GMV, Conversions) + System Health.
+    Scoped by Tenant.
+    """
+    tenant_id = current_user.tenant_id
+    
+    # 1. GMV & Conversions (Last 30 Days)
+    # Heuristic: sum value of closed/won conversations
+    # For now, we use the same heuristic as report_assisted_gmv but efficient
+    days = 30
+    avg_ticket = 45000.0 # Configurable per tenant later
+    
+    date_limit = datetime.now() - timedelta(days=days)
+    
+    q_conversions = """
+        SELECT COUNT(DISTINCT c.id)
+        FROM chat_conversations c
+        JOIN chat_messages m ON c.id = m.conversation_id
+        WHERE c.last_message_at >= $1
+        AND (
+            m.content ILIKE '%tu pedido es el #%' OR 
+            m.content ILIKE '%gracias por tu compra%' OR
+            m.content ILIKE '%pago recibido%' OR
+            m.content ILIKE '%link de pago generado%'
+        )
+    """
+    params_conv = [date_limit]
+    
+    # Scoping
+    if current_user.role != "SuperAdmin":
+        q_conversions += " AND c.tenant_id = $2"
+        params_conv.append(tenant_id)
+        
+    conversions = await db.pool.fetchval(q_conversions, *params_conv) or 0
+    gmv = conversions * avg_ticket
+    
+    # 2. Operational Metrics
+    q_msgs = "SELECT COUNT(*) FROM chat_messages"
+    q_proc = "SELECT COUNT(*) FROM chat_messages WHERE role = 'assistant'"
+    params_msgs = []
+    
+    if current_user.role != "SuperAdmin":
+        q_msgs += " JOIN chat_conversations c ON chat_messages.conversation_id = c.id WHERE c.tenant_id = $1"
+        q_proc += " JOIN chat_conversations c ON chat_messages.conversation_id = c.id WHERE c.tenant_id = $1"
+        params_msgs.append(tenant_id)
+        
+    total_messages = await db.pool.fetchval(q_msgs, *params_msgs) or 0
+    processed_messages = await db.pool.fetchval(q_proc, *params_msgs) or 0
+    
+    # 3. Tenant Count
+    active_tenants = 1
+    if current_user.role == "SuperAdmin":
+        active_tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants") or 0
+        
+    return {
+        "active_tenants": active_tenants,
+        "total_messages": total_messages,
+        "processed_messages": processed_messages,
+        "roi_metrics": {
+            "total_gmv": gmv,
+            "conversions": conversions,
+            "last_30_days": gmv, # Assuming total_gmv IS last 30 days for now
+            "formatted_gmv": f"${gmv:,.0f}"
+        }
+    }
+
 @router.get("/analytics/summary", dependencies=[Depends(verify_admin_token)])
 @require_role('SuperAdmin')
 async def analytics_summary(tenant_id: int = 1, from_date: str = None, to_date: str = None):
@@ -3182,3 +3251,84 @@ async def get_engine_analytics():
         return {"error": "Analytics unavailable"}
     
         
+@router.get("/knowledge/list")
+@safe_db_call
+async def list_knowledge_files(current_user: User = Depends(get_current_user)):
+    """
+    List private knowledge base files for the current tenant.
+    """
+    tenant_id = current_user.tenant_id
+    rows = await db.pool.fetch("""
+        SELECT * FROM rag_documents 
+        WHERE tenant_id = $1 
+        ORDER BY created_at DESC
+    """, tenant_id)
+    
+    return [dict(r) for r in rows]
+
+from fastapi import File, UploadFile
+
+@router.post("/knowledge/upload")
+@safe_db_call
+async def upload_knowledge_file(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Upload a file to the private knowledge base.
+    Triggers RAG ingestion (Mocked/Stubbed for MVP).
+    """
+    tenant_id = current_user.tenant_id
+    
+    # 1. Read File Info
+    content = await file.read() # Warning: check size in real prod
+    file_size = len(content)
+    filename = file.filename
+    file_type = file.content_type
+    
+    # 2. Insert into DB (Pending)
+    doc_id = await db.pool.fetchval("""
+        INSERT INTO rag_documents (tenant_id, filename, file_type, file_size, status, created_at)
+        VALUES ($1, $2, $3, $4, 'processing', NOW())
+        RETURNING id
+    """, tenant_id, filename, file_type, file_size)
+    
+    # 3. Trigger Async Processing (Here we simulate it)
+    # in real world: background_tasks.add_task(process_rag, doc_id, content)
+    # We'll just update to active immediately for MVP or scheduling
+    try:
+        # Simulate local storage logic or RAG Core call
+        # For now, just mark active.
+        await db.pool.execute("UPDATE rag_documents SET status = 'active' WHERE id = $1", doc_id)
+        
+        # Determine RAG status message
+        rag_status = "Indexed via Protocol Omega"
+    except Exception as e:
+        await db.pool.execute("UPDATE rag_documents SET status = 'error', meta = $2 WHERE id = $1", doc_id, json.dumps({'error': str(e)}))
+        raise HTTPException(500, f"Processing failed: {e}")
+
+    return {
+        "status": "success",
+        "id": str(doc_id),
+        "filename": filename,
+        "rag_status": "active" 
+    }
+
+@router.delete("/knowledge/{doc_id}")
+@safe_db_call
+async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_current_user)):
+    """
+    Delete a file from the knowledge base.
+    """
+    tenant_id = current_user.tenant_id
+    
+    # Verify ownership
+    exists = await db.pool.fetchval("SELECT 1 FROM rag_documents WHERE id = $1 AND tenant_id = $2", doc_id, tenant_id)
+    if not exists:
+        raise HTTPException(404, "File not found or access denied")
+        
+    await db.pool.execute("DELETE FROM rag_documents WHERE id = $1", doc_id)
+    
+    # TODO: Trigger RAG deletion from Chroma
+    
+    return {"status": "deleted", "id": doc_id}

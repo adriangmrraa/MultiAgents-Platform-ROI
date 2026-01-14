@@ -134,6 +134,8 @@ from contextlib import asynccontextmanager
 from utils import encrypt_password, decrypt_password
 from admin_routes import router as admin_router, sync_environment
 from app.routes.auth_routes import router as auth_router
+from app.routes.platform_routes import router as platform_router
+
 
 from app.core.database import AsyncSessionLocal, engine
 from app.core.init_data import init_db
@@ -742,8 +744,23 @@ CATALOGO:
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
     );
-    CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
     CREATE INDEX IF NOT EXISTS idx_users_tenant ON users (tenant_id);
+    """,
+    # 24. RAG Documents (Private Knowledge Base)
+    """
+    CREATE TABLE IF NOT EXISTS rag_documents (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        file_type TEXT,
+        file_size INTEGER,
+        storage_url TEXT,
+        status VARCHAR(32) DEFAULT 'pending', -- pending, processing, active, error
+        meta JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_rag_documents_tenant ON rag_documents (tenant_id);
     """
 ]
 
@@ -824,6 +841,17 @@ async def lifespan(app: FastAPI):
     
     yield
     
+    # Migration: Ensure Users table has profile fields
+    try:
+        await db.execute("""
+            ALTER TABLE users 
+            ADD COLUMN IF NOT EXISTS full_name VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);
+        """)
+        await db.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
+    except Exception as e:
+        logger.warning(f"Migration profile fields check: {e}")
+
     # Shutdown
     await db.disconnect()
     await engine.dispose()
@@ -838,6 +866,7 @@ app = FastAPI(
 )
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(platform_router) # Platform Router (God Mode)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

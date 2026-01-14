@@ -26,7 +26,9 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "role": current_user.role,
         "tenant_id": current_user.tenant_id,
-        "store_name": current_user.tenant.store_name if current_user.tenant else None
+        "store_name": current_user.tenant.store_name if current_user.tenant else None,
+        "full_name": current_user.full_name,
+        "avatar_url": current_user.avatar_url
     }
 
 @router.post("/register", response_model=Token)
@@ -203,3 +205,32 @@ async def resend_verification(user_in: UserLogin, db: AsyncSession = Depends(get
 async def logout(response: Response):
     response.delete_cookie("access_token")
     return {"message": "Logged out"}
+
+class UserUpdate(BaseModel):
+    full_name: str | None = None
+    password: str | None = None
+    avatar_url: str | None = None
+
+@router.put("/profile")
+async def update_profile(data: UserUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Update user profile (Self-Service).
+    """
+    if data.full_name is not None:
+        current_user.full_name = data.full_name
+        
+    if data.avatar_url is not None:
+        current_user.avatar_url = data.avatar_url
+        
+    if data.password:
+        current_user.password_hash = security.get_password_hash(data.password)
+        
+    await db.commit()
+    await db.refresh(current_user)
+    
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "avatar_url": current_user.avatar_url
+    }

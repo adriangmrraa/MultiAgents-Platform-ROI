@@ -8,9 +8,10 @@ import { Setup } from './views/Setup';
 import { SetupExperience } from './views/SetupExperience'; // v3.2 Nexus Engine
 import { Logs } from './views/Logs';
 import { Tools } from './views/Tools';
+import { Knowledge } from './views/Knowledge';
 import { Chats } from './views/Chats'; // v3.3 Chat Module
-import { YCloudSettings } from './views/YCloudSettings'; // v3.3 Settings Module
-import { MetaSettings } from './views/MetaSettings'; // v3.3 Settings Module
+
+import { Settings } from './views/Settings';
 import { Analytics } from './views/Analytics'; // v3.3 Analytics Module
 import { MagicOnboarding } from './views/MagicOnboarding'; // v3.4 Magic Module
 import { BusinessForge } from './views/BusinessForge'; // Negrocio Module
@@ -20,6 +21,21 @@ import { Handoff } from './views/Handoff';
 import Login from './views/auth/Login';
 import Register from './views/auth/Register';
 import VerifyEmail from './views/auth/VerifyEmail';
+import { Profile } from './views/Profile';
+import { PlatformTower } from './views/PlatformTower';
+
+function RequireSuperAdmin({ children }: { children: JSX.Element }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) return null; // Or spinner
+
+  if (user?.role !== 'super_admin') {
+    // Stealth 404 (Security by Obscurity) or Redirect
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -68,13 +84,20 @@ function App() {
                   <Route path="/logs" element={<Logs />} />
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/credentials" element={<Credentials />} />
-                  <Route path="/settings/ycloud" element={<YCloudSettings />} />
-                  <Route path="/settings/meta" element={<MetaSettings />} />
-                  <Route path="/settings" element={<YCloudSettings />} />
+                  <Route path="/settings/ycloud" element={<Settings initialTab="ycloud" />} />
+                  <Route path="/settings/meta" element={<Settings initialTab="meta" />} />
+                  <Route path="/settings" element={<Settings initialTab="integrations" />} />
                   <Route path="/chats" element={<Chats />} />
                   <Route path="/tools" element={<Tools />} />
+                  <Route path="/knowledge" element={<Knowledge />} />
                   <Route path="/console" element={<Console />} />
                   <Route path="/handoff" element={<Handoff />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/platform" element={
+                    <RequireSuperAdmin>
+                      <PlatformTower />
+                    </RequireSuperAdmin>
+                  } />
                   {/* Catch all redirect to dashboard */}
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

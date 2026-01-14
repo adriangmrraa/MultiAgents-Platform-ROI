@@ -18,7 +18,13 @@ class User(Base, TimestampMixin):
     
     # Zero Trust Verification
     is_verified: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # Zero Trust Verification
+    is_verified: Mapped[bool] = mapped_column(default=False, nullable=False)
     verification_token: Mapped[str] = mapped_column(String(255), nullable=True, unique=True)
+
+    # UX Profile
+    full_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    avatar_url: Mapped[str] = mapped_column(String(500), nullable=True)
 
     # Back relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", backref="users", lazy="joined")

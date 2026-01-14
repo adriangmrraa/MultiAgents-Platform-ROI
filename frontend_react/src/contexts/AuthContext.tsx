@@ -7,6 +7,8 @@ interface User {
     role: string;
     tenant_id: number;
     store_name?: string;
+    full_name?: string;
+    avatar_url?: string;
 }
 
 interface AuthContextType {
