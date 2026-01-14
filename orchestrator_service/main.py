@@ -825,7 +825,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
