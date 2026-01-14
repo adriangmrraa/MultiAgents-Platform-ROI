@@ -1,24 +1,14 @@
 import os
-import smtplib
 import logging
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.utils import formataddr
+from fastapi_mail import FastMail, ConnectionConfig, MessageSchema, MessageType
 
 logger = logging.getLogger(__name__)
 
 # Config
 SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465")) # Port 465 is implicit SSL
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASS = os.getenv("SMTP_PASS")
-SMTP_SECURITY = os.getenv("SMTP_SECURITY", "STARTTLS").upper() # SSL, STARTTLS, NONE
-
-# Force security protocol based on common ports if not strictly specified
-if SMTP_PORT == 465:
-    SMTP_SECURITY = "SSL"
-elif SMTP_PORT == 587 and SMTP_SECURITY != "SSL":
-    SMTP_SECURITY = "STARTTLS"
 
 # Anti-Spoofing: Prioritize specialized env vars, fallback to authenticated user
 SENDER_EMAIL = os.getenv("EMAILS_FROM_EMAIL") or os.getenv("SENDER_EMAIL") or SMTP_USER or "noreply@nexus-platform.com"
@@ -30,9 +20,23 @@ if not FRONTEND_URL:
     # Fallback to a clear placeholder to avoid sending valid-looking but broken links
     FRONTEND_URL = "http://CONFIGURE_FRONTEND_URL_IN_ENV"
 
+# ConnectionConfig updated per USER request for Port 465 / SSL
+conf = ConnectionConfig(
+    MAIL_USERNAME=SMTP_USER,
+    MAIL_PASSWORD=SMTP_PASS,
+    MAIL_FROM=SENDER_EMAIL,
+    MAIL_PORT=SMTP_PORT,
+    MAIL_SERVER=SMTP_HOST,
+    MAIL_FROM_NAME=SENDER_NAME,
+    MAIL_STARTTLS=False,
+    MAIL_SSL_TLS=True,
+    USE_CREDENTIALS=True,
+    VALIDATE_CERTS=True
+)
+
 class EmailService:
     @staticmethod
-    def send_verification_email(to_email: str, token: str):
+    async def send_verification_email(to_email: str, token: str):
         # DEBUG PRINTS
         print(f"DEBUG: Intentando enviar email a {to_email}", flush=True)
         print(f"DEBUG: Host={SMTP_HOST}, User={SMTP_USER}, Port={SMTP_PORT}", flush=True)
@@ -125,32 +129,15 @@ class EmailService:
         """
 
         try:
-            msg = MIMEMultipart()
-            msg['From'] = formataddr((SENDER_NAME, SENDER_EMAIL))
-            msg['To'] = to_email
-            msg['Subject'] = subject
-            msg.attach(MIMEText(html_content, 'html'))
+            message = MessageSchema(
+                subject=subject,
+                recipients=[to_email],
+                body=html_content,
+                subtype=MessageType.html
+            )
 
-            logger.info(f"Connecting to {SMTP_HOST}:{SMTP_PORT} | Security: {SMTP_SECURITY} | From: {SENDER_EMAIL}")
-            
-            # Connection Logic
-            if SMTP_SECURITY == 'SSL':
-                logger.info(f"Using Implicit SSL on port {SMTP_PORT}")
-                with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-                    server.login(SMTP_USER, SMTP_PASS)
-                    server.send_message(msg)
-            elif SMTP_SECURITY == 'STARTTLS':
-                logger.info(f"Using STARTTLS on port {SMTP_PORT}")
-                with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-                    server.starttls()
-                    server.login(SMTP_USER, SMTP_PASS)
-                    server.send_message(msg)
-            else:
-                logger.info(f"Using Plain SMTP on port {SMTP_PORT}")
-                with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-                    server.login(SMTP_USER, SMTP_PASS)
-                    server.send_message(msg)
-                    
+            fm = FastMail(conf)
+            await fm.send_message(message)
             logger.info("email_sent_success", to=to_email)
 
         except Exception as e:

@@ -58,7 +58,7 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
             
             # Resend Email (catch exceptions safely in Service)
             from app.core.email import EmailService
-            EmailService.send_verification_email(existing_user.email, existing_user.verification_token)
+            await EmailService.send_verification_email(existing_user.email, existing_user.verification_token)
             
             return {"access_token": "pending_verification", "token_type": "bearer"}
 
@@ -120,7 +120,7 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
     email_sent = True
     try:
         # Sync call (blocking) to catch errors immediately
-        EmailService.send_verification_email(new_user.email, verification_token)
+        await EmailService.send_verification_email(new_user.email, verification_token)
         new_user.last_verification_email_at = datetime.utcnow()
         await db.commit()
     except Exception as e:
@@ -223,7 +223,7 @@ async def resend_verification(db: AsyncSession = Depends(get_db), current_user: 
     from datetime import datetime
     try:
         # Sync call (blocking) to catch errors immediately
-        EmailService.send_verification_email(current_user.email, current_user.verification_token)
+        await EmailService.send_verification_email(current_user.email, current_user.verification_token)
         current_user.last_verification_email_at = datetime.utcnow()
         await db.commit()
     except Exception as e:
