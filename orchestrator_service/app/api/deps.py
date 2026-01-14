@@ -1,9 +1,13 @@
-from fastapi import Request, HTTPException, Depends, Header
+from fastapi import Request, HTTPException, Depends, Header, Cookie
 from sqlalchemy import select
 from structlog import get_logger
+from jose import jwt, JWTError
 
+from app.core import security
+from app.core.config import settings
 from app.core.database import get_db, AsyncSession
 from app.models.tenant import Tenant
+from app.models.auth import User
 from app.schemas.tenant import TenantInternal
 from app.middleware.tenant_context import tenant_context
 
@@ -115,3 +119,32 @@ async def get_current_tenant_webhook(request: Request, db: AsyncSession = Depend
     
     logger.info("tenant_resolved", tenant_id=tenant_data.id, store=tenant_data.store_name)
     return tenant_data
+
+async def get_current_user(
+    token: str | None = Cookie(default=None, alias="access_token"),
+    auth_header: str | None = Header(default=None, alias="Authorization"),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    # Support both Cookie (Priority) and Bearer Header
+    if not token and auth_header:
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+    
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+        
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY.get_secret_value(), algorithms=[security.ALGORITHM])
+        user_uuid = payload.get("sub")
+        if user_uuid is None:
+            raise HTTPException(status_code=401, detail="Could not validate credentials")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Could not validate credentials")
+        
+    result = await db.execute(select(User).where(User.id == user_uuid))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+        
+    return user

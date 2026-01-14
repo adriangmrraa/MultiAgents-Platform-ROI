@@ -110,8 +110,6 @@ export const Chats: React.FC = () => {
         try {
             let url = `/admin/chats/summary?limit=${LIMIT}&offset=${currentOffset}&v=${refreshTrigger}`;
 
-            if (selectedTenant) url += `&tenant_id=${selectedTenant}`;
-
             if (selectedChannel === 'human_override') {
                 url += `&human_override=true`;
             } else if (selectedChannel !== 'all') {
@@ -131,7 +129,8 @@ export const Chats: React.FC = () => {
                     timestamp: d.timestamp || d.last_message_at || new Date().toISOString(),
                     phone: d.external_user_id || '',
                     is_locked: d.is_locked || false,
-                    channel: d.channel // Ensure channel is mapped
+                    status: d.status || 'active', // Fix: Ensure status is mapped
+                    channel: d.channel
                 }));
 
                 // Client-side search (Optional: ideally move to backend)
@@ -165,7 +164,7 @@ export const Chats: React.FC = () => {
         setOffset(0);
         setHasMore(true);
         loadChats(true);
-    }, [selectedTenant, selectedChannel, refreshTrigger]);
+    }, [selectedChannel, refreshTrigger]); // Removed selectedTenant dep
 
     // Cleanup interval if it existed (we removed it for infinite scroll)
 
@@ -242,9 +241,8 @@ export const Chats: React.FC = () => {
                     phone: chat?.phone, // Keep phone for legacy send endpoint if needed, or update send endpoint to use conv_id later
                     message: newMessage,
                     tenant_id: chat?.tenant_id,
-                    channel_source: chat?.channel || 'whatsapp',
-                    external_chatwoot_id: chat?.cw_id || chat?.external_chatwoot_id,
-                    external_account_id: chat?.account_id || chat?.external_account_id
+                    channel_source: chat?.channel || 'whatsapp'
+                    // Removed legacy IDs
                 }
             });
 
@@ -286,16 +284,6 @@ export const Chats: React.FC = () => {
                         <div className="flex gap-2">
                             <select
                                 className="bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none flex-1"
-                                value={selectedTenant || ''}
-                                onChange={(e) => setSelectedTenant(Number(e.target.value))}
-                            >
-                                <option value="" className="bg-black text-white">Todas las tiendas</option>
-                                {tenants.map(t => (
-                                    <option key={t.id} value={t.id} className="bg-black text-white">{t.store}</option>
-                                ))}
-                            </select>
-                            <select
-                                className="bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none"
                                 value={selectedChannel}
                                 onChange={(e) => setSelectedChannel(e.target.value)}
                             >

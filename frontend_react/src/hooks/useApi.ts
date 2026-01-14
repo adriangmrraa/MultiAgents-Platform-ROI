@@ -56,14 +56,26 @@ export function useApi() {
                     method: options.method || 'GET',
                     headers,
                     body: options.body ? JSON.stringify(options.body) : undefined,
+                    credentials: 'include' // CRITICAL: Send HttpOnly Cookies
                 });
+
+                if (response.status === 401) {
+                    console.warn("Unauthorized (401). Redirecting to Login...");
+                    window.location.href = '/login';
+                    throw new Error("Unauthorized");
+                }
 
                 if (!response.ok) {
                     const errorData = await response.text();
                     if (errorData.trim().startsWith('<!DOCTYPE html') || errorData.trim().startsWith('<html')) {
                         throw new Error(`API Error: ${response.status} (Backend Unreachable)`);
                     }
-                    throw new Error(errorData || `HTTP ${response.status}`);
+                    try {
+                        const jsonErr = JSON.parse(errorData);
+                        throw new Error(jsonErr.detail || jsonErr.message || `HTTP ${response.status}`);
+                    } catch {
+                        throw new Error(errorData || `HTTP ${response.status}`);
+                    }
                 }
 
                 const contentType = response.headers.get('content-type');
@@ -71,12 +83,16 @@ export function useApi() {
                     return await response.json();
                 }
                 const textData = await response.text();
-                if (textData.trim().startsWith('<!DOCTYPE html') || textData.trim().startsWith('<html')) {
-                    throw new Error("Invalid API Response: Received HTML instead of JSON. Check API_BASE URL.");
+                // Simple sanity check
+                if (textData.trim().startsWith('<!DOCTYPE html')) {
+                    throw new Error("Invalid API Response: HTML received.");
                 }
                 return textData;
 
             } catch (err: any) {
+                // Don't retry Auth errors
+                if (err.message === "Unauthorized") throw err;
+
                 if (attempt < MAX_RETRIES) {
                     const delay = INITIAL_BACKOFF * Math.pow(2, attempt - 1);
                     console.warn(`API Attempt ${attempt} failed. Retrying in ${delay}ms...`, err);

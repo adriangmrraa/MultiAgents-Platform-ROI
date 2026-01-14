@@ -269,14 +269,9 @@ export const BusinessForge = () => {
                 const data = await fetchApi('/admin/assets');
                 setAssets(data);
             } else {
-                // Protocol Omega: Dynamic Context Linkage
-                const currentTenant = localStorage.getItem('magic_tenant_id');
-                if (currentTenant) {
-                    const data = await fetchApi(`/admin/products?tenant_id=${currentTenant}`);
-                    setProducts(data);
-                } else {
-                    console.warn("No active tenant for catalog");
-                }
+                // Protocol Omega: Dynamic Context Linkage via Cookie
+                const data = await fetchApi('/admin/products');
+                setProducts(data);
             }
         } catch (e) {
             console.error("Error loading forge data", e);

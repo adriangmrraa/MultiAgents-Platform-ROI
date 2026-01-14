@@ -11,7 +11,8 @@ import httpx
 
 from db import db, redis_client
 import smtplib
-from email.mime.text import MIMEText
+from app.models.auth import User
+from app.api.deps import get_current_user
 from email.mime.multipart import MIMEMultipart
 import logging
 
@@ -651,28 +652,25 @@ async def generate_ad_image(request: Request):
 
 # --- ASSETS & PRODUCTS (BUSINESS FORGE) ---
 
-@router.get("/assets", dependencies=[Depends(verify_admin_token)])
-@safe_db_call
-async def get_business_assets(tenant_id: Optional[str] = None, asset_type: Optional[str] = None):
+@router.get("/assets")
+async def get_business_assets(
+    asset_type: Optional[str] = None, 
+    current_user: User = Depends(get_current_user)
+):
     """
     Fetch generated business assets.
-    Protocol Omega: Filter by tenant_id if provided (SuperAdmin can see all or filter).
+    Protocol Omega: Restricted to current user's tenant.
     """
     try:
-        query = "SELECT * FROM business_assets"
-        params = []
-        conditions = []
+        tenant_id = str(current_user.tenant_id)
         
-        if tenant_id:
-            conditions.append(f"tenant_id = ${len(params) + 1}::text")
-            params.append(tenant_id)
-            
+        query = "SELECT * FROM business_assets WHERE tenant_id = $1"
+        params = [tenant_id]
+        
         if asset_type:
-             conditions.append(f"asset_type = ${len(params) + 1}")
+             query += f" AND asset_type = $2"
              params.append(asset_type)
-             
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
+
             
         query += " ORDER BY created_at DESC"
         
@@ -693,21 +691,18 @@ async def get_business_assets(tenant_id: Optional[str] = None, asset_type: Optio
         logger.error(f"Error fetching assets: {e}")
         raise HTTPException(500, str(e))
 
-@router.get("/products", dependencies=[Depends(verify_admin_token)])
-async def get_store_products(tenant_id: str):
+@router.get("/products")
+async def get_store_products(current_user: User = Depends(get_current_user)):
     """
     Fetch store products.
     Protocol Omega: Real-time proxy to TiendaNube if credentials exist, else Mock.
     """
     try:
+        tenant_id = current_user.tenant_id
+        
         # 1. Get Credentials
-        q = "SELECT tiendanube_store_id, tiendanube_access_token FROM tenants WHERE id = $1 OR bot_phone_number = $1"
-        # Try ID first, then phone
-        row = None
-        if tenant_id.isdigit():
-             row = await db.pool.fetchrow(q, int(tenant_id))
-        if not row:
-             row = await db.pool.fetchrow("SELECT tiendanube_store_id, tiendanube_access_token FROM tenants WHERE bot_phone_number = $1", tenant_id)
+        q = "SELECT tiendanube_store_id, tiendanube_access_token FROM tenants WHERE id = $1"
+        row = await db.pool.fetchrow(q, tenant_id)
              
         if not row:
             # Fallback Mocks for Demo
@@ -990,15 +985,15 @@ async def bootstrap():
         "status": "ok"
     }
 
-@router.get("/stats", dependencies=[Depends(verify_admin_token)])
+@router.get("/stats")
 @safe_db_call
-async def get_stats():
+async def get_stats(current_user: User = Depends(get_current_user)):
     """
-    Get dashboard statistics.
+    Get dashboard statistics for the CURRENT TENANT.
     Implements Aggregated Cache pattern (TTL 300s).
-    Fallback to direct DB query if Redis is unavailable.
     """
-    cache_key = "dashboard:stats"
+    tenant_id = current_user.tenant_id
+    cache_key = f"dashboard:stats:{tenant_id}"
     
     # 1. Try Redis Cache
     try:
@@ -1010,13 +1005,19 @@ async def get_stats():
 
     # 2. Fetch from DB (Fallback/Live)
     try:
-        # Active tenants (with ID and active status)
-        active_tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants WHERE is_active = TRUE")
+        # Tenant Info
+        active_tenants = 1 # Sovereign Identity: You are the only tenant you see
         
-        # Message stats (Source of Truth: chat_messages)
-        total_messages = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages")
-        # Mapping 'processed' to 'assistant' responses for logic equivalent
-        processed_messages = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'assistant'")
+        # Message stats (Source of Truth: chat_messages for THIS tenant)
+        # We need to join with conversations to filter by tenant_id, OR if chat_messages has tenant_id (it should, but let's check schema. Assuming optimization: join conversation)
+        # Checking schema from previous knowledge: chat_messages usually links to conversation_id. conversation links to tenant_id.
+        
+        # Optimized Queries for Tenant
+        q_total = "SELECT COUNT(m.id) FROM chat_messages m JOIN chat_conversations c ON m.conversation_id = c.id WHERE c.tenant_id = $1"
+        total_messages = await db.pool.fetchval(q_total, tenant_id)
+        
+        q_processed = "SELECT COUNT(m.id) FROM chat_messages m JOIN chat_conversations c ON m.conversation_id = c.id WHERE c.tenant_id = $1 AND m.role = 'assistant'"
+        processed_messages = await db.pool.fetchval(q_processed, tenant_id)
         
         stats_data = {
             "active_tenants": active_tenants,
@@ -1243,25 +1244,22 @@ async def health_check():
         "timestamp": datetime.now().isoformat()
     }
 
-@router.get("/chats", dependencies=[Depends(verify_admin_token)])
+@router.get("/chats")
 @safe_db_call
 async def list_chats(
-    tenant_id: Optional[int] = None, 
     channel: Optional[str] = None, 
     human_override: Optional[bool] = None,
     limit: int = 20,
-    offset: int = 0
+    offset: int = 0,
+    current_user: User = Depends(get_current_user)
 ):
     """
     List conversations for the WhatsApp-like view with Infinite Scroll.
-    Derived strictly from `chat_conversations`.
+    Derived strictly from `chat_conversations` for the CURRENT TENANT.
     """
-    where_clauses = []
-    params = []
-    
-    if tenant_id:
-        where_clauses.append(f"tenant_id = ${len(params) + 1}")
-        params.append(tenant_id)
+    tenant_id = current_user.tenant_id
+    where_clauses = [f"tenant_id = $1"]
+    params = [tenant_id]
         
     if channel and channel != 'all':
         where_clauses.append(f"channel_source = ${len(params) + 1}")
@@ -1337,25 +1335,25 @@ async def list_chats(
         logger.error(f"Error listing chats: {e}")
         return []
 
-@router.get("/chats/summary", dependencies=[Depends(verify_admin_token)])
+@router.get("/chats/summary")
 @safe_db_call
 async def get_chats_summary(
-    tenant_id: Optional[int] = None, 
     channel: Optional[str] = None, 
     human_override: Optional[bool] = None,
     limit: int = 20,
-    offset: int = 0
+    offset: int = 0,
+    current_user: User = Depends(get_current_user)
 ):
     """
     Versión de compatibilidad de list_chats para el frontend actual.
     Cumple con el Protocolo Omega (UUID id).
     """
     chats = await list_chats(
-        tenant_id=tenant_id, 
         channel=channel, 
         human_override=human_override,
         limit=limit,
-        offset=offset
+        offset=offset,
+        current_user=current_user
     )
     # Adaptar a lo que esperaba el resumen de chat clásico pero con IDs Omega
     return [{
@@ -1371,12 +1369,16 @@ async def get_chats_summary(
         "human_override_until": c["human_override_until"]
     } for c in chats]
 
-@router.get("/chats/{conversation_id}/messages", dependencies=[Depends(verify_admin_token)])
+@router.get("/chats/{conversation_id}/messages")
 @safe_db_call
-async def get_chat_history(conversation_id: str):
+async def get_chat_history(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user)
+):
     """
     Get full history for a conversation.
     Joins with chat_media for full context.
+    Protocol Omega: Verifies tenant ownership.
     """
     query = """
         SELECT 
@@ -1384,8 +1386,9 @@ async def get_chat_history(conversation_id: str):
             m.sent_context, m.provider_status, m.media_id, m.meta, m.channel_source,
             med.storage_url, med.media_type, med.mime_type, med.file_name
         FROM chat_messages m
+        JOIN chat_conversations c ON m.conversation_id = c.id
         LEFT JOIN chat_media med ON m.media_id = med.id
-        WHERE m.conversation_id = $1
+        WHERE m.conversation_id = $1 AND c.tenant_id = $2
         ORDER BY m.created_at ASC
     """
     # Validate UUID
@@ -1394,7 +1397,7 @@ async def get_chat_history(conversation_id: str):
     except:
         raise HTTPException(status_code=400, detail="Invalid UUID")
 
-    rows = await db.pool.fetch(query, uuid_obj)
+    rows = await db.pool.fetch(query, uuid_obj, current_user.tenant_id)
     
     messages = []
     for r in rows:

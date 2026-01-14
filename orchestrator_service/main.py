@@ -133,6 +133,7 @@ class SimpleEvent:
 from contextlib import asynccontextmanager
 from utils import encrypt_password, decrypt_password
 from admin_routes import router as admin_router, sync_environment
+from app.routes.auth_routes import router as auth_router
 
 from app.core.database import AsyncSessionLocal, engine
 from app.core.init_data import init_db
@@ -717,6 +718,20 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Failed to add onboarding_status to tenants';
     END $$;
+    """,
+    # 23. Users & Auth (Sovereign Identity)
+    """
+    CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+        role VARCHAR(50) DEFAULT 'owner',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+    CREATE INDEX IF NOT EXISTS idx_users_tenant ON users (tenant_id);
     """
 ]
 
@@ -772,6 +787,7 @@ async def lifespan(app: FastAPI):
         from app.models.chat import ChatConversation, ChatMessage, ChatMedia
         from app.models.customer import Customer # Fixes "Phantom Table" issue
         from app.models.agent import Agent # Nexus v3 Agent Support
+        from app.models.auth import User # Sovereign Identity
         
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -808,6 +824,8 @@ app = FastAPI(
     version="1.1.0",
     lifespan=lifespan
 )
+
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

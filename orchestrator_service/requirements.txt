@@ -19,3 +19,6 @@ requests
 chromadb
 beautifulsoup4
 sse-starlette
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
