@@ -769,6 +769,21 @@ CATALOGO:
         updated_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_rag_documents_tenant ON rag_documents (tenant_id);
+    """,
+    # 25. Users Evolution (v5.1 Sovereign SaaS)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS last_verification_email_at TIMESTAMP;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'owner';
+        ALTER TABLE users ALTER COLUMN tenant_id DROP NOT NULL;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Sovereign SaaS user migration failed';
+    END $$;
+    """,
+    # 26. Cleanup: Ensure is_verified exists in repair logic too
+    """
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
     """
 ]
 
