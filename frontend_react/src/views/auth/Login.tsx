@@ -9,6 +9,9 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
+    const [resendSuccess, setResendSuccess] = useState(false);
+    const [showResend, setShowResend] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -17,10 +20,40 @@ export default function Login() {
         try {
             await login(email, password);
             navigate('/');
+            navigate('/');
         } catch (err: any) {
-            setError(err.message || "Failed to login");
+            const msg = err.message || "Failed to login";
+            setError(msg);
+            if (msg.includes("verified")) {
+                setShowResend(true);
+            }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleResend = async () => {
+        setResendLoading(true);
+        try {
+            const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+            // Use fetch directly or valid hook if available, but simplest is fetch for this one-off
+            const res = await fetch(`${API_BASE}/auth/resend-verification`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password: 'dummy' }) // Password ignored by backend but schema requires UserLogin? No, I defined UserLogin in backend which needs password? Yes. I should adjust backend schema or send dummy.
+                // Wait, backend uses UserLogin schema which implies password required?
+                // `class UserLogin(BaseModel): email: EmailStr; password: str`
+                // Yes. I will send a dummy password since the endpoint doesn't verify it (it just checks email existence).
+            });
+            if (res.ok) {
+                setResendSuccess(true);
+                setError('');
+                setShowResend(false);
+            }
+        } catch (e) {
+            // ignore
+        } finally {
+            setResendLoading(false);
         }
     };
 
@@ -43,6 +76,20 @@ export default function Login() {
                     {error && (
                         <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-sm text-center">
                             {error}
+                            {showResend && (
+                                <button
+                                    onClick={handleResend}
+                                    disabled={resendLoading}
+                                    className="block mx-auto mt-2 text-xs text-purple-400 hover:text-purple-300 underline"
+                                >
+                                    {resendLoading ? "Sending..." : "Resend Verification Email"}
+                                </button>
+                            )}
+                        </div>
+                    )}
+                    {resendSuccess && (
+                        <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded text-emerald-400 text-sm text-center">
+                            Verification email resent! Check your inbox.
                         </div>
                     )}
 

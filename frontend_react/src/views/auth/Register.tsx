@@ -12,6 +12,25 @@ export default function Register() {
     const [loading, setLoading] = useState(false);
 
     const [success, setSuccess] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
+    const [resendSuccess, setResendSuccess] = useState(false);
+
+    const handleResend = async () => {
+        setResendLoading(true);
+        try {
+            const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+            await fetch(`${API_BASE}/auth/resend-verification`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password: 'dummy' })
+            });
+            setResendSuccess(true);
+        } catch (e) {
+            // ignore
+        } finally {
+            setResendLoading(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -51,6 +70,18 @@ export default function Register() {
                         <div className="p-4 bg-black/30 rounded-lg border border-white/5 mb-6 text-xs text-gray-500 font-mono">
                             PROTOCOL_STATUS: PENDING_VERIFICATION
                         </div>
+
+                        {resendSuccess ? (
+                            <p className="text-emerald-400 text-sm mb-4">Email resent successfully!</p>
+                        ) : (
+                            <button
+                                onClick={handleResend}
+                                disabled={resendLoading}
+                                className="text-xs text-purple-400 hover:text-purple-300 underline mb-6 block w-full"
+                            >
+                                {resendLoading ? "Sending..." : "Didn't receive it? Resend Email"}
+                            </button>
+                        )}
 
                         <Link
                             to="/login"

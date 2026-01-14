@@ -138,6 +138,32 @@ async def verify_email(data: TokenSchema, db: AsyncSession = Depends(get_db)):
     
     return {"message": "Email verified successfully"}
 
+@router.post("/resend-verification")
+async def resend_verification(user_in: UserLogin, db: AsyncSession = Depends(get_db)):
+    """
+    Resends the verification email if the user exists and is not verified.
+    """
+    result = await db.execute(select(User).where(User.email == user_in.email))
+    user = result.scalar_one_or_none()
+    
+    # Security: Always return 200 to prevent email enumeration, unless we want to be helpful for MVP
+    if not user:
+         return {"message": "If account exists, verification email sent."}
+         
+    if user.is_verified:
+        return {"message": "Account already verified."}
+
+    # Ensure token exists
+    if not user.verification_token:
+        user.verification_token = uuid.uuid4().hex
+        await db.commit()
+    
+    # Send Email
+    from app.core.email import EmailService
+    EmailService.send_verification_email(user.email, user.verification_token)
+    
+    return {"message": "If account exists, verification email sent."}
+
 @router.post("/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token")
