@@ -33,13 +33,14 @@ if not FRONTEND_URL:
 class EmailService:
     @staticmethod
     def send_verification_email(to_email: str, token: str):
-        """
-        Sends a Zero Trust verification email.
-        Designed to be run in a BackgroundTask to avoid blocking.
-        """
+        # DEBUG PRINTS
+        print(f"DEBUG: Intentando enviar email a {to_email}", flush=True)
+        print(f"DEBUG: Host={SMTP_HOST}, User={SMTP_USER}, Port={SMTP_PORT}", flush=True)
+
         if not SMTP_HOST or not SMTP_USER:
-            logger.warning("email_service_disabled_missing_creds", host=SMTP_HOST)
-            return
+            err_msg = f"CONFIG ERROR: Falta SMTP_HOST ({SMTP_HOST}) o SMTP_USER ({SMTP_USER})"
+            print(f"❌ {err_msg}", flush=True)
+            raise Exception(err_msg)
 
         subject = "Activa tu Fábrica de Negocios - Nexus"
         verify_link = f"{FRONTEND_URL}/verify?token={token}"
