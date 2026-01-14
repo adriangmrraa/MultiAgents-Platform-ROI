@@ -13,6 +13,9 @@ class Tenant(Base, TimestampMixin):
     
     # Identification
     bot_phone_number: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    owner_email: Mapped[Optional[str]] = mapped_column(String(255))
+    store_location: Mapped[Optional[str]] = mapped_column(String(255))
+    store_website: Mapped[Optional[str]] = mapped_column(String(255))
     
     # Credentials (Tienda Nube)
     tiendanube_store_id: Mapped[Optional[str]] = mapped_column(String(50))
