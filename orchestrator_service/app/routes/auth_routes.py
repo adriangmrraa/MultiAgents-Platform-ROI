@@ -11,6 +11,7 @@ from app.schemas.auth import UserRegister, UserLogin, Token
 from app.core import security
 from app.core.config import settings
 from app.api.deps import get_current_user
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -119,8 +120,6 @@ async def login(user_in: UserLogin, response: Response, db: AsyncSession = Depen
 
 class TokenSchema(BaseModel):
     token: str
-
-from pydantic import BaseModel
 
 @router.post("/verify-email")
 async def verify_email(data: TokenSchema, db: AsyncSession = Depends(get_db)):
