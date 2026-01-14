@@ -4,7 +4,7 @@
 
 Para garantizar la seguridad y el rendimiento, Nexus v4.0 utiliza una inyección de variables durante la fase de construcción (Build Time). Esto evita que el frontend "adivine" configuraciones y asegura que el token de administración esté sellado dentro del bundle de JavaScript.
 
-## 1. El Flujo de Construcción
+## 1. El Flujo de Construcciónnn
 
 1. **Easypanel** envía los `Build Arguments` al `Dockerfile`.
 2. El `Dockerfile` captura estos argumentos (`ARG`) y los exporta como variables de entorno (`ENV`).
