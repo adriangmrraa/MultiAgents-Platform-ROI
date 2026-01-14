@@ -193,16 +193,23 @@ async def verify_email(data: TokenSchema, db: AsyncSession = Depends(get_db)):
 
 @router.post("/resend-verification")
 async def resend_verification(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # BOOM TEST: Verify if this code is actually running
+    raise Exception("BOOM: Routing verified. This code IS running.")
     """
     Resends the verification email with a 60-second cooldown block.
     """
+    logger.info("resend_verification_initiated", user_id=str(current_user.id), email=current_user.email, is_verified=current_user.is_verified)
+    
     if current_user.is_verified:
+        logger.info("resend_verification_skipped_already_verified", user_id=str(current_user.id))
         return {"message": "Account already verified."}
 
     # 1. Cooldown Check (60 seconds)
     if current_user.last_verification_email_at:
         delta = datetime.utcnow() - current_user.last_verification_email_at
+        logger.info("resend_verification_cooldown_check", seconds_passed=delta.total_seconds())
         if delta.total_seconds() < 60:
+            logger.warning("resend_verification_cooldown_block", seconds_remaining=60 - int(delta.total_seconds()))
             raise HTTPException(
                 status_code=429, 
                 detail=f"Please wait {60 - int(delta.total_seconds())} seconds before trying again."
@@ -211,6 +218,7 @@ async def resend_verification(db: AsyncSession = Depends(get_db), current_user: 
     # 2. Prepare Token
     if not current_user.verification_token:
         current_user.verification_token = uuid.uuid4().hex
+        logger.info("resend_verification_token_generated")
     
     # 3. Send Email (BLOCKING per User Debug Protocol)
     from app.core.email import EmailService
