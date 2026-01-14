@@ -131,7 +131,32 @@ CREATE TABLE IF NOT EXISTS agents (
 
 ---
 
-**© 2025 Platform AI Solutions - Data Engineering**
+## 4. Estrategia de Protección de Datos (Safe Detach)
+
+En la v5.1, hemos pasado de una política de "Borrado en Cascada" a **"Limpieza por Lógica"**.
+
+### El Problema del Cascade
+Antes, al borrar un `tenant`, se borraban todos los `users` asociados. Esto causaba frustración si el usuario quería conservar su perfil para una nueva aventura.
+
+### La Solución (Protocolo Soberano)
+- **Store Deletion**: Borra Agentes, Assets y Config.
+- **User Survival**: El backend ejecuta un `UPDATE users SET tenant_id = NULL` antes de proceder.
+- **Beneficio**: El usuario mantiene su `email`, `password_hash`, `is_verified` y `full_name`.
+
+---
+
+## 5. Jerarquía RBAC (Role-Based Access Control)
+
+La base de datos ahora distingue entre dos clases soberanas de usuarios:
+
+| Rol | Alcance | Descripción |
+| :--- | :--- | :--- |
+| `super_admin` | Global | Acceso a métricas de infraestructura y torre de control de plataforma. |
+| `owner` | Tenant | Acceso a sus propios agentes, chats y Business Forge. |
+
+---
+
+**© 2025 Platform AI Solutions - Sovereign Data Engineering**
 
 ### El Ciclo de Vida del Arranque (Main.py)
 Cada vez que el orquestador inicia:

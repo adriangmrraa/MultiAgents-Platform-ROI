@@ -10,29 +10,32 @@
 - **Routing**: `react-router-dom` v6.
 - **State**: React Hooks (`useState`, `useEffect`) + Custom Hooks (`useApi`).
 
-### Key Modules
+### Key Modules (v5.1 Hub)
 | Path | Component | Description |
 | :--- | :--- | :--- |
 | `/` | `Dashboard.tsx` | Telemetry, Health, ROI, Stats. |
-| `/chats` | `Chats.tsx` | Message Center (The critical module). |
-| `/stores` | `Stores.tsx` | Tenant management. |
-| `/settings/ycloud` | `YCloudSettings.tsx` | Integrations. |
-| `/nexus-setup` | `SetupExperience.tsx` | "Ignition" sequence (Streaming). |
+| `/platform` | `PlatformTower.tsx` | Control Tower for Super Admin (Hidden for Owners). |
+| `/profile` | `Profile.tsx` | Identity Management & Email Verification. |
+| `/settings` | `Settings.tsx` | Integration Hub (Webhooks, Chatwoot, API Keys). |
+| `/chats` | `Chats.tsx` | Message Center. |
 
 ---
 
-## 2. API Integration Strategy (`useApi.ts`)
-The `useApi` hook acts as the **Gateway**. It implements the "Triple Redundancy" protocol for connection resilience.
+## 2. Layout & Discovery Protocol
 
-### Endpoint Discovery Logic
-1.  **Localhost (Dev)**: If hostname is `localhost`, assume `http://localhost:3000` (BFF Proxy).
-2.  **Legacy UI**: If hostname contains `platform-ui`, replaces with `orchestrator-service` via HTTPS.
-3.  **Modern Deployment (EasyPanel)**: If hostname contains `frontend` or `easypanel`, uses **Relative Path** `/api`.
-    - *Rationale*: Allows Nginx to handle reverse proxying, avoiding CORS and DNS issues ("Bunker Mode").
+### Command Center (Top-Right)
+El perfil del usuario ha sido desacoplado del Sidebar para mayor visibilidad.
+- **Desktop**: Se ubica de forma fija en el Top-Right. Incluye dropdown con "Settings", "Profile" y "Logout".
+- **Mobile**: Integrado en la Navbar superior para optimizar espacio.
 
-### Error Handling
-- **Retries**: Exponential backoff (Up to 3 attempts).
-- **Format Validation**: Rejects HTML responses (Common 404/500 Nginx pages) to prevent JSON parsing crashes.
+### API Integration Strategy (`useApi.ts`)
+El `useApi` hook implementa el **Protocolo "No Red Screen"**.
+
+#### Error Sanitation
+- **Errors 5xx**: Traduce errores técnicos de DB a mensajes amigables (ej: "Error en sincronización de datos").
+- **Keywords Filter**: Oculta términos como `foreign key`, `unique constraint` o `database` para evitar "fugaz de información técnica" al usuario final.
+- **Unauthorized (401)**: Redirige automáticamente al Login.
+- **Unverified (403)**: El frontend captura el error de "Email Verification Required" para mostrar Toasts informativos en lugar de crasheos.
 
 ---
 

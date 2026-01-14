@@ -1,21 +1,21 @@
-# 🦍 Platform AI Solutions (Nexus v5) - Protocol Omega
+# 🦍 Platform AI Solutions (Nexus v5.1) - Sovereign SaaS
 
-> **Estado del Sistema**: `STABLE` | **Versión**: `v5.0.0-omega` | **Arquitectura**: `Hybrid Microservices (Python/React)`
+> **Estado del Sistema**: `STABLE` | **Versión**: `v5.1.0-sovereign` | **Arquitectura**: `Hybrid Microservices (Python/React)`
 
-Este repositorio aloja el ecosistema **Nexus v5**, el pináculo de la orquestación de Agentes de IA Omnicanal. Diseñado bajo el **Protocolo Omega**, introduce la autonomía total en la generación de activos visuales y estratégicos.
+Este repositorio aloja el ecosistema **Nexus v5.1**, la evolución soberana de la orquestación de Agentes de IA Omnicanal. Diseñado bajo el **Protocolo de Identidad Soberana**, garantiza la resiliencia del usuario y el control total de la plataforma.
 
 ---
 
-## 🌟 Visión: "The Industrial AI Revolution"
+## 🌟 Visión: "Identity First, Business Second"
 
-Nexus v5 evoluciona más allá de la gestión de conversaciones para convertirse en una **Fábrica de Negocios Autónoma**. El sistema no solo responde, sino que *crea* campañas, estrategias y activos visuales de alto impacto en tiempo real.
+Nexus v5.1 evoluciona la arquitectura para proteger la identidad del usuario por encima de los activos temporales. Se introduce el concepto de **Sovereign SaaS**, donde el usuario es el dueño de su cuenta independientemente de las tiendas que gestione.
 
-### 🚀 Novedades v5.0 (Protocol Omega)
-- **Business Forge ("Negrocio")**: Un centro de comando unificado (`/forge`) donde se materializa la estrategia del negocio.
-- **Ad Image Fusion**: Motor de generación visual `GPT-4o Vision` + `DALL-E 3` que crea anuncios publicitarios reales a partir de productos del catálogo.
-- **Magic Onboarding**: Flujo de inicialización autónomo que genera Identidad, Guiones, Anuncios y Proyecciones ROI en < 60 segundos.
-- **Protocol Omega Streaming**: Arquitectura de transmisión en tiempo real (`Redis Pub/Sub` + `SSE`) con aislamiento de tenants y efectos visuales "Magic Reveal".
-- **Smart Catalog**: Explorador de productos con capacidad de generación de contenido on-demand.
+### 🚀 Novedades v5.1 (Sovereign Update)
+- **God Mode (Control Tower)**: Una interfaz exclusiva para el Dueño de la Plataforma (`/platform`) que permite monitorear métricas globales e infraestructura sin comprometer la privacidad de los datos.
+- **Fail-Safe Identity**: Registro resiliente que permite el acceso inmediato ("Modo Espectador") incluso si fallan los servicios externos de correo.
+- **Omnichannel Hub**: Generación y gestión de Webhooks integrada directamente en la UI para integraciones flash con Chatwoot y otros CRMs.
+- **Safe Detach Protocol**: Lógica de borrado inteligente que elimina tiendas y activos pero preserva la identidad y el acceso del usuario.
+- **Business Forge ("Negrocio")**: El motor de generación de activos (Branding, Ads, ROI) optimizado para la v5.1.
 
 ---
 

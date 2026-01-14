@@ -48,25 +48,39 @@ Genera anuncios publicitarios "on-demand" para cualquier producto:
 
 ---
 
-## 4. Gestión de Chats (Smart Inbox)
+## 4. Torre de Control (God Mode) 🏛️
 
-### A. Smart Scroll
-- Navegación fluida que no te fuerza a bajar si estás leyendo el historial.
+Acceso exclusivo para Administradores de la Plataforma a través de `/platform`.
 
-### B. Intervención Humana
-- **Botón "Agente Activo"**: Bloquea la IA para control manual.
-- **Persistencia**: El estado se mantiene aunque recargues la página.
-
----
-
-## 5. Resolución de Problemas
-
-| Síntoma | Solución |
-| :--- | :--- |
-| **Error 401** | Verifica `ADMIN_TOKEN`. |
-| **Stream desconectado** | El Protocolo Omega se auto-reconecta. Si persiste, refresca. |
-| **Imágenes no cargan** | Verifica la conexión a Internet (DALL-E urls expiran en 1h, asegúrate de guardarlas si es necesario). |
+- **Métricas Globales**: Visualiza el total de tiendas, agentes y mensajes en todo el ecosistema.
+- **Estado de Infraestructura**: Monitorea el estado de Redis y la base de datos en tiempo real.
+- **Gestión de Tenants**: Listado unificado para soporte técnico de primer nivel.
 
 ---
 
-**© 2025 Platform AI Solutions - Flight Operations**
+## 5. Gestión de Emergencias e Identidad
+
+### A. Fallos de Email durante el Registro
+Si un nuevo usuario no recibe el correo de verificación:
+1. Pídale que inicie sesión normalmente (el sistema lo permite en **Modo Espectador**).
+2. Diríjalo a **"Mi Perfil"** (esquina superior derecha).
+3. Allí encontrará el botón **"Reenviar Email"**.
+4. **Nota**: Hay un tiempo de espera de 60 segundos entre intentos.
+
+### B. El Protocolo "Safe Detach"
+Si un usuario decide cerrar su tienda:
+- Al eliminar la tienda desde "Tiendas", los datos de la tienda desaparecen, pero **la cuenta del usuario se mantiene activa**. 
+- El usuario puede volver a crear una tienda nueva en el futuro sin tener que registrarse de nuevo.
+
+---
+
+## 6. Integraciones (Omnichannel Hub)
+
+Para integrar con Chatwoot o sistemas externos:
+1. Ve a **Settings > Integraciones**.
+2. Copia la **Webhook URL** generada automáticamente para cada tienda.
+3. Pega la URL en tu CRM. El sistema ya incluye el ID de tienda correcto.
+
+---
+
+**© 2025 Platform AI Solutions - Flight Operations - v5.1 Sovereign**
