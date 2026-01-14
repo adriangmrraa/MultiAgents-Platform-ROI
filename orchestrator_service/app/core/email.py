@@ -153,6 +153,8 @@ class EmailService:
             logger.info("email_sent_success", to=to_email)
 
         except Exception as e:
+            error_msg = f"❌ SMTP ERROR DETAILED: {str(e)}"
+            print(error_msg, flush=True) # Immediate visibility in container logs
             logger.error("email_delivery_failed", error=str(e), host=SMTP_HOST)
             # We explicitly do NOT re-raise to avoid crashing the background task runner
             # or the main request (if called synchronously)
