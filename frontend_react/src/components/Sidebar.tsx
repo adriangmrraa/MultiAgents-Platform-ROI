@@ -57,7 +57,6 @@ export const Sidebar: React.FC = () => {
                     <NavItem to="/agents" icon={<Zap size={20} />} label="Agent Squad" desc="Gestión de neuronas" steps={["Activar agentes", "Refinar prompts"]} />
                     <NavItem to="/knowledge" icon={<Database size={20} />} label="Knowledge Base" desc="Cerebro del agente" steps={["Subir PDF/Docs", "Vectorizar"]} />
                     <NavItem to="/chats" icon={<MessageCircle size={20} />} label="Comms Channel" desc="Interceptión neural" steps={["Responder usuarios", "Handoff"]} />
-                    <NavItem to="/settings" icon={<Settings size={20} />} label="Settings" desc="Configuración Global" steps={["Integraciones", "Webhooks"]} />
 
                     <div className="h-px bg-white/5 w-8 mx-auto my-4" />
 
@@ -72,6 +71,9 @@ export const Sidebar: React.FC = () => {
                     <NavItem to="/settings/ycloud" icon={<Mail size={20} />} label="YCloud Relay" desc="Uplink WhatsApp" steps={["Configurar Webhook", "Testear canal"]} />
                     <NavItem to="/nexus-setup" icon={<Zap size={20} />} label="Nexus Engine" desc="Ignición del núcleo" steps={["Seteo inicial", "Cargar activos"]} />
                     <NavItem to="/magic" icon={<Sparkles size={20} />} label="Magic" desc="Onboarding fluido" steps={["Auto-deploy", "Sync Tienda"]} />
+
+                    <div className="h-px bg-white/5 w-8 mx-auto my-4" />
+                    <NavItem to="/settings" icon={<Settings size={20} />} label="Settings" desc="Configuración Global" steps={["Integraciones", "Webhooks"]} />
                 </nav>
 
                 <div className="absolute bottom-0 left-0 right-0 h-20 z-10 cursor-ns-resize opacity-0" onMouseEnter={() => handleEdgeScroll('down')} />

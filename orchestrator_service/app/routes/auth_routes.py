@@ -115,27 +115,25 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
     
     # 4. Send Verification Email (Background)
     from app.core.email import EmailService
-    # In a real app we would use BackgroundTasks, but here for simplicity we call it directly or via a fast wrapper.
-    # Actually, BackgroundTasks IS supported by FastAPI if we add it to args.
-    # But current signature is fixed. Let's do it sync for MVP resilience (fail fast if SMTP broken) 
-    # OR wrap in a simple async ensure_future logic if we don't want to block everything.
-    # Given the user requirement "Action: Ensure if SMTP fails it logs but doesnt crash server", 
-    # EmailService already handles exception catching.
+    from datetime import datetime
     
-    EmailService.send_verification_email(new_user.email, verification_token)
+    email_sent = True
     try:
         EmailService.send_verification_email(new_user.email, verification_token)
+        new_user.last_verification_email_at = datetime.utcnow()
+        await db.commit()
     except Exception as e:
         logger.warning("smtp_register_error", error=str(e))
-        # RESILIENCE: User IS created, but email failed. Don't crash.
-        return {
-            "access_token": "pending_verification", 
-            "token_type": "bearer",
-            "warning": "Usuario creado, pero hubo un error enviando el correo. Use el botón 'Reenviar' en el perfil."
-        }
+        email_sent = False
+        # Protocol: Store is created, User is created. Email failure is non-blocking.
     
-    # 5. Return Success Message (No Token)
-    return {"access_token": "pending_verification", "token_type": "bearer"} # Or 200 with message, but keeping schema partial compat
+    # 5. Return Success with Email Status
+    return {
+        "access_token": "pending_verification", 
+        "token_type": "bearer",
+        "email_sent": email_sent,
+        "message": "User created. System in Spectator Mode until verified."
+    }
 
 @router.post("/login", response_model=Token)
 async def login(user_in: UserLogin, response: Response, db: AsyncSession = Depends(get_db)):
@@ -146,9 +144,10 @@ async def login(user_in: UserLogin, response: Response, db: AsyncSession = Depen
     if not user or not security.verify_password(user_in.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
         
-    # 2. Zero Trust Guard
-    if not user.is_verified:
-        raise HTTPException(status_code=403, detail="Email not verified. Please check your inbox.")
+    # 2. Zero Trust Guard -> MODIFIED: Allow login for Spectator Mode
+    # We no longer block login. The frontend/backend will restrict actions instead.
+    # if not user.is_verified:
+    #     raise HTTPException(status_code=403, detail="Email not verified. Please check your inbox.")
         
     # 3. Generate Token
     access_token_expires = timedelta(minutes=security.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -189,36 +188,37 @@ async def verify_email(data: TokenSchema, db: AsyncSession = Depends(get_db)):
     return {"message": "Email verified successfully"}
 
 @router.post("/resend-verification")
-async def resend_verification(user_in: UserLogin, db: AsyncSession = Depends(get_db)):
+async def resend_verification(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
-    Resends the verification email if the user exists and is not verified.
+    Resends the verification email with a 60-second cooldown block.
     """
-    result = await db.execute(select(User).where(User.email == user_in.email))
-    user = result.scalar_one_or_none()
-    
-    # Security: Always return 200 to prevent email enumeration, unless we want to be helpful for MVP
-    if not user:
-         return {"message": "If account exists, verification email sent."}
-         
-    if user.is_verified:
+    if current_user.is_verified:
         return {"message": "Account already verified."}
 
-    # Ensure token exists
-    if not user.verification_token:
-        user.verification_token = uuid.uuid4().hex
-        await db.commit()
+    # 1. Cooldown Check (60 seconds)
+    if current_user.last_verification_email_at:
+        delta = datetime.utcnow() - current_user.last_verification_email_at
+        if delta.total_seconds() < 60:
+            raise HTTPException(
+                status_code=429, 
+                detail=f"Please wait {60 - int(delta.total_seconds())} seconds before trying again."
+            )
+
+    # 2. Prepare Token
+    if not current_user.verification_token:
+        current_user.verification_token = uuid.uuid4().hex
     
-    # Send Email
-    # Send Email
+    # 3. Send Email
     from app.core.email import EmailService
     try:
-        EmailService.send_verification_email(user.email, user.verification_token)
+        EmailService.send_verification_email(current_user.email, current_user.verification_token)
+        current_user.last_verification_email_at = datetime.utcnow()
+        await db.commit()
     except Exception as e:
         logger.error("smtp_resend_error", error=str(e))
-        # Return 503 so frontend shows the message (500 is masked by useApi)
-        raise HTTPException(status_code=503, detail="Error al enviar correo: Verifique configuración SMTP")
+        raise HTTPException(status_code=503, detail="Error sending email. Check SMTP configuration.")
     
-    return {"message": "If account exists, verification email sent."}
+    return {"message": "Verification email sent successfully."}
 
 @router.post("/logout")
 async def logout(response: Response):

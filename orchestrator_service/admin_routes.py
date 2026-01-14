@@ -2340,8 +2340,10 @@ async def get_tenants():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/tenants", dependencies=[Depends(verify_admin_token)])
-async def create_tenant(tenant: TenantModel):
+async def create_tenant(tenant: TenantModel, current_user: User = Depends(get_current_user)):
     """Create or update a tenant."""
+    if not current_user.is_verified:
+        raise HTTPException(status_code=403, detail="Email verification required to create stores")
     try:
         # Check if exists
         exists = await db.pool.fetchval("SELECT id FROM tenants WHERE bot_phone_number = $1", tenant.bot_phone_number)
@@ -3404,6 +3406,8 @@ async def list_agents(current_user: User = Depends(get_current_user)):
 
 @router.post("/agents", dependencies=[Depends(verify_admin_token)])
 async def create_agent(agent: AgentModel, current_user: User = Depends(get_current_user)):
+    if not current_user.is_verified:
+        raise HTTPException(status_code=403, detail="Email verification required to create agents")
     try:
         # Enforce Tenant ID (Owner can only create for themselves)
         # SuperAdmin can create templates (tenant_id 0/Null?) -> Frontend sends tenant_id=0 for select

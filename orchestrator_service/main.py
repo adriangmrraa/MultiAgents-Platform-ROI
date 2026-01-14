@@ -854,7 +854,8 @@ async def lifespan(app: FastAPI):
         await db.execute("""
             ALTER TABLE users 
             ADD COLUMN IF NOT EXISTS full_name VARCHAR(255),
-            ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);
+            ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500),
+            ADD COLUMN IF NOT EXISTS last_verification_email_at TIMESTAMPTZ;
         """)
         await db.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
     except Exception as e:

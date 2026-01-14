@@ -11,7 +11,38 @@ export const Profile: React.FC = () => {
     const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
     const [password, setPassword] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    const [isResending, setIsResending] = useState(false);
+    const [cooldown, setCooldown] = useState(0);
     const [message, setMessage] = useState('');
+
+    useEffect(() => {
+        let timer: any;
+        if (cooldown > 0) {
+            timer = setInterval(() => {
+                setCooldown(c => c - 1);
+            }, 1000);
+        }
+        return () => clearInterval(timer);
+    }, [cooldown]);
+
+    const handleResendEmail = async () => {
+        setIsResending(true);
+        setMessage('');
+        try {
+            await fetchApi('/auth/resend-verification', { method: 'POST' });
+            setMessage('✓ Correo de verificación enviado con éxito.');
+            setCooldown(60);
+        } catch (err: any) {
+            if (err.status === 429) {
+                setMessage('Favor de esperar antes de reintentar.');
+                setCooldown(30);
+            } else {
+                setMessage('Error enviando correo: ' + (err.message || 'Error SMTP'));
+            }
+        } finally {
+            setIsResending(false);
+        }
+    };
 
     useEffect(() => {
         if (user) {
@@ -49,7 +80,56 @@ export const Profile: React.FC = () => {
                 <User className="text-purple-400" /> My Profile
             </h1>
 
+            {!user?.is_verified && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 mb-8 flex flex-col md:flex-row items-center justify-between gap-6 animate-pulse-subtle">
+                    <div className="flex items-center gap-4 text-center md:text-left">
+                        <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-500">
+                            <Shield size={24} />
+                        </div>
+                        <div>
+                            <h3 className="text-amber-500 font-bold">Cuenta no verificada (Modo Espectador)</h3>
+                            <p className="text-amber-500/60 text-sm">Verifica tu correo para desbloquear la creación de tiendas y agentes.</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleResendEmail}
+                        disabled={isResending || cooldown > 0}
+                        className={`px-6 py-3 rounded-xl font-bold transition-all ${cooldown > 0
+                                ? 'bg-white/5 text-white/40 cursor-not-allowed'
+                                : 'bg-amber-500 text-black hover:bg-amber-400 shadow-lg shadow-amber-500/20'
+                            }`}
+                    >
+                        {isResending ? 'Enviando...' : cooldown > 0 ? `Reintentar en ${cooldown}s` : 'Reenviar Email'}
+                    </button>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-6">
+
+                {/* Verification Status (Spectator Mode Alert) */}
+                {!user?.is_verified && (
+                    <div className="lg:col-span-2 bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-500">
+                                <Shield size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-amber-500 font-bold">Cuenta no verificada (Modo Espectador)</h3>
+                                <p className="text-amber-500/60 text-sm">Verifica tu correo para desbloquear la creación de tiendas y agentes.</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleResendEmail}
+                            disabled={isResending || cooldown > 0}
+                            className={`px-6 py-3 rounded-xl font-bold transition-all ${cooldown > 0
+                                ? 'bg-white/5 text-white/40 cursor-not-allowed'
+                                : 'bg-amber-500 text-black hover:bg-amber-400 shadow-lg shadow-amber-500/20'
+                                }`}
+                        >
+                            {isResending ? 'Enviando...' : cooldown > 0 ? `Reintentar en ${cooldown}s` : 'Reenviar Email de Verificación'}
+                        </button>
+                    </div>
+                )}
 
                 {/* ID Card */}
                 <div className="glass p-8 rounded-2xl relative overflow-hidden group">

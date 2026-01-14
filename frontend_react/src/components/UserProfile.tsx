@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Key, Menu, LogOut, User as UserIcon } from 'lucide-react';
+import { Key, Menu, LogOut, User as UserIcon, Settings } from 'lucide-react';
 
 export const UserProfile: React.FC = () => {
     const { user, logout } = useAuth();
@@ -85,6 +85,16 @@ export const UserProfile: React.FC = () => {
                                             <Key size={14} />
                                         </div>
                                         API Keys
+                                    </NavLink>
+                                    <NavLink
+                                        to="/settings"
+                                        onClick={() => setIsOpen(false)}
+                                        className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-white/5 transition-all"
+                                    >
+                                        <div className="p-1.5 rounded-md bg-white/5 text-cyan-400">
+                                            <Settings size={14} />
+                                        </div>
+                                        Configuración
                                     </NavLink>
                                 </div>
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
+import { useAuth } from '../contexts/AuthContext';
 import { Modal } from '../components/Modal';
 import { GlobalStreamLog } from '../components/GlobalStreamLog';
 import { Bot, Plus, Settings, Trash2, Edit, Activity, Lock } from 'lucide-react';
@@ -27,6 +28,7 @@ interface Tenant {
 
 export const Agents: React.FC = () => {
     const { fetchApi } = useApi();
+    const { user } = useAuth();
     const [agents, setAgents] = useState<Agent[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [tools, setTools] = useState<any[]>([]);
@@ -84,6 +86,10 @@ export const Agents: React.FC = () => {
     };
 
     const openNew = () => {
+        if (!user?.is_verified) {
+            alert("Por favor verifica tu correo para crear nuevos agentes.");
+            return;
+        }
         setFormData(defaultAgent);
         setIsEditing(false);
         setIsModalOpen(true);
@@ -93,7 +99,10 @@ export const Agents: React.FC = () => {
         <div className="view active animate-fade-in">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="view-title">Agent Squad: Neural Configuration</h1>
-                <button className="btn-primary" onClick={openNew}>
+                <button
+                    className={`btn-primary ${!user?.is_verified ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    onClick={openNew}
+                >
                     <Plus size={18} className="mr-2" /> Nuevo Agente
                 </button>
             </div>

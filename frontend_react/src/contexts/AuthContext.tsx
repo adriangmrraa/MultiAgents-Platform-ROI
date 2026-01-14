@@ -6,6 +6,7 @@ interface User {
     email: string;
     role: string;
     tenant_id: number;
+    is_verified: boolean;
     store_name?: string;
     full_name?: string;
     avatar_url?: string;

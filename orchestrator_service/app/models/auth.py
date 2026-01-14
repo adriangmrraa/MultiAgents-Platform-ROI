@@ -2,6 +2,7 @@ import uuid
 from sqlalchemy import String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
+from datetime import datetime
 from app.models.base import Base, TimestampMixin
 
 class User(Base, TimestampMixin):
@@ -18,9 +19,8 @@ class User(Base, TimestampMixin):
     
     # Zero Trust Verification
     is_verified: Mapped[bool] = mapped_column(default=False, nullable=False)
-    # Zero Trust Verification
-    is_verified: Mapped[bool] = mapped_column(default=False, nullable=False)
     verification_token: Mapped[str] = mapped_column(String(255), nullable=True, unique=True)
+    last_verification_email_at: Mapped[datetime] = mapped_column(nullable=True)
 
     # UX Profile
     full_name: Mapped[str] = mapped_column(String(255), nullable=True)
