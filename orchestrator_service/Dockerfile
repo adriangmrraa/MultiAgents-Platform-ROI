@@ -7,7 +7,8 @@ WORKDIR /app
 COPY requirements.txt .
 
 RUN apt-get update && apt-get install -y curl build-essential && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir --default-timeout=100 --retries 5 -r requirements.txt
 
 COPY . .
 
