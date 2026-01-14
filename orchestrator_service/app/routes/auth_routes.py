@@ -193,8 +193,6 @@ async def verify_email(data: TokenSchema, db: AsyncSession = Depends(get_db)):
 
 @router.post("/resend-verification")
 async def resend_verification(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # BOOM TEST: Verify if this code is actually running
-    raise Exception("BOOM: Routing verified. This code IS running.")
     """
     Resends the verification email with a 60-second cooldown block.
     """
