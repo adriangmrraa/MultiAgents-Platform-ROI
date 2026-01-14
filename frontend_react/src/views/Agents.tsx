@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Modal } from '../components/Modal';
 import { GlobalStreamLog } from '../components/GlobalStreamLog';
-import { Bot, Plus, Settings, Trash2, Edit, Activity } from 'lucide-react';
+import { Bot, Plus, Settings, Trash2, Edit, Activity, Lock } from 'lucide-react';
 
 interface Agent {
     id?: string;
@@ -129,7 +129,15 @@ export const Agents: React.FC = () => {
                             <tr key={agent.id}>
                                 <td className="font-semibold">{agent.name}</td>
                                 <td><span className="badge type">{agent.role}</span></td>
-                                <td>{agent.tenant_name || '-'}</td>
+                                <td>
+                                    {!agent.tenant_id ? (
+                                        <span className="flex items-center gap-1 text-xs font-bold text-accent">
+                                            <Lock size={12} /> System Template
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-secondary">{agent.tenant_name || 'Personal'}</span>
+                                    )}
+                                </td>
                                 <td className="font-mono text-xs">{agent.model_provider} / {agent.model_version}</td>
                                 <td>
                                     <span className={`status-dot ${agent.is_active ? 'configured' : ''}`}></span>

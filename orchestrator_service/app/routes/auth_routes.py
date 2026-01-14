@@ -123,6 +123,16 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
     # EmailService already handles exception catching.
     
     EmailService.send_verification_email(new_user.email, verification_token)
+    try:
+        EmailService.send_verification_email(new_user.email, verification_token)
+    except Exception as e:
+        logger.warning("smtp_register_error", error=str(e))
+        # RESILIENCE: User IS created, but email failed. Don't crash.
+        return {
+            "access_token": "pending_verification", 
+            "token_type": "bearer",
+            "warning": "Usuario creado, pero hubo un error enviando el correo. Use el botón 'Reenviar' en el perfil."
+        }
     
     # 5. Return Success Message (No Token)
     return {"access_token": "pending_verification", "token_type": "bearer"} # Or 200 with message, but keeping schema partial compat
@@ -234,8 +244,13 @@ async def update_profile(data: UserUpdate, db: AsyncSession = Depends(get_db), c
     if data.password:
         current_user.password_hash = security.get_password_hash(data.password)
         
-    await db.commit()
-    await db.refresh(current_user)
+    try:
+        await db.commit()
+        await db.refresh(current_user)
+    except Exception as e:
+        await db.rollback()
+        logger.error("profile_update_db_error", error=str(e))
+        raise HTTPException(503, "No se pudo actualizar el perfil. Intente nuevamente.")
     
     return {
         "id": str(current_user.id),

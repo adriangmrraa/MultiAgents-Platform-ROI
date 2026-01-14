@@ -156,3 +156,16 @@ class RAGCore:
 
     def count_vectors(self) -> int:
         return self._db._collection.count()
+
+    def delete_document_by_metadata(self, key: str, value: str) -> bool:
+        """
+        Deletes vectors matching specific metadata (e.g., {'source_id': '123'}).
+        """
+        try:
+            logger.info("rag_deletion_start", key=key, value=value)
+            # ChromaDB specific delete
+            self._db.delete(where={key: value})
+            return True
+        except Exception as e:
+            logger.error("rag_deletion_failed", error=str(e))
+            return False

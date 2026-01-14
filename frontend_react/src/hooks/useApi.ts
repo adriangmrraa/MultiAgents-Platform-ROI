@@ -75,7 +75,7 @@ export function useApi() {
                             const errText = await response.text();
                             console.error("CRITICAL BACKEND ERROR (500):", errText);
                         } catch { }
-                        throw new Error("Error interno del sistema. Nuestro equipo ha sido notificado.");
+                        throw new Error("Ocurrió un error inesperado en nuestros servidores. Por favor intente más tarde.");
                     }
 
                     const errorData = await response.text();
@@ -84,9 +84,19 @@ export function useApi() {
                     }
                     try {
                         const jsonErr = JSON.parse(errorData);
-                        throw new Error(jsonErr.detail || jsonErr.message || `HTTP ${response.status}`);
-                    } catch {
-                        throw new Error(errorData || `HTTP ${response.status}`);
+                        let finalMsg = jsonErr.detail || jsonErr.message || `HTTP ${response.status}`;
+
+                        // UX SHIELD: Hide raw SQL/DB errors
+                        const techKeywords = ["violates", "constraint", "foreign key", "sql", "pydantic", "execution", "integrity", "table", "column"];
+                        if (techKeywords.some(k => finalMsg.toLowerCase().includes(k))) {
+                            console.warn("Sanitized Technical Error:", finalMsg);
+                            finalMsg = "No se pudo completar la operación debido a dependencias activas.";
+                        }
+
+                        throw new Error(finalMsg);
+                    } catch (err: any) {
+                        if (err.message && err.message !== "Unexpected end of JSON input") throw err;
+                        throw new Error("Error de comunicación con el servidor.");
                     }
                 }
 

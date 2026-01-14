@@ -30,9 +30,13 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
         setApiBaseUrl(inferredApi);
     }, []);
 
-    const webhookUrl = `${apiBaseUrl}/chat?tenant_id=${user?.tenant_id || 'UNKNOWN'}`;
+    // Construct Webhook URL for Chatwoot
+    const webhookUrl = apiBaseUrl
+        ? `${apiBaseUrl.replace('/api', '')}/chat?tenant_id=${user?.tenant_id || 0}`
+        : 'Loading...';
 
     const handleCopy = () => {
+        if (!webhookUrl || webhookUrl === 'Loading...') return;
         navigator.clipboard.writeText(webhookUrl);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);

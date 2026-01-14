@@ -27,11 +27,22 @@ import { PlatformTower } from './views/PlatformTower';
 function RequireSuperAdmin({ children }: { children: JSX.Element }) {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) return null; // Or spinner
+  if (isLoading) return null;
 
   if (user?.role !== 'super_admin') {
-    // Stealth 404 (Security by Obscurity) or Redirect
-    return <Navigate to="/" replace />;
+    // Stealth 404 (Security by Obscurity)
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#09090b] text-white p-4">
+        <h1 className="text-6xl font-black text-white/10 mb-4">404</h1>
+        <p className="text-xl text-slate-500 mb-8">Signal Lost in Void</p>
+        <button
+          onClick={() => window.location.href = '/'}
+          className="px-6 py-2 bg-white/5 hover:bg-white/10 rounded-full text-sm font-medium transition-colors"
+        >
+          Return to Base
+        </button>
+      </div>
+    );
   }
 
   return children;

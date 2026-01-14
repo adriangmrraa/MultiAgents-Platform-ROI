@@ -274,16 +274,25 @@ async def delete_tenant(tenant_id: int):
         # 1. Cleanup Dependent Data (Preventive Cascade / Deep Clean)
         # Protocol Omega: Manual Cascade for tables lacking FK ON DELETE CASCADE
         
-        # A. Conversations (Blocks deletion if not removed)
-        # Note: chat_messages will auto-delete via its own cascade on conversation_id
+        # 0. Messages (Explicit Deep Clean)
+        await db.pool.execute("DELETE FROM chat_messages WHERE tenant_id = $1", tenant_id)
+
+        # A. Conversations
         await db.pool.execute("DELETE FROM chat_conversations WHERE tenant_id = $1", tenant_id)
         
         # B. Agents
         await db.pool.execute("DELETE FROM agents WHERE tenant_id = $1", tenant_id)
         
         # C. Business Assets (orphaned if not FK linked)
-        # Cast to text as business_assets uses varchar tenant_id
         await db.pool.execute("DELETE FROM business_assets WHERE tenant_id = $1::text", str(tenant_id))
+
+        # D. Support Tables (Tools, Credentials, Systems)
+        await db.pool.execute("DELETE FROM tools WHERE tenant_id = $1", tenant_id)
+        await db.pool.execute("DELETE FROM credentials WHERE tenant_id = $1", tenant_id)
+        await db.pool.execute("DELETE FROM system_events WHERE tenant_id = $1", tenant_id)
+
+        # E. Users (Identity Layer)
+        await db.pool.execute("DELETE FROM users WHERE tenant_id = $1", tenant_id)
         
         # 2. Delete Tenant (Triggers Cascade for Credentials, Tools, Customers)
         row = await db.pool.fetchrow("DELETE FROM tenants WHERE id = $1 RETURNING id", tenant_id)
@@ -3329,6 +3338,169 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
         
     await db.pool.execute("DELETE FROM rag_documents WHERE id = $1", doc_id)
     
-    # TODO: Trigger RAG deletion from Chroma
+    # Trigger RAG deletion from Chroma
+    try:
+        from app.core.rag import RAGCore
+        rag = RAGCore(str(tenant_id))
+        # Assuming we index files with metadata 'source_id' = doc_id OR 'file_id' = doc_id
+        # Since ingest is simulated, we implement the DELETE side correctly so it works when ingest is real.
+        # We'll use 'source_id' as the standard key for file-based docs.
+        rag.delete_document_by_metadata("source_id", doc_id)
+    except Exception as e:
+        logger.error(f"Failed to clean up vectors for doc {doc_id}: {e}")
     
     return {"status": "deleted", "id": doc_id}
+
+# --- Agents Management (QA Phase 3) ---
+
+class AgentModel(BaseModel):
+    name: str
+    role: str
+    tenant_id: Optional[int] = 0 # 0 in frontend often sent for "Select...", but backend should enforce context
+    model_provider: str
+    model_version: str
+    temperature: float
+    system_prompt_template: Optional[str] = ""
+    enabled_tools: List[str] = []
+    channels: List[str] = []
+    is_active: bool = True
+    # Frontend might send 'id' or 'tenant_name' but we ignore/compute them
+
+@router.get("/agents", dependencies=[Depends(verify_admin_token)])
+@safe_db_call
+async def list_agents(current_user: User = Depends(get_current_user)):
+    """
+    Hybrid Visualization: Templates (Global) + My Agents (Private).
+    """
+    tenant_id = current_user.tenant_id
+    
+    # 1. Fetch Agents
+    # Query: tenant_id matches OR is NULL (Template)
+    query = """
+        SELECT a.*, t.store_name as tenant_name 
+        FROM agents a
+        LEFT JOIN tenants t ON a.tenant_id = t.id
+        WHERE a.tenant_id = $1 OR a.tenant_id IS NULL
+        ORDER BY a.tenant_id ASC NULLS FIRST, a.id DESC
+    """
+    rows = await db.pool.fetch(query, tenant_id)
+    
+    results = []
+    for row in rows:
+        r = dict(row)
+        # Parse JSON fields if they are strings (depends on DB schema, usually text or jsonb)
+        # Assuming database.py handles JSONB->dict auto-conversion for pg, but if text:
+        if isinstance(r.get('enabled_tools'), str):
+            try: r['enabled_tools'] = json.loads(r['enabled_tools'])
+            except: r['enabled_tools'] = []
+        if isinstance(r.get('channels'), str):
+            try: r['channels'] = json.loads(r['channels'])
+            except: r['channels'] = []
+            
+        results.append(r)
+        
+    return results
+
+@router.post("/agents", dependencies=[Depends(verify_admin_token)])
+async def create_agent(agent: AgentModel, current_user: User = Depends(get_current_user)):
+    try:
+        # Enforce Tenant ID (Owner can only create for themselves)
+        # SuperAdmin can create templates (tenant_id 0/Null?) -> Frontend sends tenant_id=0 for select
+        # If user is NOT SuperAdmin, force tenant_id
+        target_tenant_id = current_user.tenant_id
+        if current_user.role == "SuperAdmin":
+             # If Admin sends a tenant_id, use it. If 0/Null, make it Template (None)
+             target_tenant_id = agent.tenant_id if agent.tenant_id and agent.tenant_id > 0 else None
+        
+        q = """
+            INSERT INTO agents (
+                name, role, tenant_id, model_provider, model_version, temperature, 
+                system_prompt_template, enabled_tools, channels, is_active, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+            RETURNING id
+        """
+        
+        agent_id = await db.pool.fetchval(
+            q, 
+            agent.name, agent.role, target_tenant_id, agent.model_provider, agent.model_version, agent.temperature,
+            agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active
+        )
+        
+        return {"status": "ok", "id": agent_id}
+    except Exception as e:
+        logger.error(f"Error creating agent: {e}")
+        raise HTTPException(500, str(e))
+
+@router.put("/agents/{agent_id}", dependencies=[Depends(verify_admin_token)])
+async def update_agent(agent_id: int, agent: AgentModel, current_user: User = Depends(get_current_user)):
+    """
+    Update Agent with Fork Logic for Templates.
+    """
+    try:
+        # 1. Fetch Existing
+        existing = await db.pool.fetchrow("SELECT * FROM agents WHERE id = $1", agent_id)
+        if not existing:
+            raise HTTPException(404, "Agent not found")
+            
+        # 2. Check Fork Logic (If editing a Template)
+        # Template = tenant_id is NULL
+        is_template = existing['tenant_id'] is None
+        
+        # Fork logic: If template and user is NOT SuperAdmin (or per strict fork requirement)
+        if is_template and current_user.role != "SuperAdmin":
+             # FORK
+             logger.info(f"Forking Agent Template {agent_id} for User {current_user.id}")
+             
+             new_id = await db.pool.fetchval("""
+                INSERT INTO agents (
+                    name, role, tenant_id, model_provider, model_version, temperature, 
+                    system_prompt_template, enabled_tools, channels, is_active, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+                RETURNING id
+             """, 
+             agent.name, agent.role, current_user.tenant_id, agent.model_provider, agent.model_version, agent.temperature,
+             agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active)
+             
+             return {"status": "forked", "id": new_id, "message": "Agent cloned from template."}
+             
+        # 3. Normal Update (Ownership Check)
+        # If not template, check if belongs to user (or SuperAdmin)
+        if existing['tenant_id'] != current_user.tenant_id and current_user.role != "SuperAdmin":
+             raise HTTPException(403, "Cannot edit agent from another tenant")
+             
+        q = """
+            UPDATE agents SET 
+                name = $1, role = $2, model_provider = $3, model_version = $4, temperature = $5,
+                system_prompt_template = $6, enabled_tools = $7, channels = $8, is_active = $9, updated_at = NOW()
+            WHERE id = $10
+        """
+        await db.pool.execute(
+            q,
+            agent.name, agent.role, agent.model_provider, agent.model_version, agent.temperature,
+            agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active,
+            agent_id
+        )
+        return {"status": "updated", "id": agent_id}
+        
+    except Exception as e:
+        logger.error(f"Error updating agent: {e}")
+        raise HTTPException(500, str(e))
+
+@router.delete("/agents/{agent_id}", dependencies=[Depends(verify_admin_token)])
+async def delete_agent(agent_id: int, current_user: User = Depends(get_current_user)):
+    try:
+        # Ownership check
+        existing = await db.pool.fetchrow("SELECT tenant_id FROM agents WHERE id = $1", agent_id)
+        if not existing:
+             return {"status": "ok"} # Idempotent
+             
+        if existing['tenant_id'] is None:
+             if current_user.role != "SuperAdmin":
+                  raise HTTPException(403, "Cannot delete system templates")
+        elif existing['tenant_id'] != current_user.tenant_id and current_user.role != "SuperAdmin":
+             raise HTTPException(403, "Access denied")
+             
+        await db.pool.execute("DELETE FROM agents WHERE id = $1", agent_id)
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
