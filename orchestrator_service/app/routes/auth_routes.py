@@ -35,9 +35,25 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
     Register a new user and create a new Tenant (Sovereign Identity).
     """
     # 1. Check if user email exists
+    # 1. Check if user email exists
     result = await db.execute(select(User).where(User.email == user_in.email))
-    if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already registered")
+    existing_user = result.scalar_one_or_none()
+    
+    if existing_user:
+        if existing_user.is_verified:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        else:
+            # Idempotency / Resend Logic for Unverified Users
+            # Ensure token exists
+            if not existing_user.verification_token:
+                existing_user.verification_token = uuid.uuid4().hex
+                await db.commit()
+            
+            # Resend Email (catch exceptions safely in Service)
+            from app.core.email import EmailService
+            EmailService.send_verification_email(existing_user.email, existing_user.verification_token)
+            
+            return {"access_token": "pending_verification", "token_type": "bearer"}
 
     # 2. Check or Create Tenant
     # Generate phone if missing
@@ -50,6 +66,11 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Phone number already registered. Please provide unique.")
 
+    # Check if store name collision (Optional but good UX)
+    # result = await db.execute(select(Tenant).where(Tenant.store_name == user_in.store_name))
+    # if result.scalar_one_or_none():
+    #     raise HTTPException(status_code=400, detail="Store name already taken.")
+
     new_tenant = Tenant(
         store_name=user_in.store_name,
         bot_phone_number=phone,
@@ -57,7 +78,19 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
         is_active=True
     )
     db.add(new_tenant)
-    await db.flush() # Get ID
+    try:
+        await db.flush() # Get ID
+    except Exception as e:
+        await db.rollback()
+        # Parse IntegrityError if possible, or generic
+        str_e = str(e).lower()
+        if "bot_phone_number" in str_e:
+            raise HTTPException(status_code=400, detail="Phone number already registered.")
+        if "store_name" in str_e: # If unique constraint exists
+             raise HTTPException(status_code=400, detail="Store name already registered.")
+        if "users_email_key" in str_e or "unique constraint" in str_e: # Fallback
+             raise HTTPException(status_code=400, detail="Resource already exists (Email or Phone).")
+        raise HTTPException(status_code=500, detail=f"Database Error: {str(e)}")
     
     # 3. Create User
     verification_token = uuid.uuid4().hex

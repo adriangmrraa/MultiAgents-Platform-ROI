@@ -146,31 +146,38 @@ async def get_tools():
             
     return final_tools
 
-@router.get("/tenants", dependencies=[Depends(verify_admin_token)])
+@router.get("/tenants")
 @safe_db_call
-async def list_tenants(limit: int = 100):
-   """Lista todos los inquilinos con detalles básicos.
-      Protocolo Omega: Sanitización de secretos y parseo de tipos."""
-   query = "SELECT * FROM tenants ORDER BY id ASC LIMIT $1"
-   rows = await db.pool.fetch(query,limit)
-   results = []
-   for row in rows:
-       r = dict(row)
-       
-       # 1. JSONB Parsing (Asyncpg returns string by default)
-       if r.get('handoff_policy') and isinstance(r['handoff_policy'], str):
-           try: r['handoff_policy'] = json.loads(r['handoff_policy'])
-           except: r['handoff_policy'] = {}
-           
-       # 2. Secret Sanitization (Prevent double-encryption loop)
-       # We return NULL so the frontend sees it as empty.
-       # If user keeps it empty, UPDATE skips it.
-       # If user types a new one, UPDATE encrypts it.
-       r['tiendanube_access_token'] = None
-       
-       results.append(r)
-       
-   return results
+async def list_tenants(limit: int = 100, current_user: User = Depends(get_current_user)):
+    """
+    Lists tenants.
+    - SuperAdmin: Can see all (optional, or just all).
+    - Owner: Can ONLY see tenants they own (by owner_email).
+    """
+    
+    if current_user.role == "SuperAdmin":
+        query = "SELECT * FROM tenants ORDER BY id ASC LIMIT $1"
+        rows = await db.pool.fetch(query, limit)
+    else:
+        # Strict Scoping for Owners
+        query = "SELECT * FROM tenants WHERE owner_email = $1 ORDER BY id ASC LIMIT $2"
+        rows = await db.pool.fetch(query, current_user.email, limit)
+
+    results = []
+    for row in rows:
+        r = dict(row)
+        
+        # 1. JSONB Parsing
+        if r.get('handoff_policy') and isinstance(r['handoff_policy'], str):
+            try: r['handoff_policy'] = json.loads(r['handoff_policy'])
+            except: r['handoff_policy'] = {}
+            
+        # 2. Secret Sanitization
+        r['tiendanube_access_token'] = None
+        
+        results.append(r)
+        
+    return results
 
 @router.put("/tenants/{tenant_id}", dependencies=[Depends(verify_admin_token)])
 @require_role("SuperAdmin")
