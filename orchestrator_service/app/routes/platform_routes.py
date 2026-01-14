@@ -3,7 +3,7 @@ from typing import List, Dict, Any
 from app.core.database import get_db, AsyncSession
 from app.api.deps import get_current_super_admin
 from app.models.auth import User
-from app.core.redis import redis_client
+from db import redis_client
 import json
 
 router = APIRouter(
