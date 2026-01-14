@@ -11,19 +11,58 @@ export default function Register() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
+    const [success, setSuccess] = useState(false);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setLoading(true);
         try {
             await register(email, password, storeName);
-            navigate('/');
+            // navigate('/'); // OLD Logic
+            setSuccess(true); // NEW Zero Trust Logic
         } catch (err: any) {
             setError(err.message || "Failed to register");
         } finally {
             setLoading(false);
         }
     };
+
+    if (success) {
+        return (
+            <div className="min-h-screen w-full flex items-center justify-center bg-[#09090b] relative overflow-hidden">
+                <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-[120px] pointer-events-none" />
+                <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-emerald-600/20 rounded-full blur-[120px] pointer-events-none" />
+
+                <div className="z-10 w-full max-w-md p-8">
+                    <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl text-center">
+                        <div className="mx-auto w-16 h-16 bg-gradient-to-br from-emerald-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-6">
+                            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
+
+                        <h2 className="text-2xl font-bold text-white mb-2">Check your Inbox</h2>
+                        <p className="text-gray-400 mb-6">
+                            We've sent a magic link to <span className="text-emerald-400 font-mono">{email}</span>.
+                            <br />Click it to activate your store sovereign identity.
+                        </p>
+
+                        <div className="p-4 bg-black/30 rounded-lg border border-white/5 mb-6 text-xs text-gray-500 font-mono">
+                            PROTOCOL_STATUS: PENDING_VERIFICATION
+                        </div>
+
+                        <Link
+                            to="/login"
+                            className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg font-medium transition-all block w-full border border-white/5"
+                        >
+                            Back to Login
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen w-full flex items-center justify-center bg-[#09090b] relative overflow-hidden">

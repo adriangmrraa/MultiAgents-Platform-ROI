@@ -178,6 +178,20 @@ migration_steps = [
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_smtp_host TEXT;
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_smtp_user TEXT;
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_smtp_pass TEXT;
+    END $$;
+    """,
+    # 2. Users Table Evolution (Zero Trust)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token VARCHAR(255);
+        
+        -- Legacy Migration: Auto-verify existing users to prevent lockout
+        -- We assume any user created before this migration is legacy and trusted
+        UPDATE users SET is_verified = TRUE WHERE is_verified IS FALSE AND created_at < NOW() - INTERVAL '1 minute';
+    END $$;
+    """,
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_smtp_port INTEGER;
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handoff_policy JSONB DEFAULT '{}';
         

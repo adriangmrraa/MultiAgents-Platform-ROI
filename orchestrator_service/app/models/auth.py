@@ -15,6 +15,10 @@ class User(Base, TimestampMixin):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
     
     role: Mapped[str] = mapped_column(String(50), default="owner", nullable=False)
+    
+    # Zero Trust Verification
+    is_verified: Mapped[bool] = mapped_column(default=False, nullable=False)
+    verification_token: Mapped[str] = mapped_column(String(255), nullable=True, unique=True)
 
     # Back relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", backref="users", lazy="joined")

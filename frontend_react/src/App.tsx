@@ -19,6 +19,7 @@ import { Console } from './views/Console';
 import { Handoff } from './views/Handoff';
 import Login from './views/auth/Login';
 import Register from './views/auth/Register';
+import VerifyEmail from './views/auth/VerifyEmail';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -50,6 +51,7 @@ function App() {
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/verify" element={<VerifyEmail />} />
 
           {/* Protected Routes */}
           <Route path="/*" element={
