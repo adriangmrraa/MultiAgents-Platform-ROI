@@ -42,6 +42,6 @@ Nexus v4.4 implementa **Auto-Reparación Estructural**:
 2.  **Reparación**: Si falta el soporte para multicanalidad (`channel_source`, `meta`), el sistema inyecta las columnas automáticamente.
 3.  **Omega Standard**: Uso estricto de UUIDs para garantizar que la telemetría nunca sufra colisiones de ID.
 
----
+------
 
 **© 2025 Platform AI Solutions - Nexus Architecture**
