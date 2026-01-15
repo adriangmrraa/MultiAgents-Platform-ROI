@@ -82,7 +82,14 @@ async def handle_connection_flow(code: str, tenant_id: str, redirect_uri: str):
         }
         await orchestrator_client.sync_credentials(payload)
         
-        # 4. Return Discovery Summary
+        # 4. Return Discovery Summary (SANITIZED for Frontend)
+        # Security Audit: Do NOT return actual access tokens to the browser.
+        sanitized_assets = {
+            "pages": [{k: v for k, v in p.items() if k != "access_token"} for p in assets.get("pages", [])],
+            "instagram": assets.get("instagram", []), # IG usually doesn't have token at this level
+            "whatsapp": assets.get("whatsapp", [])
+        }
+
         return {
             "status": "success",
             "connected": {
@@ -90,7 +97,7 @@ async def handle_connection_flow(code: str, tenant_id: str, redirect_uri: str):
                 "instagram": len(assets.get("instagram", [])) > 0,
                 "whatsapp": len(assets.get("whatsapp", [])) > 0
             },
-            "assets": assets
+            "assets": sanitized_assets
         }
         
     except Exception as e:

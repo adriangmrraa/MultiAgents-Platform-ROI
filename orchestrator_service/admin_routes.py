@@ -439,6 +439,124 @@ async def save_credential(cred: CredentialModel, current_user: User = Depends(ge
     except Exception as e:
         raise HTTPException(500, detail=str(e))
 
+# --- META INTEGRATION ENDPOINTS ---
+
+class MetaSyncRequest(BaseModel):
+    tenant_id: str
+    provider: str
+    credentials: Dict[str, Any]
+
+@router.post("/credentials/internal-sync")
+async def internal_credential_sync(
+    data: MetaSyncRequest, 
+    x_internal_secret: str = Header(None)
+):
+    """
+    Called by Meta Service (Diplomat) to dump raw credentials/assets.
+    """
+    # 1. Verify Internal Secret
+    INTERNAL_SECRET = os.getenv("INTERNAL_SECRET_KEY", "7876867976967967967463422222456467776967967585795679")
+    if x_internal_secret != INTERNAL_SECRET:
+        raise HTTPException(401, "Unauthorized Internal Call")
+
+    try:
+        tenant_id = int(data.tenant_id)
+        creds = data.credentials
+        
+        # 2. Store User Access Token (Global for Tenant)
+        user_access_token = creds.get("user_access_token")
+        if user_access_token:
+            from utils import encrypt_password
+            enc_token = encrypt_password(user_access_token)
+            
+            await db.pool.execute("""
+                INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
+                VALUES ('meta_user_token', $1, 'meta_whatsapp', 'tenant', $2, 'Meta User Token (System User)', NOW())
+                ON CONFLICT (scope, name) WHERE scope='tenant' AND tenant_id IS NOT NULL
+                DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            """, enc_token, tenant_id)
+
+        # 3. Store Raw Assets in 'business_assets' table
+        assets = creds.get("assets", {})
+        
+        # Helper to store assets
+        async def store_asset_batch(asset_list, asset_type):
+            for item in asset_list:
+                # Add 'status': 'pending' ensures they don't auto-activate until Wizard runs
+                item['status'] = 'pending' 
+                await db.pool.execute("""
+                    INSERT INTO business_assets (tenant_id, asset_type, asset_id, name, content, created_at)
+                    VALUES ($1, $2, $3, $4, $5, NOW())
+                    ON CONFLICT (tenant_id, asset_id) 
+                    DO UPDATE SET content = EXCLUDED.content, name = EXCLUDED.name
+                """, str(tenant_id), asset_type, item['id'], item.get('name') or item.get('username'), json.dumps(item))
+
+        if "pages" in assets: await store_asset_batch(assets["pages"], "facebook_page")
+        if "instagram" in assets: await store_asset_batch(assets["instagram"], "instagram_account")
+        if "whatsapp" in assets: await store_asset_batch(assets["whatsapp"], "whatsapp_waba")
+
+        return {"status": "ok", "message": "Synced"}
+        
+    except Exception as e:
+        logger.error(f"Internal Sync Error: {e}")
+        raise HTTPException(500, str(e))
+
+class ChannelSelectionRequest(BaseModel):
+    selected_assets: List[str] # List of Asset IDs
+
+@router.post("/integrations/update-channels", dependencies=[Depends(get_current_user)])
+async def update_channels_selection(data: ChannelSelectionRequest, current_user: User = Depends(get_current_user)):
+    """
+    Wizard Completion Endpoints.
+    Activates the selected assets and updates the Tenant's active channels.
+    """
+    tenant_id = current_user.tenant_id
+    
+    try:
+        # 1. toggle 'is_active' or similar in business_assets
+        # First, mark ALL as inactive (optional, or just strictly activate selected)
+        # We'll just activate the selected ones.
+        
+        # NOTE: A more robust approach updates the 'agents' table configuration.
+        # For now, we update 'business_assets' content to include {active: true}
+        
+        # Fetch current assets to identify types
+        rows = await db.pool.fetch("SELECT * FROM business_assets WHERE tenant_id = $1", str(tenant_id))
+        
+        active_channels = set()
+        
+        for row in rows:
+            asset_id = row['asset_id']
+            content = json.loads(row['content']) if isinstance(row['content'], str) else row['content']
+            
+            is_selected = asset_id in data.selected_assets
+            content['active'] = is_selected
+            
+            if is_selected:
+                if row['asset_type'] == 'facebook_page': active_channels.add('facebook')
+                if row['asset_type'] == 'instagram_account': active_channels.add('instagram')
+                if row['asset_type'] == 'whatsapp_waba': 
+                    active_channels.add('whatsapp')
+                    # Update Tenant Bot Phone? Maybe not WABA, but Phone ID.
+                    # Assuming WABA selection implies "Use this WABA". 
+                    # Real number selection should be granular. 
+                    # For MVP, we assume WABA enable = Enable WhatsApp.
+            
+            await db.pool.execute("UPDATE business_assets SET content = $1 WHERE id = $2", json.dumps(content), row['id'])
+
+        # 2. Update Tenant/Agents Active Channels
+        # We update the 'agents' table for this tenant to include these channels
+        channel_list = list(active_channels)
+        if "web" not in channel_list: channel_list.append("web") # Always keep web
+        
+        await db.pool.execute("UPDATE agents SET channels = $1::jsonb WHERE tenant_id = $2", json.dumps(channel_list), tenant_id)
+
+        return {"status": "ok", "active_channels": channel_list}
+        
+    except Exception as e:
+        logger.error(f"Channel Update Error: {e}")
+        raise HTTPException(500, str(e))
+
 @router.get("/credentials")
 async def list_credentials(category: Optional[str] = None, current_user: User = Depends(get_current_user)):
     # Scope: Global + My Tenant
