@@ -11,21 +11,31 @@ export const useFacebookSdk = () => {
     const [isReady, setIsReady] = useState(false);
 
     useEffect(() => {
-        // 1. If already initialized, mark as ready and exit
+        const appId = import.meta.env.VITE_FACEBOOK_APP_ID;
+        if (!appId) {
+            console.error("[Meta SDK] CRITICAL: VITE_FACEBOOK_APP_ID missing in environment");
+            return;
+        }
+
+        const initParams = {
+            appId: appId,
+            cookie: true,
+            xfbml: true,
+            version: import.meta.env.VITE_FACEBOOK_API_VERSION || 'v20.0'
+        };
+
+        // 1. If already loaded, Force Init to ensure it's configured
         if (window.FB) {
+            console.log("[Meta SDK] FB Object found, forcing init...");
+            window.FB.init(initParams);
             setIsReady(true);
             return;
         }
 
-        // 2. Define the OFFICIAL callback that the SDK looks for when loading
+        // 2. Define the OFFICIAL callback
         window.fbAsyncInit = function () {
-            window.FB.init({
-                appId: import.meta.env.VITE_FACEBOOK_APP_ID,
-                cookie: true,
-                xfbml: true,
-                version: import.meta.env.VITE_FACEBOOK_API_VERSION || 'v20.0'
-            });
-            console.log("[Meta SDK] Initialized correctly via hook");
+            console.log("[Meta SDK] Async Hook Triggered. Initializing with:", { ...initParams, appId: 'MASKED' });
+            window.FB.init(initParams);
             setIsReady(true);
         };
 
