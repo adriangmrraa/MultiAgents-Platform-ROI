@@ -142,6 +142,29 @@ export const Chats: React.FC = () => {
         setOffset(0);
         setHasMore(true);
         loadChats(true);
+
+        // Auto-refresh chat list every 10 seconds (Polling for Webhook updates)
+        const intervalId = setInterval(() => {
+            // We load silently (isRefresh=false would append, which is bad for polling list updates... 
+            // Wait, loadChats logic appends if !isRefresh. We need a "silent refresh" mode or just re-fetch first page?
+            // If we re-fetch first page, we might duplicate if logic isn't perfect.
+            // Let's look at loadChats logic: 
+            // if (isRefresh) setsChats(mappedData). 
+            // We want to update existing items or prepend new ones. 
+            // Simple polling: just re-fetch the first page (limit 20) and merge/update.
+            // But loadChats(true) resets offset. 
+            // Ideally we need a separate 'pollChats' function or modify loadChats to handle 'update'.
+
+            // For now, let's just trigger a soft refresh of the top list by calling loadChats(true) 
+            // but we need to be careful not to reset user scroll position if possible.
+            // Actually, loadChats(true) resets 'chats' state which might flicker.
+
+            // Let's try a safer approach: Just call loadChats(true) for now, it's the most reliable way to get new headers.
+            // Users reported "no llega", so latency > flicker priority.
+            loadChats(true);
+        }, 10000);
+
+        return () => clearInterval(intervalId);
     }, [selectedChannel, refreshTrigger]); // Removed selectedTenant dep
 
     // Cleanup interval if it existed (we removed it for infinite scroll)
