@@ -397,8 +397,8 @@ export const Chats: React.FC = () => {
 
                                     {/* Texts */}
                                     <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                        <div className="flex justify-between items-baseline mb-0.5">
-                                            <h4 className={`font-bold text-[15px] truncate leading-tight ${selectedChatId === chat.id ? 'text-white' : 'text-gray-200'}`}>
+                                        <div className="flex justify-between items-baseline mb-0.5 min-w-0">
+                                            <h4 className={`font-bold text-[15px] truncate leading-tight ${selectedChatId === chat.id ? 'text-white' : 'text-gray-200'} flex-1`}>
                                                 {chat.name || identifier}
                                             </h4>
                                             <span className="text-[10px] text-gray-500 font-mono shrink-0 ml-2">
@@ -406,16 +406,16 @@ export const Chats: React.FC = () => {
                                             </span>
                                         </div>
 
-                                        <div className="flex items-center gap-1.5 min-w-0">
+                                        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
                                             {/* Subtext: Handle or Last Message */}
-                                            <p className={`text-xs truncate ${selectedChatId === chat.id ? 'text-gray-300' : 'text-gray-500'}`}>
+                                            <p className={`text-xs truncate ${selectedChatId === chat.id ? 'text-gray-300' : 'text-gray-500'} flex items-center gap-1 min-w-0`}>
                                                 {chat.provider === 'meta_direct' && chat.meta?.username && (
-                                                    <span className="font-bold text-blue-400 mr-1">@{chat.meta.username} •</span>
+                                                    <span className="font-bold text-blue-400 shrink-0 max-w-[80px] truncate">@{chat.meta.username} •</span>
                                                 )}
                                                 {chat.provider === 'chatwoot' && chat.meta?.inbox_name && (
-                                                    <span className="font-bold text-cyan-400 mr-1">{chat.meta.inbox_name} •</span>
+                                                    <span className="font-bold text-cyan-400 shrink-0 max-w-[80px] truncate">{chat.meta.inbox_name} •</span>
                                                 )}
-                                                {chat.last_message || 'Imagen / Audio'}
+                                                <span className="truncate flex-1">{chat.last_message || 'Imagen / Audio'}</span>
                                             </p>
                                         </div>
                                     </div>

@@ -107,9 +107,9 @@ const MetaOnboardingWizard: React.FC<MetaOnboardingWizardProps> = ({ assets, onC
                             <div className={`p-2 rounded-full ${selectedIds.has(asset.id) ? 'bg-zinc-800' : 'bg-zinc-900'}`}>
                                 {icon}
                             </div>
-                            <div>
-                                <h3 className="text-white font-medium">{asset.name || asset.username}</h3>
-                                <p className="text-xs text-zinc-500">ID: {asset.id}</p>
+                            <div className="min-w-0 flex-1">
+                                <h3 className="text-white font-medium truncate" title={asset.name || asset.username}>{asset.name || asset.username}</h3>
+                                <p className="text-xs text-zinc-500 truncate">ID: {asset.id}</p>
                             </div>
                         </div>
 

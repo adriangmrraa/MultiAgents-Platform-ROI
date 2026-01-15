@@ -23,14 +23,24 @@
     font-family: 'Montserrat', sans-serif;
 }
 
+img,
+svg,
+video,
+canvas {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
 body {
     background: var(--bg-dark);
     color: var(--text-primary);
     min-height: 100vh;
-    background-image:
-        radial-gradient(circle at 20% 20%, #1a1a2e 0%, transparent 40%),
-        radial-gradient(circle at 80% 80%, #16213e 0%, transparent 40%);
+    font-size: 14px;
+    /* Standardize to 14px instead of 16px if it felt 'gigantic' */
     background-attachment: fixed;
+    line-height: 1.4;
+    overflow-x: hidden;
 }
 
 #root {

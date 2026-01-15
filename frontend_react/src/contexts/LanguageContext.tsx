@@ -35,22 +35,27 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
 
         for (const key of keys) {
-            if (result && result[key]) {
+            if (result && typeof result === 'object' && key in result) {
                 result = result[key];
             } else {
-                // Fallback: Return capitalized last part of the key instead of the full path
-                const fallback = keys[keys.length - 1];
-                return fallback.charAt(0).toUpperCase() + fallback.slice(1).replace(/([A-Z])/g, ' $1').trim();
+                // Emergency Fallback: Humanize the key
+                const lastPart = keys[keys.length - 1];
+                return lastPart.charAt(0).toUpperCase() + lastPart.slice(1).replace(/([A-Z])/g, ' $1').trim();
             }
         }
 
-        if (typeof result === 'string' && params) {
-            Object.entries(params).forEach(([key, value]) => {
-                result = result.replace(`{{${key}}}`, String(value));
-            });
+        if (typeof result === 'string') {
+            if (params) {
+                Object.entries(params).forEach(([key, value]) => {
+                    result = (result as string).replace(`{{${key}}}`, String(value));
+                });
+            }
+            return result;
         }
 
-        return typeof result === 'string' ? result : path;
+        // If result found is NOT a string (it's an object), humanize the path
+        const fallbackValue = keys[keys.length - 1];
+        return fallbackValue.charAt(0).toUpperCase() + fallbackValue.slice(1).replace(/([A-Z])/g, ' $1').trim();
     };
 
     return (

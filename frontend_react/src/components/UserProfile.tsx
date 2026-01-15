@@ -23,7 +23,7 @@ export const UserProfile: React.FC = () => {
               DESKTOP STRATEGY (Screens > 768px - 'lg' in Tailwind)
               "The Command Center" - Fixed Top Right Tower 
             */}
-            <div className="hidden lg:block fixed top-6 right-8 z-[60]">
+            <div className="hidden lg:block fixed top-6 right-8 left-auto z-[60]">
                 <div className="relative">
                     <button
                         onClick={() => setIsOpen(!isOpen)}
