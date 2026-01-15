@@ -39,7 +39,36 @@ class MetaAuthService:
                     logger.error("meta_code_exchange_failed", error=data["error"])
                     raise HTTPException(status_code=400, detail=data["error"]["message"])
                     
-                return data.get("access_token")
+                # Step 1: Get Short-Lived User Token
+                short_token = data.get("access_token")
+
+                # Step 2: Exchange for Long-Lived Token (60 days)
+                # https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived
+                exchange_url = f"{self.base_url}/oauth/access_token"
+                exchange_params = {
+                    "grant_type": "fb_exchange_token",
+                    "client_id": self.app_id,
+                    "client_secret": self.app_secret,
+                    "fb_exchange_token": short_token
+                }
+                
+                resp_exchange = await client.get(exchange_url, params=exchange_params)
+                exchange_data = resp_exchange.json()
+                
+                if "access_token" in exchange_data:
+                    # Parse Expiration (seconds)
+                    expires_in = exchange_data.get("expires_in")
+                    
+                    logger.info("Sovereign Token Persisted", 
+                        valid_for="60 days", 
+                        expires_in_seconds=expires_in,
+                        token_type="long_lived"
+                    )
+                    return exchange_data["access_token"]
+                
+                # Fallback to short token if exchange fails (though unlikely)
+                logger.warning("token_exchange_fallback_short")
+                return short_token
             except httpx.ConnectError as e:
                 logger.error("meta_connection_error", url=url, error=str(e))
                 raise HTTPException(status_code=503, detail=f"Could not connect to Meta API at {url}. Check DNS/Network.")
