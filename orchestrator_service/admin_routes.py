@@ -2016,6 +2016,9 @@ async def get_tenant_details(id: int):
     # Get credentials for this tenant
     creds = await db.pool.fetch("SELECT * FROM credentials WHERE tenant_id = $1 OR scope = 'global'", id)
     
+    # Get active meta assets
+    has_meta_assets = await db.pool.fetchval("SELECT EXISTS(SELECT 1 FROM business_assets WHERE tenant_id = $1 AND (content->>'active')::boolean = true LIMIT 1)", str(id))
+    
     # Format for UI
     resp = {
         "tenant": dict(tenant),
@@ -2057,6 +2060,12 @@ async def get_tenant_details(id: int):
     
     if 'WHATSAPP_ACCESS_TOKEN' in meta_keys and 'WHATSAPP_PHONE_NUMBER_ID' in meta_keys:
         resp["connections"]["whatsapp"]["meta_api"]["configured"] = True
+    
+    # Check for new Meta Omnichannel assets
+    if has_meta_assets:
+        resp["connections"]["meta_omnichannel"] = {"configured": True}
+    else:
+        resp["connections"]["meta_omnichannel"] = {"configured": False}
             
     return resp
 

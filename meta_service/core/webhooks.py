@@ -108,10 +108,8 @@ class MetaWebhookService:
             "event_type": "message",
             "timestamp": msg.get("timestamp"),
             "recipient_id": metadata.get("display_phone_number") or metadata.get("phone_number_id"), 
-            "sender": {
-                "id": msg.get("from"),
-                "name": contact.get("profile", {}).get("name")
-            },
+            "sender_id": msg.get("from"),
+            "sender_name": contact.get("profile", {}).get("name"),
             "payload": {
                 "id": msg.get("id"),
                 "type": msg.get("type"),
@@ -141,10 +139,8 @@ class MetaWebhookService:
             "event_type": "message",
             "timestamp": timestamp,
             "recipient_id": recipient_id,
-            "sender": {
-                "id": sender_id,
-                "name": "User" # Name not provided in webhook, requires separate fetch
-            },
+            "sender_id": sender_id,
+            "sender_name": "User", # Name not provided in webhook, requires separate fetch
             "payload": {
                 "id": message.get("mid"),
                 "type": "text" if message.get("text") else "image", # Simplified

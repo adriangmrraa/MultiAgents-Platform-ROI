@@ -11,7 +11,7 @@ class OrchestratorClient:
     Handles authentication via Internal Secret.
     """
     def __init__(self):
-        self.base_url = os.getenv("ORCHESTRATOR_URL", "http://orchestrator-service:8000")
+        self.base_url = os.getenv("ORCHESTRATOR_URL", "http://orchestrator_service:8000")
         self.internal_secret = os.getenv("INTERNAL_SECRET_KEY", "internal-secret")
         self.headers = {
             "Content-Type": "application/json",

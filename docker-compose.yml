@@ -112,6 +112,7 @@ services:
       - ORCHESTRATOR_URL=http://orchestrator_service:8000
       - META_VERIFY_TOKEN=${META_VERIFY_TOKEN:-nexus_verification_token}
       - META_APP_SECRET=${META_APP_SECRET}
+      - INTERNAL_SECRET_KEY=${INTERNAL_API_TOKEN}
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
       interval: 30s

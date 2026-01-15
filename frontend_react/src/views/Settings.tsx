@@ -20,15 +20,27 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
     const [copied, setCopied] = useState(false);
     const { fetchApi } = useApi();
     const [webhookConfig, setWebhookConfig] = useState<{ webhook_path: string, access_token: string, api_base?: string } | null>(null);
+    const [connections, setConnections] = useState<any>(null);
 
-    // Fetch Webhook Config (Secure)
+    // Fetch Webhook Config & Connection Status
     useEffect(() => {
-        if (activeTab === 'integrations' && !webhookConfig) {
-            fetchApi('/admin/integrations/chatwoot/config')
-                .then(data => setWebhookConfig(data))
-                .catch(err => console.error("Webhook fetch error:", err));
+        const loadData = async () => {
+            try {
+                const [webhookData, detailsData] = await Promise.all([
+                    fetchApi('/admin/integrations/chatwoot/config'),
+                    fetchApi(`/admin/tenants/${import.meta.env.VITE_DEFAULT_TENANT_ID || 1}/details`)
+                ]);
+                setWebhookConfig(webhookData);
+                setConnections(detailsData?.connections);
+            } catch (err) {
+                console.error("Settings data fetch error:", err);
+            }
+        };
+
+        if (activeTab === 'integrations' && (!webhookConfig || !connections)) {
+            loadData();
         }
-    }, [activeTab, fetchApi, webhookConfig]);
+    }, [activeTab, fetchApi, webhookConfig, connections]);
 
     // Construct Webhook URL for Chatwoot
     const getDisplayUrl = () => {
@@ -125,12 +137,14 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
                                 </div>
                                 <p className="text-xs text-slate-400 mb-6">Messenger, Instagram y WhatsApp Direct.</p>
                                 <div className="flex items-center justify-between mt-auto">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-green-400">Activo</span>
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${connections?.meta_omnichannel?.configured ? 'text-green-400' : 'text-slate-500'}`}>
+                                        {connections?.meta_omnichannel?.configured ? 'Activo' : 'Pendiente'}
+                                    </span>
                                     <button
                                         onClick={() => setActiveTab('meta')}
                                         className="text-xs font-bold text-[#1877F2] hover:underline"
                                     >
-                                        Gestionar
+                                        {connections?.meta_omnichannel?.configured ? 'Gestionar' : 'Configurar'}
                                     </button>
                                 </div>
                             </div>
