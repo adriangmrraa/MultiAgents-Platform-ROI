@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
 import { useApi } from '../hooks/useApi';
 import { YCloudSettings } from './YCloudSettings';
 import { MetaSettings } from './MetaSettings';
-import { MessageSquare, Copy, Check, Info, Globe, Smartphone, LayoutGrid } from 'lucide-react';
+import { MessageSquare, Copy, Check, Info, Globe, Smartphone, LayoutGrid, Facebook } from 'lucide-react';
 
 interface SettingsProps {
     initialTab?: 'integrations' | 'ycloud' | 'meta';
@@ -16,7 +15,6 @@ interface SettingsProps {
 }
 
 export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' }) => {
-    const { user } = useAuth();
     const { t, language, setLanguage } = useLanguage();
     const [activeTab, setActiveTab] = useState<'integrations' | 'ycloud' | 'meta'>(initialTab);
     const [copied, setCopied] = useState(false);
@@ -107,26 +105,101 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto">
                 {activeTab === 'integrations' && (
-                    <div className="animate-fade-in max-w-4xl">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="animate-fade-in max-w-5xl">
+                        <div className="mb-8">
+                            <h2 className="text-xl font-bold mb-2">Canales Conectados</h2>
+                            <p className="text-sm text-slate-400">Gestiona la conectividad de todos tus puntos de contacto.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Meta Card */}
+                            <div className="glass p-6 border-l-4 border-[#1877F2] relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                    <Facebook size={80} />
+                                </div>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-10 h-10 rounded-full bg-[#1877F2]/10 flex items-center justify-center text-[#1877F2]">
+                                        <Facebook size={20} />
+                                    </div>
+                                    <h3 className="font-bold">Meta Omnichannel</h3>
+                                </div>
+                                <p className="text-xs text-slate-400 mb-6">Messenger, Instagram y WhatsApp Direct.</p>
+                                <div className="flex items-center justify-between mt-auto">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-green-400">Activo</span>
+                                    <button
+                                        onClick={() => setActiveTab('meta')}
+                                        className="text-xs font-bold text-[#1877F2] hover:underline"
+                                    >
+                                        Gestionar
+                                    </button>
+                                </div>
+                            </div>
 
                             {/* Chatwoot Card */}
-                            <div className="glass p-6 border-l-4 border-blue-500 relative overflow-hidden group">
-                                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                                    <MessageSquare size={100} />
+                            <div className="glass p-6 border-l-4 border-cyan-500 relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                    <MessageSquare size={80} />
                                 </div>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-10 h-10 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400">
+                                        <MessageSquare size={20} />
+                                    </div>
+                                    <h3 className="font-bold">Chatwoot HQ</h3>
+                                </div>
+                                <p className="text-xs text-slate-400 mb-6">Sincronización vía Webhook Seguro.</p>
+                                <div className="flex items-center justify-between mt-auto">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400">Conectado</span>
+                                    <button
+                                        className="text-xs font-bold text-cyan-400 hover:underline"
+                                        onClick={() => {
+                                            // Manual scroll or find a way to focus the webhook section
+                                            const el = document.getElementById('chatwoot-config');
+                                            el?.scrollIntoView({ behavior: 'smooth' });
+                                        }}
+                                    >
+                                        Configurar
+                                    </button>
+                                </div>
+                            </div>
 
-                                <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
-                                    <MessageSquare className="text-blue-400" />
-                                    {t('settings.webhookTitle')}
+                            {/* YCloud Card */}
+                            <div className="glass p-6 border-l-4 border-emerald-500 relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                    <Smartphone size={80} />
+                                </div>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                                        <Smartphone size={20} />
+                                    </div>
+                                    <h3 className="font-bold">YCloud (WhatsApp)</h3>
+                                </div>
+                                <p className="text-xs text-slate-400 mb-6">Relé oficial de alta capacidad.</p>
+                                <div className="flex items-center justify-between mt-auto">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Pendiente</span>
+                                    <button
+                                        onClick={() => setActiveTab('ycloud')}
+                                        className="text-xs font-bold text-emerald-400 hover:underline"
+                                    >
+                                        Configurar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Detailed Chatwoot Section Below Cards */}
+                        <div id="chatwoot-config" className="mt-12 max-w-2xl">
+                            <div className="glass p-6 border border-white/5">
+                                <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
+                                    <MessageSquare className="text-cyan-400" size={20} />
+                                    Configuración Chatwoot
                                 </h3>
                                 <p className="text-sm text-slate-400 mb-6">
-                                    {t('settings.webhookDesc')}
+                                    Para recibir mensajes de Chatwoot en esta plataforma, configura la siguiente URL de Webhook en tu panel de Chatwoot.
                                 </p>
 
                                 <div className="bg-black/50 rounded-lg p-4 border border-white/10 mb-4">
                                     <label className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2 block">
-                                        {t('settings.webhookUrlLabel')}
+                                        URL del Webhook
                                     </label>
                                     <div className="flex items-center gap-2">
                                         <code className="text-xs text-green-400 font-mono break-all flex-1">
@@ -137,27 +210,12 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
 
                                 <button
                                     onClick={handleCopy}
-                                    className={`w-full py-2 rounded font-bold text-sm flex items-center justify-center gap-2 transition-all ${copied ? 'bg-green-500/20 text-green-400' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                                    className={`w-full py-2 rounded font-bold text-sm flex items-center justify-center gap-2 transition-all ${copied ? 'bg-green-500/20 text-green-400' : 'bg-cyan-600 hover:bg-cyan-500 text-white'}`}
                                 >
                                     {copied ? <Check size={18} /> : <Copy size={18} />}
-                                    {copied ? t('settings.urlCopied') : t('settings.copyUrl')}
+                                    {copied ? 'Copiado' : 'Copiar URL'}
                                 </button>
-
-                                <div className="mt-4 flex items-start gap-2 text-[10px] text-slate-500 bg-blue-500/5 p-2 rounded">
-                                    <Info size={14} className="shrink-0 mt-[1px]" />
-                                    <p>{t('settings.webhookInstructions')}</p>
-                                </div>
                             </div>
-
-                            {/* Placeholder for other integrations */}
-                            <div className="glass p-6 border border-white/5 flex flex-col items-center justify-center text-center opacity-50">
-                                <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4">
-                                    <Globe size={32} className="text-slate-600" />
-                                </div>
-                                <h3 className="text-lg font-bold mb-2">Más Integraciones</h3>
-                                <p className="text-sm text-slate-500">Próximamente: Slack, Discord, Email Relay.</p>
-                            </div>
-
                         </div>
                     </div>
                 )}

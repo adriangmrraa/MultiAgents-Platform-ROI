@@ -144,6 +144,27 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     except Exception as e:
         logger.error("webhook_error", error=str(e))
         raise HTTPException(500, "Processing failed")
+@app.post("/subscribe")
+async def subscribe_asset(data: dict):
+    """
+    Subscribes a Facebook Page to webhooks.
+    """
+    asset_id = data.get("asset_id")
+    access_token = data.get("access_token")
+    asset_type = data.get("asset_type")
+
+    if not all([asset_id, access_token, asset_type]):
+        raise HTTPException(400, "Missing asset_id, access_token, or asset_type")
+
+    if asset_type == "facebook_page":
+        async with httpx.AsyncClient() as client:
+            await auth_service.subscribe_page(client, asset_id, access_token)
+            return {"status": "ok", "message": f"Subscribed to {asset_id}"}
+    
+    # Instagram and WhatsApp subscriptions are usually handled at the App Level 
+    # or don't require this specific 'page' subscription call.
+    return {"status": "ignored", "message": f"Subscription not required for {asset_type}"}
+
 @app.post("/messages/send")
 async def send_message_proxy(data: dict):
     """

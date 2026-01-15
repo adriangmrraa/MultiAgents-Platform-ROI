@@ -85,7 +85,7 @@ export const Sidebar: React.FC = () => {
             {/* Mobile Adaptive Navigation */}
             <div className="lg:hidden" onTouchStart={handleInteraction}>
                 {!isMobileVisible && (
-                    <button className="mobile-toggle-btn shadow-indigo-500/20" onClick={() => setIsMobileVisible(true)}>
+                    <button className="mobile-toggle-btn shadow-red-500/20" onClick={() => setIsMobileVisible(true)}>
                         <Menu size={24} />
                     </button>
                 )}
@@ -97,10 +97,10 @@ export const Sidebar: React.FC = () => {
                         </button>
                     )}
                     <NavItem to="/" icon={<LayoutDashboard size={20} />} label={t('sidebar.dashboard')} />
-                    <NavItem to="/chats" icon={<MessageCircle size={20} />} label={t('sidebar.chats')} />
-                    <NavItem to="/agents" icon={<Zap size={20} />} label={t('sidebar.agents')} />
-                    <NavItem to="/analytics" icon={<BarChart2 size={20} />} label={t('sidebar.analytics')} />
-                    <NavItem to="/logs" icon={<Terminal size={20} />} label="Logs" />
+                    <NavItem to="/chats" icon={<MessageCircle size={20} />} label={t('sidebar.commsChannel')} />
+                    <NavItem to="/agents" icon={<Zap size={20} />} label={t('sidebar.agentSquad')} />
+                    <NavItem to="/analytics" icon={<BarChart2 size={20} />} label={t('sidebar.telemetry')} />
+                    <NavItem to="/logs" icon={<Terminal size={20} />} label={t('sidebar.blackBox')} />
                     <NavItem to="/settings" icon={<Settings size={20} />} label={t('sidebar.settings')} />
                     <NavItem to="/stores" icon={<Store size={20} />} label={t('sidebar.hangar')} />
                 </div>

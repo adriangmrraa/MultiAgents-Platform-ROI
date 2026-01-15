@@ -33,7 +33,9 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (result && result[key]) {
                 result = result[key];
             } else {
-                return path; // Fallback to key entry
+                // Fallback: Return capitalized last part of the key instead of the full path
+                const fallback = keys[keys.length - 1];
+                return fallback.charAt(0).toUpperCase() + fallback.slice(1).replace(/([A-Z])/g, ' $1').trim();
             }
         }
 

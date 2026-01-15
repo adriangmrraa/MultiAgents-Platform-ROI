@@ -49,29 +49,41 @@ export const Chats: React.FC = () => {
     // ... (Effects unchanged until helper)
 
     // Icon & Style Helper
-    const getChannelStyle = (channel: string) => {
-        const c = channel?.toLowerCase() || '';
+    const getChannelStyle = (chat: Chat | any) => {
+        const c = chat.channel?.toLowerCase() || '';
+        const provider = chat.provider?.toLowerCase() || 'ycloud';
+
+        if (provider === 'chatwoot') {
+            return {
+                color: 'text-cyan-400',
+                bg: 'bg-cyan-500/10',
+                border: 'border-cyan-500/30',
+                shadow: 'shadow-cyan-500/20',
+                icon: <MessageSquare size={18} />
+            };
+        }
+
         if (c.includes('instagram')) return {
-            color: 'text-fuchsia-500',
-            bg: 'bg-fuchsia-500/10',
-            border: 'border-fuchsia-500/30',
-            shadow: 'shadow-fuchsia-500/20',
+            color: 'text-[#E1306C]',
+            bg: 'bg-[#E1306C]/10',
+            border: 'border-[#E1306C]/30',
+            shadow: 'shadow-[#E1306C]/20',
             icon: <Instagram size={18} />
         };
         if (c.includes('facebook')) return {
-            color: 'text-blue-500',
-            bg: 'bg-blue-500/10',
-            border: 'border-blue-500/30',
-            shadow: 'shadow-blue-500/20',
+            color: 'text-[#1877F2]',
+            bg: 'bg-[#1877F2]/10',
+            border: 'border-[#1877F2]/30',
+            shadow: 'shadow-[#1877F2]/20',
             icon: <Facebook size={18} />
         };
-        // Default WhatsApp
+
+        // Default WhatsApp / YCloud
         return {
-            color: 'text-green-500',
-            bg: 'bg-green-500/10',
-            border: 'border-green-500/30',
-            shadow: 'shadow-green-500/20',
-            // Use Phone or MessageCircle
+            color: 'text-[#25D366]',
+            bg: 'bg-[#25D366]/10',
+            border: 'border-[#25D366]/30',
+            shadow: 'shadow-[#25D366]/20',
             icon: <MessageCircle size={18} />
         };
     };
@@ -277,11 +289,11 @@ export const Chats: React.FC = () => {
             await fetchApi('/admin/whatsapp/send', {
                 method: 'POST',
                 body: {
-                    phone: chat?.phone, // Keep phone for legacy send endpoint if needed, or update send endpoint to use conv_id later
+                    conversation_id: selectedChatId,
+                    phone: chat?.phone,
                     message: newMessage,
                     tenant_id: chat?.tenant_id,
                     channel_source: chat?.channel || 'whatsapp'
-                    // Removed legacy IDs
                 }
             });
 
@@ -347,64 +359,61 @@ export const Chats: React.FC = () => {
                         </div>
                     </div>
                     <div className="overflow-y-auto flex-1" onScroll={handleScroll}>
-                        {chats.map(chat => (
-                            <div
-                                key={chat.id}
-                                onClick={() => setSelectedChatId(chat.id)}
-                                className={`flex items-center gap-3 p-4 border-b border-white/5 cursor-pointer transition-all hover:bg-white/5 group relative overflow-hidden ${selectedChatId === chat.id ? 'bg-white/10' : ''}`}
-                            >
-                                {/* Active Indicator / Channel Color Border */}
-                                <div className={`absolute left-0 top-0 bottom-0 w-1 ${chat.channel?.includes('instagram') ? 'bg-[#E1306C] shadow-[0_0_10px_#E1306C]' :
-                                    chat.channel?.includes('facebook') ? 'bg-[#1877F2] shadow-[0_0_10px_#1877F2]' :
-                                        'bg-[#25D366] shadow-[0_0_10px_#25D366]'
-                                    } transition-all duration-300`}></div>
+                        {chats.map(chat => {
+                            const style = getChannelStyle(chat);
+                            const identifier = chat.phone || chat.name;
 
-                                {/* Avatar / Icon */}
-                                <div className="shrink-0 relative">
-                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 overflow-hidden bg-black/40 ${chat.channel?.includes('instagram') ? 'border-[#E1306C]/30' :
-                                        chat.channel?.includes('facebook') ? 'border-[#1877F2]/30' :
-                                            'border-[#25D366]/30'
-                                        }`}>
-                                        {chat.avatar_url ? (
-                                            <img src={chat.avatar_url} alt="" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
-                                        ) : (
-                                            <span className="text-white/20"><User size={24} /></span>
-                                        )}
+                            return (
+                                <div
+                                    key={chat.id}
+                                    onClick={() => setSelectedChatId(chat.id)}
+                                    className={`flex items-center gap-3 p-4 border-b border-white/5 cursor-pointer transition-all hover:bg-white/5 group relative overflow-hidden ${selectedChatId === chat.id ? 'bg-white/10' : ''}`}
+                                >
+                                    {/* Active Indicator / Channel Color Border */}
+                                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${style.bg.replace('bg-', 'bg-').split(' ')[0]} ${style.color} transition-all duration-300 shadow-[0_0_10px_currentColor]`}></div>
+
+                                    {/* Avatar / Icon */}
+                                    <div className="shrink-0 relative">
+                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 overflow-hidden bg-black/40 ${style.border}`}>
+                                            {chat.avatar_url ? (
+                                                <img src={chat.avatar_url} alt="" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                                            ) : (
+                                                <span className="text-white/20"><User size={24} /></span>
+                                            )}
+                                        </div>
+                                        {/* Omnichannel Badge */}
+                                        <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center shadow-md bg-[#121212] border border-black ${style.color}`}>
+                                            {style.icon}
+                                        </div>
                                     </div>
-                                    {/* Mini Badge Icon */}
-                                    <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center shadow-md bg-[#121212] border border-black ${chat.channel?.includes('instagram') ? 'text-[#E1306C]' :
-                                        chat.channel?.includes('facebook') ? 'text-[#1877F2]' :
-                                            'text-[#25D366]'
-                                        }`}>
-                                        {chat.channel?.includes('instagram') ? <Instagram size={12} /> :
-                                            chat.channel?.includes('facebook') ? <Facebook size={12} /> :
-                                                <MessageCircle size={12} />}
+
+                                    {/* Texts */}
+                                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                        <div className="flex justify-between items-baseline mb-0.5">
+                                            <h4 className={`font-bold text-[15px] truncate leading-tight ${selectedChatId === chat.id ? 'text-white' : 'text-gray-200'}`}>
+                                                {chat.name || identifier}
+                                            </h4>
+                                            <span className="text-[10px] text-gray-500 font-mono shrink-0 ml-2">
+                                                {chat.timestamp ? new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                            {/* Subtext: Handle or Last Message */}
+                                            <p className={`text-xs truncate ${selectedChatId === chat.id ? 'text-gray-300' : 'text-gray-500'}`}>
+                                                {chat.provider === 'meta_direct' && chat.meta?.username && (
+                                                    <span className="font-bold text-blue-400 mr-1">@{chat.meta.username} •</span>
+                                                )}
+                                                {chat.provider === 'chatwoot' && chat.meta?.inbox_name && (
+                                                    <span className="font-bold text-cyan-400 mr-1">{chat.meta.inbox_name} •</span>
+                                                )}
+                                                {chat.last_message || 'Imagen / Audio'}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
-
-                                {/* Texts */}
-                                <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                    <div className="flex justify-between items-baseline mb-0.5">
-                                        <h4 className={`font-bold text-[15px] truncate leading-tight ${selectedChatId === chat.id ? 'text-white' : 'text-gray-200'}`}>
-                                            {chat.name || chat.phone || "Usuario Desconocido"}
-                                        </h4>
-                                        <span className="text-[10px] text-gray-500 font-mono shrink-0 ml-2">
-                                            {new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                    </div>
-
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                        {/* Subtext: Handle or Last Message */}
-                                        <p className={`text-xs truncate ${selectedChatId === chat.id ? 'text-gray-300' : 'text-gray-500'}`}>
-                                            {(chat.phone && chat.phone !== chat.name) ? (
-                                                <span className="font-mono opacity-80 mr-1">{chat.phone} •</span>
-                                            ) : null}
-                                            {chat.last_message || 'Imagen / Audio'}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                         {chats.length === 0 && !loading && (
                             <div className="p-8 text-center text-secondary opacity-50">
                                 No hay conversaciones recientes.
@@ -478,8 +487,8 @@ export const Chats: React.FC = () => {
                                     return (
                                         <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'} animate-scale-in`}>
                                             <div className={`max-w-[85%] rounded-2xl p-4 shadow-lg backdrop-blur-sm ${msg.role === 'user'
-                                                    ? 'bg-black/40 border border-white/10 rounded-tl-sm text-gray-100'
-                                                    : 'bg-white/10 border border-white/5 rounded-tr-sm text-white'
+                                                ? 'bg-black/40 border border-white/10 rounded-tl-sm text-gray-100'
+                                                : 'bg-white/10 border border-white/5 rounded-tr-sm text-white'
                                                 }`}>
 
                                                 {/* NEW: Attachments Array Support */}

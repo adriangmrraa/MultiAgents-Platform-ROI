@@ -75,8 +75,8 @@ class MetaAuthService:
                             "access_token": page["access_token"]
                         })
                         
-                        # Subscribe App to Page Webhooks
-                        await self._subscribe_page(client, page["id"], page["access_token"])
+                        # Note: We NO LONGER auto-subscribe here. 
+                        # Orchestrator will call subscribe_page for selected assets.
 
                         # IG Asset
                         if "instagram_business_account" in page:
@@ -114,7 +114,7 @@ class MetaAuthService:
             
             return assets
 
-    async def _subscribe_page(self, client: httpx.AsyncClient, page_id: str, page_token: str):
+    async def subscribe_page(self, client: httpx.AsyncClient, page_id: str, page_token: str):
         """
         Subscribes the App to the Page's `messages` and `messaging_postbacks` events.
         """

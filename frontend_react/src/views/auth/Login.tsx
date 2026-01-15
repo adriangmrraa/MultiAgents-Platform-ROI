@@ -57,29 +57,29 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center bg-[#09090b] relative overflow-hidden">
+        <div className="min-h-screen w-full flex items-center justify-center bg-[#1B1D20] relative overflow-hidden">
             {/* Background Ambience */}
-            <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-[120px] pointer-events-none" />
-            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-[120px] pointer-events-none" />
+            <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-600/10 rounded-full blur-[120px] pointer-events-none" />
+            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-zinc-800/20 rounded-full blur-[120px] pointer-events-none" />
 
             <div className="z-10 w-full max-w-md p-8 relative">
                 {/* Glass Card */}
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[24px] p-8 shadow-2xl">
                     <div className="mb-8 text-center">
-                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+                        <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 tracking-tight">
                             {t('auth.loginTitle')}
                         </h1>
                         <p className="text-gray-400 text-sm mt-2">{t('auth.protocolAccess')}</p>
                     </div>
 
                     {error && (
-                        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-sm text-center">
+                        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm text-center">
                             {error}
                             {showResend && (
                                 <button
                                     onClick={handleResend}
                                     disabled={resendLoading}
-                                    className="block mx-auto mt-2 text-xs text-purple-400 hover:text-purple-300 underline"
+                                    className="block mx-auto mt-2 text-xs text-red-400 hover:text-red-300 underline"
                                 >
                                     {resendLoading ? t('profile.sending') : t('auth.resendVerification')}
                                 </button>
@@ -87,14 +87,14 @@ export default function Login() {
                         </div>
                     )}
                     {resendSuccess && (
-                        <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded text-emerald-400 text-sm text-center">
+                        <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-sm text-center">
                             {t('auth.resendSuccess')}
                         </div>
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div>
-                            <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
                                 {t('auth.identity')}
                             </label>
                             <input
@@ -102,13 +102,13 @@ export default function Login() {
                                 required
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 transition-colors"
-                                placeholder="commander@nexus.ai"
+                                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-red-500 transition-colors"
+                                placeholder="commander@future.ai"
                             />
                         </div>
 
                         <div>
-                            <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
                                 {t('auth.passcode')}
                             </label>
                             <input
@@ -116,7 +116,7 @@ export default function Login() {
                                 required
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 transition-colors"
+                                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-red-500 transition-colors"
                                 placeholder="••••••••"
                             />
                         </div>
@@ -124,7 +124,7 @@ export default function Login() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-medium py-3 rounded-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-red-900/20"
                         >
                             {loading ? (
                                 <span className="flex items-center justify-center">
@@ -139,15 +139,14 @@ export default function Login() {
                     </form>
 
                     <div className="mt-6 text-center text-sm text-gray-500">
-                        {t('auth.noAccess')} <Link to="/register" className="text-purple-400 hover:text-purple-300 transition-colors">{t('auth.requestClearance')}</Link>
+                        {t('auth.noAccess')} <Link to="/register" className="text-red-400 hover:text-red-300 transition-colors font-medium">{t('auth.requestClearance')}</Link>
                     </div>
                 </div>
             </div>
             {/* Legal Footer */}
-            <div className="absolute bottom-4 left-0 w-full text-center">
-                <div className="flex justify-center gap-4 text-[10px] text-gray-600">
+            <div className="absolute bottom-6 left-0 w-full text-center">
+                <div className="flex justify-center gap-6 text-[11px] text-gray-600 font-medium">
                     <Link to="/privacy-policy" className="hover:text-gray-400 transition-colors">Privacy Policy</Link>
-                    <span>•</span>
                     <Link to="/terms-of-service" className="hover:text-gray-400 transition-colors">Terms of Service</Link>
                 </div>
             </div>

@@ -533,14 +533,24 @@ async def update_channels_selection(data: ChannelSelectionRequest, current_user:
             content['active'] = is_selected
             
             if is_selected:
-                if row['asset_type'] == 'facebook_page': active_channels.add('facebook')
+                if row['asset_type'] == 'facebook_page': 
+                    active_channels.add('facebook')
+                    # Webhook Subscription Strategy
+                    try:
+                        meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
+                        async with httpx.AsyncClient(timeout=10.0) as client:
+                            await client.post(f"{meta_service_url}/subscribe", json={
+                                "asset_id": asset_id,
+                                "access_token": content.get("access_token"),
+                                "asset_type": "facebook_page"
+                            })
+                            logger.info(f"webhook_subscription_triggered: {asset_id}")
+                    except Exception as sub_err:
+                        logger.warning(f"webhook_subscription_failed: {asset_id} - {sub_err}")
+
                 if row['asset_type'] == 'instagram_account': active_channels.add('instagram')
                 if row['asset_type'] == 'whatsapp_waba': 
                     active_channels.add('whatsapp')
-                    # Update Tenant Bot Phone? Maybe not WABA, but Phone ID.
-                    # Assuming WABA selection implies "Use this WABA". 
-                    # Real number selection should be granular. 
-                    # For MVP, we assume WABA enable = Enable WhatsApp.
             
             await db.pool.execute("UPDATE business_assets SET content = $1 WHERE id = $2", json.dumps(content), row['id'])
 
@@ -1459,7 +1469,7 @@ async def list_chats(
     query = f"""
         SELECT 
             id, tenant_id, channel, channel_source, external_user_id, 
-            display_name, avatar_url, status, meta,
+            display_name, avatar_url, status, meta, provider,
             human_override_until, last_message_at, last_message_preview
         FROM chat_conversations
         {where_sql}
@@ -1505,6 +1515,7 @@ async def list_chats(
                 "timestamp": r['last_message_at'].isoformat() if r['last_message_at'] else None,
                 "last_message_preview": r['last_message_preview'],
                 "last_message": r['last_message_preview'],
+                "provider": r['provider'],
                 "meta": meta_json
             })
             
@@ -2070,31 +2081,39 @@ async def admin_send_message(request: Request):
     if not phone or not text:
         raise HTTPException(400, "Phone and message required")
 
-    # If tenant_id missing, try to resolve from phone
+    conv_id = data.get("conversation_id")
+    
+    # 1. Resolve Tenant
     if not tenant_id:
-        # Resolve tenant from conversation
-        row = await db.pool.fetchrow("SELECT tenant_id FROM chat_conversations WHERE external_user_id = $1 LIMIT 1", phone)
-        if row:
-            tenant_id = row['tenant_id']
-        else:
-            # Default to 1 or fail
+        if conv_id:
+            tenant_id = await db.pool.fetchval("SELECT tenant_id FROM chat_conversations WHERE id = $1", conv_id)
+        
+        if not tenant_id and phone:
+            tenant_id = await db.pool.fetchval("SELECT tenant_id FROM chat_conversations WHERE external_user_id = $1 LIMIT 1", phone)
+            
+        if not tenant_id:
             tenant_id = 1 
     
     # Generate correlation ID
     correlation_id = str(uuid.uuid4())
     
-    # 1. Resolve/Create Conversation
-    conv_row = await db.pool.fetchrow("""
-        SELECT id, meta, channel_source FROM chat_conversations 
-        WHERE channel = $1 AND external_user_id = $2
-    """, channel, phone)
+    # 2. Resolve/Create Conversation
+    conv_row = None
+    if conv_id:
+        conv_row = await db.pool.fetchrow("SELECT id, meta, channel_source FROM chat_conversations WHERE id = $1", conv_id)
+    
+    if not conv_row and phone:
+        conv_row = await db.pool.fetchrow("""
+            SELECT id, meta, channel_source FROM chat_conversations 
+            WHERE channel = $1 AND external_user_id = $2
+        """, channel, phone)
     
     if not conv_row:
-         conv_id = await db.pool.fetchval("""
+         conv_id = str(uuid.uuid4())
+         await db.pool.execute("""
             INSERT INTO chat_conversations (id, tenant_id, channel, external_user_id, status, channel_source)
             VALUES ($1, $2, $3, $4, 'human_override', $5)
-            RETURNING id
-         """, str(uuid.uuid4()), tenant_id, channel, phone, channel) # Default channel_source = channel
+         """, conv_id, tenant_id, channel, phone, channel)
     else:
          conv_id = conv_row['id']
          # If channel_source is missing in DB but present in payload, update it? 
@@ -2109,30 +2128,59 @@ async def admin_send_message(request: Request):
         str(uuid.uuid4()), tenant_id, conv_id, text, correlation_id, phone, channel
     )
 
-    # 3. Routing Logic: Chatwoot vs YCloud/WhatsApp
-    # Check payload first, then DB meta
-    cw_conversation_id = data.get("external_chatwoot_id")
-    cw_account_id = data.get("external_account_id")
+    # 3. Routing Logic: Provider-Aware (Nexus v5.1 Alignment)
+    # Fetch full conversation record for provider details
+    conv_data = await db.pool.fetchrow("SELECT provider, external_user_id, meta FROM chat_conversations WHERE id = $1", conv_id)
     
-    if not cw_conversation_id and conv_row and conv_row.get("meta"):
-        try:
-             meta_json = json.loads(conv_row["meta"])
-             cw_conversation_id = meta_json.get("chatwoot_conversation_id")
-             cw_account_id = meta_json.get("chatwoot_account_id")
-        except: pass
-
+    provider = conv_data['provider'] if conv_data else 'chatwoot' if channel in ['instagram', 'facebook'] else 'ycloud'
+    
     # Decision Matrix
-    use_chatwoot = False
-    
-    if channel in ['instagram', 'facebook']:
-        use_chatwoot = True
-    elif channel == 'whatsapp':
-        # If we have explicit Chatwoot IDs, assume it's a Chatwoot-managed number
-        if cw_conversation_id:
-            use_chatwoot = True
-    
-    if use_chatwoot:
+    if provider == 'meta_direct':
+        # --- META DIRECT SEND ---
+        meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
+        
+        # Resolve Page Token
+        token_row = await db.pool.fetchrow("""
+            SELECT value FROM credentials 
+            WHERE tenant_id = $1 AND name = 'meta_page_token'
+        """, tenant_id)
+        
+        access_token = token_row['value'] if token_row else None
+        
+        if not access_token:
+            logger.error("meta_send_failed_no_token", tenant_id=tenant_id)
+            raise HTTPException(500, "Meta Page Token not configured for this tenant")
+
+        async with httpx.AsyncClient() as client:
+            try:
+                res = await client.post(
+                    f"{meta_service_url}/messages/send",
+                    json={
+                        "recipient_id": phone,
+                        "text": text,
+                        "access_token": access_token
+                    },
+                    timeout=10.0
+                )
+                if res.status_code not in [200, 201]:
+                    logger.error(f"Meta Service Error {res.status_code}: {res.text}")
+                    raise HTTPException(res.status_code, f"Meta Service Error: {res.text}")
+            except Exception as e:
+                logger.error(f"Meta Send Exception: {e}")
+                raise HTTPException(500, f"Failed to send via Meta Service: {str(e)}")
+
+    elif provider == 'chatwoot':
         # --- CHATWOOT SEND ---
+        cw_conversation_id = data.get("external_chatwoot_id")
+        cw_account_id = data.get("external_account_id")
+        
+        if not cw_conversation_id and conv_data and conv_data.get("meta"):
+            try:
+                meta_json = json.loads(conv_data["meta"])
+                cw_conversation_id = meta_json.get("chatwoot_conversation_id")
+                cw_account_id = meta_json.get("chatwoot_account_id")
+            except: pass
+
         if not cw_conversation_id:
              logger.error(f"Cannot send to Chatwoot: Missing Conversation ID for {phone}")
              raise HTTPException(400, "Missing Chatwoot Conversation ID")
@@ -2146,13 +2194,10 @@ async def admin_send_message(request: Request):
                  from utils import decrypt_password
                  cw_token = decrypt_password(token_encrypted)
              
-        # Default Account ID if missing (Omega Pattern: Env -> DB -> Default)
         if not cw_account_id:
             cw_account_id = os.getenv("CHATWOOT_ACCOUNT_ID")
             if not cw_account_id:
                  cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_ACCOUNT_ID' LIMIT 1")
-            
-            # Final fallback
             if not cw_account_id: cw_account_id = "1"
              
         if not cw_token:
@@ -2170,10 +2215,8 @@ async def admin_send_message(request: Request):
                 )
                 if res.status_code not in [200, 201]:
                     logger.error(f"Chatwoot API Error {res.status_code}: {res.text}")
-                    # Don't fail the UI request, but log error
             except Exception as e:
                 logger.error(f"Chatwoot Send Exception: {e}")
-
     else:
         # --- YCLOUD / WHATSAPP SERVICE SEND ---
         wa_url = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:8002")

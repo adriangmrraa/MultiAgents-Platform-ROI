@@ -2,12 +2,17 @@ import React, { useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { MessageCircle, AlertTriangle, Facebook, Check, Loader2 } from 'lucide-react';
 import { useFacebookSdk } from '../hooks/useFacebookSdk';
+import MetaOnboardingWizard from './settings/MetaOnboardingWizard';
 
 export const MetaSettings: React.FC = () => {
     const { fetchApi } = useApi();
     const [status, setStatus] = useState<'idle' | 'loading' | 'connected' | 'error'>('idle');
     const [errorMsg, setErrorMsg] = useState('');
     const [connectedAssets, setConnectedAssets] = useState<Record<string, boolean>>({});
+
+    // Wizard State
+    const [showWizard, setShowWizard] = useState(false);
+    const [wizardAssets, setWizardAssets] = useState<any>(null);
 
     // Hook manages SDK loading lifecycle
     const isSdkReady = useFacebookSdk();
@@ -72,11 +77,10 @@ export const MetaSettings: React.FC = () => {
             console.log("Meta Connect Result:", res);
 
             if (res.status === 'success') {
-                setStatus('connected');
-                setConnectedAssets(res.connected); // Storing the 'connected' flags map
-
-                // Optional: Store detailed assets if needed later in another state
-                // setAssetsDetails(res.assets);
+                // Instead of jumping to 'connected', show Wizard
+                setWizardAssets(res.assets);
+                setConnectedAssets(res.connected); // Keep simplified map as fallback
+                setShowWizard(true);
             }
         } catch (e: any) {
             console.error("Backend Connect Error:", e);
@@ -101,6 +105,20 @@ export const MetaSettings: React.FC = () => {
                     <p className="text-sm text-secondary mb-8 max-w-sm">
                         Vincula tu cuenta de Facebook para habilitar la mensajería automática en Messenger, Instagram y WhatsApp.
                     </p>
+
+                    {showWizard && wizardAssets && (
+                        <MetaOnboardingWizard
+                            assets={wizardAssets}
+                            onComplete={() => {
+                                setShowWizard(false);
+                                setStatus('connected');
+                            }}
+                            onCancel={() => {
+                                setShowWizard(false);
+                                setStatus('idle');
+                            }}
+                        />
+                    )}
 
                     {status === 'loading' ? (
                         <button disabled className="btn-primary bg-[#1877F2] border-[#1877F2] opacity-80 flex items-center gap-2">
