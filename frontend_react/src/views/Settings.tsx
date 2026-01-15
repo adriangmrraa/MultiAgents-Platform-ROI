@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useApi } from '../hooks/useApi';
 import { YCloudSettings } from './YCloudSettings';
 import { MetaSettings } from './MetaSettings';
 import { MessageSquare, Copy, Check, Info, Globe, Smartphone, LayoutGrid } from 'lucide-react';
@@ -18,6 +19,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
     const { user } = useAuth();
     const { t, language, setLanguage } = useLanguage();
     const [activeTab, setActiveTab] = useState<'integrations' | 'ycloud' | 'meta'>(initialTab);
+    const [copied, setCopied] = useState(false);
     const { fetchApi } = useApi();
     const [webhookConfig, setWebhookConfig] = useState<{ webhook_path: string, access_token: string, api_base?: string } | null>(null);
 
