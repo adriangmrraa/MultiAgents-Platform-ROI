@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     CORS_ALLOWED_ORIGINS: Any = [
         "https://multiagents-frontend.yn8wow.easypanel.host",
         "https://multiagents-backend.yn8wow.easypanel.host",
+        "https://multiagents-orchestrator.yn8wow.easypanel.host",
         "http://localhost:3000",
         "http://localhost:8000"
     ]
