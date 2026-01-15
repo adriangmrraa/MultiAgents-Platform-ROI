@@ -371,7 +371,7 @@ export const Chats: React.FC = () => {
                                             </span>
                                         </div>
 
-                                        {chat.name && chat.name !== chat.phone && (
+                                        {chat.phone && chat.name && chat.name !== chat.phone && (
                                             <p className="text-xs text-secondary opacity-70 truncate mb-1">
                                                 {chat.name}
                                             </p>

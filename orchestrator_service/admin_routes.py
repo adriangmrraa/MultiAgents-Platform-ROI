@@ -3648,6 +3648,21 @@ async def receive_chatwoot_webhook(
     
     if conv_row:
         conversation_id = conv_row['id']
+        # Update existing conversation to ensure latest channel/metadata
+        await db.pool.execute("""
+            UPDATE chat_conversations 
+            SET channel = $1, 
+                external_user_id = $2, 
+                provider = 'chatwoot',
+                meta =  meta || $3::jsonb,
+                updated_at = NOW()
+            WHERE id = $4
+        """, nexus_channel, identifier, json.dumps({
+            "chatwoot_conversation_id": chatwoot_conv_id, 
+            "chatwoot_contact_id": chatwoot_contact_id,
+            "sender_name": contact_map.get("name"),
+            "sender_avatar": contact_map.get("thumbnail") or contact_map.get("avatar")
+        }), conversation_id)
     else:
         # Create new conversation (Synced from Chatwoot)
         conversation_id = str(uuid.uuid4())
