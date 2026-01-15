@@ -3,8 +3,10 @@ import { useApi } from '../hooks/useApi';
 import { MessageCircle, AlertTriangle, Facebook, Check, Loader2 } from 'lucide-react';
 import { useFacebookSdk } from '../hooks/useFacebookSdk';
 import MetaOnboardingWizard from './settings/MetaOnboardingWizard';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export const MetaSettings: React.FC = () => {
+    const { t } = useLanguage();
     const { fetchApi } = useApi();
     const [status, setStatus] = useState<'idle' | 'loading' | 'connected' | 'error'>('idle');
     const [errorMsg, setErrorMsg] = useState('');
@@ -91,7 +93,7 @@ export const MetaSettings: React.FC = () => {
 
     return (
         <div className="view active animate-fade-in">
-            <h1 className="view-title">Meta Uplink Protocol</h1>
+            <h1 className="view-title">{t('metaSettings.title')}</h1>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
@@ -101,9 +103,9 @@ export const MetaSettings: React.FC = () => {
                         <Facebook size={32} />
                     </div>
 
-                    <h2 className="text-xl font-bold mb-2">Conectar con Meta</h2>
+                    <h2 className="text-xl font-bold mb-2">{t('metaSettings.connectBtn')}</h2>
                     <p className="text-sm text-secondary mb-8 max-w-sm">
-                        Vincula tu cuenta de Facebook para habilitar la mensajería automática en Messenger, Instagram y WhatsApp.
+                        {t('metaSettings.authDesc')}
                     </p>
 
                     {showWizard && wizardAssets && (
@@ -122,12 +124,12 @@ export const MetaSettings: React.FC = () => {
 
                     {status === 'loading' ? (
                         <button disabled className="btn-primary bg-[#1877F2] border-[#1877F2] opacity-80 flex items-center gap-2">
-                            <Loader2 size={18} className="animate-spin" /> Sincronizando Activos...
+                            <Loader2 size={18} className="animate-spin" /> {t('metaSettings.syncingAssets')}
                         </button>
                     ) : status === 'connected' ? (
                         <div className="flex flex-col items-center animate-fade-in w-full">
                             <div className="bg-green-500/10 text-green-400 px-4 py-2 rounded-lg flex items-center gap-2 mb-6">
-                                <Check size={18} /> Conexión Exitosa
+                                <Check size={18} /> {t('metaSettings.successConnection')}
                             </div>
 
                             {/* Discovery Result Grid */}
@@ -168,11 +170,11 @@ export const MetaSettings: React.FC = () => {
                     ) : (
                         <button
                             onClick={handleLogin}
-                            disabled={!isSdkReady || status === 'loading'}
-                            className={`btn-primary bg-[#1877F2] hover:bg-[#166fe5] border-[#1877F2] flex items-center gap-2 px-8 ${(!isSdkReady || status === 'loading') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            disabled={!isSdkReady}
+                            className={`btn-primary w-full bg-[#1877F2] hover:bg-[#166fe5] border-[#1877F2] flex items-center justify-center gap-2 py-3 px-8 ${!isSdkReady ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             {!isSdkReady ? <Loader2 size={18} className="animate-spin" /> : <Facebook size={18} />}
-                            {!isSdkReady ? 'Cargando Facebook...' : 'Conectar con Meta'}
+                            {!isSdkReady ? t('metaSettings.loadingFb') : t('metaSettings.connectBtn')}
                         </button>
                     )}
 
@@ -187,31 +189,30 @@ export const MetaSettings: React.FC = () => {
                 <div className="space-y-6">
                     <div className="glass p-6 border-l-4 border-blue-500">
                         <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                            <MessageCircle size={18} /> ¿Qué sucede al conectar?
+                            <MessageCircle size={18} /> {t('metaSettings.whatHappensTitle')}
                         </h3>
                         <ul className="space-y-3 text-sm text-secondary">
                             <li className="flex gap-2">
                                 <span className="text-blue-400">1.</span>
-                                <span>Obtenemos un <strong>Token de Acceso Permanente</strong> (60 días).</span>
+                                <span>{t('metaSettings.whatHappens1')}</span>
                             </li>
                             <li className="flex gap-2">
                                 <span className="text-blue-400">2.</span>
-                                <span>Identificamos tus Páginas de Facebook y Cuentas de Instagram Business.</span>
+                                <span>{t('metaSettings.whatHappens2')}</span>
                             </li>
                             <li className="flex gap-2">
                                 <span className="text-blue-400">3.</span>
-                                <span>Configuramos las suscripciones a <strong>Webhooks</strong> automáticamente.</span>
+                                <span>{t('metaSettings.whatHappens3')}</span>
                             </li>
                         </ul>
                     </div>
 
                     <div className="glass p-6 opacity-60">
                         <h4 className="text-sm font-bold mb-2 flex items-center gap-2 text-yellow-400">
-                            <AlertTriangle size={14} /> Requisitos
+                            <AlertTriangle size={14} /> {t('metaSettings.requirementsTitle')}
                         </h4>
                         <p className="text-xs text-secondary">
-                            Debes tener rol de Administrador en las páginas que deseas conectar.
-                            Para WhatsApp, asegúrate de tener una cuenta de WhatsApp Business API configurada.
+                            {t('metaSettings.requirementsDesc')}
                         </p>
                     </div>
                 </div>
