@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
-import { Save, ExternalLink, MessageCircle, AlertTriangle, Facebook, Check, Loader2 } from 'lucide-react';
+import { MessageCircle, AlertTriangle, Facebook, Check, Loader2 } from 'lucide-react';
 
 export const MetaSettings: React.FC = () => {
     const { fetchApi } = useApi();
     const [status, setStatus] = useState<'idle' | 'loading' | 'connected' | 'error'>('idle');
     const [errorMsg, setErrorMsg] = useState('');
-    const [connectedAssets, setConnectedAssets] = useState<any[]>([]);
+    const [connectedAssets, setConnectedAssets] = useState<Record<string, boolean>>({});
 
     // 1. Initialize FB SDK
     useEffect(() => {
@@ -54,9 +54,14 @@ export const MetaSettings: React.FC = () => {
                 body: { short_lived_token: shortToken }
             });
             console.log("Meta Connect Result:", res);
-            setStatus('connected');
-            // Assuming backend returns connected assets? 
-            // If not, we can fetch them separately or just show success for now.
+
+            if (res.status === 'success') {
+                setStatus('connected');
+                setConnectedAssets(res.connected); // Storing the 'connected' flags map
+
+                // Optional: Store detailed assets if needed later in another state
+                // setAssetsDetails(res.assets);
+            }
         } catch (e: any) {
             console.error("Backend Connect Error:", e);
             setStatus('error');
@@ -83,14 +88,48 @@ export const MetaSettings: React.FC = () => {
 
                     {status === 'loading' ? (
                         <button disabled className="btn-primary bg-[#1877F2] border-[#1877F2] opacity-80 flex items-center gap-2">
-                            <Loader2 size={18} className="animate-spin" /> Conectando...
+                            <Loader2 size={18} className="animate-spin" /> Sincronizando Activos...
                         </button>
                     ) : status === 'connected' ? (
-                        <div className="flex flex-col items-center animate-fade-in">
-                            <div className="bg-green-500/10 text-green-400 px-4 py-2 rounded-lg flex items-center gap-2 mb-4">
+                        <div className="flex flex-col items-center animate-fade-in w-full">
+                            <div className="bg-green-500/10 text-green-400 px-4 py-2 rounded-lg flex items-center gap-2 mb-6">
                                 <Check size={18} /> Conexión Exitosa
                             </div>
-                            <p className="text-xs text-secondary">Tus activos se están sincronizando en segundo plano.</p>
+
+                            {/* Discovery Result Grid */}
+                            <div className="grid grid-cols-3 gap-4 w-full mb-6">
+                                {/* Facebook */}
+                                <div className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${connectedAssets['facebook'] ? 'bg-[#1877F2]/10 border-[#1877F2]/30' : 'bg-white/5 border-white/10 opacity-50'}`}>
+                                    <Facebook size={24} className={connectedAssets['facebook'] ? 'text-[#1877F2]' : 'text-gray-400'} />
+                                    <span className="text-xs font-bold">Facebook</span>
+                                    {connectedAssets['facebook'] && <Check size={12} className="text-[#1877F2]" />}
+                                </div>
+
+                                {/* Instagram */}
+                                <div className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${connectedAssets['instagram'] ? 'bg-[#E1306C]/10 border-[#E1306C]/30' : 'bg-white/5 border-white/10 opacity-50'}`}>
+                                    <div className={connectedAssets['instagram'] ? 'text-[#E1306C]' : 'text-gray-400'}><MessageCircle size={24} /></div>
+                                    <span className="text-xs font-bold">Instagram</span>
+                                    {connectedAssets['instagram'] && <Check size={12} className="text-[#E1306C]" />}
+                                </div>
+
+                                {/* WhatsApp */}
+                                <div className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${connectedAssets['whatsapp'] ? 'bg-[#25D366]/10 border-[#25D366]/30' : 'bg-white/5 border-white/10 opacity-50'}`}>
+                                    <div className={connectedAssets['whatsapp'] ? 'text-[#25D366]' : 'text-gray-400'}><MessageCircle size={24} /></div>
+                                    <span className="text-xs font-bold">WhatsApp</span>
+                                    {connectedAssets['whatsapp'] ? <Check size={12} className="text-[#25D366]" /> : <span className="text-[10px] text-yellow-500">No detectado</span>}
+                                </div>
+                            </div>
+
+                            {!connectedAssets['whatsapp'] && (
+                                <div className="text-xs text-yellow-500 bg-yellow-500/10 p-3 rounded text-left w-full flex gap-2 items-start">
+                                    <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                                    <span>
+                                        Facebook e Instagram conectados. No detectamos una cuenta de WhatsApp Business.
+                                        Asegúrate de tener los permisos correctos si deseas usar WhatsApp.
+                                    </span>
+                                </div>
+                            )}
+
                         </div>
                     ) : (
                         <button

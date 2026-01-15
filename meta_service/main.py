@@ -42,12 +42,12 @@ async def health_check():
 
 @app.post("/connect")
 async def connect_meta_account(
-    data: dict, 
-    background_tasks: BackgroundTasks
+    data: dict
 ):
     """
     Frontend calls this with a Short-Lived User Token obtained from FB Login SDK.
     We: Exchange it -> Get Assets -> Subscribe -> Sync with Orchestrator.
+    Returns: Discovery summary for UI.
     """
     short_token = data.get("short_lived_token")
     tenant_id = data.get("tenant_id")
@@ -55,10 +55,9 @@ async def connect_meta_account(
     if not short_token or not tenant_id:
         raise HTTPException(400, "Missing token or tenant_id")
 
-    # Run complex flow in background to respond fast
-    background_tasks.add_task(handle_connection_flow, short_token, tenant_id)
-    
-    return {"status": "processing", "message": "Connection flow started"}
+    # Run flow synchronously to provide immediate UI feedback
+    result = await handle_connection_flow(short_token, tenant_id)
+    return result
 
 async def handle_connection_flow(short_token: str, tenant_id: str):
     try:
@@ -81,8 +80,20 @@ async def handle_connection_flow(short_token: str, tenant_id: str):
         }
         await orchestrator_client.sync_credentials(payload)
         
+        # 4. Return Discovery Summary
+        return {
+            "status": "success",
+            "connected": {
+                "facebook": len(assets.get("pages", [])) > 0,
+                "instagram": len(assets.get("instagram", [])) > 0,
+                "whatsapp": len(assets.get("whatsapp", [])) > 0
+            },
+            "assets": assets
+        }
+        
     except Exception as e:
         logger.error("connection_flow_failed", tenant_id=tenant_id, error=str(e))
+        raise HTTPException(500, f"Connection Failed: {str(e)}")
 
 
 # --- Webhooks ---
