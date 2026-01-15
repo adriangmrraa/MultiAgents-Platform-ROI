@@ -97,6 +97,12 @@ class MetaAuthService:
                 resp = await client.get(url_pages, params=params)
                 data = resp.json()
                 
+                if "error" in data:
+                    logger.error("meta_assets_fetch_error", error=data["error"])
+                    # Don't crash entirely, but maybe warn? 
+                    # Actually, if we can't fetch pages, something is wrong with the token/perms.
+                    raise HTTPException(400, f"Meta API Error: {data['error'].get('message')}")
+
                 if "data" in data:
                     for page in data["data"]:
                         # Filter for ADMIN/MODERATE tasks to ensure we can manage

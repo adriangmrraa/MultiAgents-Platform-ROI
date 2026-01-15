@@ -4008,13 +4008,30 @@ async def connect_meta_account(request: Request, current_user: User = Depends(ge
         if not code:
             raise HTTPException(400, "Missing code")
 
+        # 1. Tenant Resolution Logic
+        requested_tenant_id = body.get("tenant_id")
+        target_tenant_id = current_user.tenant_id
+
+        if requested_tenant_id:
+            # Security: Only SuperAdmin can connect channels for other tenants
+            if current_user.role == "SuperAdmin":
+                try:
+                    target_tenant_id = int(requested_tenant_id)
+                except ValueError:
+                    raise HTTPException(400, "Invalid tenant_id format")
+            else:
+                # If a regular user tries to inject a tenant_id, we ignore it or error.
+                # For safety, we just log a warning and enforce their own tenant.
+                logger.warning("security_tenant_injection_attempt", user_id=current_user.id, requested=requested_tenant_id)
+                # target_tenant_id remains current_user.tenant_id
+
         meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
         
         # Prepare payload for Meta Service (Diplomat)
         payload = {
             "code": code,
             "redirect_uri": redirect_uri,
-            "tenant_id": current_user.tenant_id
+            "tenant_id": target_tenant_id
         }
         
         async with httpx.AsyncClient(timeout=30.0) as client:
