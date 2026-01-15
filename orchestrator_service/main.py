@@ -136,6 +136,7 @@ from utils import encrypt_password, decrypt_password
 from admin_routes import router as admin_router, sync_environment
 from app.routes.auth_routes import router as auth_router
 from app.routes.platform_routes import router as platform_router
+from app.routes.ingest_routes import router as ingest_router # NEW
 
 
 from app.core.database import AsyncSessionLocal, engine

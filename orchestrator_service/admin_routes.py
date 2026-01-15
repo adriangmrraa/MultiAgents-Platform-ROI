@@ -3677,3 +3677,36 @@ async def receive_chatwoot_webhook(
         logger.error(f"Redis Publish Fail: {e}")
     
     return {"status": "synced", "id": msg_id}
+@router.post("/meta/connect", dependencies=[Depends(verify_admin_token)])
+async def connect_meta_account(request: Request, current_user: User = Depends(get_current_user)):
+    """
+    Frontend calls this with a short-lived token.
+    We proxy it to the internal Meta Diplomat service.
+    """
+    try:
+        body = await request.json()
+        short_lived_token = body.get("short_lived_token")
+        
+        if not short_lived_token:
+            raise HTTPException(400, "Missing short_lived_token")
+
+        meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
+        
+        # Prepare payload for Meta Service
+        payload = {
+            "short_lived_token": short_lived_token,
+            "tenant_id": current_user.tenant_id
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(f"{meta_service_url}/connect", json=payload)
+            
+            if resp.status_code != 200:
+                logger.error("meta_service_connect_failed", status=resp.status_code, response=resp.text)
+                raise HTTPException(resp.status_code, "Meta Service Connection Failed")
+                
+            return resp.json()
+
+    except Exception as e:
+        logger.error("connect_meta_proxy_error", error=str(e))
+        raise HTTPException(500, str(e))
