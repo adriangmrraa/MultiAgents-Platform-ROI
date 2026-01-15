@@ -1467,7 +1467,13 @@ async def get_chats_summary(
     base_query += f" ORDER BY c.updated_at DESC LIMIT ${i} OFFSET ${i+1}"
     p.extend([limit, offset])
     
-    rows = await db.pool.fetch(base_query, *p)
+    logger.info(f"CHATS DEBUG: Querying tenant_id={current_user.tenant_id}, channel={channel}")
+    try:
+        rows = await db.pool.fetch(base_query, *p)
+        logger.info(f"CHATS DEBUG: Found {len(rows)} chats")
+    except Exception as e:
+        logger.error(f"CHATS DEBUG QUERY ERROR: {e}")
+        raise e
     
     return [{
         "id": str(r["id"]),
