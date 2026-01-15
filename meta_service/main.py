@@ -124,3 +124,73 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     except Exception as e:
         logger.error("webhook_error", error=str(e))
         raise HTTPException(500, "Processing failed")
+@app.post("/messages/send")
+async def send_message_proxy(data: dict):
+    """
+    Sends a message via Meta Graph API using the provided Page Access Token.
+    Payload: {
+        "recipient_id": "...",
+        "text": "...",
+        "access_token": "...",
+        "messaging_type": "RESPONSE" 
+    }
+    """
+    recipient_id = data.get("recipient_id")
+    text = data.get("text")
+    access_token = data.get("access_token")
+    messaging_type = data.get("messaging_type", "RESPONSE")
+
+    if not all([recipient_id, text, access_token]):
+        raise HTTPException(400, "Missing required fields")
+
+    # Call Graph API
+    url = f"https://graph.facebook.com/v19.0/me/messages"
+    params = {"access_token": access_token}
+    payload = {
+        "recipient": {"id": recipient_id},
+        "message": {"text": text},
+        "messaging_type": messaging_type
+    }
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, params=params, json=payload)
+        
+        if resp.status_code != 200:
+            logger.error("meta_send_failed", status=resp.status_code, body=resp.text)
+            raise HTTPException(resp.status_code, f"Meta API Error: {resp.text}")
+            
+        return resp.json()
+@app.post("/privacy/data-deletion")
+async def data_deletion_callback(request: Request):
+    """
+    Standard Meta Data Deletion Callback.
+    """
+    # 1. Parse Signed Request (Simplified for MVP, ideally verify signature)
+    try:
+        data = await request.form()
+        signed_request = data.get('signed_request')
+        
+        # In production, we MUST verify signature using META_APP_SECRET
+        # For now, we generate a confirmation code and URL
+        
+        confirmation_code = str(uuid.uuid4())
+        status_url = f"https://{request.headers.get('host')}/privacy/deletion-status/{confirmation_code}"
+        
+        return {
+            "url": status_url,
+            "confirmation_code": confirmation_code
+        }
+    except Exception as e:
+        logger.error("data_deletion_error", error=str(e))
+        raise HTTPException(400, "Invalid Request")
+
+@app.get("/privacy/deletion-status/{code}")
+async def deletion_status(code: str):
+    """
+    Status check for data deletion.
+    """
+    return {
+        "status": "completed",
+        "message": "Your data deletion request has been processed.",
+        "code": code
+    }

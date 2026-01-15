@@ -3630,8 +3630,8 @@ async def receive_chatwoot_webhook(
         # Create new conversation (Synced from Chatwoot)
         conversation_id = str(uuid.uuid4())
         await db.pool.execute("""
-            INSERT INTO chat_conversations (id, tenant_id, channel, external_user_id, status, meta, created_at, updated_at)
-            VALUES ($1, $2, 'chatwoot_widget', $3, 'open', $4, NOW(), NOW())
+            INSERT INTO chat_conversations (id, tenant_id, channel, external_user_id, status, provider, meta, created_at, updated_at)
+            VALUES ($1, $2, 'chatwoot_widget', $3, 'open', 'chatwoot', $4, NOW(), NOW())
         """, conversation_id, tenant_id, identifier, json.dumps({
             "chatwoot_conversation_id": chatwoot_conv_id, 
             "chatwoot_contact_id": chatwoot_contact_id

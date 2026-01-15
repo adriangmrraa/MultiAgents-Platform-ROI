@@ -90,7 +90,27 @@ services:
         sync: false # Configurar manualmente en el dashboard con la URL pública del BFF
 
   # ==========================================
-  # 5. Redis Cache (Key Value - Valkey 8)
+  # 5. Meta Service (Diplomat)
+  # ==========================================
+  - type: web
+    name: meta-service
+    env: python
+    region: oregon
+    plan: pro
+    numInstances: 1
+    buildCommand: "pip install -r meta_service/requirements.txt"
+    startCommand: "cd meta_service && uvicorn main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: ORCHESTRATOR_URL
+        value: "http://orchestrator-service"
+      - key: META_VERIFY_TOKEN
+        generateValue: true
+      - key: META_APP_SECRET
+        sync: false
+
+  # ==========================================
+  # 6. Redis Cache (Key Value - Valkey 8)
   # ==========================================
   - type: keyvalue
     name: nexus-cache

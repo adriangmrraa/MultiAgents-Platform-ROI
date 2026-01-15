@@ -99,6 +99,23 @@ services:
       - redis
       - orchestrator_service
 
+  meta_service:
+    build: ./meta_service
+    ports:
+      - "8004:8000"
+    environment:
+      - PORT=8000
+      - ORCHESTRATOR_URL=http://orchestrator_service:8000
+      - META_VERIFY_TOKEN=${META_VERIFY_TOKEN:-nexus_verification_token}
+      - META_APP_SECRET=${META_APP_SECRET}
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - orchestrator_service
+
   # --- Infrastructure ---
 
   redis:

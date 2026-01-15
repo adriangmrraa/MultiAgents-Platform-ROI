@@ -2118,39 +2118,70 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                 
                 logger.info("agent_response_persisted", from_number=from_number)
 
-                # 6b. Delivery to Gateway (Nexus v4.0 Multichannel)
+                # 6b. Delivery to Gateway (Nexus v5.1 Hybrid Output)
                 # Fetch full conversation metadata for delivery
                 conv_meta = await db.pool.fetchrow("""
-                    SELECT channel_source, external_chatwoot_id, external_account_id, external_user_id 
+                    SELECT channel_source, external_chatwoot_id, external_account_id, external_user_id, provider 
                     FROM chat_conversations WHERE id = $1
                 """, conv_id)
 
                 if conv_meta:
-                    logger.info("delivery_metadata_fetched", 
+                    provider = conv_meta.get('provider')
+                    logger.info("delivery_router", provider=provider, 
                                 channel=conv_meta['channel_source'], 
-                                cw_id=conv_meta['external_chatwoot_id'],
-                                account_id=conv_meta['external_account_id'])
-                    async with httpx.AsyncClient() as gateway_client:
-                        try:
-                            wh_url = os.getenv("WH_SERVICE_URL", "http://whatsapp_service:8002")
-                            delivery_payload = {
-                                "to": conv_meta['external_user_id'],
-                                "text": text_content,
-                                "imageUrl": msg_obj.get("imageUrl"),
-                                "channel_source": conv_meta['channel_source'],
-                                "external_chatwoot_id": conv_meta['external_chatwoot_id'],
-                                "external_account_id": conv_meta['external_account_id']
-                            }
-                            logger.info("sending_to_gateway", url=f"{wh_url}/messages/send", payload_keys=list(delivery_payload.keys()))
-                            resp = await gateway_client.post(
-                                f"{wh_url}/messages/send",
-                                json=delivery_payload,
-                                headers={"X-Internal-Token": str(INTERNAL_SECRET_KEY)}
-                            )
-                            logger.info("gateway_response_received", status=resp.status_code, body=resp.text)
-                            logger.info("agent_response_delivered_to_gateway", channel=conv_meta['channel_source'])
-                        except Exception as de:
-                            logger.error("gateway_delivery_failed", error=str(de))
+                                recipient=conv_meta['external_user_id'])
+
+                    # Route A: Meta Direct (Facebook / Keep Meta Service stateless)
+                    if provider == 'meta_direct':
+                         meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
+                         
+                         # Fetch Page Token via our internal credentials using 'meta_page_token'
+                         # (Synced via /credentials/internal-sync)
+                         token_row = await db.pool.fetchrow("""
+                            SELECT value FROM credentials 
+                            WHERE tenant_id = $1 AND name = 'meta_page_token'
+                         """, tenant_id)
+                         
+                         access_token = token_row['value'] if token_row else None
+                         
+                         if access_token:
+                             try:
+                                 async with httpx.AsyncClient() as client:
+                                     m_resp = await client.post(f"{meta_service_url}/messages/send", json={
+                                         "recipient_id": conv_meta['external_user_id'],
+                                         "text": text_content,
+                                         "access_token": access_token
+                                     })
+                                     logger.info("meta_delivery_success", status=m_resp.status_code)
+                             except Exception as me:
+                                 logger.error("meta_delivery_failed", error=str(me))
+                         else:
+                             # Fallback: Maybe we are in a dev environment or using a global token?
+                             # For now, log critical error.
+                             logger.error("meta_delivery_failed_no_token", tenant_id=tenant_id)
+
+                    # Route B: Legacy / YCloud (Default)
+                    else:
+                        async with httpx.AsyncClient() as gateway_client:
+                            try:
+                                wh_url = os.getenv("WH_SERVICE_URL", "http://whatsapp_service:8002")
+                                delivery_payload = {
+                                    "to": conv_meta['external_user_id'],
+                                    "text": text_content,
+                                    "imageUrl": msg_obj.get("imageUrl"),
+                                    "channel_source": conv_meta['channel_source'],
+                                    "external_chatwoot_id": conv_meta['external_chatwoot_id'],
+                                    "external_account_id": conv_meta['external_account_id']
+                                }
+                                logger.info("sending_to_gateway", url=f"{wh_url}/messages/send", payload_keys=list(delivery_payload.keys()))
+                                resp = await gateway_client.post(
+                                    f"{wh_url}/messages/send",
+                                    json=delivery_payload,
+                                    headers={"X-Internal-Token": str(INTERNAL_SECRET_KEY)}
+                                )
+                                logger.info("gateway_response_received", status=resp.status_code)
+                            except Exception as de:
+                                logger.error("gateway_delivery_failed", error=str(de))
                 else:
                     logger.warning("conv_meta_not_found_for_delivery", conv_id=str(conv_id))
 
@@ -2268,6 +2299,11 @@ BEGIN
     -- Tool Config (The "Custom Guides" Requirement)
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='tenants') THEN
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tool_config JSONB DEFAULT '{}';
+    END IF;
+
+    -- Chat Conversations Provider (Hybrid Output)
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='chat_conversations') THEN
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS provider VARCHAR(32) DEFAULT 'chatwoot';
     END IF;
 
 END $$;

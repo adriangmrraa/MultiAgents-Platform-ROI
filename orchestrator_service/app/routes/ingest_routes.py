@@ -102,8 +102,8 @@ async def ingest_message(event: SimpleEvent):
     else:
         conversation_id = str(uuid.uuid4())
         await db.pool.execute("""
-            INSERT INTO chat_conversations (id, tenant_id, channel, external_user_id, status, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, 'open', NOW(), NOW())
+            INSERT INTO chat_conversations (id, tenant_id, channel, external_user_id, status, provider, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, 'open', 'meta_direct', NOW(), NOW())
         """, conversation_id, tenant_id, event.platform, event.sender_id)
         
     # 3. Persist Message
