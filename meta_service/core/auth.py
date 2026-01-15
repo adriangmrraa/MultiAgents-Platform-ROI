@@ -87,9 +87,30 @@ class MetaAuthService:
                                 "linked_page_id": page["id"]
                             })
 
-            # 2. Get WABA (This often requires granular permission 'whatsapp_business_management')
-            # For simplicity in this MVP, we assume WABA ID is provided manually or via different flow
-            # If we had 'whatsapp_business_management', we'd query /me/whatsapp_business_accounts
+            # 2. Get WABA (WhatsApp Business Accounts)
+            # This requires 'whatsapp_business_management' permission which is included in the Tech Provider Config
+            url_waba = f"{self.base_url}/me/whatsapp_business_accounts"
+            params_waba = {
+                "access_token": access_token,
+                "fields": "id,name,currency,timezone_id,message_template_namespace"
+            }
+            
+            try:
+                resp_waba = await client.get(url_waba, params=params_waba)
+                data_waba = resp_waba.json()
+                
+                if "data" in data_waba:
+                    for waba in data_waba["data"]:
+                        assets["whatsapp"].append({
+                            "id": waba["id"],
+                            "name": waba["name"],
+                            "currency": waba.get("currency"),
+                            "timezone_id": waba.get("timezone_id"),
+                            "namespace": waba.get("message_template_namespace")
+                        })
+                        # Note: We likely need to fetch Phone Numbers for this WABA separately
+            except Exception as e:
+                logger.warning("waba_fetch_failed", error=str(e))
             
             return assets
 
