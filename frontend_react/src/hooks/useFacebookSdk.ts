@@ -29,27 +29,33 @@ export const useFacebookSdk = () => {
         // 1. If already loaded, Force Init to ensure it's configured
         if (window.FB) {
             console.log("[Meta SDK] FB Object found, forcing init...");
-            window.FB.init(initParams);
-            setIsReady(true);
+            try {
+                window.FB.init(initParams);
+                setIsReady(true);
+            } catch (err) {
+                console.error("[Meta SDK] Force Init Failed:", err);
+                setIsReady(true); // Fallback even if init fails
+            }
             return;
         }
 
         // 2. Define the OFFICIAL callback
         window.fbAsyncInit = function () {
-            console.log("[Meta SDK] Async Hook Triggered. Initializing with:", { ...initParams, appId: 'MASKED' });
-            window.FB.init(initParams);
-            setIsReady(true);
-        };
-
-        // 4. Timeout Fallback (3s) - For AdBlockers/VPNs
-        const timeoutId = setTimeout(() => {
-            if (!window.FB) {
-                console.warn("[Meta SDK] Script load timed out (likely blocked). Forcing ready state to unblock UI.");
-                setIsReady(true); // Unblock UI so user can try clicking (and see specific error)
+            console.log("[Meta SDK] Async Hook Triggered. Initializing...");
+            try {
+                window.FB.init(initParams);
+            } catch (err) {
+                console.error("[Meta SDK] Async Init Failed:", err);
+            } finally {
+                setIsReady(true);
             }
+        };    // 4. Timeout Fallback (3s) - Force UI Unblock no matter what
+        const timeoutId = setTimeout(() => {
+            console.warn("[Meta SDK] 3s Timeout reached. Forcing 'Ready' state to unblock UI.");
+            setIsReady(true);
         }, 3000);
 
-        // 3. Load the script ONLY after defining fbAsyncInit
+        // 3. Load the script
         const scriptId = 'facebook-jssdk';
         if (document.getElementById(scriptId)) return;
 
@@ -58,7 +64,7 @@ export const useFacebookSdk = () => {
         js.src = "https://connect.facebook.net/es_LA/sdk.js";
         js.onerror = () => {
             console.error("[Meta SDK] Script Failed to Load (Network blocked?)");
-            setIsReady(true); // Unblock UI
+            setIsReady(true);
         };
 
         const fjs = document.getElementsByTagName('script')[0];
