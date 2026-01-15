@@ -40,7 +40,7 @@ La plataforma ha alcanzado su pico de madurez con la implementación de la **Sob
 ---
 
 ## 🔮 Roadmap v5.2
-
+bbb
 - Implementación de **Fine-tuning Soberano**.
 - Soporte para **Llama 3 (Local Hosting)** en la Bóveda.
 - Analíticas avanzadas de consumo por inquilino.
