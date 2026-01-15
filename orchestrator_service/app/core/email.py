@@ -1,8 +1,8 @@
 import os
-import logging
+import structlog
 from fastapi_mail import FastMail, ConnectionConfig, MessageSchema, MessageType
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Config
 SMTP_HOST = os.getenv("SMTP_HOST")
