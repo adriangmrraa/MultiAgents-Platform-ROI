@@ -3561,7 +3561,7 @@ async def get_webhook_config(current_user: User = Depends(get_current_user)):
         
     # 2. Construct URL (Platform agnostic)
     return {
-        "webhook_path": "/api/admin/chatwoot/webhook",
+        "webhook_path": "/admin/chatwoot/webhook",
         "access_token": secure_token,
         "tenant_id": tenant_id
     }
