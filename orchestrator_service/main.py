@@ -2296,6 +2296,11 @@ BEGIN
          ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES customers(id);
     END IF;
 
+    -- Media Support (Phase 8: Attachments)
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='chat_messages') THEN
+         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'::jsonb;
+    END IF;
+
     -- Tool Config (The "Custom Guides" Requirement)
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='tenants') THEN
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tool_config JSONB DEFAULT '{}';

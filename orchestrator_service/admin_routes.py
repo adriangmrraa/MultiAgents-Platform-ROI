@@ -1506,6 +1506,7 @@ async def get_chat_history(
         SELECT 
             m.id, m.role, m.message_type, m.content, m.created_at, m.human_override,
             m.sent_context, m.provider_status, m.media_id, m.meta, m.channel_source,
+            m.attachments,
             med.storage_url, med.media_type, med.mime_type, med.file_name
         FROM chat_messages m
         JOIN chat_conversations c ON m.conversation_id = c.id
@@ -1540,11 +1541,29 @@ async def get_chat_history(
             # Ideally: return /admin/media/<media_id> as the src.
             pass
 
+        # Parse JSONB attachments
+        atts = []
+        if r['attachments']:
+             if isinstance(r['attachments'], str):
+                 try: atts = json.loads(r['attachments'])
+                 except: pass
+             else:
+                 atts = r['attachments']
+        
+        # Merge Legacy Media
+        if media_obj:
+             atts.append({
+                 "url": media_obj["url"],
+                 "type": media_obj["type"],
+                 "file_name": media_obj["name"]
+             })
+
         messages.append({
             "id": str(r['id']),
             "role": r['role'],
             "message_type": r['message_type'],
             "content": r['content'],
+            "attachments": atts,
             "timestamp": r['created_at'].isoformat(),
             "created_at": r['created_at'].isoformat(),
             "human_override": r['human_override'],
@@ -3752,6 +3771,17 @@ async def receive_chatwoot_webhook(
             "sender_avatar": avatar_url
         }))
 
+    # 4. Attachments (Phase 8: Media Support)
+    raw_attachments = payload.get("attachments", [])
+    parsed_attachments = []
+    
+    for att in raw_attachments:
+        parsed_attachments.append({
+            "url": att.get("data_url") or att.get("source_url"), # Generic fallback
+            "type": att.get("file_type"), # image, audio, video, file
+            "file_name": "attachment" # default, could parse from URL or content-disposition if available
+        })
+    
     # 4. Insert Message
     role = 'user' if msg_type == 'incoming' else 'human_supervisor'
     msg_id = str(uuid.uuid4())
@@ -3767,9 +3797,9 @@ async def receive_chatwoot_webhook(
          return {"status": "ignored", "reason": "duplicate"}
     
     await db.pool.execute("""
-        INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, created_at, from_number)
-        VALUES ($1, $2, $3, $4, $5, NOW(), $6)
-    """, msg_id, tenant_id, conversation_id, role, data, identifier)
+        INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, created_at, from_number, attachments)
+        VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7)
+    """, msg_id, tenant_id, conversation_id, role, data, identifier, json.dumps(parsed_attachments))
     
     # 5. Publish to Redis (The "Visualization" part)
     redis_payload = {
@@ -3779,6 +3809,7 @@ async def receive_chatwoot_webhook(
             "conversation_id": conversation_id,
             "role": role,
             "content": data,
+            "attachments": parsed_attachments, # Add to stream
             "from_number": identifier,
             "created_at": datetime.now().isoformat()
         }

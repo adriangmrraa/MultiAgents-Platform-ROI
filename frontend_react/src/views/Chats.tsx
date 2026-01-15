@@ -21,12 +21,11 @@ interface Message {
     content: string;
     timestamp: string;
     channel_source?: string;
-    media?: {
+    attachments?: {
         url: string;
-        type: string; // image | video | audio | document
-        mime: string;
-        name?: string;
-    };
+        type: string; // image | video | audio | file | text
+        file_name?: string;
+    }[];
 }
 
 // ... (Interfaces unchanged)
@@ -356,15 +355,15 @@ export const Chats: React.FC = () => {
                             >
                                 {/* Active Indicator / Channel Color Border */}
                                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${chat.channel?.includes('instagram') ? 'bg-[#E1306C] shadow-[0_0_10px_#E1306C]' :
-                                        chat.channel?.includes('facebook') ? 'bg-[#1877F2] shadow-[0_0_10px_#1877F2]' :
-                                            'bg-[#25D366] shadow-[0_0_10px_#25D366]'
+                                    chat.channel?.includes('facebook') ? 'bg-[#1877F2] shadow-[0_0_10px_#1877F2]' :
+                                        'bg-[#25D366] shadow-[0_0_10px_#25D366]'
                                     } transition-all duration-300`}></div>
 
                                 {/* Avatar / Icon */}
                                 <div className="shrink-0 relative">
                                     <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 overflow-hidden bg-black/40 ${chat.channel?.includes('instagram') ? 'border-[#E1306C]/30' :
-                                            chat.channel?.includes('facebook') ? 'border-[#1877F2]/30' :
-                                                'border-[#25D366]/30'
+                                        chat.channel?.includes('facebook') ? 'border-[#1877F2]/30' :
+                                            'border-[#25D366]/30'
                                         }`}>
                                         {chat.avatar_url ? (
                                             <img src={chat.avatar_url} alt="" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
@@ -374,8 +373,8 @@ export const Chats: React.FC = () => {
                                     </div>
                                     {/* Mini Badge Icon */}
                                     <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center shadow-md bg-[#121212] border border-black ${chat.channel?.includes('instagram') ? 'text-[#E1306C]' :
-                                            chat.channel?.includes('facebook') ? 'text-[#1877F2]' :
-                                                'text-[#25D366]'
+                                        chat.channel?.includes('facebook') ? 'text-[#1877F2]' :
+                                            'text-[#25D366]'
                                         }`}>
                                         {chat.channel?.includes('instagram') ? <Instagram size={12} /> :
                                             chat.channel?.includes('facebook') ? <Facebook size={12} /> :
@@ -471,72 +470,81 @@ export const Chats: React.FC = () => {
                             {/* Messages */}
                             <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-black/10 scroll-smooth">
                                 {messages.map((msg, idx) => {
-                                    // Audio Protocol Parsing
-                                    const audioMatch = (msg.content || '').match(/\[AUDIO_URL:\s*(.*?)\s*\|\s*TRANSCRIPT:\s*(.*?)\]/);
-                                    let contentCmp = <p className="text-sm">{msg.content}</p>;
-
-                                    if (audioMatch) {
-                                        const [_, url, transcript] = audioMatch;
-                                        contentCmp = (
-                                            <div className="flex flex-col gap-2 min-w-[200px]">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-xs font-bold text-accent uppercase tracking-wider">Audio Message</span>
-                                                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                                                </div>
-                                                <audio controls className="w-full h-8 mb-1 rounded-lg">
-                                                    <source src={url} type="audio/ogg" />
-                                                    <source src={url} type="audio/mpeg" />
-                                                    Your browser does not support the audio element.
-                                                </audio>
-                                                <div className="bg-black/20 p-2 rounded border-l-2 border-accent/50">
-                                                    <p className="text-xs italic opacity-80">"{transcript}"</p>
-                                                </div>
-                                            </div>
-                                        );
-                                    } else if (msg.media) {
-                                        // Standard Media Rendering (Chatwoot/WhatsApp)
-                                        if (msg.media.type && msg.media.type.startsWith('image')) {
-                                            contentCmp = (
-                                                <div className="flex flex-col gap-1">
-                                                    <img src={msg.media.url} alt="Media" className="max-w-[250px] rounded-lg border border-white/10" />
-                                                    {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
-                                                </div>
-                                            );
-                                        } else if (msg.media.type && msg.media.type.startsWith('video')) {
-                                            contentCmp = (
-                                                <div className="flex flex-col gap-1">
-                                                    <video controls className="max-w-[250px] rounded-lg border border-white/10">
-                                                        <source src={msg.media.url} type={msg.media.mime} />
-                                                        Your browser does not support video.
-                                                    </video>
-                                                    {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
-                                                </div>
-                                            );
-                                        } else if (msg.media.type && msg.media.type.startsWith('audio')) {
-                                            contentCmp = (
-                                                <div className="flex flex-col gap-2 min-w-[200px]">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="text-xs font-bold text-accent uppercase tracking-wider">Audio Clip</span>
-                                                    </div>
-                                                    <audio controls className="w-full h-8 mb-1 rounded-lg">
-                                                        <source src={msg.media.url} type={msg.media.mime} />
-                                                        Your browser does not support audio.
-                                                    </audio>
-                                                    {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
-                                                </div>
-                                            );
-                                        }
-                                    }
+                                    // Audio Protocol Parsing (Legacy)
+                                    const audioMatch = msg.content && typeof msg.content === 'string'
+                                        ? msg.content.match(/\[AUDIO_URL:\s*(.*?)\s*\|\s*TRANSCRIPT:\s*(.*?)\]/)
+                                        : null;
 
                                     return (
-                                        <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                                            <div className={`max-w-[70%] rounded-2xl p-4 ${msg.role === 'user'
-                                                ? 'bg-white/5 border border-white/10 text-white rounded-tl-none'
-                                                : 'bg-accent/20 border border-accent/30 text-white rounded-tr-none'
+                                        <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'} animate-scale-in`}>
+                                            <div className={`max-w-[85%] rounded-2xl p-4 shadow-lg backdrop-blur-sm ${msg.role === 'user'
+                                                    ? 'bg-black/40 border border-white/10 rounded-tl-sm text-gray-100'
+                                                    : 'bg-white/10 border border-white/5 rounded-tr-sm text-white'
                                                 }`}>
-                                                {contentCmp}
-                                                <span className="text-[10px] opacity-50 mt-2 block text-right">
-                                                    {new Date(msg.timestamp).toLocaleTimeString()}
+
+                                                {/* NEW: Attachments Array Support */}
+                                                {msg.attachments && msg.attachments.length > 0 && (
+                                                    <div className="flex flex-col gap-2 mb-2">
+                                                        {msg.attachments.map((att, i) => (
+                                                            <div key={i} className="rounded-lg overflow-hidden border border-white/10 bg-black/20">
+                                                                {(att.type === 'image' || att.type === 'image/jpeg' || att.type === 'image/png') && (
+                                                                    <img
+                                                                        src={att.url}
+                                                                        alt="Adjunto"
+                                                                        className="max-w-full h-auto cursor-pointer hover:opacity-95"
+                                                                        style={{ maxHeight: '300px' }}
+                                                                        onClick={() => window.open(att.url, '_blank')}
+                                                                    />
+                                                                )}
+                                                                {(att.type === 'video' || att.type === 'video/mp4') && (
+                                                                    <video controls src={att.url} className="w-full max-h-[300px]"></video>
+                                                                )}
+                                                                {(att.type === 'audio' || att.type === 'audio/mpeg' || att.type === 'audio/ogg' || att.type === 'audio/mp3') && (
+                                                                    <div className="p-2 w-full min-w-[250px]">
+                                                                        <audio controls src={att.url} className="w-full h-8"></audio>
+                                                                    </div>
+                                                                )}
+                                                                {att.type === 'file' && (
+                                                                    <a href={att.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 hover:bg-white/5 transition-colors">
+                                                                        <div className="p-2 bg-white/10 rounded-full">
+                                                                            <MessageSquare size={16} />
+                                                                        </div>
+                                                                        <div className="overflow-hidden">
+                                                                            <p className="font-bold text-sm truncate">{att.file_name || 'Descargar Archivo'}</p>
+                                                                            <p className="text-[10px] opacity-70 uppercase tracking-widest">Documento</p>
+                                                                        </div>
+                                                                    </a>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Legacy Audio Match */}
+                                                {audioMatch && !msg.attachments && (
+                                                    <div className="flex flex-col gap-2 min-w-[200px] mb-2">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-xs font-bold text-accent uppercase tracking-wider">Audio Legacy</span>
+                                                        </div>
+                                                        <audio controls className="w-full h-8 mb-1 rounded-lg">
+                                                            <source src={audioMatch[1]} />
+                                                        </audio>
+                                                        <p className="text-xs italic opacity-80">"{audioMatch[2]}"</p>
+                                                    </div>
+                                                )}
+
+                                                {/* Text Content (Linkified) */}
+                                                {!audioMatch && msg.content && msg.content !== '[Attachment/Media]' && (
+                                                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words" dangerouslySetInnerHTML={{
+                                                        __html: msg.content.replace(
+                                                            /(https?:\/\/[^\s]+)/g,
+                                                            '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline"> $1 </a>'
+                                                        )
+                                                    }} />
+                                                )}
+
+                                                <span className="text-[10px] opacity-40 mt-1 block text-right font-mono">
+                                                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </span>
                                             </div>
                                         </div>
