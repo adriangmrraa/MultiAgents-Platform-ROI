@@ -16,10 +16,22 @@ interface Chat {
     is_locked: boolean;
 }
 
+interface Message {
+    role: string;
+    content: string;
+    timestamp: string;
+    channel_source?: string;
+    media?: {
+        url: string;
+        type: string; // image | video | audio | document
+        mime: string;
+        name?: string;
+    };
+}
+
 // ... (Interfaces unchanged)
 
 export const Chats: React.FC = () => {
-    // ... (State unchanged)
     const { fetchApi, loading, error } = useApi();
     const [selectedChannel, setSelectedChannel] = useState<string>('all');
     const [chats, setChats] = useState<Chat[]>([]);
@@ -81,24 +93,7 @@ export const Chats: React.FC = () => {
 
 
 
-    const { fetchApi, loading, error } = useApi();
-    // Removed selectedTenant
-    const [selectedChannel, setSelectedChannel] = useState<string>('all');
-    // Removed tenants state
-    const [chats, setChats] = useState<Chat[]>([]);
-    const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [newMessage, setNewMessage] = useState('');
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [offset, setOffset] = useState(0);
-    const [hasMore, setHasMore] = useState(true);
-    const LIMIT = 20;
 
-    // humanOverrideFilter removed to unify with selectedChannel
-    // const [loadingChats, setLoadingChats] = useState(false); // Removed unused, creating lint noise
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const lastChatIdRef = useRef<string | null>(null);
 
     // Auto-scroll logic (Smart Scroll) - Refined to be non-intrusive
     useEffect(() => {
