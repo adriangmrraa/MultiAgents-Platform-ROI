@@ -3612,9 +3612,31 @@ async def receive_chatwoot_webhook(
     chatwoot_conv_id = conversation_map.get("id")
     chatwoot_contact_id = contact_map.get("id")
     # Phone or Email or ID
-    identifier = contact_map.get("phone_number") or contact_map.get("email") or f"cw_{chatwoot_contact_id}"
-    
     # 3. Resolve Native Conversation
+    
+    # helper: map chatwoot channel to nexus channel
+    cw_channel = conversation_map.get("channel", "")
+    nexus_channel = "chatwoot"
+    if "Whatsapp" in cw_channel: nexus_channel = "whatsapp"
+    elif "Instagram" in cw_channel: nexus_channel = "instagram"
+    elif "Facebook" in cw_channel: nexus_channel = "facebook"
+    
+    # helper: better identifier extraction
+    identifier = contact_map.get("phone_number")
+    
+    if nexus_channel == "instagram":
+        # Try to get IG username
+        additional = contact_map.get("additional_attributes", {})
+        social = additional.get("social_profiles", {})
+        identifier = social.get("instagram") or contact_map.get("name")
+        
+    if nexus_channel == "facebook":
+        identifier = contact_map.get("name")
+
+    # Fallback
+    if not identifier:
+        identifier = contact_map.get("email") or f"cw_{chatwoot_contact_id}"
+
     conv_query = """
         SELECT id FROM chat_conversations 
         WHERE tenant_id = $1 AND (
@@ -3631,10 +3653,12 @@ async def receive_chatwoot_webhook(
         conversation_id = str(uuid.uuid4())
         await db.pool.execute("""
             INSERT INTO chat_conversations (id, tenant_id, channel, external_user_id, status, provider, meta, created_at, updated_at)
-            VALUES ($1, $2, 'chatwoot_widget', $3, 'open', 'chatwoot', $4, NOW(), NOW())
-        """, conversation_id, tenant_id, identifier, json.dumps({
+            VALUES ($1, $2, $3, $4, 'open', 'chatwoot', $5, NOW(), NOW())
+        """, conversation_id, tenant_id, nexus_channel, identifier, json.dumps({
             "chatwoot_conversation_id": chatwoot_conv_id, 
-            "chatwoot_contact_id": chatwoot_contact_id
+            "chatwoot_contact_id": chatwoot_contact_id,
+            "sender_name": contact_map.get("name"),
+            "sender_avatar": contact_map.get("thumbnail") or contact_map.get("avatar")
         }))
 
     # 4. Insert Message
