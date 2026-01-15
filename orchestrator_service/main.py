@@ -201,9 +201,8 @@ migration_steps = [
         ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token VARCHAR(255);
         
-        -- Legacy Migration: Auto-verify existing users to prevent lockout
-        -- We assume any user created before this migration is legacy and trusted
-        UPDATE users SET is_verified = TRUE WHERE is_verified IS FALSE AND created_at < NOW() - INTERVAL '1 minute';
+        -- Legacy Migration: DISABLED to prevent auto-verification during development
+        -- UPDATE users SET is_verified = TRUE WHERE is_verified IS FALSE AND created_at < NOW() - INTERVAL '1 minute';
     END $$;
     """,
     # 1c. Pre-clean Handoff Config

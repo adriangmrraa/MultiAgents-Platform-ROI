@@ -24,6 +24,9 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
     Get current logged in user.
     """
     # Eager load tenant for convenience (should be handled by lazy="joined" in model but explicit is good for APIs)
+    # DEBUG: Log the actual value from DB
+    logger.info("auth_me_check", user_id=str(current_user.id), is_verified=current_user.is_verified)
+    
     return {
         "id": str(current_user.id),
         "email": current_user.email,
