@@ -165,8 +165,8 @@ async def login(user_in: UserLogin, response: Response, db: AsyncSession = Depen
         value=access_token,
         httponly=True,
         max_age=security.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        samesite="lax",
-        secure=True  # CAPTAIN: Changed to True for production HTTPS support
+        samesite="none",
+        secure=True  # Required for samesite="none"
     )
     
     return {"access_token": access_token, "token_type": "bearer"}
