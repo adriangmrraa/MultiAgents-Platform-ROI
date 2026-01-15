@@ -106,7 +106,17 @@ The `EmailService` differentiates traffic:
 
 ---
 
-## 5. Developer Guide: Protocol Omega
+---
+
+## 5. Protocolo Omega de Visibilidad (SMTP Resiliency)
+El backend implementa una captura de errores proactiva para el servicio de correo:
+- **Detección de Blacklist**: Si el servidor SMTP devuelve errores 550 (bloqueo geográfico), el backend captura la excepción y la envía al frontend en el campo `message`.
+- **Registro de Emergencia**: El link de verificación se imprime SIEMPRE en los logs del contenedor para permitir la activación manual en entornos de firewall restrictivos.
+- **Frontend Aware**: La vista de registro detecta si `email_sent` es `false` y despliega un cuadro de alerta ámbar con el diagnóstico técnico.
+
+---
+
+## 6. Developer Guide: Protocol Omega
 
 ### Creating New Endpoints
 1.  **Define Contract**: Use Pydantic `BaseModel`.

@@ -10,7 +10,9 @@ Ya no es necesario configurar la `OPENAI_API_KEY` o `GOOGLE_API_KEY` en el archi
 ### 2. Variables Mínimas (Globales)
 - `ADMIN_TOKEN`: Seguridad para el túnel administrativo.
 - `POSTGRES_DSN` & `REDIS_URL`: Infraestructura de datos.
-- `SMTP_*`: Para notificaciones oficiales del sistema (Nexus Brand).
+- `SMTP_*`: Para notificaciones oficiales del sistema (Nexus Brand). 
+    - **Recomendación**: Usar **Brevo** o **Resend** (Puerto 587) para evitar bloqueos geográficos (como el error 550 de Ferozo).
+    - **Visibilidad**: El sistema ahora informa errores SMTP en tiempo real durante el registro.
 
 ---
 

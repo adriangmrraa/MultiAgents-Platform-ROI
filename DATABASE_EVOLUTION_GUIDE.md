@@ -130,10 +130,18 @@ CREATE TABLE IF NOT EXISTS tools (
 *   **Causa**: El modelo no se importó en `main.py` antes de `Base.metadata.create_all`.
 *   **Solución**: Agrega `from app.models import X` en las importaciones de `main.py`.
 
-### Safe Detach (Protección de Datos)
-- **Store Deletion**: Borra Agentes, Assets y Config.
-- **User Survival**: El backend ejecuta un `UPDATE users SET tenant_id = NULL` antes de proceder.
-- **Soberanía**: Las credenciales de la tienda se destruyen permanentemente al eliminar el tenant.
+### Reset Industrial (Uso en Desarrollo/Despliegue)
+Si necesitas limpiar la plataforma por completo para iniciar un nuevo despliegue desde cero:
+```sql
+TRUNCATE TABLE 
+    users, tenants, credentials, agents, tools, business_assets, 
+    chat_conversations, chat_messages, chat_media, customers, system_events 
+RESTART IDENTITY CASCADE;
+```
+*Este comando borra todos los datos y resetea los IDs a 1.*
+
+### Soberanía
+Las credenciales de la tienda se destruyen permanentemente al eliminar el tenant.
 
 ---
 

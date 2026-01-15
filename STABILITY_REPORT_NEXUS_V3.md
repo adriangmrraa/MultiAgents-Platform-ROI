@@ -24,6 +24,8 @@ La plataforma ha alcanzado su pico de madurez con la implementación de la **Sob
 *   **[OK] Dynamic Embedding**: RAG utiliza las llaves soberanas del cliente.
 *   **[OK] Multi-Cloud Intelligence**: Soporte simultáneo para OpenAI y Google AI (Gemini) por inquilino.
 *   **[OK] Hybrid SMTP**: Identidad de marca preservada en comunicaciones de agentes.
+*   **[OK] Visibility Omega**: Detección y reporte de errores SMTP en tiempo real al usuario final.
+*   **[OK] Manual Fallback**: Punto de restauración vía logs para activaciones bloqueadas por firewalls.
 
 ---
 

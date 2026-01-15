@@ -61,4 +61,23 @@ Para un despliegue exitoso, asegúrate de configurar estos parámetros en tu pro
 
 ---
 
+---
+
+## 5. Guía de Resiliencia SMTP
+Para garantizar que los correos de Nexus no sean bloqueados por proveedores de hosting tradicionales (como Ferozo/DonWeb):
+
+### Configuración Recomendada (Brevo Relay)
+- **Host**: `smtp-relay.brevo.com`
+- **Port**: `587` (STARTTLS).
+- **Security**: Evitar el puerto 465 en entornos Cloud si hay firewalls restrictivos.
+
+### Coexistencia de DNS (Ferozo + Brevo)
+Si el dominio ya maneja correos en otro proveedor:
+1.  **DKIM/CNAME**: Agregar los registros de Brevo sin tocar los existentes.
+2.  **DMARC Merge**: No duplicar el registro `_dmarc`. Fusionar así:
+    `v=DMARC1; p=none; rua=mailto:rua@dmarc.brevo.com`
+3.  **SPF**: Solo es necesario agregar el `include:spf.brevo.com` si se desea máxima autoridad.
+
+---
+
 **© 2026 Platform AI Solutions - Sovereign Infrastructure Team**

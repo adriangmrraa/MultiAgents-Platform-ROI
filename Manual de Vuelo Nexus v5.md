@@ -1,6 +1,13 @@
 Monitoreo global para dueños de plataforma:
 - **Uso de Bóveda**: Verifica qué tiendas tienen llaves configuradas y cuáles usan el fallback global.
 - **Salubridad CPU/DB**: Monitoreo de latencia en la recuperación de secretos.
+- **Protocolo de Visibilidad**: Si el registro muestra un cuadro amarillo, lee el error técnico; usualmente es un bloqueo de IP o falta de verificación de remitente en Brevo.
+
+### C. Despegue con Fallo SMTP (Plan de Emergencia)
+Si el email de verificación no llega:
+1.  **Logs**: Busca el mensaje `🔗 MANUAL VERIFICATION LINK` en los registros del orquestador.
+2.  **Activación Manual**: Copia y pega ese link en el navegador para activar la cuenta sin depender del correo.
+3.  **Configuración de Remitente**: Asegúrate de haber verificado tu email en el panel de Brevo (Senders & IP).
 
 ### B. Protocolo "Safe Detach"
 Si eliminas una tienda:
