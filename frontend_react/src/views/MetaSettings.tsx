@@ -2,37 +2,34 @@ import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { MessageCircle, AlertTriangle, Facebook, Check, Loader2 } from 'lucide-react';
 
+import { initFacebookSdk } from '../utils/facebookSdk';
+
 export const MetaSettings: React.FC = () => {
     const { fetchApi } = useApi();
     const [status, setStatus] = useState<'idle' | 'loading' | 'connected' | 'error'>('idle');
     const [errorMsg, setErrorMsg] = useState('');
     const [connectedAssets, setConnectedAssets] = useState<Record<string, boolean>>({});
+    const [sdkReady, setSdkReady] = useState(false);
 
     // 1. Initialize FB SDK
     useEffect(() => {
-        // Load SDK asynchronously
-        if (!(window as any).FB) {
-            const script = document.createElement('script');
-            script.src = "https://connect.facebook.net/en_US/sdk.js";
-            script.async = true;
-            script.defer = true;
-            script.crossOrigin = "anonymous";
-            script.onload = () => {
-                (window as any).FB.init({
-                    appId: import.meta.env.VITE_META_APP_ID, // Ensure this is in .env
-                    autoLogAppEvents: true,
-                    xfbml: true,
-                    version: 'v19.0'
-                });
-            };
-            document.body.appendChild(script);
-        }
+        initFacebookSdk()
+            .then(() => {
+                console.log("FB SDK Ready");
+                setSdkReady(true);
+            })
+            .catch(err => {
+                console.error("FB SDK Init Error", err);
+                setErrorMsg("Error cargando componentes de Facebook");
+                setStatus('error');
+            });
     }, []);
 
     const handleLogin = () => {
-        if (!(window as any).FB) return;
+        if (!sdkReady || !(window as any).FB) return;
 
         setStatus('loading');
+        // Business Login Flow with config_id
         (window as any).FB.login((response: any) => {
             if (response.authResponse) {
                 console.log('FB Login Success', response);
@@ -42,7 +39,7 @@ export const MetaSettings: React.FC = () => {
                 setStatus('idle');
             }
         }, {
-            scope: 'pages_show_list,pages_messaging,instagram_basic,instagram_manage_messages,business_management',
+            config_id: import.meta.env.VITE_META_CONFIG_ID, // Use Config ID for Tech Provider permissions
             override_default_response_type: true
         });
     };
@@ -134,9 +131,11 @@ export const MetaSettings: React.FC = () => {
                     ) : (
                         <button
                             onClick={handleLogin}
-                            className="btn-primary bg-[#1877F2] hover:bg-[#166fe5] border-[#1877F2] flex items-center gap-2 px-8"
+                            disabled={!sdkReady}
+                            className={`btn-primary bg-[#1877F2] hover:bg-[#166fe5] border-[#1877F2] flex items-center gap-2 px-8 ${!sdkReady ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                            <Facebook size={18} /> Continuar con Facebook
+                            {!sdkReady ? <Loader2 size={18} className="animate-spin" /> : <Facebook size={18} />}
+                            {!sdkReady ? 'Cargando SDK...' : 'Continuar con Facebook'}
                         </button>
                     )}
 
