@@ -3716,6 +3716,12 @@ async def receive_chatwoot_webhook(
     """
     conv_row = await db.pool.fetchrow(conv_query, tenant_id, str(chatwoot_conv_id), identifier)
     
+    # helper: better avatar extraction
+    avatar_url = contact_map.get("thumbnail") or contact_map.get("avatar_url")
+    if not avatar_url and nexus_channel == "facebook":
+         # Facebook specific locations
+         avatar_url = contact_map.get("additional_attributes", {}).get("profile_pic")
+    
     if conv_row:
         conversation_id = conv_row['id']
         # Update existing conversation to ensure latest channel/metadata
@@ -3731,7 +3737,7 @@ async def receive_chatwoot_webhook(
             "chatwoot_conversation_id": chatwoot_conv_id, 
             "chatwoot_contact_id": chatwoot_contact_id,
             "sender_name": contact_map.get("name"),
-            "sender_avatar": contact_map.get("thumbnail") or contact_map.get("avatar")
+            "sender_avatar": avatar_url
         }), conversation_id)
     else:
         # Create new conversation (Synced from Chatwoot)
@@ -3743,7 +3749,7 @@ async def receive_chatwoot_webhook(
             "chatwoot_conversation_id": chatwoot_conv_id, 
             "chatwoot_contact_id": chatwoot_contact_id,
             "sender_name": contact_map.get("name"),
-            "sender_avatar": contact_map.get("thumbnail") or contact_map.get("avatar")
+            "sender_avatar": avatar_url
         }))
 
     # 4. Insert Message
