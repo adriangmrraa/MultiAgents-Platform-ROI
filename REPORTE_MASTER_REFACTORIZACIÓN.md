@@ -56,7 +56,19 @@ Actualizamos la interfaz para dar control total al administrador.
 
 ---
 
+---
+
+## 7. 🛡️ RESILIENCIA Y VISIBILIDAD SMTP (PROTOCOLO OMEGA)
+Tras detectar bloqueos geográficos por parte de proveedores tradicionales, blindamos el sistema de correo.
+
+- **Detección de Blacklist**: El backend ahora captura errores 550 y los reporta directamente a la UI.
+- **Protocolo de Visibilidad**: El frontend muestra un cuadro de alerta técnica si el mail falla, evitando que el usuario espere un correo que nunca saldrá.
+- **Activación de Emergencia**: Se implementó una impresión de link de verificación manual en los logs para casos críticos de firewall.
+- **Estandarización de Infraestructura**: Seleccionamos a **Brevo** como el relayer recomendado, configurando la coexistencia de DNS (DKIM/DMARC) para no afectar correos corporativos existentes.
+
+---
+
 ## ✅ ESTADO FINAL DEL PROYECTO
 El sistema Nexus ahora es una plataforma **Tenant-Agnostica** en su núcleo de IA. El administrador de la plataforma provee el software, pero cada cliente provee sus propios "combustibles" (API Keys), garantizando costos justos, límites de cuota independientes y una seguridad de datos de grado empresarial.
 
-**Misión: Nexus Protocol v4.0 Complete.** 🫡🚀🦾
+**Misión: Nexus Protocol v5.1 Sovereign Complete.** 🫡🚀🦾
