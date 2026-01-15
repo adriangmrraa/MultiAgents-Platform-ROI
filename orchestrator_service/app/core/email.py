@@ -20,7 +20,10 @@ if not FRONTEND_URL:
     # Fallback to a clear placeholder to avoid sending valid-looking but broken links
     FRONTEND_URL = "http://CONFIGURE_FRONTEND_URL_IN_ENV"
 
-# ConnectionConfig updated per USER request for Port 465 / SSL
+# Dynamic security based on port
+USE_SSL = (SMTP_PORT == 465)
+USE_STARTTLS = (SMTP_PORT == 587)
+
 conf = ConnectionConfig(
     MAIL_USERNAME=SMTP_USER,
     MAIL_PASSWORD=SMTP_PASS,
@@ -28,8 +31,8 @@ conf = ConnectionConfig(
     MAIL_PORT=SMTP_PORT,
     MAIL_SERVER=SMTP_HOST,
     MAIL_FROM_NAME=SENDER_NAME,
-    MAIL_STARTTLS=False,
-    MAIL_SSL_TLS=True,
+    MAIL_STARTTLS=USE_STARTTLS,
+    MAIL_SSL_TLS=USE_SSL,
     USE_CREDENTIALS=True,
     VALIDATE_CERTS=False # CAPTAIN: Set to False to avoid SSL cert issues in Docker environments
 )
@@ -51,6 +54,9 @@ class EmailService:
         subject = "Activa tu Fábrica de Negocios - Nexus"
         verify_link = f"{FRONTEND_URL}/verify?token={token}"
         
+        # PROTOCOL OMEGA: Fallback log for manual verification if SMTP is blocked
+        logger.info("verification_link_generated", link=verify_link)
+        print(f"🔗 MANUAL VERIFICATION LINK: {verify_link}", flush=True)
         # Dark Mode / Cyberpunk HTML Template
         html_content = f"""
         <!DOCTYPE html>
