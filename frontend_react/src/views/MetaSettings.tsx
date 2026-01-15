@@ -20,6 +20,10 @@ export const MetaSettings: React.FC = () => {
         // Business Login Flow with config_id
         // Try-catch for immediate sync errors
         try {
+            if (!(window as any).FB) {
+                throw new Error("El SDK de Facebook no pudo cargarse (bloqueado por navegador/red).");
+            }
+
             (window as any).FB.login((response: any) => {
                 if (response.authResponse) {
                     console.log('FB Login Success', response);

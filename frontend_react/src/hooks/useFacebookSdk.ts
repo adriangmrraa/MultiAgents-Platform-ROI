@@ -41,14 +41,25 @@ export const useFacebookSdk = () => {
             setIsReady(true);
         };
 
+        // 4. Timeout Fallback (3s) - For AdBlockers/VPNs
+        const timeoutId = setTimeout(() => {
+            if (!window.FB) {
+                console.warn("[Meta SDK] Script load timed out (likely blocked). Forcing ready state to unblock UI.");
+                setIsReady(true); // Unblock UI so user can try clicking (and see specific error)
+            }
+        }, 3000);
+
         // 3. Load the script ONLY after defining fbAsyncInit
-        // Using distinct ID to avoid duplicate scripts
         const scriptId = 'facebook-jssdk';
         if (document.getElementById(scriptId)) return;
 
         const js = document.createElement('script');
         js.id = scriptId;
         js.src = "https://connect.facebook.net/es_LA/sdk.js";
+        js.onerror = () => {
+            console.error("[Meta SDK] Script Failed to Load (Network blocked?)");
+            setIsReady(true); // Unblock UI
+        };
 
         const fjs = document.getElementsByTagName('script')[0];
         if (fjs && fjs.parentNode) {
@@ -57,6 +68,7 @@ export const useFacebookSdk = () => {
             document.head.appendChild(js);
         }
 
+        return () => clearTimeout(timeoutId);
     }, []); // Runs once on mount
 
     return isReady;
