@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
-import { Save, ExternalLink, HelpCircle, Smartphone, AlertTriangle } from 'lucide-react';
+import { Save, ExternalLink, Smartphone, AlertTriangle } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export const YCloudSettings: React.FC = () => {
+    const { t } = useLanguage();
     const { fetchApi, loading } = useApi();
     const [apiKey, setApiKey] = useState('');
     const [webhookSecret, setWebhookSecret] = useState('');
@@ -68,16 +70,16 @@ export const YCloudSettings: React.FC = () => {
                 }
             });
 
-            alert('Configuración guardada correctamente');
+            alert(t('ycloudSettings.saveSuccess'));
             setStatus('configured');
-        } catch (e) {
-            alert('Error al guardar: ' + e.message);
+        } catch (e: any) {
+            alert(t('ycloudSettings.saveError') + ': ' + e.message);
         }
     };
 
     return (
         <div className="view active animate-fade-in">
-            <h1 className="view-title">YCloud Relay Node</h1>
+            <h1 className="view-title">{t('ycloudSettings.title')}</h1>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Configuration Form */}
@@ -87,37 +89,37 @@ export const YCloudSettings: React.FC = () => {
                             <Smartphone size={20} />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold">Credenciales</h2>
-                            <p className="text-sm text-secondary">Configura el acceso a la API de YCloud</p>
+                            <h2 className="text-lg font-bold">{t('ycloudSettings.credentials')}</h2>
+                            <p className="text-sm text-secondary">{t('ycloudSettings.credentialsDesc')}</p>
                         </div>
                     </div>
 
                     <form onSubmit={handleSave} className="space-y-4">
                         <div className="form-group">
-                            <label className="block text-sm font-medium mb-1">API Key</label>
+                            <label className="block text-sm font-medium mb-1">{t('ycloudSettings.apiKey')}</label>
                             <input
                                 type="password"
                                 className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-white focus:border-accent outline-none"
                                 value={apiKey}
                                 onChange={e => setApiKey(e.target.value)}
-                                placeholder="Pegar API Key aquí..."
+                                placeholder={t('ycloudSettings.apiKeyPlaceholder')}
                                 required
                             />
                         </div>
 
                         <div className="form-group">
-                            <label className="block text-sm font-medium mb-1">Webhook Secret</label>
+                            <label className="block text-sm font-medium mb-1">{t('ycloudSettings.webhookSecret')}</label>
                             <input
                                 type="text"
                                 className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-white focus:border-accent outline-none"
                                 value={webhookSecret}
                                 onChange={e => setWebhookSecret(e.target.value)}
-                                placeholder="Secreto para validar hooks..."
+                                placeholder={t('ycloudSettings.webhookSecretPlaceholder')}
                             />
                         </div>
 
                         <button type="submit" className="btn-primary w-full flex items-center justify-center gap-2">
-                            <Save size={18} /> Guardar Configuración
+                            <Save size={18} /> {t('ycloudSettings.saveConfig')}
                         </button>
                     </form>
                 </div>
@@ -126,16 +128,16 @@ export const YCloudSettings: React.FC = () => {
                 <div className="space-y-6">
                     {/* Status Card */}
                     <div className={`glass p-6 border-l-4 ${status === 'configured' ? 'border-green-500' : 'border-yellow-500'}`}>
-                        <h3 className="text-lg font-bold mb-2">Estado de Conexión</h3>
+                        <h3 className="text-lg font-bold mb-2">{t('ycloudSettings.statusTitle')}</h3>
                         {status === 'configured' ? (
                             <p className="text-green-400 flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                                Configurado y listo para recibir mensajes.
+                                {t('ycloudSettings.statusConfigured')}
                             </p>
                         ) : (
                             <p className="text-yellow-400 flex items-center gap-2">
                                 <AlertTriangle size={16} />
-                                Faltan credenciales. La integración no funcionará.
+                                {t('ycloudSettings.statusMissing')}
                             </p>
                         )}
                     </div>
@@ -143,10 +145,10 @@ export const YCloudSettings: React.FC = () => {
                     {/* Webhook Info */}
                     <div className="glass p-6">
                         <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                            <ExternalLink size={18} /> Configuración de Webhook
+                            <ExternalLink size={18} /> {t('ycloudSettings.webhookConfigTitle')}
                         </h3>
                         <p className="text-sm text-secondary mb-4">
-                            Copia esta URL y pégala en la configuración de "Callback URL" en tu panel de YCloud.
+                            {t('ycloudSettings.webhookConfigDesc')}
                         </p>
 
                         <div className="bg-black/40 p-3 rounded border border-white/10 font-mono text-xs break-all mb-4">
@@ -154,7 +156,7 @@ export const YCloudSettings: React.FC = () => {
                         </div>
 
                         <div className="text-xs text-secondary opacity-70">
-                            <strong>Eventos requeridos:</strong>
+                            <strong>{t('ycloudSettings.requiredEvents')}</strong>
                             <ul className="list-disc pl-4 mt-1 space-y-1">
                                 <li>message.received</li>
                                 <li>message.sent</li>

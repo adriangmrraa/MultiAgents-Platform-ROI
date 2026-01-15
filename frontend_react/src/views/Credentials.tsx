@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Modal } from '../components/Modal';
 import { Globe, Store, Trash2, Edit2, Plus } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface Credential {
     id?: number;
@@ -19,6 +20,7 @@ interface Tenant {
 }
 
 export const Credentials: React.FC = () => {
+    const { t } = useLanguage();
     const { fetchApi } = useApi();
     const [credentials, setCredentials] = useState<Credential[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -99,12 +101,12 @@ export const Credentials: React.FC = () => {
             setIsModalOpen(false);
             loadData();
         } catch (e: any) {
-            alert('Error al guardar credencial: ' + e.message);
+            alert(t('credentials.saveError') + ': ' + e.message);
         }
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('¿Eliminar credencial?')) return;
+        if (!confirm(t('credentials.deleteConfirm'))) return;
         try {
             await fetchApi(`/admin/credentials/${id}`, { method: 'DELETE' });
             loadData();
@@ -150,16 +152,16 @@ export const Credentials: React.FC = () => {
     return (
         <div className="view active">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                <h1 className="view-title" style={{ margin: 0 }}>Gestión de Credenciales</h1>
+                <h1 className="view-title" style={{ margin: 0 }}>{t('credentials.title')}</h1>
                 <button className="btn-primary" onClick={openNew}>
                     <Plus size={18} style={{ marginRight: '8px' }} />
-                    Nueva Credencial
+                    {t('credentials.newCredential')}
                 </button>
             </div>
 
             <div className="glass" style={{ padding: '20px' }}>
                 <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Globe size={18} color="var(--accent)" /> Globales (Heredadas)
+                    <Globe size={18} color="var(--accent)" /> {t('credentials.global')}
                 </h3>
                 <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
                     {credentials.filter(c => c.scope === 'global').map(cred => (
@@ -180,7 +182,7 @@ export const Credentials: React.FC = () => {
                 </div>
 
                 <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px', marginBottom: '20px', marginTop: '40px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Store size={18} color="var(--success)" /> Específicas por Tienda
+                    <Store size={18} color="var(--success)" /> {t('credentials.tenant')}
                 </h3>
                 <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
                     {credentials.filter(c => c.scope === 'tenant').map(cred => (
@@ -203,10 +205,10 @@ export const Credentials: React.FC = () => {
                 </div>
             </div>
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingCred ? 'Editar Credencial' : 'Nueva Credencial'}>
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingCred ? t('common.edit') + ' ' + t('credentials.identifier') : t('credentials.newCredential')}>
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label>Nombre Identificador</label>
+                        <label>{t('credentials.identifier')}</label>
                         <input
                             required
                             value={formData.name}
@@ -217,7 +219,7 @@ export const Credentials: React.FC = () => {
 
                     {formData.category === 'smtp' ? (
                         <div className="p-3 bg-white/5 rounded mb-4 border border-white/10">
-                            <h5 className="text-xs font-bold text-accent mb-2">Configuración SMTP</h5>
+                            <h5 className="text-xs font-bold text-accent mb-2">{t('credentials.smtpConfig')}</h5>
                             <div className="form-grid">
                                 <div className="form-group">
                                     <label>Host</label>
@@ -241,7 +243,7 @@ export const Credentials: React.FC = () => {
                         </div>
                     ) : (
                         <div className="form-group">
-                            <label>Valor (Token/Key)</label>
+                            <label>{t('credentials.value')}</label>
                             <input
                                 required
                                 type="password"
@@ -253,7 +255,7 @@ export const Credentials: React.FC = () => {
                     )}
                     <div className="form-grid">
                         <div className="form-group">
-                            <label>Categoría</label>
+                            <label>{t('credentials.category')}</label>
                             <select
                                 value={formData.category}
                                 onChange={e => setFormData({ ...formData, category: e.target.value })}
@@ -268,7 +270,7 @@ export const Credentials: React.FC = () => {
                             </select>
                         </div>
                         <div className="form-group">
-                            <label>Alcance (Scope)</label>
+                            <label>{t('credentials.scope')}</label>
                             <select
                                 value={formData.scope}
                                 onChange={e => setFormData({ ...formData, scope: e.target.value as 'global' | 'tenant' })}
@@ -281,7 +283,7 @@ export const Credentials: React.FC = () => {
 
                     {formData.scope === 'tenant' && (
                         <div className="form-group">
-                            <label>Asignar a Tienda</label>
+                            <label>{t('credentials.assignToStore')}</label>
                             <select
                                 required
                                 value={formData.tenant_id?.toString() || ''}
@@ -296,7 +298,7 @@ export const Credentials: React.FC = () => {
                     )}
 
                     <div className="form-group">
-                        <label>Descripción (Opcional)</label>
+                        <label>{t('credentials.description')}</label>
                         <textarea
                             value={formData.description}
                             onChange={e => setFormData({ ...formData, description: e.target.value })}
@@ -305,8 +307,8 @@ export const Credentials: React.FC = () => {
                     </div>
 
                     <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                        <button type="button" className="btn-secondary" onClick={() => setIsModalOpen(false)}>Cancelar</button>
-                        <button type="submit" className="btn-primary">Guardar Credencial</button>
+                        <button type="button" className="btn-secondary" onClick={() => setIsModalOpen(false)}>{t('common.cancel')}</button>
+                        <button type="submit" className="btn-primary">{t('common.save')}</button>
                     </div>
                 </form>
             </Modal>

@@ -29,6 +29,11 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const keys = path.split('.');
         let result: any = translations[language];
 
+        // Safety: If language not found, fallback to Spanish
+        if (!result) {
+            result = translations['es'];
+        }
+
         for (const key of keys) {
             if (result && result[key]) {
                 result = result[key];

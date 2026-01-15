@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { Modal } from '../components/Modal';
 import { GlobalStreamLog } from '../components/GlobalStreamLog';
-import { Bot, Plus, Settings, Trash2, Edit, Activity, Lock } from 'lucide-react';
+import { Bot, Plus, Trash2, Edit, Activity, Lock } from 'lucide-react';
 
 interface Agent {
     id?: string;
@@ -27,6 +28,7 @@ interface Tenant {
 }
 
 export const Agents: React.FC = () => {
+    const { t } = useLanguage();
     const { fetchApi } = useApi();
     const { user } = useAuth();
     const [agents, setAgents] = useState<Agent[]>([]);
@@ -69,12 +71,12 @@ export const Agents: React.FC = () => {
             setIsModalOpen(false);
             loadData();
         } catch (e) {
-            alert('Error al guardar agente');
+            alert(t('agents.saveError'));
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('¿Eliminar agente? Esta acción no se puede deshacer.')) return;
+        if (!confirm(t('agents.deleteConfirm'))) return;
         await fetchApi(`/admin/agents/${id}`, { method: 'DELETE' });
         loadData();
     };
@@ -98,25 +100,25 @@ export const Agents: React.FC = () => {
     return (
         <div className="view active animate-fade-in">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="view-title">Agent Squad: Neural Configuration</h1>
+                <h1 className="view-title">{t('agents.title')}</h1>
                 <button
                     className={`btn-primary ${!user?.is_verified ? 'opacity-50 cursor-not-allowed' : ''}`}
                     onClick={openNew}
                 >
-                    <Plus size={18} className="mr-2" /> Nuevo Agente
+                    <Plus size={18} className="mr-2" /> {t('agents.newAgent')}
                 </button>
             </div>
 
             <div className="glass p-4 mb-6 border-l-4 border-accent">
-                <h4 className="font-bold mb-2 flex items-center gap-2"><Bot size={16} /> Protocolo Omega: Manual de Operaciones</h4>
+                <h4 className="font-bold mb-2 flex items-center gap-2"><Bot size={16} /> {t('agents.opsManual')}</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-secondary">
                     <div className="p-3 bg-white/5 rounded border border-white/10">
-                        <p className="font-semibold text-white mb-1">🧠 Lógica del Agente</p>
-                        Los agentes utilizan el <strong>System Prompt</strong> como su identidad base. Asegúrate de incluir reglas de estilo (Ej: "Usa emojis", "Habla de usted").
+                        <p className="font-semibold text-white mb-1">🧠 {t('agents.agentLogic')}</p>
+                        {t('agents.agentLogicDesc')}
                     </div>
                     <div className="p-3 bg-white/5 rounded border border-white/10">
-                        <p className="font-semibold text-white mb-1">🛠 Herramientas Tácticas</p>
-                        Cada herramienta añade capacidades. Configura el "Comportamiento Táctico" en la Armería para que el agente sepa CUÁNDO y CÓMO usarlas.
+                        <p className="font-semibold text-white mb-1">🛠 {t('agents.tacticalTools')}</p>
+                        {t('agents.tacticalToolsDesc')}
                     </div>
                 </div>
             </div>
@@ -125,12 +127,12 @@ export const Agents: React.FC = () => {
                 <table className="data-table">
                     <thead>
                         <tr>
-                            <th>Nombre</th>
-                            <th>Rol</th>
-                            <th>Tenant</th>
-                            <th>Modelo</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
+                            <th>{t('agents.name')}</th>
+                            <th>{t('agents.role')}</th>
+                            <th>{t('agents.tenant')}</th>
+                            <th>{t('agents.model')}</th>
+                            <th>{t('agents.status')}</th>
+                            <th>{t('agents.actions')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -150,11 +152,11 @@ export const Agents: React.FC = () => {
                                 <td className="font-mono text-xs">{agent.model_provider} / {agent.model_version}</td>
                                 <td>
                                     <span className={`status-dot ${agent.is_active ? 'configured' : ''}`}></span>
-                                    {agent.is_active ? 'Activo' : 'Inactivo'}
+                                    {agent.is_active ? t('agents.active') : t('agents.inactive')}
                                 </td>
                                 <td className="flex gap-2">
                                     <button className="btn-secondary text-xs px-2 py-1" onClick={() => openEdit(agent)}>
-                                        <Edit size={12} className="mr-1" /> Editar
+                                        <Edit size={12} className="mr-1" /> {t('common.edit')}
                                     </button>
                                     <button className="btn-delete text-xs px-2 py-1" onClick={() => handleDelete(agent.id!)}>
                                         <Trash2 size={12} />
@@ -176,17 +178,17 @@ export const Agents: React.FC = () => {
                 <GlobalStreamLog />
             </div>
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={isEditing ? 'Editar Agente' : 'Nuevo Agente'}>
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={isEditing ? t('common.edit') + ' ' + t('agents.name') : t('agents.newAgent')}>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="form-group">
-                            <label>Nombre</label>
+                            <label>{t('agents.name')}</label>
                             <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Ej: Agente de Ventas 1" />
                         </div>
                         <div className="form-group">
-                            <label>Tenant</label>
+                            <label>{t('agents.tenant')}</label>
                             <select required value={formData.tenant_id} onChange={e => setFormData({ ...formData, tenant_id: parseInt(e.target.value) })}>
-                                <option value={0}>Seleccionar...</option>
+                                <option value={0}>{t('common.select')}...</option>
                                 {tenants.map(t => <option key={t.id} value={t.id}>{t.store_name}</option>)}
                             </select>
                         </div>
@@ -194,21 +196,21 @@ export const Agents: React.FC = () => {
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="form-group">
-                            <label>Proveedor IA</label>
+                            <label>{t('agents.model')}</label>
                             <select value={formData.model_provider} onChange={e => setFormData({ ...formData, model_provider: e.target.value })}>
                                 <option value="openai">OpenAI</option>
                                 <option value="anthropic">Anthropic</option>
                             </select>
                         </div>
                         <div className="form-group">
-                            <label>Modelo</label>
+                            <label>Version</label>
                             <input value={formData.model_version} onChange={e => setFormData({ ...formData, model_version: e.target.value })} />
                         </div>
                     </div>
 
                     <div className="form-group">
                         <div className="flex justify-between items-center mb-1">
-                            <label>System Prompt Template</label>
+                            <label>{t('agents.identity')}</label>
                             <div className="text-[10px] text-accent font-bold bg-accent/10 px-2 py-0.5 rounded border border-accent/20">
                                 RECOMENDADO: NÚCLEO OMEGA
                             </div>
@@ -226,11 +228,11 @@ export const Agents: React.FC = () => {
 
                     <div className="flex items-center gap-2">
                         <input type="checkbox" checked={formData.is_active} onChange={e => setFormData({ ...formData, is_active: e.target.checked })} />
-                        <label>Agente Activo</label>
+                        <label>{t('agents.active')}</label>
                     </div>
 
                     <div className="form-group">
-                        <label>Canales Asignados (Ruteo)</label>
+                        <label>{t('agents.channels')}</label>
                         <div className="flex gap-4 mt-2 mb-4">
                             {['whatsapp', 'instagram', 'facebook', 'web'].map(ch => (
                                 <label key={ch} className="flex items-center gap-2 cursor-pointer">
@@ -250,7 +252,7 @@ export const Agents: React.FC = () => {
                     </div>
 
                     <div className="form-group">
-                        <label>Herramientas Habilitadas (RAG)</label>
+                        <label>{t('agents.tools')}</label>
                         <div className="text-[11px] text-secondary mb-2">Habilita las herramientas que este agente podrá invocar.</div>
                         <div className="grid grid-cols-2 gap-2 mt-2 p-3 glass rounded border border-white/5">
                             {tools.map(tool => (
@@ -272,8 +274,8 @@ export const Agents: React.FC = () => {
                     </div>
 
                     <div className="flex justify-end gap-2 mt-4">
-                        <button type="button" className="btn-secondary" onClick={() => setIsModalOpen(false)}>Cancelar</button>
-                        <button type="submit" className="btn-primary">Guardar Agente</button>
+                        <button type="button" className="btn-secondary" onClick={() => setIsModalOpen(false)}>{t('common.cancel')}</button>
+                        <button type="submit" className="btn-primary">{t('common.save')}</button>
                     </div>
                 </form>
             </Modal>

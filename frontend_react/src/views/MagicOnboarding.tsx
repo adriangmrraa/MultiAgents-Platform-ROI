@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApi, ADMIN_TOKEN } from '../hooks/useApi';
 import { ArrowRight, Loader2, Sparkles, Activity, Brain, Image as ImageIcon, FileText, BarChart3, Palette } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useLanguage } from '../contexts/LanguageContext';
 
 // --- Skeleton Components ---
 
@@ -133,6 +134,7 @@ const renderAssetContent = (assetLink: any) => {
 };
 
 export const MagicOnboarding: React.FC = () => {
+    const { t } = useLanguage();
     const { fetchApi } = useApi();
     const navigate = useNavigate();
     const [step, setStep] = useState<'connect' | 'igniting' | 'dashboard'>('connect');
@@ -301,13 +303,13 @@ export const MagicOnboarding: React.FC = () => {
                 <div style={{ maxWidth: '400px', margin: '100px auto', textAlign: 'center' }}>
                     <div className="mb-8 animate-fade-in-up">
                         <Sparkles size={48} className="mx-auto text-cyan-400 mb-4" />
-                        <h1 className="text-3xl font-bold mb-2">Nexus Business Forge</h1>
-                        <p className="text-slate-400">Initialize your autonomous enterprise.</p>
+                        <h1 className="text-3xl font-bold mb-2">{t('magic.title')}</h1>
+                        <p className="text-slate-400">{t('magic.subtitle')}</p>
                     </div>
 
                     <div className="space-y-4 text-left animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
                         <div className="form-group">
-                            <label className="text-sm text-slate-400">Project Name</label>
+                            <label className="text-sm text-slate-400">{t('magic.projectName')}</label>
                             <input
                                 className="w-full bg-slate-800 border-none rounded p-3 text-white"
                                 value={formData.store_name}
@@ -316,7 +318,7 @@ export const MagicOnboarding: React.FC = () => {
                             />
                         </div>
                         <div className="form-group">
-                            <label className="text-sm text-slate-400">Tenant ID (Phone)</label>
+                            <label className="text-sm text-slate-400">{t('magic.tenantId')}</label>
                             <input
                                 className="w-full bg-slate-800 border-none rounded p-3 text-white"
                                 value={formData.bot_phone_number}
@@ -354,7 +356,7 @@ export const MagicOnboarding: React.FC = () => {
                             className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-3 rounded mt-6 transition-all shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.5)]"
                             style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
                         >
-                            Hacer Magia <Sparkles size={18} />
+                            {t('magic.ignitionBtn')} <Sparkles size={18} />
                         </button>
                     </div>
                 </div>
@@ -371,7 +373,7 @@ export const MagicOnboarding: React.FC = () => {
                             <h2 className="text-2xl font-bold flex items-center gap-3">
                                 <Activity className="text-cyan-400" />
                                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500">
-                                    Business Canvas
+                                    {t('magic.canvasTitle')}
                                 </span>
                             </h2>
                             <div className="flex items-center gap-4">
@@ -452,7 +454,7 @@ export const MagicOnboarding: React.FC = () => {
                         <div className="p-4 border-b border-indigo-500/20 bg-indigo-950/20 backdrop-blur flex justify-between items-center">
                             <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-2">
                                 <Brain size={16} className={percent < 100 ? "animate-pulse" : ""} />
-                                Cortex Process
+                                {t('magic.thinkingProcess')}
                             </h3>
                             {percent < 100 && <Loader2 size={14} className="animate-spin text-indigo-400" />}
                         </div>
