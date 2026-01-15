@@ -402,6 +402,11 @@ migration_steps = [
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS human_override_until TIMESTAMPTZ;
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT '{}';
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES customers(id); -- Fix Identity Link
+        
+        -- Origin Metadata v1.0
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS platform_origin VARCHAR(32);
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS source_identifier VARCHAR(255);
+        ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS source_entity_id VARCHAR(128);
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Schema repair failed for chat_conversations';
     END $$;

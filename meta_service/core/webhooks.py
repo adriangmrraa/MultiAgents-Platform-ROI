@@ -107,6 +107,7 @@ class MetaWebhookService:
             "tenant_identifier": metadata.get("display_phone_number"), # Key for multitenancy
             "event_type": "message",
             "timestamp": msg.get("timestamp"),
+            "recipient_id": metadata.get("display_phone_number") or metadata.get("phone_number_id"), 
             "sender": {
                 "id": msg.get("from"),
                 "name": contact.get("profile", {}).get("name")
@@ -139,6 +140,7 @@ class MetaWebhookService:
             "tenant_identifier": recipient_id, # Page ID / IG ID
             "event_type": "message",
             "timestamp": timestamp,
+            "recipient_id": recipient_id,
             "sender": {
                 "id": sender_id,
                 "name": "User" # Name not provided in webhook, requires separate fetch

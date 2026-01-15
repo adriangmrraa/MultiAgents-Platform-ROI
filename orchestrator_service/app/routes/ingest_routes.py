@@ -46,7 +46,7 @@ async def ingest_message(event: SimpleEvent):
     2. Syncs Conversation/Message to DB.
     3. Publishes to Redis for UI.
     """
-    logger.info("ingest_received", provider=event.provider, platform=event.platform)
+    logger.info("ingest_received", provider=event.provider, platform=event.platform, recipient=event.recipient_id)
     
     # 1. Resolve Tenant
     tenant_id = None
@@ -57,39 +57,30 @@ async def ingest_message(event: SimpleEvent):
         
     # Strategy B: Resolve via Recipient ID (Page/Phone ID)
     if not tenant_id:
-        # Query DB: We need a mapping. 
-        # For this MVP, we assume tenants table has 'bot_phone_number' OR we check 'credentials' for page_id?
         # Let's search by Bot Phone Number first (WhatsApp)
         if event.platform == "whatsapp":
-             # Try exact match or match specific meta field if we added one
              formatted_id = event.recipient_id.replace("+", "")
              row = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1", formatted_id)
              if row: tenant_id = row['id']
              
-        # For Facebook/Instagram, we might not have 'page_id' column yet.
-        # We can look up in 'credentials' table (asset_id -> tenant_id) if we sync assets there?
-        # Protocol Omega: "Assets Discovery" in Meta Service syncs assets. 
-        # Ideally we store these asset mappings in a table 'tenant_assets' or JSON in tenants.
-        
-        # Fallback: If not found, use Tenant 1 (SuperAdmin) or Fail?
-        # FOr safety in MVP: Log warning and use Default Tenant 1 if safe, else Error.
+        # For Facebook/Instagram, look up in business_assets
         if not tenant_id:
-             # Try to find a tenant with this credential
-             # Assuming 'MetaAuthService' synced credentials to 'credentials' table?
-             # Or we simply look for a tenant that claims this number.
-             # PASS for now, fallback to 1 logic or error.
-             # Verify Recipient ID against active sessions?
-             pass
+             asset_row = await db.pool.fetchrow("SELECT tenant_id FROM business_assets WHERE asset_id = $1 LIMIT 1", event.recipient_id)
+             if asset_row: 
+                 t_val = asset_row['tenant_id']
+                 tenant_id = int(t_val) if str(t_val).isdigit() else 1 # Default fallback if uuid? usually int here
 
     if not tenant_id:
         logger.warning("ingest_tenant_unresolved", recipient=event.recipient_id)
-        # Defaulting to 1 for consistency with 'admin_routes' fallback logic in early testing
         tenant_id = 1 
 
-    # 2. Sync Conversation
-    # Unique Key: (channel, external_user_id)
-    # Channel = platform (instagram, facebook, whatsapp)
-    
+    # 2. Resolve Source Identifier (Asset Name)
+    source_identifier = event.recipient_id
+    asset_info = await db.pool.fetchrow("SELECT name FROM business_assets WHERE asset_id = $1 AND tenant_id = $2", event.recipient_id, str(tenant_id))
+    if asset_info:
+        source_identifier = asset_info['name']
+
+    # 3. Sync Conversation
     conv_query = """
         SELECT id FROM chat_conversations 
         WHERE tenant_id = $1 AND channel = $2 AND external_user_id = $3
@@ -99,18 +90,27 @@ async def ingest_message(event: SimpleEvent):
     
     if conv_row:
         conversation_id = conv_row['id']
+        # Update metadata
+        await db.pool.execute("""
+            UPDATE chat_conversations 
+            SET platform_origin = $1, source_identifier = $2, source_entity_id = $3, updated_at = NOW()
+            WHERE id = $4
+        """, event.platform, source_identifier, event.recipient_id, conversation_id)
     else:
         conversation_id = str(uuid.uuid4())
         await db.pool.execute("""
-            INSERT INTO chat_conversations (id, tenant_id, channel, external_user_id, status, provider, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, 'open', 'meta_direct', NOW(), NOW())
-        """, conversation_id, tenant_id, event.platform, event.sender_id)
+            INSERT INTO chat_conversations (
+                id, tenant_id, channel, external_user_id, status, provider, 
+                platform_origin, source_identifier, source_entity_id, 
+                created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, 'open', 'meta_direct', $5, $6, $7, NOW(), NOW())
+        """, conversation_id, tenant_id, event.platform, event.sender_id, event.platform, source_identifier, event.recipient_id)
         
-    # 3. Persist Message
+    # 4. Persist Message
     msg_id = str(uuid.uuid4())
     content = event.payload.get("text") or "[Media Message]"
     
-    # If media, we might want to store URL.
     media_url = event.payload.get("media_url")
     if media_url:
         content += f" {media_url}"

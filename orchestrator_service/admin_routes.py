@@ -1470,6 +1470,7 @@ async def list_chats(
         SELECT 
             id, tenant_id, channel, channel_source, external_user_id, 
             display_name, avatar_url, status, meta, provider,
+            platform_origin, source_identifier,
             human_override_until, last_message_at, last_message_preview
         FROM chat_conversations
         {where_sql}

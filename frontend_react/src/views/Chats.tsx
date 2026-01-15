@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
-import { MessageSquare, User, RefreshCw, Facebook, Instagram, Phone, MessageCircle } from 'lucide-react';
+import { MessageSquare, User, RefreshCw, Facebook, Instagram, MessageCircle } from 'lucide-react';
 
 interface Chat {
     id: string;
@@ -14,6 +14,14 @@ interface Chat {
     human_override_until?: string;
     status: string;
     is_locked: boolean;
+    provider?: string;
+    platform_origin?: string;
+    source_identifier?: string;
+    meta?: {
+        username?: string;
+        inbox_name?: string;
+        [key: string]: any;
+    };
 }
 
 interface Message {
