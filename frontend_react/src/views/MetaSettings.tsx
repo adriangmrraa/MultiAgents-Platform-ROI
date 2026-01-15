@@ -1,53 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { MessageCircle, AlertTriangle, Facebook, Check, Loader2 } from 'lucide-react';
-
-import { initFacebookSdk } from '../utils/facebookSdk';
+import { useFacebookSdk } from '../hooks/useFacebookSdk';
 
 export const MetaSettings: React.FC = () => {
     const { fetchApi } = useApi();
     const [status, setStatus] = useState<'idle' | 'loading' | 'connected' | 'error'>('idle');
     const [errorMsg, setErrorMsg] = useState('');
     const [connectedAssets, setConnectedAssets] = useState<Record<string, boolean>>({});
-    const [isSdkReady, setIsSdkReady] = useState(false);
 
-    // 1. Initialize FB SDK (Robust with mounted check)
-    useEffect(() => {
-        let mounted = true;
-        initFacebookSdk()
-            .then(() => {
-                if (mounted) {
-                    console.log("FB SDK Ready");
-                    setIsSdkReady(true);
-                }
-            })
-            .catch(err => {
-                if (mounted) {
-                    console.error("FB SDK Init Error", err);
-                    setErrorMsg("Error cargando componentes de Facebook");
-                    setStatus('error');
-                }
-            });
-        return () => { mounted = false; };
-    }, []);
+    // Hook manages SDK loading lifecycle
+    const isSdkReady = useFacebookSdk();
 
     const handleLogin = () => {
-        if (!isSdkReady || !(window as any).FB) return;
+        if (!isSdkReady) return;
 
         setStatus('loading');
 
+        // Business Login Flow with config_id
+        // Try-catch for immediate sync errors
         try {
-            // Safety timeout: if popup closed/blocked and callback never fires
-            const safetyTimeout = setTimeout(() => {
-                if (status === 'loading') {
-                    console.warn("Login timed out or blocked");
-                    setStatus('idle');
-                }
-            }, 60000); // 1 minute timeout
-
-            // Business Login Flow with config_id
             (window as any).FB.login((response: any) => {
-                clearTimeout(safetyTimeout);
                 if (response.authResponse) {
                     console.log('FB Login Success', response);
                     connectWithBackend(response.authResponse.accessToken);
@@ -59,10 +32,10 @@ export const MetaSettings: React.FC = () => {
                 config_id: import.meta.env.VITE_META_CONFIG_ID, // Use Config ID for Tech Provider permissions
                 override_default_response_type: true
             });
-        } catch (err) {
-            console.error("FB.login sync error:", err);
+        } catch (error) {
+            console.error("Login Error", error);
             setStatus('error');
-            setErrorMsg("Error iniciando el popup de Facebook. Revisa la consola.");
+            setErrorMsg("Error al iniciar el popup. Revisa permisos.");
         }
     };
 
