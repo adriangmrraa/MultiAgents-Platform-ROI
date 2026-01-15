@@ -3966,11 +3966,11 @@ async def connect_meta_account(request: Request, current_user: User = Depends(ge
             resp = await client.post(f"{meta_service_url}/connect", json=payload)
             
             if resp.status_code != 200:
-                logger.error("meta_service_connect_failed", status=resp.status_code, response=resp.text)
+                logger.error(f"meta_service_connect_failed: {resp.status_code} - {resp.text}")
                 raise HTTPException(resp.status_code, "Meta Service Connection Failed")
                 
             return resp.json()
 
     except Exception as e:
-        logger.error("connect_meta_proxy_error", error=str(e))
+        logger.error(f"connect_meta_proxy_error: {str(e)}")
         raise HTTPException(500, str(e))
