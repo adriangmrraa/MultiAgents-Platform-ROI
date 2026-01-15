@@ -17,7 +17,7 @@ interface AuthContextType {
     isAuthenticated: boolean;
     isLoading: boolean;
     login: (email: string, pass: string) => Promise<void>;
-    register: (email: string, pass: string, storeName: string) => Promise<void>;
+    register: (email: string, pass: string, storeName: string) => Promise<any>;
     logout: () => Promise<void>;
     refreshProfile: () => Promise<void>;
 }
@@ -63,12 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const register = async (email: string, pass: string, storeName: string) => {
-        await fetchApi('/auth/register', {
+        const data = await fetchApi('/auth/register', {
             method: 'POST',
             body: { email, password: pass, store_name: storeName }
         });
-        // Register NO LONGER auto-logs in (Zero Trust)
-        // await checkSession(); 
+        return data; // Return full response (with email_sent and message)
     };
 
     const logout = async () => {

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 export default function Register() {
     const { register } = useAuth();
-    const navigate = useNavigate();
+    // const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [storeName, setStoreName] = useState('');
@@ -32,14 +32,16 @@ export default function Register() {
         }
     };
 
+    const [regData, setRegData] = useState<{ email_sent: boolean, message: string } | null>(null);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setLoading(true);
         try {
-            await register(email, password, storeName);
-            // navigate('/'); // OLD Logic
-            setSuccess(true); // NEW Zero Trust Logic
+            const data = await register(email, password, storeName);
+            setRegData(data);
+            setSuccess(true);
         } catch (err: any) {
             setError(err.message || "Failed to register");
         } finally {
@@ -61,14 +63,26 @@ export default function Register() {
                             </svg>
                         </div>
 
-                        <h2 className="text-2xl font-bold text-white mb-2">Check your Inbox</h2>
+                        <h2 className="text-2xl font-bold text-white mb-2">
+                            {regData?.email_sent ? "Check your Inbox" : "Next Steps"}
+                        </h2>
+
+                        {!regData?.email_sent && (
+                            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
+                                <p className="font-bold mb-1">Account Created, but Email Failed</p>
+                                <p className="text-xs opacity-80">{regData?.message}</p>
+                            </div>
+                        )}
+
                         <p className="text-gray-400 mb-6">
-                            We've sent a magic link to <span className="text-emerald-400 font-mono">{email}</span>.
-                            <br />Click it to activate your store sovereign identity.
+                            {regData?.email_sent
+                                ? <>We've sent a magic link to <span className="text-emerald-400 font-mono">{email}</span>. Click it to activate your store sovereign identity.</>
+                                : <>Your account is ready, but we couldn't send the activation link to <span className="text-emerald-400 font-mono">{email}</span>. Please verify your SMTP settings or contact support.</>
+                            }
                         </p>
 
-                        <div className="p-4 bg-black/30 rounded-lg border border-white/5 mb-6 text-xs text-gray-500 font-mono">
-                            PROTOCOL_STATUS: PENDING_VERIFICATION
+                        <div className="p-4 bg-black/30 rounded-lg border border-white/5 mb-6 text-xs text-gray-400 font-mono">
+                            PROTOCOL_STATUS: {regData?.email_sent ? "PENDING_VERIFICATION" : "SMTP_FAILURE_MANUAL_NEEDED"}
                         </div>
 
                         {resendSuccess ? (
