@@ -43,12 +43,12 @@ export const MetaSettings: React.FC = () => {
                 }
             }, {
                 config_id: import.meta.env.VITE_META_CONFIG_ID,
-                response_type: 'code', // CRITICAL for Tech Providers
+                response_type: 'code',
                 override_default_response_type: true,
-                extras: {
+                extras: import.meta.env.VITE_META_EMBEDDED_SIGNUP === 'true' ? {
                     feature: 'whatsapp_embedded_signup',
                     setup: {}
-                }
+                } : undefined
             });
         } catch (error) {
             console.error("Login Error", error);

@@ -1,26 +1,71 @@
 ---
 
-## 🚀 Guía de Inicio y Despliegue
+# 🛸 Nexus v5.1: Sovereign Architecture
 
-### 1. Instalación Zero-Config
-Ya no es necesario configurar la `OPENAI_API_KEY` o `GOOGLE_API_KEY` en el archivo `.env` para cada operación. El sistema ahora funciona así:
-- **Herencia Automática**: Si pones las llaves en el `.env` al inicio, el sistema las "sedimenta" automáticamente en la base de datos para el primer inquilino.
-- **Configuración via UI**: Los administradores pueden cargar y rotar las llaves directamente desde *Settings > Credenciales*.
-
-### 2. Variables Mínimas (Globales)
-- `ADMIN_TOKEN`: Seguridad para el túnel administrativo.
-- `POSTGRES_DSN` & `REDIS_URL`: Infraestructura de datos.
-- `SMTP_*`: Para notificaciones oficiales del sistema (Nexus Brand). 
-    - **Recomendación**: Usar **Brevo** o **Resend** (Puerto 587) para evitar bloqueos geográficos (como el error 550 de Ferozo).
-    - **Visibilidad**: El sistema ahora informa errores SMTP en tiempo real durante el registro.
+> **Plataforma Multi-Agente de Alto ROI para E-Commerce (TiendaNube + WhatsApp + Meta)**
+> *Arquitectura Soberana, Multi-Tenant y Audit-Ready.*
 
 ---
 
-## 📚 Documentación Técnica
-*   **[BACKEND_SPECIFICATION.md](./BACKEND_SPECIFICATION.md)**: El contrato de la Bóveda de Credenciales.
-*   **[Manual de Vuelo v5.1](./Manual%20de%20Vuelo%20Nexus%20v5.md)**: Operaciones diarias y gestión soberana.
-*   **[REPORTE_MASTER_REFACTORIZACIÓN.md](./REPORTE_MASTER_REFACTORIZACIÓN.md)**: Historial técnico del salto a la v5.1.
+## 🔥 5 Pilares de la Evolución v5.1
+
+### 🛡️ 1. Bóveda de Credenciales Soberana (Sovereign Vault)
+Eliminamos la dependencia del archivo `.env` para llaves de API críticas.
+*   **Antes:** `OPENAI_API_KEY` global compartida.
+*   **Ahora:** Cada inquilino (Tenant) tiene sus propias llaves encriptadas (AES-256) en la base de datos.
+*   **Seguridad:** Audit-Ready. Aislamiento total de cuotas y consumo de recursos entre clientes.
+
+### 📧 2. Protocolo de Correo Híbrido (Omega)
+Resolución definitiva del conflicto de identidad en emails.
+*   **System Path:** Nexus usa un SMTP global (Brevo) para notificaciones críticas de infraestructura.
+*   **Agent Path:** Cada bot usa el SMTP propio de la tienda para hablar con sus clientes.
+*   **Visibilidad:** Detección en tiempo real de bloqueos de IP y errores DNS (Error 550).
+
+### 🤖 3. Inteligencia Multi-Cloud por Inquilino
+Libertad creativa descentralizada.
+*   **Gemini & Imagen 3:** Inyección dinámica de modelos de Google AI. cada tienda carga su propia llave.
+*   **Galaxy RAG:** Bases de conocimiento vectoriales independientes y segmentadas por `tenant_id`.
+
+### 🗄️ 4. Blindaje Estructural (Database Armour)
+Corrección de colisiones en sistemas masivos.
+*   **Restricción Única Inteligente:** `UNIQUE(name, tenant_id)`.
+*   **Escalabilidad:** Permite que 1000 tiendas tengan una credencial llamada "openai_key" sin conflictos.
+
+### 🪄 5. Auto-Sedimentación
+Migración sin dolor.
+*   **Bootloader:** Al arrancar, el sistema detecta si hay llaves en `.env` y las "siembra" automáticamente en la bóveda del primer inquilino.
+*   **Limpieza:** Tras el primer arranque, el `.env` puede (y debe) ser purgado de secretos sensibles.
 
 ---
 
-**© 2026 Platform AI Solutions - Sovereign Architecture**
+## 🚀 Guía de Despliegue Rápido
+
+### Requisitos
+*   Docker & Docker Compose
+*   Python 3.11+
+*   Node.js 18+
+
+### Instalación Zero-Config
+```bash
+# 1. Clona el repositorio
+git clone <repo_url>
+
+# 2. Configura variables mínimas (Ver .env.example)
+# Solo necesitas ADMIN_TOKEN y credenciales de BD/Redis.
+
+# 3. Despliega
+docker-compose up -d --build
+```
+*El sistema realizará la Auto-Sedimentación en el primer inicio.*
+
+---
+
+## 📚 Documentación Oficial
+
+*   **[Manual de Vuelo v5.1](./Manual%20de%20Vuelo%20Nexus%20v5.md)**: Operaciones diarias, gestión de credenciales y monitoreo.
+*   **[Deep Dive Técnico](./docs/TECHNICAL_DEEP_DIVE_V5_1.md)**: Detalles de arquitectura, base de datos y seguridad.
+*   **[Protocolo Meta Uplink](./docs/META_UPLINK_PROTOCOL.md)**: Guía de integración con Facebook, Instagram y WhatsApp.
+
+---
+
+**© 2026 Platform AI Solutions - Nexus Core Team**
