@@ -43,6 +43,8 @@ export const translations = {
             webhookDesc: 'Vincula Chatwoot para centralizar la atención humana.',
             copyUrl: 'Copiar URL de Conexión',
             urlCopied: 'URL Copiada',
+            webhookUrlLabel: 'URL del Webhook (Sovereano)',
+            webhookInstructions: 'Copia esta URL segura en la configuración de Chatwoot. Incluye un token de acceso único.',
         }
     },
     en: {
@@ -89,6 +91,8 @@ export const translations = {
             webhookDesc: 'Link Chatwoot to centralize human attention.',
             copyUrl: 'Copy Connection URL',
             urlCopied: 'URL Copied',
+            webhookUrlLabel: 'Webhook URL (Sovereign)',
+            webhookInstructions: 'Copy this secure URL into Chatwoot Webhook settings. Includes a unique access token.',
         }
     }
 };
