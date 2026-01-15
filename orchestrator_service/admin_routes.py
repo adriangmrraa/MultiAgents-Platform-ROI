@@ -3949,16 +3949,18 @@ async def connect_meta_account(request: Request, current_user: User = Depends(ge
     """
     try:
         body = await request.json()
-        short_lived_token = body.get("short_lived_token")
+        code = body.get("code")
+        redirect_uri = body.get("redirect_uri")
         
-        if not short_lived_token:
-            raise HTTPException(400, "Missing short_lived_token")
+        if not code:
+            raise HTTPException(400, "Missing code")
 
         meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
         
-        # Prepare payload for Meta Service
+        # Prepare payload for Meta Service (Diplomat)
         payload = {
-            "short_lived_token": short_lived_token,
+            "code": code,
+            "redirect_uri": redirect_uri,
             "tenant_id": current_user.tenant_id
         }
         
