@@ -56,7 +56,8 @@ class Settings(BaseSettings):
     CORS_ALLOWED_ORIGINS: Any = ["*"]  # Configurable string or list
     BOT_PHONE_NUMBER: str | None = None
     
-    # Security
+    # Security & AI
+    OPENAI_API_KEY: str | None = None
     SECRET_KEY: SecretStr = SecretStr("changeme_in_production_please_32chars")
     INTERNAL_API_TOKEN: SecretStr = SecretStr("internal_token_fallback")
     ENCRYPTION_KEY: str = "agente-js-secret-key-2024"

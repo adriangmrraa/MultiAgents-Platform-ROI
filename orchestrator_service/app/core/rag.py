@@ -13,9 +13,11 @@ from langchain.schema import Document
 
 logger = structlog.get_logger()
 
+from app.core.config import settings
+
 # Configuration
 CHROMA_PERSIST_DIRECTORY = "/app/data/chroma"
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = settings.OPENAI_API_KEY
 
 import re
 

@@ -29,6 +29,7 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "role": current_user.role,
         "tenant_id": current_user.tenant_id,
+        "is_verified": current_user.is_verified,
         "store_name": current_user.tenant.store_name if current_user.tenant else None,
         "full_name": current_user.full_name,
         "avatar_url": current_user.avatar_url
