@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 
+import { useLanguage } from '../../contexts/LanguageContext';
+
 export default function Register() {
     const { register } = useAuth();
+    const { t } = useLanguage();
     // const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -64,20 +67,20 @@ export default function Register() {
                         </div>
 
                         <h2 className="text-2xl font-bold text-white mb-2">
-                            {regData?.email_sent ? "Check your Inbox" : "Next Steps"}
+                            {regData?.email_sent ? t('auth.checkInbox') : t('auth.nextSteps')}
                         </h2>
 
                         {!regData?.email_sent && (
                             <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
-                                <p className="font-bold mb-1">Account Created, but Email Failed</p>
+                                <p className="font-bold mb-1">{t('auth.smtpErrorTitle')}</p>
                                 <p className="text-xs opacity-80">{regData?.message}</p>
                             </div>
                         )}
 
                         <p className="text-gray-400 mb-6">
                             {regData?.email_sent
-                                ? <>We've sent a magic link to <span className="text-emerald-400 font-mono">{email}</span>. Click it to activate your store sovereign identity.</>
-                                : <>Your account is ready, but we couldn't send the activation link to <span className="text-emerald-400 font-mono">{email}</span>. Please verify your SMTP settings or contact support.</>
+                                ? t('auth.emailSent', { email })
+                                : t('auth.emailFailed', { email })
                             }
                         </p>
 
@@ -86,14 +89,14 @@ export default function Register() {
                         </div>
 
                         {resendSuccess ? (
-                            <p className="text-emerald-400 text-sm mb-4">Email resent successfully!</p>
+                            <p className="text-emerald-400 text-sm mb-4">{t('auth.resendSuccess')}</p>
                         ) : (
                             <button
                                 onClick={handleResend}
                                 disabled={resendLoading}
                                 className="text-xs text-purple-400 hover:text-purple-300 underline mb-6 block w-full"
                             >
-                                {resendLoading ? "Sending..." : "Didn't receive it? Resend Email"}
+                                {resendLoading ? t('profile.sending') : t('auth.didntReceive')}
                             </button>
                         )}
 
@@ -101,7 +104,7 @@ export default function Register() {
                             to="/login"
                             className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg font-medium transition-all block w-full border border-white/5"
                         >
-                            Back to Login
+                            {t('auth.backToLogin')}
                         </Link>
                     </div>
                 </div>
@@ -120,9 +123,9 @@ export default function Register() {
                 <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
                     <div className="mb-8 text-center">
                         <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-cyan-400">
-                            New Deployment
+                            {t('auth.newDeployment')}
                         </h1>
-                        <p className="text-gray-400 text-sm mt-2">Initialize Store Sovereign Identity</p>
+                        <p className="text-gray-400 text-sm mt-2">{t('auth.initIdentity')}</p>
                     </div>
 
                     {error && (
@@ -134,7 +137,7 @@ export default function Register() {
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div>
                             <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-                                Store Name
+                                {t('auth.storeName')}
                             </label>
                             <input
                                 type="text"
@@ -148,7 +151,7 @@ export default function Register() {
 
                         <div>
                             <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-                                Owner Email
+                                {t('auth.ownerEmail')}
                             </label>
                             <input
                                 type="email"
@@ -162,7 +165,7 @@ export default function Register() {
 
                         <div>
                             <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-                                Secure Passcode
+                                {t('auth.securePasscode')}
                             </label>
                             <input
                                 type="password"
@@ -185,14 +188,14 @@ export default function Register() {
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
-                                    Provisioning...
+                                    {t('auth.provisioning')}
                                 </span>
-                            ) : "Deploy Tenant"}
+                            ) : t('auth.deployBtn')}
                         </button>
                     </form>
 
                     <div className="mt-6 text-center text-sm text-gray-500">
-                        Already deployed? <Link to="/login" className="text-emerald-400 hover:text-emerald-300 transition-colors">Acces Command</Link>
+                        {t('auth.alreadyDeployed')} <Link to="/login" className="text-emerald-400 hover:text-emerald-300 transition-colors">{t('auth.accessCommand')}</Link>
                     </div>
                 </div>
             </div>

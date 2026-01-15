@@ -3,9 +3,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useApi } from '../hooks/useApi';
 import { User, Shield, Key, Save, LogOut } from 'lucide-react';
 
+import { useLanguage } from '../contexts/LanguageContext';
+
 export const Profile: React.FC = () => {
     const { user, logout } = useAuth(); // We'll refresh user by reloading or refetching
     const { fetchApi } = useApi();
+    const { t, language, setLanguage } = useLanguage();
 
     const [fullName, setFullName] = useState(user?.full_name || '');
     const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
@@ -30,14 +33,14 @@ export const Profile: React.FC = () => {
         setMessage('');
         try {
             await fetchApi('/auth/resend-verification', { method: 'POST' });
-            setMessage('✓ Correo de verificación enviado con éxito.');
+            setMessage('✓ ' + t('profile.resendSuccess'));
             setCooldown(60);
         } catch (err: any) {
             if (err.status === 429) {
-                setMessage('Favor de esperar antes de reintentar.');
+                setMessage(t('profile.retryIn', { count: 30 }));
                 setCooldown(30);
             } else {
-                setMessage('Error enviando correo: ' + (err.message || 'Error SMTP'));
+                setMessage(t('common.error') + ': ' + (err.message || 'Error SMTP'));
             }
         } finally {
             setIsResending(false);
@@ -65,10 +68,10 @@ export const Profile: React.FC = () => {
                     password: password || undefined
                 }
             });
-            setMessage('Profile updated successfully. Please refresh to see changes.'); // In a real app we'd update context
+            setMessage(t('common.success') + '. ' + t('profile.refreshNotice'));
             setPassword('');
         } catch (err: any) {
-            setMessage('Error updating profile: ' + (err.message || 'Unknown error'));
+            setMessage(t('common.error') + ': ' + (err.message || 'Unknown error'));
         } finally {
             setIsSaving(false);
         }
@@ -77,7 +80,7 @@ export const Profile: React.FC = () => {
     return (
         <div className="view active">
             <h1 className="view-title flex items-center gap-3">
-                <User className="text-purple-400" /> My Profile
+                <User className="text-purple-400" /> {t('profile.title')}
             </h1>
 
             {!user?.is_verified && (
@@ -87,8 +90,8 @@ export const Profile: React.FC = () => {
                             <Shield size={24} />
                         </div>
                         <div>
-                            <h3 className="text-amber-500 font-bold">Cuenta no verificada (Modo Espectador)</h3>
-                            <p className="text-amber-500/60 text-sm">Verifica tu correo para desbloquear la creación de tiendas y agentes.</p>
+                            <h3 className="text-amber-500 font-bold">{t('profile.unverified')}</h3>
+                            <p className="text-amber-500/60 text-sm">{t('profile.unverifiedDesc')}</p>
                         </div>
                     </div>
                     <button
@@ -99,7 +102,7 @@ export const Profile: React.FC = () => {
                             : 'bg-amber-500 text-black hover:bg-amber-400 shadow-lg shadow-amber-500/20'
                             }`}
                     >
-                        {isResending ? 'Enviando...' : cooldown > 0 ? `Reintentar en ${cooldown}s` : 'Reenviar Email'}
+                        {isResending ? t('profile.sending') : cooldown > 0 ? t('profile.retryIn', { count: cooldown }) : t('profile.resendEmail')}
                     </button>
                 </div>
             )}
@@ -126,6 +129,23 @@ export const Profile: React.FC = () => {
                     </div>
 
                     <div className="border-t border-white/5 pt-6 grid grid-cols-2 gap-4 text-sm">
+                        <div className="col-span-2 mb-4">
+                            <label className="block text-white/30 text-xs uppercase font-bold tracking-wider mb-2">{t('profile.language')}</label>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setLanguage('es')}
+                                    className={`flex-1 py-2 rounded-lg border transition-all ${language === 'es' ? 'bg-purple-600/20 border-purple-500 text-white' : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'}`}
+                                >
+                                    Español
+                                </button>
+                                <button
+                                    onClick={() => setLanguage('en')}
+                                    className={`flex-1 py-2 rounded-lg border transition-all ${language === 'en' ? 'bg-purple-600/20 border-purple-500 text-white' : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'}`}
+                                >
+                                    English
+                                </button>
+                            </div>
+                        </div>
                         <div>
                             <span className="block text-white/30 text-xs uppercase font-bold tracking-wider mb-1">Tenant ID</span>
                             <span className="font-mono text-white/80">#{user?.tenant_id}</span>
@@ -140,12 +160,12 @@ export const Profile: React.FC = () => {
                 {/* Edit Form */}
                 <div className="glass p-8 rounded-2xl">
                     <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                        <Key size={18} className="text-white/60" /> Account Settings
+                        <Key size={18} className="text-white/60" /> {t('profile.accountSettings')}
                     </h3>
 
                     <form onSubmit={handleSave} className="space-y-6">
                         <div className="form-group">
-                            <label className="block text-sm font-medium text-white/60 mb-2">Display Name</label>
+                            <label className="block text-sm font-medium text-white/60 mb-2">{t('profile.displayName')}</label>
                             <input
                                 type="text"
                                 className="input-field w-full"
@@ -156,7 +176,7 @@ export const Profile: React.FC = () => {
                         </div>
 
                         <div className="form-group">
-                            <label className="block text-sm font-medium text-white/60 mb-2">Avatar URL</label>
+                            <label className="block text-sm font-medium text-white/60 mb-2">{t('profile.avatarUrl')}</label>
                             <input
                                 type="text"
                                 className="input-field w-full"
@@ -167,13 +187,13 @@ export const Profile: React.FC = () => {
                         </div>
 
                         <div className="form-group">
-                            <label className="block text-sm font-medium text-white/60 mb-2">New Password (Optional)</label>
+                            <label className="block text-sm font-medium text-white/60 mb-2">{t('profile.password')}</label>
                             <input
                                 type="password"
                                 className="input-field w-full"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Leave blank to keep current"
+                                placeholder={t('profile.passwordPlaceholder')}
                             />
                         </div>
 
@@ -183,7 +203,7 @@ export const Profile: React.FC = () => {
                                 onClick={logout}
                                 className="px-4 py-2 rounded-lg border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2 text-sm"
                             >
-                                <LogOut size={16} /> Sign Out
+                                <LogOut size={16} /> {t('common.signOut')}
                             </button>
 
                             <button
@@ -192,7 +212,7 @@ export const Profile: React.FC = () => {
                                 className="btn-primary flex items-center gap-2"
                             >
                                 {isSaving ? <span className="animate-spin">⌛</span> : <Save size={18} />}
-                                Save Changes
+                                {t('common.save')}
                             </button>
                         </div>
 

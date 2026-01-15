@@ -70,53 +70,57 @@ function RequireAuth({ children }: { children: JSX.Element }) {
   return children;
 }
 
+import { LanguageProvider } from './contexts/LanguageContext';
+
 function App() {
   return (
     <Router>
-      <AuthProvider>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/verify" element={<VerifyEmail />} />
+      <LanguageProvider>
+        <AuthProvider>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/verify" element={<VerifyEmail />} />
 
-          {/* Protected Routes */}
-          <Route path="/*" element={
-            <RequireAuth>
-              <Layout>
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/setup" element={<Setup />} />
-                  <Route path="/nexus-setup" element={<SetupExperience />} />
-                  <Route path="/magic" element={<MagicOnboarding />} />
-                  <Route path="/forge" element={<BusinessForge />} />
-                  <Route path="/stores" element={<Stores />} />
-                  <Route path="/agents" element={<Agents />} />
-                  <Route path="/logs" element={<Logs />} />
-                  <Route path="/analytics" element={<Analytics />} />
-                  <Route path="/credentials" element={<Credentials />} />
-                  <Route path="/settings/ycloud" element={<Settings initialTab="ycloud" />} />
-                  <Route path="/settings/meta" element={<Settings initialTab="meta" />} />
-                  <Route path="/settings" element={<Settings initialTab="integrations" />} />
-                  <Route path="/chats" element={<Chats />} />
-                  <Route path="/tools" element={<Tools />} />
-                  <Route path="/knowledge" element={<Knowledge />} />
-                  <Route path="/console" element={<Console />} />
-                  <Route path="/handoff" element={<Handoff />} />
-                  <Route path="/profile" element={<Profile />} />
-                  <Route path="/platform" element={
-                    <RequireSuperAdmin>
-                      <PlatformTower />
-                    </RequireSuperAdmin>
-                  } />
-                  {/* Catch all redirect to dashboard */}
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </Layout>
-            </RequireAuth>
-          } />
-        </Routes>
-      </AuthProvider>
+            {/* Protected Routes */}
+            <Route path="/*" element={
+              <RequireAuth>
+                <Layout>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/setup" element={<Setup />} />
+                    <Route path="/nexus-setup" element={<SetupExperience />} />
+                    <Route path="/magic" element={<MagicOnboarding />} />
+                    <Route path="/forge" element={<BusinessForge />} />
+                    <Route path="/stores" element={<Stores />} />
+                    <Route path="/agents" element={<Agents />} />
+                    <Route path="/logs" element={<Logs />} />
+                    <Route path="/analytics" element={<Analytics />} />
+                    <Route path="/credentials" element={<Credentials />} />
+                    <Route path="/settings/ycloud" element={<Settings initialTab="ycloud" />} />
+                    <Route path="/settings/meta" element={<Settings initialTab="meta" />} />
+                    <Route path="/settings" element={<Settings initialTab="integrations" />} />
+                    <Route path="/chats" element={<Chats />} />
+                    <Route path="/tools" element={<Tools />} />
+                    <Route path="/knowledge" element={<Knowledge />} />
+                    <Route path="/console" element={<Console />} />
+                    <Route path="/handoff" element={<Handoff />} />
+                    <Route path="/profile" element={<Profile />} />
+                    <Route path="/platform" element={
+                      <RequireSuperAdmin>
+                        <PlatformTower />
+                      </RequireSuperAdmin>
+                    } />
+                    {/* Catch all redirect to dashboard */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </Layout>
+              </RequireAuth>
+            } />
+          </Routes>
+        </AuthProvider>
+      </LanguageProvider>
     </Router>
   );
 }

@@ -8,8 +8,15 @@ interface SettingsProps {
     initialTab?: 'integrations' | 'ycloud' | 'meta';
 }
 
+import { useLanguage } from '../contexts/LanguageContext';
+
+interface SettingsProps {
+    initialTab?: 'integrations' | 'ycloud' | 'meta';
+}
+
 export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' }) => {
     const { user } = useAuth();
+    const { t, language, setLanguage } = useLanguage();
     const [activeTab, setActiveTab] = useState<'integrations' | 'ycloud' | 'meta'>(initialTab);
     const [copied, setCopied] = useState(false);
     const [apiBaseUrl, setApiBaseUrl] = useState('');
@@ -33,10 +40,10 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
     // Construct Webhook URL for Chatwoot
     const webhookUrl = apiBaseUrl
         ? `${apiBaseUrl.replace('/api', '')}/chat?tenant_id=${user?.tenant_id || 0}`
-        : 'Loading...';
+        : t('common.loading');
 
     const handleCopy = () => {
-        if (!webhookUrl || webhookUrl === 'Loading...') return;
+        if (!webhookUrl || webhookUrl === t('common.loading')) return;
         navigator.clipboard.writeText(webhookUrl);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -47,8 +54,24 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
             <div className="flex items-center justify-between mb-8">
                 <h1 className="text-2xl font-bold flex items-center gap-3">
                     <LayoutGrid className="text-cyan-400" />
-                    System Configuration
+                    {t('settings.title')}
                 </h1>
+
+                {/* Language Quick Switch */}
+                <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10">
+                    <button
+                        onClick={() => setLanguage('es')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${language === 'es' ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20' : 'text-slate-400 hover:text-white'}`}
+                    >
+                        ES
+                    </button>
+                    <button
+                        onClick={() => setLanguage('en')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${language === 'en' ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20' : 'text-slate-400 hover:text-white'}`}
+                    >
+                        EN
+                    </button>
+                </div>
             </div>
 
             {/* Tabs */}
@@ -57,19 +80,19 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
                     active={activeTab === 'integrations'}
                     onClick={() => setActiveTab('integrations')}
                     icon={<Globe size={18} />}
-                    label="Integrations"
+                    label={t('settings.integrations')}
                 />
                 <TabButton
                     active={activeTab === 'ycloud'}
                     onClick={() => setActiveTab('ycloud')}
                     icon={<Smartphone size={18} />}
-                    label="YCloud (WhatsApp)"
+                    label={t('settings.ycloud')}
                 />
                 <TabButton
                     active={activeTab === 'meta'}
                     onClick={() => setActiveTab('meta')}
                     icon={<Info size={18} />} // Meta Icon placeholder
-                    label="Meta (Facebook/IG)"
+                    label={t('settings.meta')}
                 />
             </div>
 
@@ -87,10 +110,10 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
 
                                 <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
                                     <MessageSquare className="text-blue-400" />
-                                    Conexión Omnicanal
+                                    {t('settings.webhookTitle')}
                                 </h3>
                                 <p className="text-sm text-slate-400 mb-6">
-                                    Vincula Chatwoot para centralizar la atención humana. Usa este Webhook para recibir mensajes de todos los canales.
+                                    {t('settings.webhookDesc')}
                                 </p>
 
                                 <div className="bg-black/50 rounded-lg p-4 border border-white/10 mb-4">
@@ -109,7 +132,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
                                     className={`w-full py-2 rounded font-bold text-sm flex items-center justify-center gap-2 transition-all ${copied ? 'bg-green-500/20 text-green-400' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
                                 >
                                     {copied ? <Check size={18} /> : <Copy size={18} />}
-                                    {copied ? 'URL Copiada' : 'Copiar URL de Conexión'}
+                                    {copied ? t('settings.urlCopied') : t('settings.copyUrl')}
                                 </button>
 
                                 <div className="mt-4 flex items-start gap-2 text-[10px] text-slate-500 bg-blue-500/5 p-2 rounded">

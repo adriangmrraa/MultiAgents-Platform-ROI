@@ -62,9 +62,24 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
             
             # Resend Email (catch exceptions safely in Service)
             from app.core.email import EmailService
-            await EmailService.send_verification_email(existing_user.email, existing_user.verification_token, tenant_id=existing_user.tenant_id)
+            from datetime import datetime
+            email_sent = True
+            try:
+                await EmailService.send_verification_email(existing_user.email, existing_user.verification_token, tenant_id=existing_user.tenant_id)
+                existing_user.last_verification_email_at = datetime.utcnow()
+                await db.commit()
+                message = "Verification email resent. Check your inbox."
+            except Exception as e:
+                logger.error("smtp_register_resend_error", error=str(e))
+                email_sent = False
+                message = f"SMTP Failed: {str(e)}"
             
-            return {"access_token": "pending_verification", "token_type": "bearer"}
+            return {
+                "access_token": "pending_verification", 
+                "token_type": "bearer",
+                "email_sent": email_sent,
+                "message": message
+            }
 
     # 2. Check or Create Tenant
     # Generate phone if missing

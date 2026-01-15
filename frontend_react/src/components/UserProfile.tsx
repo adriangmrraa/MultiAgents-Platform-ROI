@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Key, Menu, LogOut, User as UserIcon, Settings } from 'lucide-react';
+import { Key, LogOut, User as UserIcon, Settings } from 'lucide-react';
+
+import { useLanguage } from '../contexts/LanguageContext';
 
 export const UserProfile: React.FC = () => {
     const { user, logout } = useAuth();
+    const { t } = useLanguage();
     const [isOpen, setIsOpen] = useState(false);
 
     // Initial Helper
@@ -46,7 +49,7 @@ export const UserProfile: React.FC = () => {
                         {/* Name & Role (Desktop) */}
                         <div className="flex flex-col items-start mr-1">
                             <span className="text-xs font-bold text-white leading-tight group-hover:text-indigo-300 transition-colors">
-                                {user?.full_name?.split(' ')[0] || 'Commander'}
+                                {user?.full_name?.split(' ')[0] || t('userProfile.commander')}
                             </span>
                             <span className="text-[10px] text-white/50 font-mono leading-tight uppercase tracking-wider">
                                 {user?.role === 'owner' ? 'Tenant Owner' : user?.role || 'Guest'}
@@ -74,7 +77,7 @@ export const UserProfile: React.FC = () => {
                                         <div className="p-1.5 rounded-md bg-white/5 text-indigo-400">
                                             <UserIcon size={14} />
                                         </div>
-                                        Profile Settings
+                                        {t('userProfile.profileSettings')}
                                     </NavLink>
                                     <NavLink
                                         to="/credentials"
@@ -84,7 +87,7 @@ export const UserProfile: React.FC = () => {
                                         <div className="p-1.5 rounded-md bg-white/5 text-emerald-400">
                                             <Key size={14} />
                                         </div>
-                                        API Keys
+                                        {t('userProfile.apiKeys')}
                                     </NavLink>
                                     <NavLink
                                         to="/settings"
@@ -94,7 +97,7 @@ export const UserProfile: React.FC = () => {
                                         <div className="p-1.5 rounded-md bg-white/5 text-cyan-400">
                                             <Settings size={14} />
                                         </div>
-                                        Configuración
+                                        {t('userProfile.config')}
                                     </NavLink>
                                 </div>
 
@@ -111,7 +114,7 @@ export const UserProfile: React.FC = () => {
                                         <div className="p-1.5 rounded-md bg-red-500/10 text-red-400 group-hover/logout:text-red-300">
                                             <LogOut size={14} />
                                         </div>
-                                        Disconnect
+                                        {t('userProfile.disconnect')}
                                     </button>
                                 </div>
                             </div>

@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 
+import { useLanguage } from '../../contexts/LanguageContext';
+
 export default function Login() {
     const { login } = useAuth();
+    const { t } = useLanguage();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -19,7 +22,6 @@ export default function Login() {
         setLoading(true);
         try {
             await login(email, password);
-            navigate('/');
             navigate('/');
         } catch (err: any) {
             const msg = err.message || "Failed to login";
@@ -40,10 +42,7 @@ export default function Login() {
             const res = await fetch(`${API_BASE}/auth/resend-verification`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password: 'dummy' }) // Password ignored by backend but schema requires UserLogin? No, I defined UserLogin in backend which needs password? Yes. I should adjust backend schema or send dummy.
-                // Wait, backend uses UserLogin schema which implies password required?
-                // `class UserLogin(BaseModel): email: EmailStr; password: str`
-                // Yes. I will send a dummy password since the endpoint doesn't verify it (it just checks email existence).
+                body: JSON.stringify({ email, password: 'dummy' })
             });
             if (res.ok) {
                 setResendSuccess(true);
@@ -68,9 +67,9 @@ export default function Login() {
                 <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
                     <div className="mb-8 text-center">
                         <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-                            Nexus Command
+                            {t('auth.loginTitle')}
                         </h1>
-                        <p className="text-gray-400 text-sm mt-2">Protocol Omega v5.1 Access</p>
+                        <p className="text-gray-400 text-sm mt-2">{t('auth.protocolAccess')}</p>
                     </div>
 
                     {error && (
@@ -82,21 +81,21 @@ export default function Login() {
                                     disabled={resendLoading}
                                     className="block mx-auto mt-2 text-xs text-purple-400 hover:text-purple-300 underline"
                                 >
-                                    {resendLoading ? "Sending..." : "Resend Verification Email"}
+                                    {resendLoading ? t('profile.sending') : t('auth.resendVerification')}
                                 </button>
                             )}
                         </div>
                     )}
                     {resendSuccess && (
                         <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded text-emerald-400 text-sm text-center">
-                            Verification email resent! Check your inbox.
+                            {t('auth.resendSuccess')}
                         </div>
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div>
                             <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-                                Identity
+                                {t('auth.identity')}
                             </label>
                             <input
                                 type="email"
@@ -110,7 +109,7 @@ export default function Login() {
 
                         <div>
                             <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-                                Passcode
+                                {t('auth.passcode')}
                             </label>
                             <input
                                 type="password"
@@ -133,14 +132,14 @@ export default function Login() {
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
-                                    Authenticating...
+                                    {t('auth.authenticating')}
                                 </span>
-                            ) : "Initialize Session"}
+                            ) : t('auth.initSession')}
                         </button>
                     </form>
 
                     <div className="mt-6 text-center text-sm text-gray-500">
-                        No access? <Link to="/register" className="text-purple-400 hover:text-purple-300 transition-colors">Request Clearance</Link>
+                        {t('auth.noAccess')} <Link to="/register" className="text-purple-400 hover:text-purple-300 transition-colors">{t('auth.requestClearance')}</Link>
                     </div>
                 </div>
             </div>

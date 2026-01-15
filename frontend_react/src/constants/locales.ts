@@ -1,0 +1,97 @@
+export const translations = {
+    es: {
+        common: {
+            save: 'Guardar Cambios',
+            cancel: 'Cancelar',
+            loading: 'Cargando...',
+            error: 'Error',
+            success: 'Éxito',
+            signOut: 'Cerrar Sesión',
+        },
+        sidebar: {
+            dashboard: 'Panel de Control',
+            agents: 'Agentes AI',
+            chats: 'Conversaciones',
+            credentials: 'Credenciales',
+            knowledge: 'Conocimiento (RAG)',
+            analytics: 'Analíticas',
+            settings: 'Configuración',
+            profile: 'Mi Perfil',
+        },
+        profile: {
+            title: 'Mi Perfil',
+            accountSettings: 'Ajustes de Cuenta',
+            displayName: 'Nombre a Mostrar',
+            avatarUrl: 'URL del Avatar',
+            password: 'Nueva Contraseña (Opcional)',
+            passwordPlaceholder: 'Dejar en blanco para mantener actual',
+            language: 'Idioma del Sistema',
+            unverified: 'Cuenta no verificada (Modo Espectador)',
+            unverifiedDesc: 'Verifica tu correo para desbloquear la creación de tiendas y agentes.',
+            resendEmail: 'Reenviar Email',
+            sending: 'Enviando...',
+            retryIn: 'Reintentar en {{count}}s',
+        },
+        settings: {
+            title: 'Configuración del Sistema',
+            integrations: 'Integraciones',
+            ycloud: 'YCloud (WhatsApp)',
+            meta: 'Meta (Facebook/IG)',
+            language: 'Idioma de la Plataforma',
+            selectLanguage: 'Seleccionar Idioma',
+            webhookTitle: 'Conexión Omnicanal',
+            webhookDesc: 'Vincula Chatwoot para centralizar la atención humana.',
+            copyUrl: 'Copiar URL de Conexión',
+            urlCopied: 'URL Copiada',
+        }
+    },
+    en: {
+        common: {
+            save: 'Save Changes',
+            cancel: 'Cancel',
+            loading: 'Loading...',
+            error: 'Error',
+            success: 'Success',
+            signOut: 'Sign Out',
+        },
+        sidebar: {
+            dashboard: 'Dashboard',
+            agents: 'AI Agents',
+            chats: 'Conversations',
+            credentials: 'Credentials',
+            knowledge: 'Knowledge (RAG)',
+            analytics: 'Analytics',
+            settings: 'Settings',
+            profile: 'My Profile',
+        },
+        profile: {
+            title: 'My Profile',
+            accountSettings: 'Account Settings',
+            displayName: 'Display Name',
+            avatarUrl: 'Avatar URL',
+            password: 'New Password (Optional)',
+            passwordPlaceholder: 'Leave blank to keep current',
+            language: 'System Language',
+            unverified: 'Account Unverified (Spectator Mode)',
+            unverifiedDesc: 'Verify your email to unlock store and agent creation.',
+            resendEmail: 'Resend Email',
+            sending: 'Sending...',
+            retryIn: 'Retry in {{count}}s',
+        },
+        settings: {
+            title: 'System Configuration',
+            integrations: 'Integrations',
+            ycloud: 'YCloud (WhatsApp)',
+            meta: 'Meta (Facebook/IG)',
+            language: 'Platform Language',
+            selectLanguage: 'Select Language',
+            webhookTitle: 'Omnichannel Connection',
+            webhookDesc: 'Link Chatwoot to centralize human attention.',
+            copyUrl: 'Copy Connection URL',
+            urlCopied: 'URL Copied',
+        }
+    }
+};
+
+export type Language = 'en' | 'es';
+export type TranslationKey = keyof typeof translations.es;
