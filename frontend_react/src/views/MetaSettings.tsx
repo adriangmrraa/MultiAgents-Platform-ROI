@@ -25,15 +25,25 @@ export const MetaSettings: React.FC = () => {
             }
 
             (window as any).FB.login((response: any) => {
-                if (response.authResponse) {
-                    console.log('FB Login Success', response);
-                    connectWithBackend(response.authResponse.accessToken);
+                // For Code Flow, we look for 'code' in authResponse or root
+                const code = response.authResponse?.code || response.code;
+
+                if (code) {
+                    console.log('FB Code Received', code);
+                    // Critical: Redirect URI must match exactly what Meta expects (usually Origin + /)
+                    // We send it so backend uses the same one.
+                    connectWithBackend(code);
                 } else {
-                    console.log('User cancelled login or did not fully authorize.');
+                    console.log('User cancelled login or did not fully authorize.', response);
                     setStatus('idle');
+                    if (response.status !== 'connected' && response.status !== 'unknown') {
+                        setErrorMsg("No se recibió el código de autorización.");
+                        setStatus('error');
+                    }
                 }
             }, {
-                config_id: import.meta.env.VITE_META_CONFIG_ID, // Use Config ID for Tech Provider permissions
+                config_id: import.meta.env.VITE_META_CONFIG_ID,
+                response_type: 'code', // CRITICAL for Tech Providers
                 override_default_response_type: true
             });
         } catch (error) {
@@ -43,11 +53,17 @@ export const MetaSettings: React.FC = () => {
         }
     };
 
-    const connectWithBackend = async (shortToken: string) => {
+    const connectWithBackend = async (code: string) => {
         try {
+            // Dynamic Redirect URI (Origin + Slash) to match Meta's strict requirement
+            const redirectUri = window.location.origin + '/';
+
             const res = await fetchApi('/admin/meta/connect', {
                 method: 'POST',
-                body: { short_lived_token: shortToken }
+                body: {
+                    code: code,
+                    redirect_uri: redirectUri
+                }
             });
             console.log("Meta Connect Result:", res);
 

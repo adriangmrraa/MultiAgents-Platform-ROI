@@ -45,25 +45,27 @@ async def connect_meta_account(
     data: dict
 ):
     """
-    Frontend calls this with a Short-Lived User Token obtained from FB Login SDK.
-    We: Exchange it -> Get Assets -> Subscribe -> Sync with Orchestrator.
-    Returns: Discovery summary for UI.
+    Frontend calls this with an Authorization Code obtained from FB Login SDK.
+    We: Exchange Code -> Get Assets -> Subscribe -> Sync with Orchestrator.
     """
-    short_token = data.get("short_lived_token")
+    code = data.get("code")
     tenant_id = data.get("tenant_id")
+    # Meta is strict: Redirect URI must match exactly what was used in frontend (or the page origin)
+    default_redirect_uri = os.getenv("FRONTEND_URL", "https://multiagents-frontend.yn8wow.easypanel.host")
+    redirect_uri = data.get("redirect_uri", default_redirect_uri)
     
-    if not short_token or not tenant_id:
-        raise HTTPException(400, "Missing token or tenant_id")
+    if not code or not tenant_id:
+        raise HTTPException(400, "Missing code or tenant_id")
 
     # Run flow synchronously to provide immediate UI feedback
-    result = await handle_connection_flow(short_token, tenant_id)
+    result = await handle_connection_flow(code, tenant_id, redirect_uri)
     return result
 
-async def handle_connection_flow(short_token: str, tenant_id: str):
+async def handle_connection_flow(code: str, tenant_id: str, redirect_uri: str):
     try:
-        # 1. Exchange Token
-        long_token = await auth_service.exchange_token(short_token)
-        logger.info("token_exchanged", tenant_id=tenant_id)
+        # 1. Exchange Code for Token
+        long_token = await auth_service.exchange_code(code, redirect_uri)
+        logger.info("code_exchanged", tenant_id=tenant_id)
         
         # 2. Get Assets (Pages, IG, WABA)
         assets = await auth_service.get_accounts(long_token)

@@ -114,6 +114,8 @@ services:
         generateValue: true
       - key: META_APP_SECRET
         sync: false
+      - key: FRONTEND_URL
+        fromGroup: FRONTEND_URL
 
   # ==========================================
   # 6. Redis Cache (Key Value - Valkey 8)

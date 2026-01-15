@@ -17,16 +17,17 @@ class MetaAuthService:
         self.api_version = "v19.0"
         self.base_url = f"https://graph.facebook.com/{self.api_version}"
 
-    async def exchange_token(self, short_lived_token: str) -> str:
+    async def exchange_code(self, code: str, redirect_uri: str) -> str:
         """
-        Exchanges a short-lived user access token for a long-lived one (60 days).
+        Exchanges an Authorization Code for a User Access Token.
+        Required for 'Business Login for Tech Providers' (System User Flow).
         """
         url = f"{self.base_url}/oauth/access_token"
         params = {
-            "grant_type": "fb_exchange_token",
             "client_id": self.app_id,
             "client_secret": self.app_secret,
-            "fb_exchange_token": short_lived_token
+            "redirect_uri": redirect_uri,
+            "code": code
         }
         
         async with httpx.AsyncClient() as client:
@@ -34,7 +35,7 @@ class MetaAuthService:
             data = resp.json()
             
             if "error" in data:
-                logger.error("meta_token_exchange_failed", error=data["error"])
+                logger.error("meta_code_exchange_failed", error=data["error"])
                 raise HTTPException(status_code=400, detail=data["error"]["message"])
                 
             return data.get("access_token")

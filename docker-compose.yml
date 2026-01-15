@@ -89,8 +89,9 @@ services:
     environment:
       - YCLOUD_API_KEY=${YCLOUD_API_KEY}
       - YCLOUD_WEBHOOK_SECRET=${YCLOUD_WEBHOOK_SECRET}
-      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
-      - ORCHESTRATOR_SERVICE_URL=http://orchestrator_service:8000
+      - META_VERIFY_TOKEN=${META_VERIFY_TOKEN}
+      - ORCHESTRATOR_URL=http://orchestrator_service:8000
+      - FRONTEND_URL=${FRONTEND_URL}
       - REDIS_URL=redis://redis:6379
       - OPENAI_API_KEY=${OPENAI_API_KEY} # For Audio Transcription
     healthcheck:
