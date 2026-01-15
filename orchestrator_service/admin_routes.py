@@ -1410,26 +1410,78 @@ async def get_chats_summary(
     Versión de compatibilidad de list_chats para el frontend actual.
     Cumple con el Protocolo Omega (UUID id).
     """
-    chats = await list_chats(
-        channel=channel, 
-        human_override=human_override,
-        limit=limit,
-        offset=offset,
-        current_user=current_user
-    )
-    # Adaptar a lo que esperaba el resumen de chat clásico pero con IDs Omega
+    # Direct SQL implementation to ensure correct filtering (Protocol Omega)
+    query = """
+        SELECT c.*, 
+            CASE WHEN c.meta->>'sender_name' IS NOT NULL THEN c.meta->>'sender_name' ELSE c.external_user_id END as display_name,
+            c.meta->>'sender_avatar' as avatar_url,
+            (SELECT content FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
+            c.updated_at as timestamp,
+            c.status,
+            c.is_locked,
+            c.human_override_until,
+            c.channel as channel_source
+        FROM chat_conversations c
+        WHERE c.tenant_id = $1
+    """
+    params = [current_user.tenant_id]
+    
+    # Filter Logic
+    if channel and channel != 'all':
+        if channel == 'human_override':
+             query += " AND c.human_override_until > NOW()"
+        else:
+             query += " AND c.channel = $2"
+             params.append(channel)
+             
+    query += " ORDER BY c.updated_at DESC LIMIT $3 OFFSET $4"
+    params.extend([limit, offset]) # $3, $4 (or depending on index)
+    
+    # Adjust param indices dynamically for the query builder
+    # Python-side index fix:
+    # If channel is present: tenant=$1, channel=$2, limit=$3, offset=$4
+    # If not: tenant=$1, limit=$2, offset=$3
+    
+    # Re-build simpler query to avoid index headache
+    base_query = """
+        SELECT c.id, c.external_user_id, c.tenant_id, c.channel, 
+               COALESCE(c.meta->>'sender_name', c.external_user_id) as name,
+               c.meta->>'sender_avatar' as avatar_url,
+               c.updated_at, c.status, c.is_locked, c.human_override_until,
+               (SELECT content FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message
+        FROM chat_conversations c
+        WHERE c.tenant_id = $1
+    """
+    
+    p = [int(current_user.tenant_id)]
+    i = 2
+    
+    if channel and channel != 'all':
+        if channel == 'human_override':
+             base_query += " AND c.human_override_until > NOW()"
+        else:
+             base_query += f" AND c.channel = ${i}"
+             p.append(channel)
+             i += 1
+             
+    base_query += f" ORDER BY c.updated_at DESC LIMIT ${i} OFFSET ${i+1}"
+    p.extend([limit, offset])
+    
+    rows = await db.pool.fetch(base_query, *p)
+    
     return [{
-        "id": c["id"],
-        "phone": c["external_user_id"],
-        "tenant_id": c["tenant_id"],
-        "channel": c["channel_source"],
-        "name": c["display_name"] or c["name"],
-        "last_message": c["last_message"],
-        "timestamp": c["timestamp"],
-        "status": c["status"],
-        "is_locked": c["is_locked"],
-        "human_override_until": c["human_override_until"]
-    } for c in chats]
+        "id": str(r["id"]),
+        "phone": r["external_user_id"],
+        "tenant_id": r["tenant_id"],
+        "channel": r["channel"], # channel_source
+        "name": r["name"],
+        "last_message": r["last_message"] or "",
+        "avatar_url": r["avatar_url"],
+        "timestamp": r["updated_at"].isoformat() if r["updated_at"] else "",
+        "status": r["status"],
+        "is_locked": r["is_locked"],
+        "human_override_until": r["human_override_until"].isoformat() if r["human_override_until"] else None
+    } for r in rows]
 
 @router.get("/chats/{conversation_id}/messages")
 @safe_db_call
@@ -3616,10 +3668,14 @@ async def receive_chatwoot_webhook(
     
     # helper: map chatwoot channel to nexus channel
     cw_channel = conversation_map.get("channel", "")
+    logger.info(f"WEBHOOK DEBUG: Raw Channel='{cw_channel}'") # DEBUG LOG
+
     nexus_channel = "chatwoot"
-    if "Whatsapp" in cw_channel: nexus_channel = "whatsapp"
-    elif "Instagram" in cw_channel: nexus_channel = "instagram"
-    elif "Facebook" in cw_channel: nexus_channel = "facebook"
+    # Case insensitive check
+    cw_lower = cw_channel.lower()
+    if "whatsapp" in cw_lower: nexus_channel = "whatsapp"
+    elif "instagram" in cw_lower: nexus_channel = "instagram"
+    elif "facebook" in cw_lower: nexus_channel = "facebook"
     
     # helper: better identifier extraction
     identifier = contact_map.get("phone_number")
@@ -3629,13 +3685,19 @@ async def receive_chatwoot_webhook(
         additional = contact_map.get("additional_attributes", {})
         social = additional.get("social_profiles", {})
         identifier = social.get("instagram") or contact_map.get("name")
+        # IG doesn't strictly need phone
         
     if nexus_channel == "facebook":
         identifier = contact_map.get("name")
+        # FB doesn't strictly need phone
 
     # Fallback
     if not identifier:
-        identifier = contact_map.get("email") or f"cw_{chatwoot_contact_id}"
+        # Strict Phone only for WhatsApp
+        if nexus_channel == "whatsapp":
+             identifier = contact_map.get("phone_number") # Must exist
+        else:
+             identifier = contact_map.get("email") or f"cw_{chatwoot_contact_id}"
 
     conv_query = """
         SELECT id FROM chat_conversations 
