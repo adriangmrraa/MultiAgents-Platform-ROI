@@ -39,17 +39,54 @@ conf = ConnectionConfig(
 
 class EmailService:
     @staticmethod
-    async def send_verification_email(to_email: str, token: str):
+    async def get_connection_config(tenant_id: int = None, mode: str = "system"):
+        """
+        Builds a ConnectionConfig.
+        - 'system': Always uses Platform Global SMTP (env vars).
+        - 'agent': Prioritizes Tenant Credentials from DB.
+        """
+        if mode == "agent" and tenant_id:
+            from app.core.credentials import get_tenant_credential
+            
+            # Fetch custom SMTP settings
+            host = await get_tenant_credential(tenant_id, "smtp", "%host%")
+            user = await get_tenant_credential(tenant_id, "smtp", "%user%")
+            password = await get_tenant_credential(tenant_id, "smtp", "%pass%")
+            port_str = await get_tenant_credential(tenant_id, "smtp", "%port%")
+            sender = await get_tenant_credential(tenant_id, "smtp", "%sender%")
+            
+            if host and user and password:
+                port = int(port_str) if port_str and port_str.isdigit() else 465
+                use_ssl = (port == 465)
+                use_starttls = (port == 587)
+                
+                return ConnectionConfig(
+                    MAIL_USERNAME=user,
+                    MAIL_PASSWORD=password,
+                    MAIL_FROM=sender or user,
+                    MAIL_PORT=port,
+                    MAIL_SERVER=host,
+                    MAIL_FROM_NAME="Nexus Protocol",
+                    MAIL_STARTTLS=use_starttls,
+                    MAIL_SSL_TLS=use_ssl,
+                    USE_CREDENTIALS=True,
+                    VALIDATE_CERTS=False
+                )
+        
+        # Fallback for 'system' mode or missing 'agent' credentials
+        return conf 
+
+    @staticmethod
+    async def send_verification_email(to_email: str, token: str, tenant_id: int = None):
+        """Standard System Communication. Always Uses Global SMTP."""
+        # Verification is a Platform/System event. Use global config.
+        dynamic_conf = await EmailService.get_connection_config(tenant_id, mode="system")
+        
         # DEBUG PRINTS
         print(f"DEBUG: Intentando enviar email a {to_email}", flush=True)
-        print(f"DEBUG: Host={SMTP_HOST}, User={SMTP_USER}, Port={SMTP_PORT}", flush=True)
+        print(f"DEBUG: Host={dynamic_conf.MAIL_SERVER}, User={dynamic_conf.MAIL_USERNAME}, Port={dynamic_conf.MAIL_PORT}", flush=True)
 
-        if not SMTP_HOST or not SMTP_USER:
-            err_msg = f"CONFIG ERROR: Falta SMTP_HOST ({SMTP_HOST}) o SMTP_USER ({SMTP_USER})"
-            logger.error("smtp_config_invalid", host=SMTP_HOST, user=SMTP_USER)
-            raise Exception(err_msg)
-
-        logger.info("smtp_attempt_send", to=to_email, server=SMTP_HOST, port=SMTP_PORT, sender=SENDER_EMAIL)
+        logger.info("smtp_attempt_send", to=to_email, server=dynamic_conf.MAIL_SERVER, port=dynamic_conf.MAIL_PORT, sender=dynamic_conf.MAIL_FROM)
 
         subject = "Activa tu Fábrica de Negocios - Nexus"
         verify_link = f"{FRONTEND_URL}/verify?token={token}"
@@ -57,6 +94,7 @@ class EmailService:
         # PROTOCOL OMEGA: Fallback log for manual verification if SMTP is blocked
         logger.info("verification_link_generated", link=verify_link)
         print(f"🔗 MANUAL VERIFICATION LINK: {verify_link}", flush=True)
+
         # Dark Mode / Cyberpunk HTML Template
         html_content = f"""
         <!DOCTYPE html>
@@ -144,12 +182,12 @@ class EmailService:
                 subtype=MessageType.html
             )
 
-            fm = FastMail(conf)
+            fm = FastMail(dynamic_conf)
             await fm.send_message(message)
             logger.info("email_sent_success", to=to_email)
 
         except Exception as e:
             error_msg = f"❌ SMTP ERROR DETAILED: {str(e)}"
             print(error_msg, flush=True) # Immediate visibility in container logs
-            logger.error("email_delivery_failed", error=str(e), host=SMTP_HOST)
-            raise e # RE-RAISE for explicit debugging per user request
+            logger.error("email_delivery_failed", error=str(e), host=dynamic_conf.MAIL_SERVER)
+            raise e

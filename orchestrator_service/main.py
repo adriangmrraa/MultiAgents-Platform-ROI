@@ -54,6 +54,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 from db import db, redis_client
+from app.core.credentials import get_tenant_credential # NEW
 
 # Configuration & Environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -1853,7 +1854,7 @@ async def chat_endpoint(
     
     return OrchestratorResult(status="ok", send=False, text="Debouncing...", meta={"correlation_id": correlation_id})
 
-async def classify_intent(message: str, history: List[Dict[str, str]], agents: List[Any], store_name: str) -> Optional[Any]:
+async def classify_intent(message: str, history: List[Dict[str, str]], agents: List[Any], store_name: str, tenant_id: int) -> Optional[Any]:
     """
     Uses a fast LLM call to classify user intent and select the best Agent Specialist.
     Part of the Nexus v5 'Armada' Coordination logic.
@@ -1886,7 +1887,10 @@ REGLAS:
 ID DEL AGENTE ELEGIDO:"""
 
     try:
-        llm = ChatOpenAI(model="gpt-4o-mini", api_key=OPENAI_API_KEY, temperature=0, max_tokens=10)
+        # Sovereign Credentials: Fetch key from DB
+        openai_key = await get_tenant_credential(tenant_id, "openai", "%api_key%")
+        
+        llm = ChatOpenAI(model="gpt-4o-mini", api_key=openai_key or OPENAI_API_KEY, temperature=0, max_tokens=10)
         resp = await llm.ainvoke(prompt)
         chosen_id = resp.content.strip()
         
@@ -1943,7 +1947,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         
         if agents:
             # Protocol Omega: Intent-Based Routing (The "Armada" Coordinator)
-            agent_row = await classify_intent(content, remote_history, agents, tenant_row['store_name'])
+            agent_row = await classify_intent(content, remote_history, agents, tenant_row['store_name'], tenant_id)
             if agent_row:
                  logger.info("agent_routed_by_intent", chosen_agent=agent_row['name'], role=agent_row['role'])
             else:
@@ -2024,6 +2028,10 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         else:
             logger.info("agent_thinking_multichannel", channel="whatsapp", tone="standard")
 
+        # Sovereign Credentials: Fetch from credentials table
+        openai_key = await get_tenant_credential(tenant_id, "openai", "%api_key%")
+        tn_token = await get_tenant_credential(tenant_id, "tiendanube", "%access_token%")
+
         # 4. Prepare Agent Payload
         agent_request = {
             "tenant_id": tenant_id,
@@ -2040,9 +2048,9 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                 "model": model_config
             },
             "credentials": {
-                "openai_api_key": decrypt_password(tenant_row['openai_api_key_enc']) if tenant_row.get('openai_api_key_enc') else OPENAI_API_KEY,
+                "openai_api_key": openai_key or OPENAI_API_KEY,
                 "tiendanube_store_id": tenant_row['tiendanube_store_id'],
-                "tiendanube_access_token": decrypt_password(tenant_row['tiendanube_access_token_enc']) if tenant_row.get('tiendanube_access_token_enc') else None,
+                "tiendanube_access_token": tn_token or tenant_row.get('tiendanube_access_token'),
                 "tiendanube_service_url": TIENDANUBE_SERVICE_URL
             },
             "internal_secret": INTERNAL_SECRET_KEY
@@ -2156,31 +2164,18 @@ async def trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, cust
         """, tenant_id)
         
         if tenant_settings and tenant_settings['handoff_enabled'] and tenant_settings['handoff_target_email']:
-             # 1. Try to fetch SMTP config from Credentials (priority: tenant > global)
-             smtp_cred_json = await db.pool.fetchval("""
-                 SELECT value FROM credentials 
-                 WHERE category = 'smtp' 
-                 AND (tenant_id = $1 OR (scope = 'global' AND tenant_id IS NULL))
-                 ORDER BY CASE WHEN tenant_id IS NOT NULL THEN 0 ELSE 1 END
-                 LIMIT 1
-             """, tenant_id)
-             
-             smtp_cfg = {}
-             if smtp_cred_json:
-                 try: smtp_cfg = json.loads(smtp_cred_json)
-                 except: pass
-             
-             # 2. Fallback to Env Vars (handled by TiendaNube Service if not passed)
-             # But if we found creds, we pass them.
+             # Protocol Omega: Human Handoffs ALWAYS use Global Platform SMTP
+             # This ensures internal notifications come from the official Nexus account.
              
              email_payload = {
                  "to_email": tenant_settings['handoff_target_email'],
                  "subject": f"🚨 Solicitud de Humano: {tenant_settings['store_name']}",
                  "text": f"El cliente {customer_name} ({from_number}) solicita atención humana.\nMotivo: {reason}\n\nIngresa al panel para responder: https://app.nexus-ai.com",
-                 "smtp_host": smtp_cfg.get("host"),
-                 "smtp_port": int(smtp_cfg.get("port")) if smtp_cfg.get("port") else None,
-                 "smtp_user": smtp_cfg.get("user"),
-                 "smtp_password": smtp_cfg.get("pass")
+                 # Pass None to force the downstream service to use its global env vars
+                 "smtp_host": None,
+                 "smtp_port": None,
+                 "smtp_user": None,
+                 "smtp_password": None
              }
              
              # Call TiendaNube Service (Tool Holder) to send email

@@ -25,6 +25,7 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-99")
 # Resilience & Engine
 from app.core.resilience import safe_db_call
 from app.core.engine import NexusEngine # NEW
+from app.core.credentials import get_tenant_credential # NEW
 
 
 
@@ -2637,6 +2638,7 @@ async def report_assisted_gmv(tenant_id: Optional[str] = None, days: int = 30):
 # --- AI ASSISTANCE (Nexus v4.5) ---
 class PromptImproveRequest(BaseModel):
     text: str
+    tenant_id: int # Sovereign Credentials requirement
     context: str = "tool" # 'tool' or 'catalog'
 
 @router.post("/ai/improve-prompt", dependencies=[Depends(verify_admin_token)])
@@ -2646,7 +2648,10 @@ async def improve_prompt(req: PromptImproveRequest):
         from langchain_openai import ChatOpenAI
         from langchain.schema import SystemMessage, HumanMessage
         
-        llm = ChatOpenAI(model="gpt-4o", temperature=0.5)
+        # Sovereign Credentials: Fetch key from DB
+        openai_key = await get_tenant_credential(req.tenant_id, "openai", "%api_key%")
+        
+        llm = ChatOpenAI(model="gpt-4o", temperature=0.5, openai_api_key=openai_key)
         
         system_msg = "Eres un experto en ingeniería de prompts para agentes de IA de e-commerce. Tu objetivo es refinar el texto del usuario para que sea claro, directo y efectivo. "
         if req.context == "tool":
@@ -3157,7 +3162,11 @@ async def get_rag_galaxy(tenant_id: str):
     """
     try:
         from app.core.rag import RAGCore
-        rag = RAGCore(tenant_id)
+        
+        # Sovereign Credentials: Fetch key from DB
+        openai_key = await get_tenant_credential(int(tenant_id), "openai", "%api_key%")
+        
+        rag = RAGCore(tenant_id, openai_api_key=openai_key)
         
         # In a real scenario, we would sample ChromaDB. 
         # For MVP/Didactic view, we generate nodes from the catalog and assets.

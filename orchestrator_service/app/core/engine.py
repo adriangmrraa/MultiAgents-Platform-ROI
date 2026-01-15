@@ -9,6 +9,7 @@ from typing import Dict, Any, List
 from db import db, redis_client 
 from app.core.rag import RAGCore
 from langchain_openai import ChatOpenAI
+from app.core.credentials import get_tenant_credential
 
 logger = structlog.get_logger()
 
@@ -21,7 +22,8 @@ class NexusEngine:
     def __init__(self, tenant_id: str, context: Dict[str, Any]):
         self.tenant_id = tenant_id
         self.context = context
-        self.rag = RAGCore(tenant_id)
+        self.openai_api_key = None
+        self.rag = None # Deferred until key is fetched in ignite()
         
     async def ignite(self):
         """
@@ -30,6 +32,15 @@ class NexusEngine:
         logger.info("engine_ignite_start_v3_3", tenant_id=self.tenant_id)
         
         # 0. Context Preparation
+        # Fetch Tenant-Specific OpenAI Key (Sovereign Credentials System)
+        self.openai_api_key = await get_tenant_credential(int(self.tenant_id), "openai", "%api_key%")
+        if not self.openai_api_key:
+            logger.warning("engine_missing_tenant_openai_key", tenant_id=self.tenant_id)
+            await self._publish_log(">> Warning: OpenAI API Key not found for your tenant. Using global fallback if available.")
+        
+        # Initialize RAG with the tenant-specific key
+        self.rag = RAGCore(self.tenant_id, openai_api_key=self.openai_api_key)
+
         tn_store_id = self.context.get('credentials', {}).get('tiendanube_store_id')
         tn_token = self.context.get('credentials', {}).get('tiendanube_access_token')
         
@@ -242,7 +253,7 @@ class NexusEngine:
             - methodology: Breve descripción de su enfoque comercial.
             """
             
-            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=self.openai_api_key)
             resp = await llm.ainvoke(prompt)
             
             # Extract JSON from response
@@ -348,7 +359,7 @@ class NexusEngine:
             Formato: JSON con una lista 'scripts' que contiene objetos {{stage, framework, copy}}.
             """
             
-            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7, openai_api_key=self.openai_api_key)
             resp = await llm.ainvoke(prompt)
             
             try:

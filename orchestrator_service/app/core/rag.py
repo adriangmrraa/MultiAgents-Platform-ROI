@@ -27,16 +27,20 @@ class RAGCore:
     Handles Persistent Vector Storage using ChromaDB and OpenAI Embeddings.
     """
     
-    def __init__(self, tenant_id: str):
+    def __init__(self, tenant_id: str, openai_api_key: str = None):
         # Sanitize tenant_id for ChromaDB collection naming rules:
         # 3-512 chars, alphanumeric, underscores, hyphens, dots. Start/end with alphanumeric.
         # We replace non-alphanumeric with underscores.
         sanitized_id = re.sub(r'[^a-zA-Z0-9]', '_', str(tenant_id))
         self.tenant_id = tenant_id
         self.collection_name = f"store_{sanitized_id}"
+        
+        # Use provided key or fallback to global setting
+        self.openai_api_key = openai_api_key or OPENAI_API_KEY
+        
         self.embedding_fn = OpenAIEmbeddings(
             model="text-embedding-3-small",
-            openai_api_key=OPENAI_API_KEY
+            openai_api_key=self.openai_api_key
         )
         self._db = Chroma(
             collection_name=self.collection_name,
@@ -89,7 +93,7 @@ class RAGCore:
             llm_transform = ChatOpenAI(
                 model="gpt-4o-mini", # Cost-effective & Fast
                 temperature=0.3,
-                openai_api_key=OPENAI_API_KEY
+                openai_api_key=self.openai_api_key
             )
             
             # 1. Product Ingestion with "Smart Transformation"
