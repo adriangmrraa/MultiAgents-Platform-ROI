@@ -53,7 +53,12 @@ class Settings(BaseSettings):
     # Infrastructure
     POSTGRES_DSN: str = "postgresql+asyncpg://postgres:password@postgres:5432/platform_ai"
     REDIS_URL: str = "redis://redis:6379/0"
-    CORS_ALLOWED_ORIGINS: Any = ["*"]  # Configurable string or list
+    CORS_ALLOWED_ORIGINS: Any = [
+        "https://multiagents-frontend.yn8wow.easypanel.host",
+        "https://multiagents-backend.yn8wow.easypanel.host",
+        "http://localhost:3000",
+        "http://localhost:8000"
+    ]
     BOT_PHONE_NUMBER: str | None = None
     
     # Security & AI
