@@ -131,14 +131,17 @@ async def get_current_user(
             token = auth_header.split(" ")[1]
     
     if not token:
+        logger.warning("auth_failed_no_token", cookie_present=bool(token), auth_header_present=bool(auth_header))
         raise HTTPException(status_code=401, detail="Not authenticated")
         
     try:
         payload = jwt.decode(token, settings.SECRET_KEY.get_secret_value(), algorithms=[security.ALGORITHM])
         user_uuid = payload.get("sub")
         if user_uuid is None:
+            logger.error("auth_failed_invalid_payload", sub=bool(user_uuid))
             raise HTTPException(status_code=401, detail="Could not validate credentials")
-    except JWTError:
+    except JWTError as e:
+        logger.error("auth_failed_jwt_error", error=str(e))
         raise HTTPException(status_code=401, detail="Could not validate credentials")
         
     result = await db.execute(select(User).where(User.id == user_uuid))
