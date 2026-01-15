@@ -45,6 +45,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
       - ADMIN_TOKEN=${ADMIN_TOKEN:-admin-secret-99} # Explicit Sync
+      - META_SERVICE_URL=http://meta_service:8000
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
       interval: 30s
