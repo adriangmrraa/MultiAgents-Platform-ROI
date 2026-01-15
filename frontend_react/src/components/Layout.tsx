@@ -11,7 +11,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="glass-container min-h-screen">
             <UserProfile />
             <Sidebar />
-            <main className="content flex-1 lg:ml-24 overflow-x-hidden pt-20 lg:pt-6 min-w-0">
+            <main className="content flex-1 lg:ml-24 overflow-x-hidden pt-20 lg:pt-6">
                 {children}
             </main>
         </div>

@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap');
 
 :root {
@@ -16,28 +20,11 @@
     --radius-lg: 20px;
 }
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    font-family: 'Montserrat', sans-serif;
-}
-
-img,
-video,
-canvas {
-    max-width: 100%;
-    height: auto;
-}
-
-svg {
-    max-width: 100%;
-}
-
 body {
-    background: var(--bg-dark);
+    background-color: var(--bg-dark);
     color: var(--text-primary);
     min-height: 100vh;
+    font-family: 'Montserrat', sans-serif;
     font-size: 16px;
     background-image:
         radial-gradient(circle at 20% 20%, #1a1a2e 0%, transparent 40%),
