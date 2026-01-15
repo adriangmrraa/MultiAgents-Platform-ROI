@@ -18,72 +18,35 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
     const { user } = useAuth();
     const { t, language, setLanguage } = useLanguage();
     const [activeTab, setActiveTab] = useState<'integrations' | 'ycloud' | 'meta'>(initialTab);
-    const [copied, setCopied] = useState(false);
-    const [apiBaseUrl, setApiBaseUrl] = useState('');
-    const [webhookConfig, setWebhookConfig] = useState<{ webhook_path: string, access_token: string } | null>(null);
-
-    useEffect(() => {
-        // Dynamic API Base Detection (Protocol Omega)
-        const currentHost = window.location.protocol + '//' + window.location.hostname;
-        // If local, assume localhost:8000. If prod (easypanel), replace ui with api or service name
-        let inferredApi = currentHost.replace('frontend', 'backend').replace('ui.', 'api.');
-
-        // Localhost fallback
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            inferredApi = 'http://localhost:8000';
-        } else if (currentHost.includes('platform-ui')) {
-            inferredApi = currentHost.replace('platform-ui', 'orchestrator-service');
-        }
-
-        setApiBaseUrl(inferredApi);
-    }, []);
-
-
+    const { fetchApi } = useApi();
+    const [webhookConfig, setWebhookConfig] = useState<{ webhook_path: string, access_token: string, api_base?: string } | null>(null);
 
     // Fetch Webhook Config (Secure)
     useEffect(() => {
-        if (activeTab === 'integrations' && !webhookConfig && apiBaseUrl) {
-            // Retrieve token from cookie or local storage if needed, but fetch usually sends cookies.
-            // However, verify_admin_token checks X-Admin-Token header OR user session.
-            // If user logged in via UI, they have a session cookie 'access_token'.
-            // The endpoint `get_webhook_config` depends on `verify_admin_token` which checks Header OR `get_current_user`?
-            // Wait, look at the code I added: `dependencies=[Depends(verify_admin_token)]`.
-            // `verify_admin_token` usually checks a static token or user role.
-            // Actually, `get_webhook_config` signature: `async def get_webhook_config(current_user: User = Depends(get_current_user))`
-            // But the dependency `verify_admin_token` is also there.
-            // If `verify_admin_token` enforces a specific header, we must send it.
-            // Let's assume for now we use the standard API client/fetch with creds.
-
-            // To be safe, we'll try to use the logic that other components use (e.g. valid session).
-            // If 'verify_admin_token' is strict (only static token), this might fail for regular users.
-            // Re-reading admin_routes: verify_admin_token checks `x_admin_token` header.
-            // If checking `current_user` implies we want User context.
-            // I should probably remove `dependencies=[Depends(verify_admin_token)]` from `get_webhook_config` 
-            // if I want regular users to access it, OR ensure they have the token.
-            // Users have `access_token` cookie.
-
-            // Let's assume for this step we fetch with credentials (include cookies).
-            fetch(`${apiBaseUrl}/api/admin/integrations/chatwoot/config`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    // 'X-Admin-Token': '...' // We don't have this in frontend usually unless stored.
-                    // Ideally we should rely on Cookie Auth for this endpoint.
-                },
-                credentials: 'include'
-            })
-                .then(res => {
-                    if (res.ok) return res.json();
-                    throw new Error('Auth or Network Error');
-                })
+        if (activeTab === 'integrations' && !webhookConfig) {
+            fetchApi('/admin/integrations/chatwoot/config')
                 .then(data => setWebhookConfig(data))
                 .catch(err => console.error("Webhook fetch error:", err));
         }
-    }, [activeTab, apiBaseUrl, webhookConfig]);
+    }, [activeTab, fetchApi, webhookConfig]);
 
     // Construct Webhook URL for Chatwoot
-    const webhookUrl = (apiBaseUrl && webhookConfig)
-        ? `${apiBaseUrl.replace('/api', '')}${webhookConfig.webhook_path}?access_token=${webhookConfig.access_token}`
-        : t('common.loading');
+    const getDisplayUrl = () => {
+        if (!webhookConfig) return t('common.loading');
+
+        if (webhookConfig.api_base) {
+            return `${webhookConfig.api_base}${webhookConfig.webhook_path}?access_token=${webhookConfig.access_token}`;
+        }
+
+        const envBase = import.meta.env.VITE_API_BASE_URL;
+        if (envBase) {
+            return `${envBase}${webhookConfig.webhook_path}?access_token=${webhookConfig.access_token}`;
+        }
+
+        return `${window.location.origin}/api${webhookConfig.webhook_path}?access_token=${webhookConfig.access_token}`;
+    };
+
+    const webhookUrl = getDisplayUrl();
 
     const handleCopy = () => {
         if (!webhookUrl || webhookUrl === t('common.loading')) return;
