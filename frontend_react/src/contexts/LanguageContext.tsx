@@ -50,7 +50,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             });
         }
 
-        return result;
+        return typeof result === 'string' ? result : path;
     };
 
     return (

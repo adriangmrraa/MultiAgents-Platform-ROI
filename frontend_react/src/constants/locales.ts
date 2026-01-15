@@ -7,6 +7,7 @@ export const translations = {
             error: 'Error',
             success: 'Éxito',
             signOut: 'Cerrar Sesión',
+            next: 'Siguiente',
         },
         sidebar: {
             dashboard: 'Inicio',
@@ -42,6 +43,7 @@ export const translations = {
             metaDesc: 'Vincula tus activos de Meta.',
         },
         metaWizard: {
+            title: 'Conectando Canales',
             titlePages: 'Seleccionar Páginas',
             titleIg: 'Vincular Instagram',
             titleWa: 'Configurar WhatsApp',
@@ -239,6 +241,7 @@ export const translations = {
             error: 'Error',
             success: 'Success',
             signOut: 'Sign Out',
+            next: 'Next',
         },
         sidebar: {
             dashboard: 'Home',
@@ -274,6 +277,7 @@ export const translations = {
             metaDesc: 'Link your Meta assets.',
         },
         metaWizard: {
+            title: 'Connecting Channels',
             titlePages: 'Select Pages',
             titleIg: 'Link Instagram',
             titleWa: 'Configure WhatsApp',

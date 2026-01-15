@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { UserProfile } from './UserProfile';
 
@@ -11,7 +11,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="glass-container min-h-screen">
             <UserProfile />
             <Sidebar />
-            <main className="content flex-1 w-full lg:ml-16 overflow-x-hidden pt-20 lg:pt-6">
+            <main className="content flex-1 lg:ml-24 overflow-x-hidden pt-20 lg:pt-6">
                 {children}
             </main>
         </div>

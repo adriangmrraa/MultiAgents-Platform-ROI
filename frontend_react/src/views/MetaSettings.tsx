@@ -152,7 +152,7 @@ export const MetaSettings: React.FC = () => {
                                 <div className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${connectedAssets['whatsapp'] ? 'bg-[#25D366]/10 border-[#25D366]/30' : 'bg-white/5 border-white/10 opacity-50'}`}>
                                     <div className={connectedAssets['whatsapp'] ? 'text-[#25D366]' : 'text-gray-400'}><MessageCircle size={24} /></div>
                                     <span className="text-xs font-bold">WhatsApp</span>
-                                    {connectedAssets['whatsapp'] ? <Check size={12} className="text-[#25D366]" /> : <span className="text-[10px] text-yellow-500">No detectado</span>}
+                                    {connectedAssets['whatsapp'] ? <Check size={12} className="text-[#25D366]" /> : <span className="text-[10px] text-yellow-500">{t('metaSettings.notDetected')}</span>}
                                 </div>
                             </div>
 
