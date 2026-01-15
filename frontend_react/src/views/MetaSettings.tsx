@@ -9,39 +9,61 @@ export const MetaSettings: React.FC = () => {
     const [status, setStatus] = useState<'idle' | 'loading' | 'connected' | 'error'>('idle');
     const [errorMsg, setErrorMsg] = useState('');
     const [connectedAssets, setConnectedAssets] = useState<Record<string, boolean>>({});
-    const [sdkReady, setSdkReady] = useState(false);
+    const [isSdkReady, setIsSdkReady] = useState(false);
 
-    // 1. Initialize FB SDK
+    // 1. Initialize FB SDK (Robust with mounted check)
     useEffect(() => {
+        let mounted = true;
         initFacebookSdk()
             .then(() => {
-                console.log("FB SDK Ready");
-                setSdkReady(true);
+                if (mounted) {
+                    console.log("FB SDK Ready");
+                    setIsSdkReady(true);
+                }
             })
             .catch(err => {
-                console.error("FB SDK Init Error", err);
-                setErrorMsg("Error cargando componentes de Facebook");
-                setStatus('error');
+                if (mounted) {
+                    console.error("FB SDK Init Error", err);
+                    setErrorMsg("Error cargando componentes de Facebook");
+                    setStatus('error');
+                }
             });
+        return () => { mounted = false; };
     }, []);
 
     const handleLogin = () => {
-        if (!sdkReady || !(window as any).FB) return;
+        if (!isSdkReady || !(window as any).FB) return;
 
         setStatus('loading');
-        // Business Login Flow with config_id
-        (window as any).FB.login((response: any) => {
-            if (response.authResponse) {
-                console.log('FB Login Success', response);
-                connectWithBackend(response.authResponse.accessToken);
-            } else {
-                console.log('User cancelled login or did not fully authorize.');
-                setStatus('idle');
-            }
-        }, {
-            config_id: import.meta.env.VITE_META_CONFIG_ID, // Use Config ID for Tech Provider permissions
-            override_default_response_type: true
-        });
+
+        try {
+            // Safety timeout: if popup closed/blocked and callback never fires
+            const safetyTimeout = setTimeout(() => {
+                if (status === 'loading') {
+                    console.warn("Login timed out or blocked");
+                    setStatus('idle');
+                }
+            }, 60000); // 1 minute timeout
+
+            // Business Login Flow with config_id
+            (window as any).FB.login((response: any) => {
+                clearTimeout(safetyTimeout);
+                if (response.authResponse) {
+                    console.log('FB Login Success', response);
+                    connectWithBackend(response.authResponse.accessToken);
+                } else {
+                    console.log('User cancelled login or did not fully authorize.');
+                    setStatus('idle');
+                }
+            }, {
+                config_id: import.meta.env.VITE_META_CONFIG_ID, // Use Config ID for Tech Provider permissions
+                override_default_response_type: true
+            });
+        } catch (err) {
+            console.error("FB.login sync error:", err);
+            setStatus('error');
+            setErrorMsg("Error iniciando el popup de Facebook. Revisa la consola.");
+        }
     };
 
     const connectWithBackend = async (shortToken: string) => {
@@ -131,11 +153,11 @@ export const MetaSettings: React.FC = () => {
                     ) : (
                         <button
                             onClick={handleLogin}
-                            disabled={!sdkReady}
-                            className={`btn-primary bg-[#1877F2] hover:bg-[#166fe5] border-[#1877F2] flex items-center gap-2 px-8 ${!sdkReady ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            disabled={!isSdkReady || status === 'loading'}
+                            className={`btn-primary bg-[#1877F2] hover:bg-[#166fe5] border-[#1877F2] flex items-center gap-2 px-8 ${(!isSdkReady || status === 'loading') ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                            {!sdkReady ? <Loader2 size={18} className="animate-spin" /> : <Facebook size={18} />}
-                            {!sdkReady ? 'Cargando SDK...' : 'Continuar con Facebook'}
+                            {!isSdkReady ? <Loader2 size={18} className="animate-spin" /> : <Facebook size={18} />}
+                            {!isSdkReady ? 'Cargando Facebook...' : 'Conectar con Meta'}
                         </button>
                     )}
 

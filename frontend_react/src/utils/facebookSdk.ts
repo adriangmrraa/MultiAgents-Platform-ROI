@@ -1,11 +1,20 @@
 export const initFacebookSdk = (): Promise<any> => {
     return new Promise((resolve, reject) => {
+        const appId = import.meta.env.VITE_FACEBOOK_APP_ID;
+        if (!appId) {
+            console.error("Missing VITE_FACEBOOK_APP_ID in .env");
+            reject(new Error("Facebook App ID not configured"));
+            return;
+        }
+
         const initParams = {
-            appId: import.meta.env.VITE_FACEBOOK_APP_ID,
+            appId: appId,
             cookie: true,
             xfbml: true,
             version: import.meta.env.VITE_FACEBOOK_API_VERSION || 'v20.0'
         };
+
+        console.log("Initializing FB SDK with:", { ...initParams, appId: 'MASKED' });
 
         // Case 1: SDK already loaded
         if ((window as any).FB) {
