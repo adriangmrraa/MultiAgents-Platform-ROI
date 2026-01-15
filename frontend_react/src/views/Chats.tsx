@@ -352,44 +352,58 @@ export const Chats: React.FC = () => {
                             <div
                                 key={chat.id}
                                 onClick={() => setSelectedChatId(chat.id)}
-                                className={`p-4 border-b border-white/5 cursor-pointer transition-all hover:bg-white/5 group ${selectedChatId === chat.id ? 'bg-white/10 border-l-4 border-accent' : 'border-l-4 border-transparent'}`}
+                                className={`flex items-center gap-3 p-4 border-b border-white/5 cursor-pointer transition-all hover:bg-white/5 group relative overflow-hidden ${selectedChatId === chat.id ? 'bg-white/10' : ''}`}
                             >
-                                <div className="flex items-start gap-3">
-                                    {/* Avatar / Channel Icon */}
-                                    <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center border transition-all ${getChannelStyle(chat.channel).bg} ${getChannelStyle(chat.channel).border} ${getChannelStyle(chat.channel).color} shadow-lg ${getChannelStyle(chat.channel).shadow}`}>
-                                        {getChannelStyle(chat.channel).icon}
+                                {/* Active Indicator / Channel Color Border */}
+                                <div className={`absolute left-0 top-0 bottom-0 w-1 ${chat.channel?.includes('instagram') ? 'bg-[#E1306C] shadow-[0_0_10px_#E1306C]' :
+                                        chat.channel?.includes('facebook') ? 'bg-[#1877F2] shadow-[0_0_10px_#1877F2]' :
+                                            'bg-[#25D366] shadow-[0_0_10px_#25D366]'
+                                    } transition-all duration-300`}></div>
+
+                                {/* Avatar / Icon */}
+                                <div className="shrink-0 relative">
+                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 overflow-hidden bg-black/40 ${chat.channel?.includes('instagram') ? 'border-[#E1306C]/30' :
+                                            chat.channel?.includes('facebook') ? 'border-[#1877F2]/30' :
+                                                'border-[#25D366]/30'
+                                        }`}>
+                                        {chat.avatar_url ? (
+                                            <img src={chat.avatar_url} alt="" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                                        ) : (
+                                            <span className="text-white/20"><User size={24} /></span>
+                                        )}
+                                    </div>
+                                    {/* Mini Badge Icon */}
+                                    <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center shadow-md bg-[#121212] border border-black ${chat.channel?.includes('instagram') ? 'text-[#E1306C]' :
+                                            chat.channel?.includes('facebook') ? 'text-[#1877F2]' :
+                                                'text-[#25D366]'
+                                        }`}>
+                                        {chat.channel?.includes('instagram') ? <Instagram size={12} /> :
+                                            chat.channel?.includes('facebook') ? <Facebook size={12} /> :
+                                                <MessageCircle size={12} />}
+                                    </div>
+                                </div>
+
+                                {/* Texts */}
+                                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                    <div className="flex justify-between items-baseline mb-0.5">
+                                        <h4 className={`font-bold text-[15px] truncate leading-tight ${selectedChatId === chat.id ? 'text-white' : 'text-gray-200'}`}>
+                                            {chat.name || chat.phone || "Usuario Desconocido"}
+                                        </h4>
+                                        <span className="text-[10px] text-gray-500 font-mono shrink-0 ml-2">
+                                            {new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
                                     </div>
 
-                                    {/* Content */}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-start">
-                                            <h4 className={`font-bold text-sm truncate text-white leading-tight mb-0.5`}>
-                                                {chat.phone || chat.name}
-                                            </h4>
-                                            <span className="text-[10px] text-secondary opacity-50 shrink-0 uppercase font-mono ml-2 mt-0.5">
-                                                {new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </span>
-                                        </div>
-
-                                        {chat.phone && chat.name && chat.name !== chat.phone && (
-                                            <p className="text-xs text-secondary opacity-70 truncate mb-1">
-                                                {chat.name}
-                                            </p>
-                                        )}
-
-                                        <p className={`text-xs truncate ${selectedChatId === chat.id ? 'text-white/80' : 'text-secondary opacity-60'}`}>
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                        {/* Subtext: Handle or Last Message */}
+                                        <p className={`text-xs truncate ${selectedChatId === chat.id ? 'text-gray-300' : 'text-gray-500'}`}>
+                                            {(chat.phone && chat.phone !== chat.name) ? (
+                                                <span className="font-mono opacity-80 mr-1">{chat.phone} •</span>
+                                            ) : null}
                                             {chat.last_message || 'Imagen / Audio'}
                                         </p>
                                     </div>
                                 </div>
-
-                                {chat.is_locked && (
-                                    <div className="mt-2 flex justify-end">
-                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase tracking-wider flex items-center gap-1">
-                                            ⚠️ Intervención
-                                        </span>
-                                    </div>
-                                )}
                             </div>
                         ))}
                         {chats.length === 0 && !loading && (
