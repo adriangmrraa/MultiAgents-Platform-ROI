@@ -1,23 +1,41 @@
-# Guía de Migración: Legacy UI a React UI (Completado)
+# Guía de Migración Soberana (Nexus v5.1)
 
-> **Estado**: `COMPLETED` | **Fecha**: `Diciembre 2025` | **Versión Destino**: `Nexus v5.0`
+> **Estado**: `ACTIVO` | **Fecha**: `Enero 2026` | **Versión Destino**: `Nexus v5.1 (Sovereign Edition)`
 
-## ✅ Resumen de la Migración
+Esta guía detalla el proceso para migrar una instalación de Nexus v5.0 (basada en variables de entorno) al nuevo **Protocolo de Soberanía Total** de la v5.1.
 
-La transición del antiguo `platform_ui` (Vanilla JS) al nuevo `frontend_react` ha finalizado con éxito.
+---
 
-### Cambios Clave Realizados:
-1. **Componentización**: Toda la lógica dispersa en `app.js` se ha dividido en componentes funcionales de React.
-2. **Estilizado Unificado**: Se ha purgado el CSS redundante. Ahora el diseño se rige exclusivamente por `index.css` y Tailwind.
-3. **Gestión de Estado**: Se eliminaron las llamadas `fetch` manuales en favor del hook persistente `useApi.ts`.
-4. **Resiliencia de Red**: Integración con el BFF Service para streaming de datos en tiempo real.
+## 🚀 De .env a la Bóveda Soberana
 
-## 🛠️ Cómo operar en el nuevo ecosistema
+En la v5.1, las llaves como `OPENAI_API_KEY` o `GOOGLE_API_KEY` ya no viven en archivos de texto plano. Ahora residen cifradas en la base de datos para permitir el aislamiento multi-inquilino.
 
-- **Nuevas Vistas**: Crea archivos `.tsx` en `src/views/` y regístralos en `App.tsx`.
-- **Estilos**: Usa variables de CSS definidas en el `:root` de `index.css` para mantener el estilo "Glassmorphism".
-- **Despliegue**: El antiguo flujo de subir archivos ya no existe. El despliegue es 100% automático vía Docker.
+### 1. El Proceso de "Auto-Sedimentación"
+No es necesario migrar las llaves manualmente. Al iniciar Nexus v5.1 por primera vez:
+- El sistema detectará las llaves en tu archivo `.env`.
+- Las inyectará automáticamente en la tabla `credentials` vinculadas al inquilino #1.
+- **Acción**: Una vez verificado el funcionamiento en la UI, puedes eliminar las llaves del `.env` por seguridad (excepto `ADMIN_TOKEN` y `ENCRYPTION_KEY`).
 
---- ------
+### 2. Migración del SMTP
+Si tenías un SMTP global, este seguirá funcionando para alertas de sistema. Sin embargo, para que los agentes envíen correos con identidad de marca:
+- Ve a **Settings > Credenciales**.
+- Agrega un nuevo registro de categoría `smtp`.
+- Introduce los datos del servidor del cliente.
 
-**© 2025 Nexus Migration Taskforce**
+### 3. Migración de Google Gemini
+La v5.1 prioriza Google AI para el `Creative Director`. 
+- Si usas `GOOGLE_API_KEY` en el `.env`, se sedimentará automáticamente.
+- Recomendamos cargar llaves independientes para cada cliente nuevo desde el panel de **Credenciales** para evitar bloqueos de cuota.
+
+---
+
+## 🛠️ Verificación Post-Migración
+
+1.  Inicia el orquestador y busca el log: `[SEDIMENTATION] 3 legacy keys migrated to vault.`
+2.  Entra al panel de **Credenciales** en el Frontend.
+3.  Verifica que las llaves aparezcan listadas (en formato encriptado/oculto).
+4.  Realiza una prueba de "Magic Onboarding" para confirmar que el agente recupera las llaves correctamente.
+
+---
+
+**© 2026 Nexus Sovereign Taskforce - Infrastructure Division**

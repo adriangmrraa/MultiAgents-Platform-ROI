@@ -60,6 +60,54 @@ async def init_db(session: AsyncSession) -> None:
     session.add(tenant)
     await session.flush() # flush to get tenant.id
     
+    # --- Protocol Omega: Sovereign Credentials Seeding ---
+    # Automatically migrate ENV vars to the Sovereign system for the first tenant
+    from sqlalchemy import text # Use text for direct execution if needed or raw SQL
+    
+    initial_creds = []
+    
+    # OpenAI
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key:
+        initial_creds.append({
+            "name": "OpenAI Primary Key",
+            "value": openai_key,
+            "category": "openai",
+            "scope": "tenant",
+            "tenant_id": tenant.id,
+            "description": "Auto-seeded from environment variables"
+        })
+        
+    # Google (Gemini)
+    google_key = os.getenv("GOOGLE_API_KEY")
+    if google_key:
+        initial_creds.append({
+            "name": "Google AI Primary Key",
+            "value": google_key,
+            "category": "google",
+            "scope": "tenant",
+            "tenant_id": tenant.id,
+            "description": "Auto-seeded from environment variables"
+        })
+        
+    # TiendaNube
+    if tn_token:
+        initial_creds.append({
+            "name": f"TiendaNube - {store_name}",
+            "value": tn_token,
+            "category": "tiendanube",
+            "scope": "tenant",
+            "tenant_id": tenant.id,
+            "description": f"Access token for store ID {tn_id}"
+        })
+
+    # Execute seeding
+    for c in initial_creds:
+        await session.execute(text("""
+            INSERT INTO credentials (id_uuid, name, value, category, scope, tenant_id, description)
+            VALUES (gen_random_uuid(), :name, :value, :category, :scope, :tenant_id, :description)
+        """), c)
+
     # 4. Create Handoff Config (Default Disabled)
     handoff = TenantHumanHandoffConfig(
         tenant_id=tenant.id,

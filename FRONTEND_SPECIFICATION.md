@@ -1,140 +1,85 @@
-# Nexus v5 Frontend Technical Specification (Titan Protocol)
+# Nexus v5.1 Frontend Technical Specification (Sovereign UI)
 
-> **Purpose**: This document defines the Frontend Architecture, acting as the "Client Contract" to be compared against the Backend Specification.
+> **Purpose**: This document defines the Frontend Architecture, acting as the "Client Contract" under the **Sovereign Protocol (v5.1)**.
 
 ---
 
 ## 1. Core Architecture
 - **Framework**: React 18 + TypeScript + Vite.
 - **Styling**: TailwindCSS + Vanilla CSS (`index.css` for Glassmorphism).
-- **Routing**: `react-router-dom` v6.
-- **State**: React Hooks (`useState`, `useEffect`) + Custom Hooks (`useApi`).
+- **Security**: Mandatory `X-Admin-Token` injection via `useApi` hook.
 
-### Key Modules (v5.1 Hub)
+### Key Modules (Sovereign Hub)
 | Path | Component | Description |
 | :--- | :--- | :--- |
-| `/` | `Dashboard.tsx` | Telemetry, Health, ROI, Stats. |
-| `/platform` | `PlatformTower.tsx` | Control Tower for Super Admin (Hidden for Owners). |
-| `/profile` | `Profile.tsx` | Identity Management & Email Verification. |
-| `/settings` | `Settings.tsx` | Integration Hub (Webhooks, Chatwoot, API Keys). |
-| `/chats` | `Chats.tsx` | Message Center. |
+| `/settings/credentials` | `Credentials.tsx` | **Sovereign Vault UI**: Manage OpenAI, Google, SMTP, and Cloud keys. |
+| `/magic-onboarding` | `Onboarding.tsx` | Multi-step setup with real-time asset generation status. |
+| `/chats` | `Chats.tsx` | Omnichannel HUD with human handoff controls. |
+| `/platform` | `PlatformTower.tsx`| Global metrics and infrastructure health for SuperAdmin. |
 
 ---
 
-## 2. Layout & Discovery Protocol
+## 2. The Sovereign Credential UI Protocol
 
-### Command Center (Top-Right)
-El perfil del usuario ha sido desacoplado del Sidebar para mayor visibilidad.
-- **Desktop**: Se ubica de forma fija en el Top-Right. Incluye dropdown con "Settings", "Profile" y "Logout".
-- **Mobile**: Integrado en la Navbar superior para optimizar espacio.
+The `Credentials.tsx` module is the user-facing interface for the Bóveda de Credenciales.
 
-### API Integration Strategy (`useApi.ts`)
-El `useApi` hook implementa el **Protocolo "No Red Screen"**.
+### A. Masked Value Handling
+Sensitive values (API Keys) MUST NEVER be displayed in plain text after saving.
+- **Protocol**: Backend returns a masked string (e.g., `sk-proj...1a2b`).
+- **UI Action**: A "Eye" icon allows temporary unmasking (if permitted by role) or a "Copy" icon copies the value via a specialized unmasking endpoint.
 
-#### Error Sanitation
-- **Errors 5xx**: Traduce errores técnicos de DB a mensajes amigables (ej: "Error en sincronización de datos").
-- **Keywords Filter**: Oculta términos como `foreign key`, `unique constraint` o `database` para evitar "fugaz de información técnica" al usuario final.
-- **Unauthorized (401)**: Redirige automáticamente al Login.
-- **Unverified (403)**: El frontend captura el error de "Email Verification Required" para mostrar Toasts informativos en lugar de crasheos.
+### B. Category Selection
+The frontend implements a dynamic selector for credential categories:
+- `openai`: Triggers specific tooltip for usage tiers.
+- `google`: Enables Google AI Vision settings in the Creative Director.
+- `smtp`: Unlocks the "Agent Mode" for email tools.
 
 ---
 
-## 3. Data Contracts (Interfaces)
-These interfaces MUST match the JSON returned by the Backend.
+## 3. Data Contracts (Sovereign Interfaces)
 
-### `Chat` (in `Chats.tsx`)
+### `CredentialModel`
 ```typescript
-interface Chat {
-    id: string;               // UUID
-    name: string;             // Display Name (Fallback priority: name > display_name > phone)
-    last_message: string;     // Preview text
-    timestamp: string;        // ISO Date
-    status: 'open' | 'human_handling' | 'human_override';
-    is_locked: boolean;       // Visual indicator for Human handling
-    channel: 'whatsapp' | 'instagram' | 'facebook';
-    phone: string;            // external_user_id
+interface Credential {
+    id_uuid: string;
+    name: string;
+    category: 'openai' | 'google' | 'tiendanube' | 'smtp' | 'whatsapp_cloud';
+    scope: 'global' | 'tenant';
+    value_masked: string;
+    tenant_id?: number;
 }
 ```
 
-### `Message` (in `Chats.tsx`)
+### `TenantConfig`
 ```typescript
-interface Message {
-    id: string;
-    role: 'user' | 'assistant' | 'system';
-    content: string;          // May be null/empty if media-only
-    media?: {
-        type: string;         // 'image/jpeg', 'audio/ogg'
-        url: string;
-    };
-    timestamp: string;
-}
-```
-
-### `Stats` (in `Dashboard.tsx`)
-```typescript
-interface Stats {
-    active_tenants: number;
-    total_messages: number;
-    processed_messages: number;
+interface Tenant {
+    id: number;
+    store_name: string;
+    onboarding_status: 'pending' | 'in_progress' | 'completed';
+    handoff_enabled: boolean;
 }
 ```
 
 ---
 
-## 4. Resilience Features
-- **Null Safety**: `Chats.tsx` protects against null `msg.content` to allow purely media messages.
-- **Polling**:
-  - `Chats.tsx`: Polls `/admin/chats/${id}/messages` every 3s.
-  - `Dashboard.tsx`: Polls `/stats` every 30s.
+## 4. API Integration Strategy (`useApi.ts`)
+
+The `useApi` hook remains the single point of contact with the backend, implementing the **Sovereign Handshake**:
+
+1.  **Auth Injection**: Automatically reads `ADMIN_TOKEN` and adds `X-Admin-Token` header.
+2.  **Error Sanitation**:
+    - **401 Unauthorized**: Redirects to Login.
+    - **403 Forbidden**: Shows "Sovereignty Access Denied" toast if an owner tries to access global platform keys.
+    - **5xx**: Maps raw SQL errors to "Secure Cryptographic Failure" or "Credential Mismatch".
 
 ---
 
-## 5. Developer Guide: Communication Protocol (Frontend)
+## 5. Developer Guide (Creating Sovereign Views)
 
-### How to Create & Send Requests to Backend
-To communicate with the backend, **NEVER use `fetch` directly**. Always use the `useApi` hook (Gateway).
+1.  **Strict Typing**: Always define a `DTO` (Data Transfer Object) matching the Backend Specification.
+2.  **Component Isolation**: Keep logic in `hooks/` and UI in `views/`.
+3.  **Visual Feedback**: Use `Toaster` for all credential operations (Saving/Deleting/Updating).
 
-#### 1. Initialize the Gateway
-Inside your React Component:
-```typescript
-import { useApi } from '../hooks/useApi';
+---
 
-const MyComponent = () => {
-    const { fetchApi } = useApi(); // The Hook
-    // ...
-}
-```
-
-#### 2. Execute Requests (GET/POST/PUT/DELETE)
-The `fetchApi` function signature handles auth injection automatically.
-```typescript
-// GET Request (Read)
-const loadData = async () => {
-    try {
-        const data = await fetchApi('/admin/my-endpoint');
-        console.log(data);
-    } catch (e) {
-        // useApi handles 401/network errors, handle logic errors here
-        console.error("Logic error:", e);
-    }
-};
-
-// POST Request (Create/Write)
-const saveData = async () => {
-    await fetchApi('/admin/my-endpoint', {
-        method: 'POST',
-        body: { key: 'value', complex: { nested: true } }
-    });
-};
-```
-
-#### 3. Handle Responses
-- **Success**: `fetchApi` returns the parsed JSON object directly.
-- **Failure**: If the backend returns `4xx` or `5xx`, `fetchApi` **throws an Error**. You must wrap calls in `try/catch`.
-- **Loading State**: Use the `loading` state from `useApi` or your own local state to show spinners.
-
-#### 4. Critical Rules
-1.  **Prefix**: Accessing backend endpoints MUST start with `/admin/` (or `/api/admin/` if using raw URL, but `useApi` handles the base).
-2.  **Types**: Always define an Interface for the response (see Section 3) to ensure type safety.
-
-**© 2025 Platform AI Solutions - Interface Division**
+**© 2026 Platform AI Solutions - Interface Division**

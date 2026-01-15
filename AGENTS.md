@@ -1,126 +1,105 @@
-# 🦍 Guía de Desarrollo de Agentes (Nexus v5.1 - Protocol Omega)
+# 🦍 Guía de Inteligencia Soberana (Nexus v5.1)
 
-Este documento detalla la arquitectura de **Inteligencia Artificial** de la plataforma, dividida en dos grandes dominios: **Agentes Conversacionales** (Atención al Cliente en Tiempo Real) y **Agentes Estratégicos** (Motor de Negocios "Magic Onboarding").
+Este documento detalla la arquitectura de **IA Soberana** de la plataforma. En la v5.1, la inteligencia deja de ser compartida para ser **estrictamente privada**, donde cada agente opera bajo el contexto de las credenciales del inquilino.
 
 ---
 
-## Parte I: Agentes Conversacionales (Runtime)
+## Parte I: Agentes Conversacionales (Runtime Soberano)
 
-Ubicación: `agent_service/` (Microservicio Apátrida)
+Ubicación: `agent_service/` (Cerebro Apátrida)
 
-El **Agent Service** es el núcleo de inteligencia "Apátrida" (Stateless) que maneja las interacciones chat con los usuarios finales. Diseñado bajo el **Protocolo Omega**, escala horizontalmente y procesa cada solicitud de forma aislada.
+El **Agent Service** procesa chats en tiempo real. En la v5.1, su "combustible" es dinámico:
 
-### 1. Arquitectura Apátrida (Stateless Logic)
+### 1. Inyección de Credenciales Soberanas
+Cada ejecución de un agente (`POST /v1/agent/execute`) ahora recibe las llaves descifradas desde la Bóveda del Orquestador:
 
-El Agente no mantiene memoria persistente en proceso. Cada solicitud (`POST /v1/agent/execute`) recibe todo el contexto necesario:
+*   **Sovereign OpenAI Key**: El agente usa la API Key propia del cliente para sus pensamientos, eliminando cuellos de botella de cuota global.
+*   **Sovereign TiendaNube Token**: Las herramientas de búsqueda (`search_specific_products`, etc.) usan el token privado de la tienda en lugar de variables globales.
 
-*   **Tenant Context**: Credenciales de Tienda Nube y OpenAI.
-*   **Tactical Context**: Prompt del Sistema y configuración de herramientas.
-*   **Channel Context**: Origen (IG/FB/WA) identificado.
-*   **Chat History**: Los últimos N mensajes de la conversación.
-
-#### Inyección de Contexto (ContextVars)
-Para seguridad y aislamiento, usamos `contextvars` para inyectar credenciales en las herramientas sin pasarlas como argumentos explícitos:
+#### Contexto Aislado (ContextVars)
+Usamos `contextvars` para asegurar que, en un servidor con miles de peticiones simultáneas, las llaves de un Inquilino A nunca se mezclen con las del Inquilino B:
 
 ```python
-# agent_service/main.py
-ctx_store_id: ContextVar[str] = ContextVar("ctx_store_id")
-ctx_token: ContextVar[str] = ContextVar("ctx_token")
-ctx_internal_token: ContextVar[str] = ContextVar("ctx_internal_token")
+# Aislamiento de llaves en tiempo de ejecución
+ctx_openai_key: ContextVar[str] = ContextVar("ctx_openai_key")
+ctx_google_key: ContextVar[str] = ContextVar("ctx_google_key")
 ```
 
-### 2. Catálogo de Herramientas (Conversational Tools)
+---
 
-Estas herramientas están disponibles para que el LLM interactúe con el e-commerce y el mundo exterior.
+# Guía de Inteligencia Soberana (Nexus v5.1)
 
-| Tool | Función (Python) | Descripción |
-| :--- | :--- | :--- |
-| `search_specific_products` | `search_specific_products` | Busca productos por nombre exacto, categoría o marca. |
-| `search_by_category` | `search_by_category` | Busca filtros de categoría + palabra clave opcional. |
-| `browse_general_storefront` | `browse_general_storefront` | Obtiene productos destacados para consultas vagas ("qué vendes"). |
-| `cupones_list` | `cupones_list` | Lista cupones de descuento activos. |
-| `orders` | `orders` | Consulta estado de pedidos (por ID o nombre). |
-| `search_knowledge_base` | `search_knowledge_base` | Consulta RAG (políticas, envíos) en el Orquestador. |
-| `derivhumano` | `derivhumano` | Dispara la intervención humana y pausa al bot. |
-
-### 3. Roles de Agentes (Perfiles)
-
-*   **Sales Assistant (Vendedor)**:
-    *   *Objetivo*: Cerrar ventas, sugerir productos, cross-selling.
-    *   *Tools*: Búsqueda de productos, Cupones, Catálogo.
-    *   *Prompt*: Persuasivo, breve, orientado a la conversión.
-
-*   **Customer Support (Atención)**:
-    *   *Objetivo*: Post-venta, tracking, resolución de dudas.
-    *   *Tools*: Órdenes, RAG (Políticas), Derivación Humana.
-    *   *Prompt*: Empático, resolutivo, paciente.
+Esta guía define el comportamiento y la arquitectura de los agentes de IA dentro del ecosistema Nexus v5.1, operando bajo el **Protocolo de Soberanía Total**.
 
 ---
 
-## Parte II: Agentes Estratégicos (Nexus Business Engine)
+## 1. Los "Siete Magníficos": Perfiles de Agentes
 
-Ubicación: `orchestrator_service/app/core/engine.py` (Clase `NexusEngine`)
+Nexus v5.1 orquesta siete especialistas que trabajan de forma coordinada, cada uno con acceso a la Bóveda de Credenciales del inquilino.
 
-Estos son los **"Magnificent Seven"**, agentes especializados que se ejecutan **una sola vez** (o bajo demanda) durante el proceso de **Magic Onboarding** para construir la identidad digital y estrategia de la marca.
+### 1.1 Extractor de ADN de Marca
+- **Rol**: Analiza la historia, valores y catálogo para definir la identidad.
+- **Táctica**: Utiliza GPT-4o para destilar arquetipos de marca a partir de datos crudos.
 
-### Flujo de Ejecución ("The Spark")
+### 1.2 Director Creativo de Performance
+- **Rol**: El motor visual y estratégico de las campañas.
+- **Táctica**: Fusiona **Google Gemini** (Visión) y **DALL-E 3** (Generación) usando las llaves del inquilino para crear anuncios únicos.
 
-El proceso `ignite()` orquesta estos agentes secuencialmente:
+### 1.3 Copywriter Maestro & Social Media
+- **Rol**: Voz y narrativa en todos los canales.
+- **Táctica**: Aplica frameworks de persuasión (AIDA, PAS) adaptados al tono de voz extraído por el ADN.
 
-#### 1. 🧬 Extractor de ADN (The DNA Extractor)
-*   **Misión**: Decodificar el "alma" de la marca analizando su sitio web actual y productos.
-*   **Modelo Base**: GPT-4o-mini.
-*   **Output**: UVP (Propuesta de Valor), Voz de Marca, Arquetipo (ej: "El Mago"), Metodología.
+### 1.4 Arquitecto de Crecimiento (ROI)
+- **Rol**: Estratega de negocios y analista de mercado.
+- **Táctica**: Proyecta escenarios de crecimiento y sugiere optimizaciones de presupuesto.
 
-#### 2. 📚 Bibliotecario RAG (The Librarian)
-*   **Misión**: Indexar el conocimiento del catálogo en la base de datos vectorial.
-*   **Funciones**:
-    *   Scraping inteligente del sitio.
-    *   Generación de Embeddings.
-    *   Verificación de coherencia (saltar si ya existen vectores).
+### 1.5 Bibliotecario RAG (Galaxy)
+- **Rol**: Guardián del conocimiento específico de la tienda.
+- **Táctica**: Gestiona la búsqueda vectorial en ChromaDB. Sus embeddings dependen de la **OpenAI Key** soberana del inquilino.
 
-#### 3. 🎨 Director Creativo (The Creative Director)
-*   **Misión**: Alquimia Visual. Transforma fotos de producto simples en anuncios publicitarios de alto impacto.
-*   **Tecnología**: **Gemini 2.5 Multimodal** (Vision) + DALL-E 3 (vía "Fusion").
-*   **Output**: Assets visuales, prompts de "Neuroestética".
-
-#### 4. ✍️ Copywriter Maestro (The Copywriter)
-*   **Misión**: Redacción persuasiva de Respuesta Directa.
-*   **Frameworks**: AIDA (Atención, Interés, Deseo, Acción), PAS (Problema, Agitación, Solución).
-*   **Output**: Scripts de venta para TOFU (Top of Funnel) y BOFU (Bottom of Funnel).
-
-#### 5. 📈 Arquitecto de Crecimiento (Growth Architect)
-*   **Misión**: Estrategia financiera y proyección.
-*   **Output**: Estimaciones de ROAS, CPA target, Estrategia de Upselling (Regla 80/20).
-
-#### 6. 📱 Estratega de Redes (Social Media Strategist)
-*   **Misión**: Adaptación de contenido a canales.
-*   **Output**: Matriz de formatos (Reels vs Feed vs WhatsApp Blast).
-
-#### 7. 🛡️ Guardián de la Verdad (Compliance Guardian)
-*   **Misión**: Filtro de seguridad final.
-*   **Funciones**:
-    *   Verificar que la IA no alucine productos inexistentes.
-    *   Validar integridad de precios (vs Tienda Nube).
-    *   Brand Safety Check.
+### 1.6 Guardián de la Verdad
+- **Rol**: Auditor de respuestas y seguridad.
+- **Táctica**: Filtra alucinaciones y asegura que el agente cliente-final nunca revele información sensible o prometa cosas fuera de stock.
 
 ---
 
-## Ciclo de Desarrollo de una Nueva Tool
+## 2. El Ciclo de Pensamiento Soberano
 
-1.  **Definir la Función**: En `agent_service/main.py` decorada con `@tool`.
-2.  **Usar Contexto**: Obtener credenciales con `ctx_store_id.get()`.
-3.  **Manejo de Errores**: **NUNCA** lanzar excepciones crudas. Devolver un string con describir el error para que el LLM pueda intentar corregir.
-4.  **Registrar**: Agregar la función a la lista `all_tools` dentro de `execute_agent`.
+Cuando un agente se activa, sigue este protocolo de seguridad:
+
+1.  **Recuperación**: El orquestador solicita la llave (OpenAI/Google) a la `Bóveda` usando el `tenant_id`.
+2.  **Inyección**: La llave se inyecta en el hilo de ejecución actual a través de `ContextVars` (`ctx_openai_key`).
+3.  **Ejecución**: El agente realiza la inferencia. **IMPORTANTE**: La facturación y los límites de cuota recaen sobre la cuenta del inquilino, no de la plataforma.
+4.  **Limpieza**: Al terminar, la llave se purga de la memoria volátil.
+
+---
+
+## 3. Desarrollo de Agentes (Sovereign Best Practices)
+
+- **Aislamiento**: Nunca uses `os.getenv("OPENAI_API_KEY")` dentro de la lógica de un agente. Siempre recupera la llave desde el contexto o el modelo inyectado.
+- **Eficiencia**: Usa el modelo más pequeño capaz de cumplir la tarea (GPT-4o-mini para clasificación, GPT-4o para síntesis creativa).
+- **Herramientas**: Los agentes deben invocar herramientas utilizando el `X-Internal-Secret` para garantizar la trazabilidad mutua entre microservicios.
+
+---
+
+**© 2026 Platform AI Solutions - Sovereign Intelligence Division**
+
+## Desarrollo de Herramientas (Sovereign Best Practices)
+
+Al crear nuevas herramientas (`@tool`), siempre debes usar los `ContextVars` para obtener las credenciales:
 
 ```python
 @tool
-async def check_custom_metric(param: str):
-    """Checks custom metric."""
-    # Usar httpx con el token interno
-    headers = {"X-Internal-Secret": ctx_internal_token.get()}
-    # ... logic ...
-    return "Metric: OK"
+async def my_new_sovereign_tool(query: str):
+    """Herramienta que respeta la soberanía del cliente."""
+    api_key = ctx_openai_key.get() # Obtener llave del inquilino actual
+    # ... ejecutar lógica ...
+    return f"Respuesta generada con identidad {tenant_id}"
 ```
 
-> **Nota de Seguridad**: Todas las comunicaciones internas deben incluir el header `X-Internal-Secret`. El `agent_service` rechazará peticiones sin este secreto validado.
+> [!WARNING]
+> Nunca uses `os.getenv("OPENAI_API_KEY")` dentro de la lógica del agente. Esto rompería el Protocolo de Soberanía y usaría la llave global de la plataforma, causando fugas de costos.
+
+---
+
+**© 2026 Platform AI Solutions - Sovereign Intelligence Division**

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Modal } from '../components/Modal';
-import { Key, Globe, Store, Trash2, Edit2, Plus } from 'lucide-react';
+import { Globe, Store, Trash2, Edit2, Plus } from 'lucide-react';
 
 interface Credential {
     id?: number;
@@ -19,7 +19,7 @@ interface Tenant {
 }
 
 export const Credentials: React.FC = () => {
-    const { fetchApi, loading } = useApi();
+    const { fetchApi } = useApi();
     const [credentials, setCredentials] = useState<Credential[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -98,7 +98,7 @@ export const Credentials: React.FC = () => {
             }
             setIsModalOpen(false);
             loadData();
-        } catch (e) {
+        } catch (e: any) {
             alert('Error al guardar credencial: ' + e.message);
         }
     };
@@ -108,7 +108,7 @@ export const Credentials: React.FC = () => {
         try {
             await fetchApi(`/admin/credentials/${id}`, { method: 'DELETE' });
             loadData();
-        } catch (e) {
+        } catch (e: any) {
             alert('Error al eliminar: ' + e.message);
         }
     };
@@ -259,6 +259,7 @@ export const Credentials: React.FC = () => {
                                 onChange={e => setFormData({ ...formData, category: e.target.value })}
                             >
                                 <option value="openai">OpenAI</option>
+                                <option value="google">Google AI (Gemini)</option>
                                 <option value="whatsapp_cloud">WhatsApp Cloud API</option>
                                 <option value="tiendanube">Tienda Nube</option>
                                 <option value="database">Database</option>

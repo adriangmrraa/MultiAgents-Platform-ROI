@@ -1,90 +1,52 @@
-# 🧬 Database Evolution Guide (Nexus v5.0 - Protocol Omega)
+# 🧬 Database Evolution Guide (Nexus v5.1 - Sovereign Saga)
 
-Este documento define la **Filosofía de Gestión de Datos** para la plataforma. En Nexus v5, la base de datos es la **Única Fuente de Verdad (SSOT)**.
+Este documento define la **Filosofía de Gestión de Datos** para la plataforma. En Nexus v5.1, la base de datos no solo es la fuente de verdad, sino también el **Búnker de Soberanía**.
 
 ---
 
-## 1. Filosofía "Schema Drift Prevention"
+## 1. Filosofía de Evolución "Self-Healing"
 
-El "Schema Drift" ocurre cuando el código espera una columna que la base de datos no tiene. Protocol Omega resuelve esto con una estrategia de **Auto-Reparación en Tiempo de Arranque**.
+Protocol Omega elimina la necesidad de archivos de migración manuales externos. El sistema implementa un **Mecanismo de Auto-Reparación** en tiempo de arranque que garantiza que el esquema sea siempre el esperado.
 
-### El Ciclo de Vida del Arranque (Main.py)
+### Ciclo de Vida del Arranque (Main.py)
 Cada vez que el orquestador inicia:
-1.  **Import**: Carga todos los modelos de `app/models/__init__.py`.
-2.  **Inspect**: Verifica si existen las tablas críticas (`tenants`, `tools`, `business_assets`).
-3.  **Repair (Migration Steps)**:
-    *   Si falta la columna `customer_id` en `chat_conversations` -> La crea.
-    *   Si falta la tabla `business_assets` -> La crea con PK UUID.
+1.  **Auditoría de Tablas**: Verifica la existencia de `tenants`, `tools`, `business_assets` y `credentials`.
+2.  **Reparación de Columnas**: Si falta algún campo crítico (ej. `category` en credentials), el sistema lo inyecta automáticamente.
+3.  **Sedimentación de Datos**: Migra variables de entorno a la tabla `credentials` si es la primera ejecución.
 
 ---
 
-## 2. Guía de Migración Sagrada (Los 4 Pasos)
+## 2. El Búnker de Credenciales (Estructura Soberana)
 
-Si necesitas agregar un nuevo campo a la base de datos, **NO crees un archivo .sql manual**. Sigue este protocolo:
+La tabla `credentials` es el corazón de la v5.1. Implementa **Unicidad Multi-Tenant** y soporte para UUIDs.
 
-### Paso 1: Actualizar el Modelo Pydantic/SQLAlchemy
-Edita el archivo en `app/models/`.
-
-```python
-class Tenant(Base):
-    # ... campos existentes ...
-    # [NUEVO] Agrega el campo con valor por defecto o nullable
-    new_feature_flag: Mapped[bool] = mapped_column(Boolean, default=False)
+**Esquema de Credenciales (v5.1)**:
+```sql
+CREATE TABLE IF NOT EXISTS credentials (
+    id_uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id SERIAL, -- Legacy support
+    name TEXT NOT NULL,
+    value TEXT NOT NULL, -- encrypted AES-256
+    category TEXT DEFAULT 'general', -- openai, google, smtp, etc.
+    scope TEXT DEFAULT 'global', -- global o tenant
+    tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 ```
 
-### Paso 2: Agregar Paso de Migración en `main.py`
-En la lista `migration_steps`, agrega la sentencia SQL defensiva (`IF NOT EXISTS`).
-
-```python
-migration_steps = [
-    # ... pasos anteriores ...
-    """
-    DO $$ 
-    BEGIN 
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tenants' AND column_name='new_feature_flag') THEN 
-            ALTER TABLE tenants ADD COLUMN new_feature_flag BOOLEAN DEFAULT FALSE; 
-        END IF; 
-    END $$;
-    """
-]
-```
-
-### Paso 3: Reiniciar el Orquestador
-Al reiniciar, el log mostrará: `[MIGRATION] Applying step...`.
-
-### Paso 4: Validar
-Consulta la base de datos para confirmar que la columna existe.
+### Protocolo de Unicidad Omega
+Para manejar la concurrencia multi-tenant, aplicamos restricciones quirúrgicas:
+- **Tenant Unique**: `UNIQUE (name, tenant_id)` permite que el Inquilino A y el B tengan claves llamadas "API Key" sin conflictos.
+- **Global Unique**: Se utiliza un **Índice Parcial** que garantiza que los nombres globales sean únicos solo donde `tenant_id IS NULL`.
 
 ---
 
-## 3. Identificadores (UUID vs Integers)
+## 3. Definiciones de Tablas Core (SSOT)
 
-*   **Tablas Protocol Omega**: Deben usar `id UUID PRIMARY KEY DEFAULT gen_random_uuid()` (ej. `business_assets`, `chat_conversations`).
-*   **Agentes & Herramientas (Legacy/Order)**: Se utiliza `SERIAL` (Integer) para facilitar la gestión secuencial.
-
----
-
-## 4. Troubleshooting de DB
-
-### Error: `Relation "X" does not exist`
-*   **Causa**: El modelo no se importó en `main.py` antes de `Base.metadata.create_all`.
-*   **Solución**: Agrega `from app.models import X` en las importaciones de `main.py`.
-
-## Schema Strategy: "The Maintenance Robot" (v5.0)
-
-Instead of traditional migration files (`alembic`, etc.), the Orchestrator implements a **Self-Healing Mechanism** on startup (`lifespan` in `main.py`).
-
-### Active Drift Prevention
-1.  **Check**: Does `business_assets` exist?
-2.  **Repair**: If not, `CREATE TABLE` with UUID PK.
-3.  This ensures "Ghost Tables" never crash the system in Production.
-
-### Core Tables
-*   `tenants` (Config & Credentials)
-*   `business_assets` (Generated content, cached JSONB)
-*   `chat_conversations` (History - Omnichannel UUID)
-
-**Definición de Business Assets (Protocol Omega)**:
+### `business_assets` (Protocol Omega)
+El almacén persistente de toda la inteligencia de negocio generada.
 ```sql
 CREATE TABLE IF NOT EXISTS business_assets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -96,7 +58,7 @@ CREATE TABLE IF NOT EXISTS business_assets (
 );
 ```
 
-**Definición de Conversaciones (Nexus v4.4)**:
+### `chat_conversations` (Omnichannel UUID)
 ```sql
 CREATE TABLE IF NOT EXISTS chat_conversations (
     id UUID PRIMARY KEY,
@@ -111,7 +73,7 @@ CREATE TABLE IF NOT EXISTS chat_conversations (
 );
 ```
 
-**Definición de Agentes (Nexus v5.0)**:
+### `agents` (Configuración de IA)
 ```sql
 CREATE TABLE IF NOT EXISTS agents (
     id SERIAL PRIMARY KEY,
@@ -129,129 +91,7 @@ CREATE TABLE IF NOT EXISTS agents (
 );
 ```
 
----
-
-## 4. Estrategia de Protección de Datos (Safe Detach)
-
-En la v5.1, hemos pasado de una política de "Borrado en Cascada" a **"Limpieza por Lógica"**.
-
-### El Problema del Cascade
-Antes, al borrar un `tenant`, se borraban todos los `users` asociados. Esto causaba frustración si el usuario quería conservar su perfil para una nueva aventura.
-
-### La Solución (Protocolo Soberano)
-- **Store Deletion**: Borra Agentes, Assets y Config.
-- **User Survival**: El backend ejecuta un `UPDATE users SET tenant_id = NULL` antes de proceder.
-- **Beneficio**: El usuario mantiene su `email`, `password_hash`, `is_verified` y `full_name`.
-
----
-
-## 5. Jerarquía RBAC (Role-Based Access Control)
-
-La base de datos ahora distingue entre dos clases soberanas de usuarios:
-
-| Rol | Alcance | Descripción |
-| :--- | :--- | :--- |
-| `super_admin` | Global | Acceso a métricas de infraestructura y torre de control de plataforma. |
-| `owner` | Tenant | Acceso a sus propios agentes, chats y Business Forge. |
-
----
-
-**© 2025 Platform AI Solutions - Sovereign Data Engineering**
-
-### El Ciclo de Vida del Arranque (Main.py)
-Cada vez que el orquestador inicia:
-1.  **Import**: Carga todos los modelos de `app/models/__init__.py`.
-2.  **Inspect**: Verifica si existen las tablas críticas (`tenants`, `tools`, `credentials`).
-3.  **Repair (Migration Steps)**:
-    *   Si falta la columna `customer_id` en `chat_conversations` -> La crea.
-    *   Si falta la columna `openai_api_key` en `tenants` -> La inyecta.
-    *   Si la tabla `credentials` tiene el esquema viejo -> Ejecuta `ALTER TABLE` para agregar `scope`, `category`, etc.
-
----
-
-## 2. Guía de Migración Sagrada (Los 4 Pasos)
-
-Si necesitas agregar un nuevo campo a la base de datos, **NO crees un archivo .sql manual**. Sigue este protocolo:
-
-### Paso 1: Actualizar el Modelo Pydantic/SQLAlchemy
-Edita el archivo en `app/models/`.
-
-```python
-class Tenant(Base):
-    # ... campos existentes ...
-    # [NUEVO] Agrega el campo con valor por defecto o nullable
-    new_feature_flag: Mapped[bool] = mapped_column(Boolean, default=False)
-```
-
-### Paso 2: Agregar Paso de Migración en `main.py`
-En la lista `migration_steps`, agrega la sentencia SQL defensiva (`IF NOT EXISTS`).
-
-```python
-migration_steps = [
-    # ... pasos anteriores ...
-    """
-    DO $$ 
-    BEGIN 
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tenants' AND column_name='new_feature_flag') THEN 
-            ALTER TABLE tenants ADD COLUMN new_feature_flag BOOLEAN DEFAULT FALSE; 
-        END IF; 
-    END $$;
-    """
-]
-```
-
-### Paso 3: Reiniciar el Orquestador
-Al reiniciar, el log mostrará: `[MIGRATION] Applying step...`.
-
-### Paso 4: Validar
-Consulta la base de datos para confirmar que la columna existe.
-
----
-
-## 3. Identificadores (UUID vs Integers)
-
-*   **Nuevas Tablas Estratégicas**: Deben usar `id UUID PRIMARY KEY DEFAULT gen_random_uuid()` para escalabilidad global.
-*   **Agentes & Herramientas (Nexus v4.6)**: Se utiliza `SERIAL` (Integer) para garantizar la compatibilidad con secuencias heredadas y facilitar la gestión manual desde el panel administrativo en entornos de MVP.
-
----
-
-## 4. Troubleshooting de DB
-
-### Error: `Relation "X" does not exist`
-*   **Causa**: El modelo no se importó en `main.py` antes de `Base.metadata.create_all`.
-*   **Solución**: Agrega `from app.models import X` en las importaciones de `main.py`.
-
-## Schema Strategy: "The Maintenance Robot" (v3.2)
-
-Instead of traditional migration files (`alembic`, etc.), the Orchestrator implements a **Self-Healing Mechanism** on startup (`lifespan` in `main.py`).
-
-### Active Drift Prevention
-1.  **Check**: Does `business_assets` exist?
-2.  **Repair**: If not, `CREATE TABLE` with UUID PK.
-3.  **Heal**: If exists but missing `tenant_id` or `content`, `ALTER TABLE ADD COLUMN`.
-4.  This ensures "Ghost Tables" never crash the system in Production.
-
-### Core Tables
-*   `tenants` (Config & Credentials)
-*   `business_assets` (Generated content, cached JSONB)
-*   `chat_conversations` / `chat_messages` (History - Omnichannel UUID)
-
-**Definición de Conversaciones (Nexus v4.4)**:
-```sql
-CREATE TABLE IF NOT EXISTS chat_conversations (
-    id UUID PRIMARY KEY,
-    tenant_id INTEGER REFERENCES tenants(id),
-    channel VARCHAR(32) NOT NULL, 
-    channel_source VARCHAR(32) NOT NULL DEFAULT 'whatsapp',
-    display_name VARCHAR(255),
-    meta JSONB DEFAULT '{}', -- Extended Context
-    last_message_preview TEXT,
-    last_message_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-```
-
-**Definición de Herramientas (Nexus v4.6)**:
+### `tools` (Armería Táctica)
 ```sql
 CREATE TABLE IF NOT EXISTS tools (
     id SERIAL PRIMARY KEY,
@@ -268,24 +108,33 @@ CREATE TABLE IF NOT EXISTS tools (
 );
 ```
 
-**Definición de Agentes (Nexus v4.6)**:
-```sql
-CREATE TABLE IF NOT EXISTS agents (
-    id SERIAL PRIMARY KEY,
-    tenant_id INTEGER REFERENCES tenants(id),
-    name TEXT NOT NULL,
-    role TEXT DEFAULT 'sales',
-    model_provider TEXT DEFAULT 'openai',
-    model_version TEXT DEFAULT 'gpt-4o',
-    temperature FLOAT DEFAULT 0.3,
-    system_prompt_template TEXT NOT NULL,
-    enabled_tools JSONB DEFAULT '[]',
-    channels JSONB DEFAULT '["whatsapp", "instagram", "facebook"]',
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT now()
-);
-```
+---
+
+## 4. Identificadores y Migración
+
+### UUID vs Integers
+- **Nuevas Tablas Estratégicas**: Deben usar `id UUID PRIMARY KEY DEFAULT gen_random_uuid()` para escalabilidad global.
+- **Agentes & Herramientas**: Se utiliza `SERIAL` (Integer) para garantizar la compatibilidad con secuencias heredadas.
+
+### Guía de Migración Sagrada
+1.  **Modelo SQLAlchemy**: Edita el archivo en `app/models/`.
+2.  **Migración Proactiva**: Agrega el bloque SQL en `migration_steps` dentro de `main.py` usando `DO $$ BEGIN ... END $$;`.
+3.  **Default Values**: Asegura que las nuevas columnas tengan `DEFAULT` o sean `NULLABLE`.
+4.  **Reinicio**: Inicia el orquestador y verifica los logs de `[ALCHEMIST] Schema repair completed`.
 
 ---
 
-**© 2025 Platform AI Solutions - Data Engineering**
+## 5. Troubleshooting y Seguridad
+
+### Error: `Relation "X" does not exist`
+*   **Causa**: El modelo no se importó en `main.py` antes de `Base.metadata.create_all`.
+*   **Solución**: Agrega `from app.models import X` en las importaciones de `main.py`.
+
+### Safe Detach (Protección de Datos)
+- **Store Deletion**: Borra Agentes, Assets y Config.
+- **User Survival**: El backend ejecuta un `UPDATE users SET tenant_id = NULL` antes de proceder.
+- **Soberanía**: Las credenciales de la tienda se destruyen permanentemente al eliminar el tenant.
+
+---
+
+**© 2026 Platform AI Solutions - Sovereign Data Engineering**

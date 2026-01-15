@@ -280,6 +280,24 @@ migration_steps = [
         ALTER TABLE credentials ALTER COLUMN category SET DEFAULT 'general';
         ALTER TABLE credentials ALTER COLUMN scope SET DEFAULT 'global';
         ALTER TABLE credentials ALTER COLUMN updated_at SET DEFAULT NOW();
+        
+        -- Fix Uniqueness for Multi-Tenancy (Protocol Omega)
+        -- We want (name, tenant_id) to be unique so different tenants can use "My Key"
+        IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_credentials_name_tenant') THEN
+             -- Replace if exists to ensure correct columns
+             ALTER TABLE credentials DROP CONSTRAINT uq_credentials_name_tenant;
+        END IF;
+        
+        -- To handle NULL tenant_id (global) and still have uniqueness, 
+        -- we use a partial index or a COALESCE logic.
+        -- Partial Index for Global:
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_credentials_global_unique') THEN
+            CREATE UNIQUE INDEX idx_credentials_global_unique ON credentials (name) WHERE tenant_id IS NULL;
+        END IF;
+        -- Unique for Tenant:
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_credentials_name_tenant') THEN
+            ALTER TABLE credentials ADD CONSTRAINT uq_credentials_name_tenant UNIQUE (name, tenant_id);
+        END IF;
         -- Check for name column (Fix for bootstrap error)
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credentials' AND column_name='name') THEN
             ALTER TABLE credentials ADD COLUMN name TEXT;

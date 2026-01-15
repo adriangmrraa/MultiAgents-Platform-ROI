@@ -41,6 +41,11 @@ class NexusEngine:
         # Initialize RAG with the tenant-specific key
         self.rag = RAGCore(self.tenant_id, openai_api_key=self.openai_api_key)
 
+        # Fetch Tenant-Specific Google Key (Nano Banana)
+        self.google_api_key = await get_tenant_credential(int(self.tenant_id), "google", "%api_key%")
+        if not self.google_api_key:
+             logger.warning("engine_missing_tenant_google_key", tenant_id=self.tenant_id)
+
         tn_store_id = self.context.get('credentials', {}).get('tiendanube_store_id')
         tn_token = self.context.get('credentials', {}).get('tiendanube_access_token')
         
@@ -319,7 +324,7 @@ class NexusEngine:
                 )
                 
                 # 3. Call Multimodal Transformation
-                gen_url = await generate_ad_from_product(b64_product, fusion_prompt)
+                gen_url = await generate_ad_from_product(b64_product, fusion_prompt, google_api_key=self.google_api_key)
                 
                 visual_assets.append({
                     "asset_name": f"Visual Stop - {p.get('name', {}).get('es')}",
@@ -432,7 +437,7 @@ class NexusEngine:
              # Protocol Omega: Call the ingestion wrapper with correct 4 arguments
              # We use a localized version to avoid circular imports from admin_routes
              from app.core.rag import RAGCore
-             rag = RAGCore(self.tenant_id)
+             rag = RAGCore(self.tenant_id, openai_api_key=self.openai_api_key)
 
              # Optimization V5.9.119: Skip redundant scraping if vectors exist (Speed Boost)
              vector_count = 0

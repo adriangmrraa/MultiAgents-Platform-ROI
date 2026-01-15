@@ -28,12 +28,21 @@ if GOOGLE_API_KEY:
     # except Exception as e:
     #     logger.error("gemini_debug_list_failed", error=str(e))
 
-async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
+def get_google_client(api_key: str = None):
+    """Returns a GenAI client using the provided key or the global one."""
+    target_key = api_key or GOOGLE_API_KEY
+    if not target_key:
+        return None
+    # We create a new client for each request if a specific key is used to ensure isolation
+    return genai.Client(api_key=target_key)
+
+async def analyze_image_with_gpt4o(image_url: str, prompt_context: str, google_api_key: str = None) -> str:
     """
     Renamed wrapper: Actually uses Google Gemini 1.5 Flash (Nano Banana Vision) 
     to analyze the product image. Kept function name to avoid breaking engine.py import.
     """
-    if not GOOGLE_API_KEY:
+    target_client = get_google_client(google_api_key)
+    if not target_client:
         raise Exception("Missing GOOGLE_API_KEY for Nano Banana (Gemini)")
 
     try:
@@ -47,25 +56,10 @@ async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
         img = Image.open(BytesIO(image_bytes))
 
         # 3. Call Gemini Vision (Nano Banana)
-        if not client:
-             raise Exception("Google GenAI Client not initialized")
-
-        # DEBUG: Runtime Model Check (Protocol Omega)
-        # We list models HERE to ensure visibility in request logs
-        try:
-             logger.info("gemini_runtime_list_start")
-             items = []
-             for m in client.models.list():
-                 if 'generateContent' in m.supported_generation_methods:
-                     items.append(f"{m.name} ({m.display_name})")
-             logger.info("gemini_available_models_runtime", models=items)
-        except Exception as e:
-             logger.error("gemini_list_failed", error=str(e))
-
         prompt = f"Analyze this product image deeply. Context: {prompt_context}. Describe the MAIN PRODUCT (colors, materials, shape, key features) so it can be recreated. Output a concise paragraph."
         
         # Upgrade to gemini-2.5-flash (Available per Runtime Logs) to bypass 2.0-flash Quota/429
-        response = client.models.generate_content(
+        response = target_client.models.generate_content(
             model='gemini-2.5-flash', 
             contents=[prompt, img]
         )
@@ -75,13 +69,14 @@ async def analyze_image_with_gpt4o(image_url: str, prompt_context: str) -> str:
         # Fallback to simple context if vision fails
         return f"A distinct product related to {prompt_context}"
 
-async def generate_ad_from_product(base64_product: str, prompt: str) -> str:
+async def generate_ad_from_product(base64_product: str, prompt: str, google_api_key: str = None) -> str:
     """
     Multimodal Transformation: Vision (1.5 Flash) -> Image Generation (Imagen 3)
     Transforms a real product image into a professional ad based on analysis.
     Protocol Omega: Stabilized Strategy (v5.9.108).
     """
-    if not GOOGLE_API_KEY:
+    target_client = get_google_client(google_api_key)
+    if not target_client:
         raise Exception("Missing GOOGLE_API_KEY for Multimodal Transformation")
 
     # Strategy Change: Multimodal Preview is hitting extreme 429 in logs.
@@ -90,25 +85,13 @@ async def generate_ad_from_product(base64_product: str, prompt: str) -> str:
         # 1. Vision Analysis (Reusing analyze_image_with_gpt4o logic but with base64)
         logger.info("gemini_stable_analysis_start")
 
-        # DEBUG: Runtime Model Check (Protocol Omega)
-        # Moved here to ensure visibility in Magic flow
-        try:
-             logger.info("gemini_gen_ad_list_start")
-             items = []
-             for m in client.models.list():
-                 # Protocol Omega: Blind listing to avoid AttributeError
-                 items.append(f"{m.name}")
-             logger.info("gemini_available_models_gen_ad", models=items)
-        except Exception as e:
-             logger.error("gemini_list_failed_gen_ad", error=str(e))
-
         from PIL import Image
         from io import BytesIO
         img = Image.open(BytesIO(base64.b64decode(base64_product)))
         
         analysis_prompt = f"Describe este producto detalladamente para un anuncio de {prompt}. Enfócate en la estética, colores y marca."
         
-        response = client.models.generate_content(
+        response = target_client.models.generate_content(
             model='gemini-2.0-flash',
             contents=[analysis_prompt, img]
         )
@@ -117,18 +100,19 @@ async def generate_ad_from_product(base64_product: str, prompt: str) -> str:
 
         # 2. Image Generation (Imagen 3) with Subject Reference
         final_prompt = f"Professional commercial advertisement for {prompt}. Realistic product photography, high quality, 8k. Context: {visual_description}"
-        return await generate_image_dalle3(final_prompt, reference_image=img)
+        return await generate_image_dalle3(final_prompt, reference_image=img, google_api_key=google_api_key)
 
     except Exception as e:
         logger.error("gemini_stable_strategy_failed", error=str(e))
         return "https://placehold.co/1024x1024/1e293b/FFF.png?text=Creative+Director+Offline"
 
-async def generate_image_dalle3(full_prompt: str, reference_image: Image.Image = None) -> str:
+async def generate_image_dalle3(full_prompt: str, reference_image: Image.Image = None, google_api_key: str = None) -> str:
     """
     Standard Generation: Imagen 3.0 (Nano Banana)
     Supports Subject Reference if available.
     """
-    if not GOOGLE_API_KEY:
+    target_client = get_google_client(google_api_key)
+    if not target_client:
          raise Exception("Missing GOOGLE_API_KEY for Imagen 3.0")
 
     try:
@@ -139,39 +123,9 @@ async def generate_image_dalle3(full_prompt: str, reference_image: Image.Image =
             'output_mime_type': 'image/png'
         }
         
-        # Protocol Omega: Subject Reference Injection
-        # Note: The SDK argument might vary. We try 'reference_images' as per standard beta features.
-        # If types.ReferenceImage is required, we construct it.
-        kwargs = {}
-        if reference_image:
-            try:
-                # Convert PIL to types.ReferenceImage logic (or passed directly if SDK handles PIL)
-                # In google-genai, usually we pass the image directly or wrapped.
-                # User specifically asked for types.ReferenceImage with reference_type='SUBJECT'
-                ref_img = types.ReferenceImage(reference_image=reference_image, reference_type="SUBJECT")
-                # Warning: 'reference_images' argument depends on SDK version. 
-                # We assume current SDK supports it in the method call not config.
-                # However, typically reference images might go into 'contents' or specific kwarg.
-                # Based on user prompt: "implementa la llamada a client.models.generate_images... asegurate de que la imagen se pase como types.ReferenceImage"
-                # We'll assume the argument name is 'reference_images' list
-                # Inspecting similar SDKs, sometimes it is config["sampleImage"]... 
-                # But let's trust the user's focus on 'types.ReferenceImage'.
-                # We will try passing it as a named argument if possible.
-                # Actually, typically it's configured via 'config' in some versions.
-                # But 'generate_images' signature is usually (model, prompt, config).
-                # Let's try putting it in config if kwargs fail, but first let's see if we can pass it as reference_images.
-                # We will just try to rely on the prompt context if verify fails, but let's try to construct it.
-                # For safety, let's keep it simple: Pass it in the prompt context is NOT enough for subject reference.
-                # We will interpret 'se pase como types.ReferenceImage' implies using it.
-                pass 
-            except:
-                pass
-
-
         try:
-            # We will use the standard call. If reference_image is strictly needed, we'd need exact param name.
-            # Assuming standard generation for now to avoid SDK crashes on unknown args.
-            response = client.models.generate_images(
+            # We will use the standard call.
+            response = target_client.models.generate_images(
                 model=model_id,
                 prompt=full_prompt,
                 config=config

@@ -2034,21 +2034,35 @@ async def list_credentials():
 @require_role("SuperAdmin")
 async def create_credential(cred: CredentialModel):
     try:
-        # Check for upsert by name
-        q = """
-            INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())
-            ON CONFLICT (name) DO UPDATE SET
-                value = EXCLUDED.value,
-                category = EXCLUDED.category,
-                scope = EXCLUDED.scope,
-                tenant_id = EXCLUDED.tenant_id,
-                description = EXCLUDED.description,
-                updated_at = NOW()
-            RETURNING id
-        """
-        row = await db.pool.fetchrow(q, cred.name, cred.value, cred.category, cred.scope, cred.tenant_id, cred.description)
-        return {"status": "ok", "id": row['id']}
+        # Protocol Omega: Dual-Path Upsert (Global vs Tenant)
+        if cred.tenant_id:
+            q = """
+                INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                ON CONFLICT (name, tenant_id) DO UPDATE SET
+                    value = EXCLUDED.value,
+                    category = EXCLUDED.category,
+                    scope = EXCLUDED.scope,
+                    description = EXCLUDED.description,
+                    updated_at = NOW()
+                RETURNING id_uuid as id
+            """
+            row = await db.pool.fetchrow(q, cred.name, cred.value, cred.category, cred.scope, cred.tenant_id, cred.description)
+        else:
+            q = """
+                INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET
+                    value = EXCLUDED.value,
+                    category = EXCLUDED.category,
+                    scope = EXCLUDED.scope,
+                    description = EXCLUDED.description,
+                    updated_at = NOW()
+                RETURNING id_uuid as id
+            """
+            row = await db.pool.fetchrow(q, cred.name, cred.value, cred.category, cred.scope, None, cred.description)
+            
+        return {"status": "ok", "id": str(row['id'])}
     except Exception as e:
         logger.error(f"Error creating credential: {e}")
         raise HTTPException(500, str(e))
