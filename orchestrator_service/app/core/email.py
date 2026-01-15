@@ -43,8 +43,10 @@ class EmailService:
 
         if not SMTP_HOST or not SMTP_USER:
             err_msg = f"CONFIG ERROR: Falta SMTP_HOST ({SMTP_HOST}) o SMTP_USER ({SMTP_USER})"
-            print(f"❌ {err_msg}", flush=True)
+            logger.error("smtp_config_invalid", host=SMTP_HOST, user=SMTP_USER)
             raise Exception(err_msg)
+
+        logger.info("smtp_attempt_send", to=to_email, server=SMTP_HOST, port=SMTP_PORT, sender=SENDER_EMAIL)
 
         subject = "Activa tu Fábrica de Negocios - Nexus"
         verify_link = f"{FRONTEND_URL}/verify?token={token}"
