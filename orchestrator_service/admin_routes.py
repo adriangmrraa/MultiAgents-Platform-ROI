@@ -1418,7 +1418,7 @@ async def get_chats_summary(
             (SELECT content FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
             c.updated_at as timestamp,
             c.status,
-            c.is_locked,
+            CASE WHEN c.human_override_until > NOW() THEN true ELSE false END as is_locked,
             c.human_override_until,
             c.channel as channel_source
         FROM chat_conversations c
@@ -1447,7 +1447,9 @@ async def get_chats_summary(
         SELECT c.id, c.external_user_id, c.tenant_id, c.channel, 
                COALESCE(c.meta->>'sender_name', c.external_user_id) as name,
                c.meta->>'sender_avatar' as avatar_url,
-               c.updated_at, c.status, c.is_locked, c.human_override_until,
+               c.updated_at, c.status, 
+               CASE WHEN c.human_override_until > NOW() THEN true ELSE false END as is_locked, 
+               c.human_override_until,
                (SELECT content FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message
         FROM chat_conversations c
         WHERE c.tenant_id = $1
