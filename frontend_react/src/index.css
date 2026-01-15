@@ -24,22 +24,26 @@
 }
 
 img,
-svg,
 video,
 canvas {
     max-width: 100%;
     height: auto;
-    display: block;
+}
+
+svg {
+    max-width: 100%;
 }
 
 body {
     background: var(--bg-dark);
     color: var(--text-primary);
     min-height: 100vh;
-    font-size: 14px;
-    /* Standardize to 14px instead of 16px if it felt 'gigantic' */
+    font-size: 16px;
+    background-image:
+        radial-gradient(circle at 20% 20%, #1a1a2e 0%, transparent 40%),
+        radial-gradient(circle at 80% 80%, #16213e 0%, transparent 40%);
     background-attachment: fixed;
-    line-height: 1.4;
+    line-height: 1.5;
     overflow-x: hidden;
 }
 
