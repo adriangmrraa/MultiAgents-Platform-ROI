@@ -194,13 +194,17 @@ async def send_message_proxy(data: dict):
     }
 
     async with httpx.AsyncClient() as client:
-        resp = await client.post(url, params=params, json=payload)
-        
-        if resp.status_code != 200:
-            logger.error("meta_send_failed", status=resp.status_code, body=resp.text)
-            raise HTTPException(resp.status_code, f"Meta API Error: {resp.text}")
+        try:
+            resp = await client.post(url, params=params, json=payload)
             
-        return resp.json()
+            if resp.status_code != 200:
+                logger.error("meta_send_failed", status=resp.status_code, body=resp.text)
+                raise HTTPException(resp.status_code, f"Meta API Error: {resp.text}")
+                
+            return resp.json()
+        except httpx.ConnectError as e:
+            logger.error("meta_connection_error_send", url=url, error=str(e))
+            raise HTTPException(status_code=503, detail=f"Could not connect to {url} to send message. Check network.")
 @app.post("/privacy/data-deletion")
 async def data_deletion_callback(request: Request):
     """

@@ -31,14 +31,18 @@ class MetaAuthService:
         }
         
         async with httpx.AsyncClient() as client:
-            resp = await client.get(url, params=params)
-            data = resp.json()
-            
-            if "error" in data:
-                logger.error("meta_code_exchange_failed", error=data["error"])
-                raise HTTPException(status_code=400, detail=data["error"]["message"])
+            try:
+                resp = await client.get(url, params=params)
+                data = resp.json()
                 
-            return data.get("access_token")
+                if "error" in data:
+                    logger.error("meta_code_exchange_failed", error=data["error"])
+                    raise HTTPException(status_code=400, detail=data["error"]["message"])
+                    
+                return data.get("access_token")
+            except httpx.ConnectError as e:
+                logger.error("meta_connection_error", url=url, error=str(e))
+                raise HTTPException(status_code=503, detail=f"Could not connect to Meta API at {url}. Check DNS/Network.")
 
     async def get_accounts(self, access_token: str):
         """
@@ -60,32 +64,36 @@ class MetaAuthService:
 
         async with httpx.AsyncClient() as client:
             # 1. Get Pages
-            resp = await client.get(url_pages, params=params)
-            data = resp.json()
-            
-            if "data" in data:
-                for page in data["data"]:
-                    # Filter for ADMIN/MODERATE tasks to ensure we can manage
-                    tasks = page.get("tasks", [])
-                    if "MANAGE" in tasks or "MODERATE" in tasks or "CREATE_CONTENT" in tasks:
-                        # Page Asset
-                        assets["pages"].append({
-                            "id": page["id"],
-                            "name": page["name"],
-                            "access_token": page["access_token"]
-                        })
-                        
-                        # Note: We NO LONGER auto-subscribe here. 
-                        # Orchestrator will call subscribe_page for selected assets.
-
-                        # IG Asset
-                        if "instagram_business_account" in page:
-                            ig = page["instagram_business_account"]
-                            assets["instagram"].append({
-                                "id": ig["id"],
-                                "username": ig.get("username"),
-                                "linked_page_id": page["id"]
+            try:
+                resp = await client.get(url_pages, params=params)
+                data = resp.json()
+                
+                if "data" in data:
+                    for page in data["data"]:
+                        # Filter for ADMIN/MODERATE tasks to ensure we can manage
+                        tasks = page.get("tasks", [])
+                        if "MANAGE" in tasks or "MODERATE" in tasks or "CREATE_CONTENT" in tasks:
+                            # Page Asset
+                            assets["pages"].append({
+                                "id": page["id"],
+                                "name": page["name"],
+                                "access_token": page["access_token"]
                             })
+                            
+                            # Note: We NO LONGER auto-subscribe here. 
+                            # Orchestrator will call subscribe_page for selected assets.
+
+                            # IG Asset
+                            if "instagram_business_account" in page:
+                                ig = page["instagram_business_account"]
+                                assets["instagram"].append({
+                                    "id": ig["id"],
+                                    "username": ig.get("username"),
+                                    "linked_page_id": page["id"]
+                                })
+            except httpx.ConnectError as e:
+                logger.error("meta_connection_error_pages", url=url_pages, error=str(e))
+                raise HTTPException(status_code=503, detail=f"Could not resolve {url_pages}. DNS error?")
 
             # 2. Get WABA (WhatsApp Business Accounts)
             # This requires 'whatsapp_business_management' permission which is included in the Tech Provider Config
@@ -109,6 +117,9 @@ class MetaAuthService:
                             "namespace": waba.get("message_template_namespace")
                         })
                         # Note: We likely need to fetch Phone Numbers for this WABA separately
+            except httpx.ConnectError as e:
+                logger.error("meta_connection_error_waba", url=url_waba, error=str(e))
+                # We don't necessarily want to crash the whole thing if only WABA fails, but logging is vital
             except Exception as e:
                 logger.warning("waba_fetch_failed", error=str(e))
             
