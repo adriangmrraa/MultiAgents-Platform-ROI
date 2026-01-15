@@ -23,6 +23,8 @@ import Register from './views/auth/Register';
 import VerifyEmail from './views/auth/VerifyEmail';
 import { Profile } from './views/Profile';
 import { PlatformTower } from './views/PlatformTower';
+import { PrivacyPolicy } from './views/PrivacyPolicy';
+import { TermsOfService } from './views/TermsOfService';
 
 function RequireSuperAdmin({ children }: { children: JSX.Element }) {
   const { user, isLoading } = useAuth();
@@ -82,6 +84,8 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/verify" element={<VerifyEmail />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
 
             {/* Protected Routes */}
             <Route path="/*" element={

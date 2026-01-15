@@ -11,6 +11,8 @@ export const useFacebookSdk = () => {
     const [isReady, setIsReady] = useState(false);
 
     useEffect(() => {
+        console.log("Variables cargadas:", import.meta.env); // DEBUG: User requested
+
         const appId = import.meta.env.VITE_FACEBOOK_APP_ID;
         if (!appId) {
             console.error("[Meta SDK] CRITICAL: VITE_FACEBOOK_APP_ID missing in environment");

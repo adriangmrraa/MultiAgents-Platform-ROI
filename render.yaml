@@ -87,7 +87,13 @@ services:
     staticPublishPath: "./frontend_react/dist"
     envVars:
       - key: VITE_API_BASE_URL
-        sync: false # Configurar manualmente en el dashboard con la URL pública del BFF
+        sync: false
+      - key: VITE_FACEBOOK_APP_ID
+        sync: false
+      - key: VITE_FACEBOOK_API_VERSION
+        value: "v20.0"
+      - key: VITE_META_CONFIG_ID
+        sync: false
 
   # ==========================================
   # 5. Meta Service (Diplomat)

@@ -143,6 +143,14 @@ export default function Login() {
                     </div>
                 </div>
             </div>
+            {/* Legal Footer */}
+            <div className="absolute bottom-4 left-0 w-full text-center">
+                <div className="flex justify-center gap-4 text-[10px] text-gray-600">
+                    <Link to="/privacy-policy" className="hover:text-gray-400 transition-colors">Privacy Policy</Link>
+                    <span>•</span>
+                    <Link to="/terms-of-service" className="hover:text-gray-400 transition-colors">Terms of Service</Link>
+                </div>
+            </div>
         </div>
     );
 }
