@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-99")
+INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY")
 
-# Resilience & Engine
 # Resilience & Engine
 from app.core.resilience import safe_db_call
 from app.core.engine import NexusEngine # NEW
@@ -77,6 +77,17 @@ async def verify_admin_token(x_admin_token: str = Header(None)):
         masked_expected = ADMIN_TOKEN[:5] + "***" if ADMIN_TOKEN else "None"
         print(f"AUTH_DEBUG: Expected '{masked_expected}' vs Received '{masked_received}'")
         raise HTTPException(status_code=401, detail="Invalid Admin Token")
+
+async def verify_internal_token(x_internal_secret: str = Header(None, alias="X-Internal-Secret")):
+    """
+    Security Barrier for Inter-Service Communication (Sovereign Cloud).
+    Used by: Tienda Nube Service -> Orchestrator (Sync/Audit)
+    """
+    if not INTERNAL_API_TOKEN:
+         raise HTTPException(status_code=500, detail="Security Config Missing (INTERNAL_API_TOKEN)")
+         
+    if x_internal_secret != INTERNAL_API_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid Internal Secret Header")
 
 # --- RBAC Helper ---
 from functools import wraps
