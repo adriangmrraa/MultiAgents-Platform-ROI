@@ -434,13 +434,6 @@ async def save_credential(cred: CredentialModel, current_user: User = Depends(ge
             final_value = encrypt_password(cred.value)
             
             
-        # Improved Upsert Logic (Handling Partial Indexes in PG is tricky in one query)
-        # We split into two atomic attempts or use a smarter query
-        
-        # ATTEMPT 1: Try Tenant Scope Upsert
-        """
-        # Improved Upsert Logic (Handling Partial Indexes in PG is tricky in one query)
-        # We split into two atomic attempts or use a smarter query
         
         # ATTEMPT 1: Try Tenant Scope Upsert
         if cred.scope == 'tenant':
