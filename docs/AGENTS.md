@@ -27,9 +27,9 @@ ctx_google_key: ContextVar[str] = ContextVar("ctx_google_key")
 
 ---
 
-# Guía de Inteligencia Soberana (Nexus v5.1)
-
-Esta guía define el comportamiento y la arquitectura de los agentes de IA dentro del ecosistema Nexus v5.1, operando bajo el **Protocolo de Soberanía Total**.
+> **Nota Técnica**: Este documento explica la arquitectura conceptual.
+> *   Para detalles sobre cómo **Configurar** agentes en el Admin, ver: [Agents Logic Deep Dive](AGENTS_LOGIC_DEEP_DIVE.md).
+> *   Para detalles sobre la **Orquestación de los 7 Agentes** ("Magia"), ver: [Magic Logic Deep Dive](MAGIC_LOGIC_DEEP_DIVE.md).
 
 ---
 
@@ -37,29 +37,33 @@ Esta guía define el comportamiento y la arquitectura de los agentes de IA dentr
 
 Nexus v5.1 orquesta siete especialistas que trabajan de forma coordinada, cada uno con acceso a la Bóveda de Credenciales del inquilino.
 
-### 1.1 Extractor de ADN de Marca
+### 1.1 Extractor de ADN de Marca (The Profiler)
 - **Rol**: Analiza la historia, valores y catálogo para definir la identidad.
 - **Táctica**: Utiliza GPT-4o para destilar arquetipos de marca a partir de datos crudos.
 
-### 1.2 Director Creativo de Performance
+### 1.2 Director Creativo de Performance (The Artist)
 - **Rol**: El motor visual y estratégico de las campañas.
-- **Táctica**: Fusiona **Google Gemini** (Visión) y **DALL-E 3** (Generación) usando las llaves del inquilino para crear anuncios únicos.
+- **Táctica**: Fusiona **Google Gemini** (Visión) y **DALL-E 3 / Imagen 3** (Generación) usando las llaves del inquilino.
 
-### 1.3 Copywriter Maestro & Social Media
-- **Rol**: Voz y narrativa en todos los canales.
-- **Táctica**: Aplica frameworks de persuasión (AIDA, PAS) adaptados al tono de voz extraído por el ADN.
+### 1.3 Copywriter Maestro (The Voice)
+- **Rol**: Experto en redacción persuasiva.
+- **Táctica**: Aplica frameworks de respuesta directa (Eugene Schwartz, AIDA) adaptados al tono de voz extraído.
 
-### 1.4 Arquitecto de Crecimiento (ROI)
-- **Rol**: Estratega de negocios y analista de mercado.
-- **Táctica**: Proyecta escenarios de crecimiento y sugiere optimizaciones de presupuesto.
+### 1.4 Arquitecto de Crecimiento (The Strategist)
+- **Rol**: Analista de negocio y proyecciones.
+- **Táctica**: Proyecta escenarios de ROI, ROAS y CLV basados en precios del catálogo.
 
-### 1.5 Bibliotecario RAG (Galaxy)
+### 1.5 Social Media Specialist (The Amplifier)
+- **Rol**: Adaptador de formatos y canales.
+- **Táctica**: Traduce los activos creativos a especificaciones técnicas de Instagram, Facebook y WhatsApp.
+
+### 1.6 Bibliotecario RAG (The Knowledge Keeper)
 - **Rol**: Guardián del conocimiento específico de la tienda.
-- **Táctica**: Gestiona la búsqueda vectorial en ChromaDB. Sus embeddings dependen de la **OpenAI Key** soberana del inquilino.
+- **Táctica**: Gestiona la búsqueda vectorial en ChromaDB. Sus embeddings dependen de la **OpenAI Key** soberana.
 
-### 1.6 Guardián de la Verdad
-- **Rol**: Auditor de respuestas y seguridad.
-- **Táctica**: Filtra alucinaciones y asegura que el agente cliente-final nunca revele información sensible o prometa cosas fuera de stock.
+### 1.7 Guardián de la Verdad (The Auditor)
+- **Rol**: Filtro final de calidad y seguridad.
+- **Táctica**: Verifica que no haya alucinaciones de precios o stock antes de la publicación.
 
 ---
 

@@ -15,8 +15,9 @@ graph TD
     FE --> OR[Orchestrator Port 8000]
     OR --> DB[(PostgreSQL + Vault)]
     OR --> RD[(Redis Cache)]
-    OR --> TN[TiendaNube Service Port 8002]
-    OR --> WA[WhatsApp Service Port 8003]
+    OR --> TN[TiendaNube Service Port 8003]
+    OR --> WA[WhatsApp Service Port 8002]
+    OR --> MT[Meta Service (Diplomat) Port 8004/8000]
 ```
 
 ### Puertos y Accesos
@@ -35,6 +36,7 @@ A partir de la v5.1, la seguridad se desvincula de los archivos `.env` planos pa
     - `ADMIN_TOKEN`: Autenticación para el panel administrativo.
     - `ENCRYPTION_KEY`: Llave maestra de la bóveda.
     - `DATABASE_URL` / `REDIS_URL`: Conectividad de infraestructura.
+    - `INTERNAL_SECRET_KEY`: Llave de alta seguridad para comunicación entre microservicios (Orquestador <-> Meta).
 
 ---
 

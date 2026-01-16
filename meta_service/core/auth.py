@@ -66,12 +66,42 @@ class MetaAuthService:
                     )
                     return exchange_data["access_token"]
                 
-                # Fallback to short token if exchange fails (though unlikely)
-                logger.warning("token_exchange_fallback_short")
-                return short_token
+                # CRITICAL: Do NOT fallback to short token. We want to ensure long-lived only.
+                logger.error("long_lived_exchange_failed", response=exchange_data)
+                raise HTTPException(status_code=400, detail="Could not generate Sovereign Long-Lived Token. Please try again.")
+
             except httpx.ConnectError as e:
                 logger.error("meta_connection_error", url=url, error=str(e))
                 raise HTTPException(status_code=503, detail=f"Could not connect to Meta API at {url}. Check DNS/Network.")
+
+    async def check_token_health(self, access_token: str) -> dict:
+        """
+        Validates the token and returns its metadata (expiry, scopes).
+        Uses /debug_token endpoint.
+        """
+        url = f"{self.base_url}/debug_token"
+        params = {
+            "input_token": access_token,
+            "access_token": f"{self.app_id}|{self.app_secret}" # App Access Token required for debug
+        }
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                resp = await client.get(url, params=params)
+                data = resp.json()
+                
+                if "data" in data:
+                    return data["data"]
+                
+                if "error" in data:
+                    logger.warning("token_health_check_failed", error=data["error"])
+                    return {"is_valid": False, "error": data["error"]}
+                    
+                return {"is_valid": False, "reason": "unknown_response"}
+                
+            except Exception as e:
+                logger.error("token_health_check_error", error=str(e))
+                return {"is_valid": False, "error": str(e)}
 
     async def get_accounts(self, access_token: str):
         """

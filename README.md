@@ -36,6 +36,12 @@ Migración sin dolor.
 *   **Bootloader:** Al arrancar, el sistema detecta si hay llaves en `.env` y las "siembra" automáticamente en la bóveda del primer inquilino.
 *   **Limpieza:** Tras el primer arranque, el `.env` puede (y debe) ser purgado de secretos sensibles.
 
+### 🔗 6. Conexión Soberana (Meta Uplink)
+Independencia total del navegador.
+*   **Token Lifecycle:** Intercambio automático de códigos efímeros por Llaves Maestras de Sistema (60 días).
+*   **The Diplomat:** Microservicio dedicado (`meta_service`) que gestiona la burocracia de Facebook/Instagram sin bloquear el núcleo.
+*   **Multi-Store:** Capacidad para que un SuperAdmin conecte canales a tiendas específicas arbitrarias.
+
 ---
 
 ## 🚀 Guía de Despliegue Rápido

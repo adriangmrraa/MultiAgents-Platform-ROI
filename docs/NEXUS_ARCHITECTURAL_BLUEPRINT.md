@@ -40,11 +40,16 @@ Nexus uses a specialized agentic workflow divided into "Departments":
 - **Engine**: ChromaDB / Vector Search logic.
 - **Sovereignty**: Uses the Tenant's OpenAI key for embeddings and retrieval, ensuring search costs are allocated to the correct account.
 
-### 2. Creative Director (Image/Ad Gen)
-- **Logic**: Uses Google Gemini to analyze context and Imagen 3 to generate high-fidelity marketing assets.
 - **Tooling**: Found in `orchestrator_service/app/core/image_utils.py`.
 
-### 3. Nexus Engine (Orchestrator)
+### 3. The Meta Diplomat (Microservice)
+- **Role**: Handles the complex OAuth dance with Facebook/Instagram/WhatsApp.
+- **Sovereignty**:
+    - **Long-Lived Tokens**: Automatically exchanges user tokens for 60-day System User tokens.
+    - **Asset Discovery**: Fetches and filters Pages/IG Accounts strictly based on Admin permissions.
+- **Protocol**: Communicates with Orchestrator via internal HTTP (`http://meta_service:8000`) secured by `INTERNAL_SECRET_KEY`.
+
+### 4. Nexus Engine (Orchestrator)
 - **Role**: Coordinates intent classification, tool selection (search products, check stock, send emails), and final response synthesis.
 
 ---

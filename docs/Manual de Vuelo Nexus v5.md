@@ -71,3 +71,22 @@ El sistema registra cada uso de herramienta y error crítico.
 ---
 
 **© 2026 Platform AI Solutions - Flight Operations**
+
+---
+
+## 📚 Biblioteca Técnica de Profundización (Deep Dives)
+
+Para entender la lógica atómica de cada módulo, consulta los siguientes documentos técnicos:
+
+### Frontend Logic & Data Flow
+*   [🪄 Magic Onboarding Logic](MAGIC_LOGIC_DEEP_DIVE.md) - El cerebro detrás de la ignición inicial.
+*   [💬 Chats & Messaging Logic](CHATS_LOGIC_DEEP_DIVE.md) - Sincronización híbrida y polling multicanal.
+*   [🤖 Agents Engine Logic](AGENTS_LOGIC_DEEP_DIVE.md) - Configuración de cerebros y herramientas.
+*   [⚒️ Business Forge Logic](FORGE_LOGIC_DEEP_DIVE.md) - Edición y generación (Fusion) de activos.
+*   [🧠 RAG & Knowledge Logic](RAG_LOGIC_DEEP_DIVE.md) - Ingesta y vectorización de documentos.
+*   [🗼 Platform Tower (Analytics) Logic](ANALYTICS_LOGIC_DEEP_DIVE.md) - "God Mode" y telemetría global.
+
+### Infrastructure & Settings
+*   [🔐 Credentials & Vault Logic](SETTINGS_LOGIC_DEEP_DIVE.md) - Cifrado y gestión de secretos soberanos.
+*   [🔗 Integrations (Meta/YCloud) Logic](INTEGRATIONS_LOGIC_DEEP_DIVE.md) - Wizards de conexión y Auth flows.
+*   [🏬 Stores & Tenants Logic](STORES_LOGIC_DEEP_DIVE.md) - Gestión de contextos aislados.

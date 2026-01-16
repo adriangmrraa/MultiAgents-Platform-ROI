@@ -80,8 +80,10 @@ export const MetaSettings: React.FC = () => {
 
             if (res.status === 'success') {
                 // Instead of jumping to 'connected', show Wizard
-                setWizardAssets(res.assets);
-                setConnectedAssets(res.connected); // Keep simplified map as fallback
+                // Defensive: Ensure assets object exists
+                const safeAssets = res.assets || { pages: [], instagram: [], whatsapp: [] };
+                setWizardAssets(safeAssets);
+                setConnectedAssets(res.connected || {});
                 setShowWizard(true);
             }
         } catch (e: any) {

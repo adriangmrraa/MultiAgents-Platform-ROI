@@ -63,6 +63,16 @@ La integración con Meta (Facebook/WhatsApp) sigue un patrón de "Diplomático y
     *   Permite al usuario seleccionar qué activos activar.
     *   Llama a `update-channels` para cambiar el estado de `pending` a `active`.
 
+### Mecanismo de Escalada de Token (Sovereign 60-Day)
+Para evitar desconexiones, el `meta_service` realiza un doble canje (Double Exchange Flow):
+1.  **Code -> Short Token**: Válido por 1 hora. Vinculado a la sesión web.
+2.  **Short Token -> Long Token**: Llamada inmediata a `oauth/access_token` con `grant_type=fb_exchange_token`.
+3.  **Resultado**: Un token de sistema válido por **60 días** que **no caduca** al cerrar el navegador.
+
+### Seguridad Multi-Inquilino (Strict Tenant Binding)
+*   **Usuarios Normales**: El backend **fuerza** `tenant_id = current_user.tenant_id`. Cualquier intento de inyección de ID externo es ignorado y logueado como alerta de seguridad.
+*   **Super Admin**: Tiene permiso explícito para pasar un `tenant_id` arbitrario en el body, permitiendo la configuración centralizada de múltiples tiendas.
+
 ---
 
 ## 4. Auto-Sedimentación (Migration Bridge)
@@ -73,6 +83,19 @@ Para facilitar la actualización desde v1/v4 sin configuración manual:
 2.  **Seed Detection:** Si no hay credenciales en la DB pero existen en `os.environ`.
 3.  **Migration:** El sistema copia las variables de entorno a la tabla `credentials` del primer tenant detectado.
 4.  **Log:** Se emite una alerta de éxito para que el admin sepa que puede limpiar su `.env`.
+
+---
+
+---
+
+## 5. Referencias Atómicas (Deep Dives)
+
+Para detalles de implementación línea-por-línea, consulta los siguientes documentos:
+*   [Agents Logic](AGENTS_LOGIC_DEEP_DIVE.md)
+*   [Chats Logic](CHATS_LOGIC_DEEP_DIVE.md)
+*   [Magic/Onboarding Logic](MAGIC_LOGIC_DEEP_DIVE.md)
+*   [Integrations/Meta Logic](INTEGRATIONS_LOGIC_DEEP_DIVE.md)
+*   [RAG/Knowledge Logic](RAG_LOGIC_DEEP_DIVE.md)
 
 ---
 

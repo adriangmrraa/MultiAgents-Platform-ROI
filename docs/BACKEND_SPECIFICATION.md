@@ -125,4 +125,37 @@ El backend implementa una captura de errores proactiva para el servicio de corre
 
 ---
 
+## 7. Meta Uplink Protocol (v5.1)
+The dedicated system for Sovereign Social Connection.
+
+### A. The Diplomat (`meta_service`)
+A dedicated microservice that isolates the complex OAuth dance from the core orchestrator.
+- **Port**: 8000 (Internal Only).
+- **Communication**: HTTP JSON.
+- **Security**: `INTERNAL_SECRET_KEY` header required for all inter-service calls.
+
+### B. Endpoints (Orchestrator -> Meta)
+**`POST /admin/meta/connect`**
+- **Purpose**: Init OAuth exchange.
+- **Payload**:
+  ```json
+  {
+    "code": "auth_code_from_fb_sdk",
+    "redirect_uri": "must_match_origin",
+    "tenant_id": 123 // Optional (SuperAdmin Only)
+  }
+  ```
+- **Flow**:
+  1. Orchestrator verifies Admin Token.
+  2. Orchestrator resolves `tenant_id` (Self or Explicit).
+  3. Orchestrator proxies to `http://meta_service:8000/connect`.
+  4. Meta Service exchanges Code -> Short Token -> **Long-Lived Token (60 days)**.
+  5. Meta Service fetches Assets (Pages, IG, WA).
+  6. Meta Service calls back `/credentials/internal-sync` to persist data.
+
+### C. Sovereign Persistence
+Tokens are NEVER stored in the browser alongside the session. They are immediately escalated to System User tokens and vaulted in `credentials` (Encrypted).
+
+---
+
 **© 2026 Platform AI Solutions - Sovereign Architecture Division**

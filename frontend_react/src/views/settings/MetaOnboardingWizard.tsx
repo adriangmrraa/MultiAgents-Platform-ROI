@@ -25,9 +25,10 @@ interface MetaOnboardingWizardProps {
 const MetaOnboardingWizard: React.FC<MetaOnboardingWizardProps> = ({ assets, onComplete, onCancel }) => {
     const { t } = useLanguage();
     // Determine initial steps based on available assets
-    const hasPages = assets.pages?.length > 0;
-    const hasIg = assets.instagram?.length > 0;
-    const hasWa = assets.whatsapp?.length > 0;
+    // Defensive: defaulting to empty array to avoid crash on .length access
+    const hasPages = (assets?.pages || []).length > 0;
+    const hasIg = (assets?.instagram || []).length > 0;
+    const hasWa = (assets?.whatsapp || []).length > 0;
 
     const [step, setStep] = useState(hasPages ? 'pages' : hasIg ? 'instagram' : hasWa ? 'whatsapp' : 'empty');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -81,9 +82,9 @@ const MetaOnboardingWizard: React.FC<MetaOnboardingWizardProps> = ({ assets, onC
         }
 
         const currentAssets =
-            step === 'pages' ? assets.pages :
-                step === 'instagram' ? assets.instagram :
-                    assets.whatsapp;
+            step === 'pages' ? (assets.pages || []) :
+                step === 'instagram' ? (assets.instagram || []) :
+                    (assets.whatsapp || []);
 
         const icon =
             step === 'pages' ? <Facebook className="w-5 h-5 text-blue-500" /> :
@@ -141,7 +142,15 @@ const MetaOnboardingWizard: React.FC<MetaOnboardingWizardProps> = ({ assets, onC
 
                 {/* Body */}
                 <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                    {renderStepContent()}
+                    {/* Defensive Guard: Ensure assets exist before rendering */}
+                    {!assets ? (
+                        <div className="flex flex-col items-center justify-center py-10">
+                            <Loader2 className="w-8 h-8 text-zinc-500 animate-spin mb-2" />
+                            <p className="text-zinc-500 text-sm">Cargando activos...</p>
+                        </div>
+                    ) : (
+                        renderStepContent()
+                    )}
                 </div>
 
                 {/* Footer */}

@@ -13,7 +13,8 @@
 | Path | Component | Description |
 | :--- | :--- | :--- |
 | `/settings/credentials` | `Credentials.tsx` | **Sovereign Vault UI**: Manage OpenAI, Google, SMTP, and Cloud keys. |
-| `/magic-onboarding` | `Onboarding.tsx` | Multi-step setup with real-time asset generation status. |
+| `/magic-onboarding` | `MagicOnboarding.tsx` | **Protocol Omega Stream**: Real-time 7-agent ignition UI using Server-Sent Events (SSE). |
+| `/settings/integrations` | `MetaOnboardingWizard.tsx` | **Meta Diplomat UI**: Explicit asset selection (Pages/WA) after Sovereign Connection. |
 | `/chats` | `Chats.tsx` | Omnichannel HUD with human handoff controls. |
 | `/platform` | `PlatformTower.tsx`| Global metrics and infrastructure health for SuperAdmin. |
 
