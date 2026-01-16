@@ -2202,15 +2202,23 @@ async def get_tenant_details(id: int):
         resp["connections"]["meta_omnichannel"] = {"configured": False}
         
     # Check Tienda Nube (Vault Check)
-    tn_configured = False
+    tn_token_exists = False
+    tn_id_exists = False
+
     for c in resp["credentials"]["tenant_specific"] + resp["credentials"]["global_available"]:
         if c['name'] == 'TIENDANUBE_ACCESS_TOKEN':
-            tn_configured = True
-            break
+            tn_token_exists = True
+        if c['name'] == 'TIENDANUBE_USER_ID':
+            tn_id_exists = True
             
-    # Fallback: Check Legacy Table Column if not found in vault
-    if not tn_configured and tenant.get('tiendanube_access_token'):
-        tn_configured = True
+    # Fallback: Check Legacy Table Columns
+    if not tn_token_exists and tenant.get('tiendanube_access_token'):
+        tn_token_exists = True
+    if not tn_id_exists and tenant.get('tiendanube_store_id'):
+        tn_id_exists = True
+        
+    # Strict Check: Must have both Token AND ID to be "Connected"
+    tn_configured = tn_token_exists and tn_id_exists
         
     resp["connections"]["tiendanube"] = {"configured": tn_configured}
             
