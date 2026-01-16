@@ -271,42 +271,28 @@ async def update_tenant(tenant_id: int, data: TenantModel):
 @router.delete("/tenants/{tenant_id}", dependencies=[Depends(verify_admin_token)])
 @require_role("SuperAdmin")
 async def delete_tenant(tenant_id: int):
+    """
+    Soft Delete Tenant (Archival).
+    Prevents accidental data loss (Sovereign Safety).
+    """
     try:
-        # 1. Cleanup Dependent Data (Preventive Cascade / Deep Clean)
-        # Protocol Omega: Manual Cascade for tables lacking FK ON DELETE CASCADE
-        
-        # 0. Messages (Explicit Deep Clean)
-        await db.pool.execute("DELETE FROM chat_messages WHERE tenant_id = $1", tenant_id)
-
-        # A. Conversations
-        await db.pool.execute("DELETE FROM chat_conversations WHERE tenant_id = $1", tenant_id)
-        
-        # B. Agents
-        await db.pool.execute("DELETE FROM agents WHERE tenant_id = $1", tenant_id)
-        
-        # C. Business Assets (orphaned if not FK linked)
-        await db.pool.execute("DELETE FROM business_assets WHERE tenant_id = $1::text", str(tenant_id))
-
-        # D. Support Tables (Tools, Credentials, Systems)
-        await db.pool.execute("DELETE FROM tools WHERE tenant_id = $1", tenant_id)
-        await db.pool.execute("DELETE FROM credentials WHERE tenant_id = $1", tenant_id)
-        await db.pool.execute("DELETE FROM system_events WHERE tenant_id = $1", tenant_id)
-
-        # E. Users (Identity Layer - SAFE DETACH)
-        # Protocol: The Store dies, the User survives.
-        await db.pool.execute("UPDATE users SET tenant_id = NULL WHERE tenant_id = $1", tenant_id)
-        
-        # 2. Delete Tenant (Triggers Cascade for Credentials, Tools, Customers)
-        row = await db.pool.fetchrow("DELETE FROM tenants WHERE id = $1 RETURNING id", tenant_id)
-        if not row:
+        # 1. Check if exists
+        exists = await db.pool.fetchval("SELECT id FROM tenants WHERE id = $1", tenant_id)
+        if not exists:
             raise HTTPException(404, "Tenant not found")
-            
-        return {"status": "ok", "message": f"Tenant {tenant_id} and all associated data deleted (Deep Clean)"}
+
+        # 2. Archive (Soft Delete)
+        # We preserve all data but mark tenant as ARCHIVED.
+        # This allows recovery or historical audit.
+        await db.pool.execute("UPDATE tenants SET status = 'ARCHIVED', updated_at = NOW() WHERE id = $1", tenant_id)
+        
+        # Log 
+        await db.log_system_event("warning", "tenant_archived", f"Tenant {tenant_id} archived (Soft Delete)")
+
+        return {"status": "archived", "id": tenant_id, "message": "Tenant archived for safety."}
+
     except Exception as e:
-        logger.error(f"Error deleting tenant: {e}")
-        # Improve error message for FK violations if they still happen
-        if "foreign key constraint" in str(e).lower():
-            raise HTTPException(409, f"Dependency Error: {str(e)}")
+        logger.error(f"Error archiving tenant: {e}")
         raise HTTPException(500, str(e))
 
 
@@ -403,6 +389,35 @@ class HandoffConfigModel(BaseModel):
 
 
 
+
+class AuditLogRequest(BaseModel):
+    event_type: str
+    message: str
+    severity: str = "info"
+    payload: Optional[dict] = {}
+    tenant_id: Optional[int] = None
+
+@router.post("/audit/log", dependencies=[Depends(verify_internal_token)])
+async def ingest_audit_log(req: AuditLogRequest):
+    """
+    Ingest Audit Log from External Services (Agents).
+    Used for tracking 'Write Actions' (e.g. Email Sent, Order Created).
+    """
+    try:
+        # We rely on log_system_event which uses 'system_events' table.
+        # We should ensure tenant_id is passed if possible.
+        # Ensure system_events has tenant_id column (it should per schema).
+        await db.pool.execute("""
+            INSERT INTO system_events (event_type, severity, message, payload, tenant_id, occurred_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())
+        """, req.event_type, req.severity, req.message, json.dumps(req.payload), req.tenant_id)
+        
+        return {"status": "logged"}
+    except Exception as e:
+        # Don't fail the caller, just log error internally
+        logger.error("audit_ingest_failed", error=str(e))
+        return {"status": "error", "details": str(e)}
+
 @router.post("/credentials", dependencies=[Depends(get_current_user)])
 async def save_credential(cred: CredentialModel, current_user: User = Depends(get_current_user)):
     try:
@@ -418,16 +433,57 @@ async def save_credential(cred: CredentialModel, current_user: User = Depends(ge
             from utils import encrypt_password
             final_value = encrypt_password(cred.value)
             
-        q = """
+            INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            ON CONFLICT (scope, name, tenant_id) WHERE scope = 'tenant'
+            DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
+            
+            -- Fallback for global scope conflict
             INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, NOW())
             ON CONFLICT (name) WHERE scope = 'global'
-            DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-            RETURNING id_uuid
+            DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
         """
-        # Note: If scope is 'tenant', we might need a unique constraint on (name, tenant_id). 
-        # Assuming schema handles it or we accept duplicates across tenants.
-        # Ideally: ON CONFLICT (name, tenant_id) DO UPDATE...
+        # Improved Upsert Logic (Handling Partial Indexes in PG is tricky in one query)
+        # We split into two atomic attempts or use a smarter query
+        
+        # ATTEMPT 1: Try Tenant Scope Upsert
+        if cred.scope == 'tenant':
+             q = """
+                INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                ON CONFLICT (name, tenant_id) WHERE scope = 'tenant'
+                DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+                RETURNING id_uuid
+             """
+             # Note: This assumes a UNIQUE INDEX on (name, tenant_id) WHERE scope='tenant' exists.
+             # If not, we might get duplicate errors. 
+             # Given "Schema Drift = 0", we rely on existing constraints.
+             # If constraints are missing, we must do SELECT + UPDATE/INSERT.
+             
+             # SAFE UPSERT (Select First)
+             existing = await db.pool.fetchval("SELECT id_uuid FROM credentials WHERE name=$1 AND tenant_id=$2 AND scope='tenant'", cred.name, cred.tenant_id)
+             if existing:
+                 await db.pool.execute("UPDATE credentials SET value=$1, updated_at=NOW() WHERE id_uuid=$2", final_value, existing)
+                 return {"status": "ok", "id": str(existing), "action": "updated"}
+             else:
+                 row = await db.pool.fetchrow("""
+                    INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING id_uuid
+                 """, cred.name, final_value, cred.category, cred.scope, cred.tenant_id, cred.description)
+                 return {"status": "ok", "id": str(row['id_uuid']), "action": "created"}
+
+        # ATTEMPT 2: Global Scope
+        else:
+             q = """
+                INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                ON CONFLICT (name) WHERE scope = 'global'
+                DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+                RETURNING id_uuid
+            """
+             row = await db.pool.fetchrow(q, cred.name, final_value, cred.category, cred.scope, cred.tenant_id, cred.description)
+             return {"status": "ok", "id": str(row['id_uuid'])}
         
         row = await db.pool.fetchrow(q, cred.name, final_value, cred.category, cred.scope, cred.tenant_id, cred.description)
         
@@ -881,41 +937,120 @@ async def get_business_assets(
         logger.error(f"Error fetching assets: {e}")
         raise HTTPException(500, str(e))
 
+class ConnectionTestRequest(BaseModel):
+    category: str
+
+@router.post("/credentials/test", dependencies=[Depends(verify_admin_token)])
+async def test_credential_connection(data: ConnectionTestRequest, current_user: User = Depends(get_current_user)):
+    """
+    Real-time Health Check for Integrations (Ping).
+    Uses TokenManager to ensure token is fresh before testing.
+    """
+    tenant_id = current_user.tenant_id
+    category = data.category.lower()
+    
+    start_time = datetime.utcnow()
+    
+    if category == "tiendanube":
+        from app.services.token_manager import TokenManager
+        from app.core.credentials import get_tenant_credential
+        
+        # 1. Get Token (Auto-Refresh if needed)
+        token = await TokenManager.get_valid_token(tenant_id, "tiendanube")
+        if not token:
+             return {"status": "error", "message": "No credentials found or configured."}
+             
+        store_id = await get_tenant_credential(tenant_id, "tiendanube", "TIENDANUBE_USER_ID")
+        if not store_id:
+             # Try legacy fallback just for ID (Protocol Omega compatibility)
+             row = await db.pool.fetchrow("SELECT tiendanube_store_id FROM tenants WHERE id = $1", tenant_id)
+             if row: store_id = row['tiendanube_store_id']
+        
+        if not store_id:
+             return {"status": "error", "message": "Store ID missing."}
+
+        # 2. Perform Ping (Fetch Store Info - Lightweight)
+        url = f"https://api.tiendanube.com/v1/{store_id}/store"
+        headers = {"Authentication": f"bearer {token}", "User-Agent": "Nexus Verify/1.0"}
+        
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(url, headers=headers)
+                latency = (datetime.utcnow() - start_time).total_seconds() * 1000
+                
+                if resp.status_code == 200:
+                    store_data = resp.json()
+                    name = store_data.get("name", {}).get("es") or store_data.get("name")
+                    return {
+                        "status": "ok", 
+                        "latency_ms": int(latency), 
+                        "details": f"Connected to {name}",
+                        "valid": True
+                    }
+                elif resp.status_code == 401:
+                    return {"status": "error", "message": "Unauthorized (Token Invalid)", "valid": False}
+                else:
+                    return {"status": "error", "message": f"API Error {resp.status_code}", "valid": False}
+                    
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    return {"status": "unknown", "message": f"Test not implemented for {category}"}
+
 @router.get("/products")
 async def get_store_products(current_user: User = Depends(get_current_user)):
     """
     Fetch store products.
     Protocol Omega: Real-time proxy to TiendaNube if credentials exist, else Mock.
+    Uses TokenManager for auto-refresh.
     """
     try:
         tenant_id = current_user.tenant_id
         
-        # 1. Get Credentials
-        q = "SELECT tiendanube_store_id, tiendanube_access_token FROM tenants WHERE id = $1"
-        row = await db.pool.fetchrow(q, tenant_id)
-             
-        if not row:
+        # 1. Get Credentials via TokenManager (Handles Refresh)
+        from app.services.token_manager import TokenManager
+        from app.core.credentials import get_tenant_credential
+        
+        # Attempt Managed Fetch
+        token = await TokenManager.get_valid_token(tenant_id, "tiendanube")
+        
+        # Get Store ID (Standard or Legacy)
+        store_id = await get_tenant_credential(tenant_id, 'tiendanube', 'TIENDANUBE_USER_ID')
+        
+        if not store_id:
+             # Legacy Fallback
+             row = await db.pool.fetchrow("SELECT tiendanube_store_id FROM tenants WHERE id = $1", tenant_id)
+             if row: 
+                 store_id = row['tiendanube_store_id']
+        
+        # Last ditch legacy token check if TokenManager failed (unlikely but safe)
+        if not token:
+             row = await db.pool.fetchrow("SELECT tiendanube_access_token FROM tenants WHERE id = $1", tenant_id)
+             if row and row['tiendanube_access_token']:
+                  from utils import decrypt_password
+                  try: token = decrypt_password(row['tiendanube_access_token'])
+                  except: token = row['tiendanube_access_token']
+        
+        if not token or not store_id:
             # Fallback Mocks for Demo
             return [
                 {"id": 991, "name": {"es": "Camiseta CyberPunk Gen1"}, "images": [{"src": "https://via.placeholder.com/300/000000/00ffff?text=CyberTee"}], "categories": [{"id": 1, "name": {"es": "Ropa"}}]},
                 {"id": 992, "name": {"es": "Zapatillas Neon Runner"}, "images": [{"src": "https://via.placeholder.com/300/111111/ff00ff?text=NeonShoes"}], "categories": [{"id": 1, "name": {"es": "Calzado"}}]}
             ]
             
-        store_id = row['tiendanube_store_id']
-        from utils import decrypt_password
-        token = decrypt_password(row['tiendanube_access_token'])
-        
         # 2. Fetch from TN
         url = f"https://api.tiendanube.com/v1/{store_id}/products?per_page=50"
-        headers = {"Authentication": f"bearer {token}", "User-Agent": "Nexus Bot"}
+        headers = {"Authentication": f"bearer {token}", "User-Agent": "Nexus Bot (Platform AI)"}
         
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, headers=headers)
             if resp.status_code == 200:
                 return resp.json()
+            elif resp.status_code == 401:
+                logger.warning("products_fetch_401_token_expired_despite_refresh_attempt")
+                return []
             else:
                 logger.warning(f"TN Fetch Failed: {resp.text}")
-                # Return empty list or fallbacks? Return empty to avoid confusion.
                 return []
                 
     except Exception as e:
@@ -2066,6 +2201,19 @@ async def get_tenant_details(id: int):
         resp["connections"]["meta_omnichannel"] = {"configured": True}
     else:
         resp["connections"]["meta_omnichannel"] = {"configured": False}
+        
+    # Check Tienda Nube (Vault Check)
+    tn_configured = False
+    for c in resp["credentials"]["tenant_specific"] + resp["credentials"]["global_available"]:
+        if c['name'] == 'TIENDANUBE_ACCESS_TOKEN':
+            tn_configured = True
+            break
+            
+    # Fallback: Check Legacy Table Column if not found in vault
+    if not tn_configured and tenant.get('tiendanube_access_token'):
+        tn_configured = True
+        
+    resp["connections"]["tiendanube"] = {"configured": tn_configured}
             
     return resp
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApi } from '../hooks/useApi';
 import { YCloudSettings } from './YCloudSettings';
 import { MetaSettings } from './MetaSettings';
-import { MessageSquare, Copy, Check, Info, Globe, Smartphone, LayoutGrid, Facebook } from 'lucide-react';
+import { MessageSquare, Copy, Check, Info, Globe, Smartphone, LayoutGrid, Facebook, ShoppingBag } from 'lucide-react';
 
 interface SettingsProps {
     initialTab?: 'integrations' | 'ycloud' | 'meta';
@@ -65,6 +65,71 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
         navigator.clipboard.writeText(webhookUrl);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const connectTiendaNube = () => {
+        const width = 600;
+        const height = 700;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        const tenantId = import.meta.env.VITE_DEFAULT_TENANT_ID || 1;
+
+        // Tienda Nube Service URL (Sovereign Service)
+        // Default to Prod URL provided by user if Env Var is missing
+        let serviceUrl = import.meta.env.VITE_TIENDANUBE_SERVICE_URL || "https://multiagents-tiendanube-service.yn8wow.easypanel.host";
+
+        // Remove trailing slash if present to avoid double slashes
+        serviceUrl = serviceUrl.replace(/\/$/, '');
+
+        // Auth Path: /auth/login (Matching the /auth/callback structure)
+        const url = `${serviceUrl}/auth/login?tenant_id=${tenantId}`;
+
+        console.log("Launching Tienda Nube Auth:", url);
+        window.open(url, "TiendaNubeLogin", `width=${width},height=${height},top=${top},left=${left}`);
+
+        const handleMessage = (event: MessageEvent) => {
+            if (event.data?.type === 'TIENDANUBE_SUCCESS') {
+                console.log("Tienda Nube Connected!");
+                // Refresh connections data to show "Connected" status
+                window.location.reload();
+                window.removeEventListener('message', handleMessage);
+            }
+        };
+        window.addEventListener("message", handleMessage);
+    };
+
+    const [showManualTn, setShowManualTn] = useState(false);
+
+    const handleManualConnect = async () => {
+        const token = (document.getElementById('tn_manual_token') as HTMLInputElement).value;
+        const id = (document.getElementById('tn_manual_id') as HTMLInputElement).value;
+
+        if (!token || !id) return alert("Completa ambos campos");
+
+        try {
+            await fetchApi('/admin/credentials', {
+                method: 'POST',
+                body: {
+                    tenant_id: import.meta.env.VITE_DEFAULT_TENANT_ID || 1,
+                    category: 'tiendanube',
+                    name: 'TIENDANUBE_ACCESS_TOKEN',
+                    value: token
+                }
+            });
+            await fetchApi('/admin/credentials', {
+                method: 'POST',
+                body: {
+                    tenant_id: import.meta.env.VITE_DEFAULT_TENANT_ID || 1,
+                    category: 'tiendanube',
+                    name: 'TIENDANUBE_USER_ID',
+                    value: id
+                }
+            });
+            window.location.reload();
+        } catch (e) {
+            console.error(e);
+            alert("Error guardando credenciales");
+        }
     };
 
     return (
@@ -196,6 +261,99 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
                                     >
                                         Configurar
                                     </button>
+                                </div>
+                            </div>
+
+                            {/* Tienda Nube Card */}
+                            <div className="glass p-6 border-l-4 border-[#2D3278] relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                    <ShoppingBag size={80} />
+                                </div>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-10 h-10 rounded-full bg-[#2D3278]/10 flex items-center justify-center text-[#2D3278] dark:text-indigo-400">
+                                        <ShoppingBag size={20} />
+                                    </div>
+                                    <h3 className="font-bold">Tienda Nube</h3>
+                                </div>
+                                <p className="text-xs text-slate-400 mb-6">Sincronización de catálogo y órdenes.</p>
+                                <div className="flex items-center justify-between mt-auto">
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${connections?.tiendanube?.configured ? 'text-green-400' : 'text-slate-500'}`}>
+                                        {connections?.tiendanube?.configured ? 'Conectado' : 'Pendiente'}
+                                    </span>
+                                    <button
+                                        onClick={() => {
+                                            const el = document.getElementById('tiendanube-config');
+                                            el?.scrollIntoView({ behavior: 'smooth' });
+                                        }}
+                                        className="text-xs font-bold text-indigo-400 hover:underline"
+                                    >
+                                        Configurar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Tienda Nube Configuration Section */}
+                        <div id="tiendanube-config" className="mt-12 max-w-2xl bg-[#2D3278]/5 rounded-xl border border-[#2D3278]/20 p-6">
+                            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-indigo-300">
+                                <ShoppingBag size={20} />
+                                Configuración Tienda Nube
+                            </h3>
+
+                            <div className="flex flex-col gap-6">
+                                {/* Auto Mode */}
+                                <div className="bg-black/20 p-4 rounded-lg flex items-center justify-between">
+                                    <div>
+                                        <h4 className="font-bold text-sm text-white">Conexión Automática (Recomendado)</h4>
+                                        <p className="text-xs text-slate-400 mt-1">Inicia sesión con tu cuenta de Tienda Nube para vincular.</p>
+                                    </div>
+                                    <button
+                                        onClick={connectTiendaNube}
+                                        className="bg-[#2D3278] hover:bg-[#2D3278]/80 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
+                                    >
+                                        Conectar Ahora
+                                    </button>
+                                </div>
+
+                                {/* Manual Mode Toggle */}
+                                <div>
+                                    <button
+                                        onClick={() => setShowManualTn(!showManualTn)}
+                                        className="text-xs text-slate-500 hover:text-white underline decoration-dashed underline-offset-4"
+                                    >
+                                        {showManualTn ? 'Ocultar configuración manual' : '¿Prefieres ingresar credenciales manualmente?'}
+                                    </button>
+
+                                    {showManualTn && (
+                                        <div className="mt-4 space-y-4 animate-fade-in bg-black/40 p-4 rounded-lg border border-white/5">
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-400 block mb-1">Access Token</label>
+                                                <input
+                                                    type="password"
+                                                    placeholder="bearer token..."
+                                                    className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none transition-colors"
+                                                    id="tn_manual_token"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-400 block mb-1">Store ID (User ID)</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Ej: 123456"
+                                                    className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none transition-colors"
+                                                    id="tn_manual_id"
+                                                />
+                                            </div>
+                                            <div className="flex justify-end">
+                                                <button
+                                                    onClick={handleManualConnect}
+                                                    className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded transition-colors"
+                                                >
+                                                    Guardar Credenciales
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

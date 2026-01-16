@@ -24,6 +24,9 @@ from fastapi.responses import JSONResponse, Response
 from contextvars import ContextVar
 from pydantic import BaseModel, Field
 
+# Safety Protocols: Rate Limiting
+from app.middleware.rate_limit import RateLimitMiddleware # Import Middleware
+
 # PROTOCOL OMEGA DEPLOYMENT TRACKER
 print(">> SYSTEM STARTUP: Protocol Omega v5.9.129 (Stream+SQL Fix Loaded)")
 
@@ -141,6 +144,9 @@ from app.routes.ingest_routes import router as ingest_router # NEW
 
 from app.core.database import AsyncSessionLocal, engine
 from app.core.init_data import init_db
+
+# Register Middleware (Rate Limiting)
+app.add_middleware(RateLimitMiddleware)
 
 # --- Auto-Migration for EasyPanel (Raw SQL Steps) ---
 # Since the db/ folder isn't copied to the container, we inline critical schema here.
