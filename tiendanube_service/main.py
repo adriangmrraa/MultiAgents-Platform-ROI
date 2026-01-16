@@ -539,3 +539,10 @@ async def gdpr_customers_data(request: Request):
         logger.error("gdpr_customer_data_export_error", error=str(e))
         return Response(status_code=200)
 
+@app.get("/privacy")
+async def privacy_policy():
+    """
+    Redirects to the official Frontend Privacy Policy.
+    """
+    return RedirectResponse("https://multiagents-frontend.yn8wow.easypanel.host/privacy-policy")
+
