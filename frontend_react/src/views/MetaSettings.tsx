@@ -67,7 +67,8 @@ export const MetaSettings: React.FC = () => {
     const connectWithBackend = async (code: string) => {
         try {
             // Dynamic Redirect URI (Origin + Slash) to match Meta's strict requirement
-            const redirectUri = window.location.origin + '/';
+            // UPDATE: Removed trailing slash per Meta 400 Error (Redirect Mismatch)
+            const redirectUri = window.location.origin;
 
             const res = await fetchApi('/admin/meta/connect', {
                 method: 'POST',
