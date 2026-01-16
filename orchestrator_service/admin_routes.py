@@ -433,16 +433,11 @@ async def save_credential(cred: CredentialModel, current_user: User = Depends(ge
             from utils import encrypt_password
             final_value = encrypt_password(cred.value)
             
-            INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())
-            ON CONFLICT (scope, name, tenant_id) WHERE scope = 'tenant'
-            DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
             
-            -- Fallback for global scope conflict
-            INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())
-            ON CONFLICT (name) WHERE scope = 'global'
-            DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
+        # Improved Upsert Logic (Handling Partial Indexes in PG is tricky in one query)
+        # We split into two atomic attempts or use a smarter query
+        
+        # ATTEMPT 1: Try Tenant Scope Upsert
         """
         # Improved Upsert Logic (Handling Partial Indexes in PG is tricky in one query)
         # We split into two atomic attempts or use a smarter query
