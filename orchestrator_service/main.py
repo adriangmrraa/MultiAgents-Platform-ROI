@@ -145,6 +145,28 @@ from app.routes.ingest_routes import router as ingest_router # NEW
 from app.core.database import AsyncSessionLocal, engine
 from app.core.init_data import init_db
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize DB
+    await init_db()
+    # verify redis
+    try:
+        await redis_client.ping()
+        logger.info("system_startup_redis_ok")
+    except Exception as e:
+        logger.error(f"system_startup_redis_fail: {e}")
+        
+    yield
+    # Shutdown
+    await db.close()
+
+app = FastAPI(
+    title="Orchestrator Service",
+    description="Protocol Omega Core",
+    version="5.9.130",
+    lifespan=lifespan
+)
+
 # Register Middleware (Rate Limiting)
 app.add_middleware(RateLimitMiddleware)
 
