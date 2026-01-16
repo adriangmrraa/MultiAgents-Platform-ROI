@@ -534,17 +534,28 @@ async def internal_credential_sync(
         # 3. Store Raw Assets in 'business_assets' table
         assets = creds.get("assets", {})
         
-        # Helper to store assets
+        # Helper to store assets (Corrected Schema)
         async def store_asset_batch(asset_list, asset_type):
             for item in asset_list:
-                # Add 'status': 'pending' ensures they don't auto-activate until Wizard runs
-                item['status'] = 'pending' 
-                await db.pool.execute("""
-                    INSERT INTO business_assets (tenant_id, asset_type, asset_id, name, content, created_at)
-                    VALUES ($1, $2, $3, $4, $5, NOW())
-                    ON CONFLICT (tenant_id, asset_id) 
-                    DO UPDATE SET content = EXCLUDED.content, name = EXCLUDED.name
-                """, str(tenant_id), asset_type, item['id'], item.get('name') or item.get('username'), json.dumps(item))
+                item['status'] = 'pending'
+                external_id = item['id']
+                
+                # Check existence via JSONB
+                existing = await db.pool.fetchrow("""
+                    SELECT id FROM business_assets 
+                    WHERE tenant_id = $1 AND asset_type = $2 AND content->>'id' = $3
+                """, str(tenant_id), asset_type, external_id)
+                
+                if existing:
+                    await db.pool.execute("""
+                        UPDATE business_assets SET content = $1, updated_at = NOW() WHERE id = $2
+                    """, json.dumps(item), existing['id'])
+                else:
+                    new_id = str(uuid.uuid4())
+                    await db.pool.execute("""
+                        INSERT INTO business_assets (id, tenant_id, asset_type, content, is_active, created_at)
+                        VALUES ($1, $2, $3, $4, true, NOW())
+                    """, new_id, str(tenant_id), asset_type, json.dumps(item))
 
         if "pages" in assets: await store_asset_batch(assets["pages"], "facebook_page")
         if "instagram" in assets: await store_asset_batch(assets["instagram"], "instagram_account")

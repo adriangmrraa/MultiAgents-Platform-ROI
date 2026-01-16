@@ -85,6 +85,10 @@ export const MetaSettings: React.FC = () => {
                 setWizardAssets(safeAssets);
                 setConnectedAssets(res.connected || {});
                 setShowWizard(true);
+            } else {
+                console.warn("Meta Connect returned non-success:", res);
+                setStatus('error');
+                setErrorMsg(res.message || "La conexión no se completó correctamente.");
             }
         } catch (e: any) {
             console.error("Backend Connect Error:", e);
