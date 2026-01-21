@@ -190,7 +190,7 @@ export const Knowledge: React.FC = () => {
                     </p>
                     <div className="flex flex-col gap-3">
                         <button
-                            onClick={() => navigate('/settings/credentials')}
+                            onClick={() => navigate('/credentials')}
                             className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
                         >
                             Configurar Credenciales Ahora

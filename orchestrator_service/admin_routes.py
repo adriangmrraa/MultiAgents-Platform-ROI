@@ -433,44 +433,31 @@ async def ingest_audit_log(req: AuditLogRequest):
 async def save_credential(cred: CredentialModel, current_user: User = Depends(get_current_user)):
     try:
         # Security: Enforce tenant ownership (SuperAdmin can override)
-        if current_user.role != "SuperAdmin":
+        user_role = (current_user.role or "owner").lower()
+        if user_role != "superadmin":
              cred.tenant_id = current_user.tenant_id
              cred.scope = "tenant" # Enforce tenant scope for non-admins
 
         # Security: Encrypt sensitive categories
         final_value = cred.value
-        sensitive_categories = ['whatsapp_cloud', 'meta_whatsapp', 'tiendanube', 'openai', 'security']
+        sensitive_categories = ['whatsapp_cloud', 'meta_whatsapp', 'tiendanube', 'openai', 'security', 'google', 'smtp']
         if cred.category in sensitive_categories:
             from utils import encrypt_password
             final_value = encrypt_password(cred.value)
             
-            
-        
         # ATTEMPT 1: Try Tenant Scope Upsert
         if cred.scope == 'tenant':
-             q = """
-                INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, NOW())
-                ON CONFLICT (name, tenant_id) WHERE scope = 'tenant'
-                DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-                RETURNING id_uuid
-             """
-             # Note: This assumes a UNIQUE INDEX on (name, tenant_id) WHERE scope='tenant' exists.
-             # If not, we might get duplicate errors. 
-             # Given "Schema Drift = 0", we rely on existing constraints.
-             # If constraints are missing, we must do SELECT + UPDATE/INSERT.
-             
              # SAFE UPSERT (Select First)
              existing = await db.pool.fetchval("SELECT id_uuid FROM credentials WHERE name=$1 AND tenant_id=$2 AND scope='tenant'", cred.name, cred.tenant_id)
              if existing:
-                 await db.pool.execute("UPDATE credentials SET value=$1, updated_at=NOW() WHERE id_uuid=$2", final_value, existing)
-                 return {"status": "ok", "id": str(existing), "action": "updated"}
+                 await db.pool.execute("UPDATE credentials SET value=$1, category=$2, description=$3, updated_at=NOW() WHERE id_uuid=$2", final_value, cred.category, cred.description, existing)
+                 res = {"status": "ok", "id": str(existing), "action": "updated"}
              else:
                  row = await db.pool.fetchrow("""
                     INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
                     VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING id_uuid
                  """, cred.name, final_value, cred.category, cred.scope, cred.tenant_id, cred.description)
-                 return {"status": "ok", "id": str(row['id_uuid']), "action": "created"}
+                 res = {"status": "ok", "id": str(row['id_uuid']), "action": "created"}
 
         # ATTEMPT 2: Global Scope
         else:
@@ -478,20 +465,47 @@ async def save_credential(cred: CredentialModel, current_user: User = Depends(ge
                 INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
                 VALUES ($1, $2, $3, $4, $5, $6, NOW())
                 ON CONFLICT (name) WHERE scope = 'global'
-                DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+                DO UPDATE SET value = EXCLUDED.value, category = EXCLUDED.category, description = EXCLUDED.description, updated_at = NOW()
                 RETURNING id_uuid
             """
-             row = await db.pool.fetchrow(q, cred.name, final_value, cred.category, cred.scope, cred.tenant_id, cred.description)
-             return {"status": "ok", "id": str(row['id_uuid'])}
-        
-        row = await db.pool.fetchrow(q, cred.name, final_value, cred.category, cred.scope, cred.tenant_id, cred.description)
+             row = await db.pool.fetchrow(q, cred.name, final_value, cred.category, cred.scope, None, cred.description)
+             res = {"status": "ok", "id": str(row['id_uuid'])}
         
         # Performance: Invalidate Redis Cache
         cache_key = f"settings:{cred.category}:{cred.tenant_id}"
         await redis_client.delete(cache_key)
+        # Also delete 'all' cache for this tenant
+        await redis_client.delete(f"settings:all:{cred.tenant_id}")
         
-        return {"status": "ok", "id": str(row['id_uuid'])}
+        return res
     except Exception as e:
+        logger.error(f"save_credential_failed: {e}")
+        raise HTTPException(500, detail=str(e))
+
+@router.delete("/credentials/{cred_id}", dependencies=[Depends(get_current_user)])
+async def delete_credential(cred_id: str, current_user: User = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.tenant_id
+        user_role = (current_user.role or "owner").lower()
+        
+        # Security: Fetch category and owner before deleting to invalidate cache
+        row = await db.pool.fetchrow("SELECT category, tenant_id, scope FROM credentials WHERE id_uuid = $1", uuid.UUID(cred_id))
+        if not row:
+            raise HTTPException(404, "Credential not found")
+            
+        # Permission check
+        if user_role != "superadmin" and row['tenant_id'] != tenant_id:
+            raise HTTPException(403, "Not authorized to delete this credential")
+
+        await db.pool.execute("DELETE FROM credentials WHERE id_uuid = $1", uuid.UUID(cred_id))
+        
+        # Invalidate Cache
+        await redis_client.delete(f"settings:{row['category']}:{row['tenant_id']}")
+        await redis_client.delete(f"settings:all:{row['tenant_id']}")
+        
+        return {"status": "ok", "message": "Credential deleted"}
+    except Exception as e:
+        logger.error(f"delete_credential_failed: {e}")
         raise HTTPException(500, detail=str(e))
 
 # --- META INTEGRATION ENDPOINTS ---
@@ -2419,79 +2433,8 @@ async def admin_send_message(request: Request):
 # Consolidado en @router.post("/whatsapp/send") line 1413
 pass
 
-# --- Credentials Routes ---
-
-@router.get("/credentials", dependencies=[Depends(verify_admin_token)])
-async def list_credentials():
-    """List all credentials."""
-    try:
-        # Check if table exists first (migration safety)
-        await db.pool.execute("""
-            CREATE TABLE IF NOT EXISTS credentials (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) UNIQUE NOT NULL,
-                value TEXT NOT NULL,
-                category VARCHAR(50) DEFAULT 'other',
-                scope VARCHAR(20) DEFAULT 'global',
-                tenant_id INT,
-                description TEXT,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            );
-        """)
-        
-        rows = await db.pool.fetch("SELECT * FROM credentials ORDER BY id DESC")
-        return [dict(row) for row in rows]
-    except Exception as e:
-        logger.error(f"Error listing credentials: {e}")
-        raise HTTPException(500, str(e))
-
-@router.post("/credentials", dependencies=[Depends(verify_admin_token)])
-@require_role("SuperAdmin")
-async def create_credential(cred: CredentialModel):
-    try:
-        # Protocol Omega: Dual-Path Upsert (Global vs Tenant)
-        if cred.tenant_id:
-            q = """
-                INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, NOW())
-                ON CONFLICT (name, tenant_id) DO UPDATE SET
-                    value = EXCLUDED.value,
-                    category = EXCLUDED.category,
-                    scope = EXCLUDED.scope,
-                    description = EXCLUDED.description,
-                    updated_at = NOW()
-                RETURNING id_uuid as id
-            """
-            row = await db.pool.fetchrow(q, cred.name, cred.value, cred.category, cred.scope, cred.tenant_id, cred.description)
-        else:
-            q = """
-                INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, NOW())
-                ON CONFLICT (name) WHERE tenant_id IS NULL DO UPDATE SET
-                    value = EXCLUDED.value,
-                    category = EXCLUDED.category,
-                    scope = EXCLUDED.scope,
-                    description = EXCLUDED.description,
-                    updated_at = NOW()
-                RETURNING id_uuid as id
-            """
-            row = await db.pool.fetchrow(q, cred.name, cred.value, cred.category, cred.scope, None, cred.description)
-            
-        return {"status": "ok", "id": str(row['id'])}
-    except Exception as e:
-        logger.error(f"Error creating credential: {e}")
-        raise HTTPException(500, str(e))
-
-@router.delete("/credentials/{cred_id}", dependencies=[Depends(verify_admin_token)])
-@require_role("SuperAdmin")
-async def delete_credential(cred_id: int):
-    try:
-        await db.pool.execute("DELETE FROM credentials WHERE id = $1", cred_id)
-        return {"status": "ok", "message": "Credential deleted"}
-    except Exception as e:
-        logger.error(f"Error deleting credential: {e}")
-        raise HTTPException(500, str(e))
+# Credentials routes consolidated above.
+pass
 
 # --- Tools Management ---
 
