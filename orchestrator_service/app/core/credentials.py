@@ -19,7 +19,7 @@ async def get_tenant_credential(tenant_id: int, category: str, name_pattern: str
     try:
         query = """
             SELECT value FROM credentials 
-            WHERE tenant_id = $1 AND category = $2
+            WHERE tenant_id = $1 AND LOWER(category) = LOWER($2)
         """
         params = [tenant_id, category]
         
@@ -27,7 +27,7 @@ async def get_tenant_credential(tenant_id: int, category: str, name_pattern: str
             query += " AND name ILIKE $3"
             params.append(name_pattern)
             
-        query += " LIMIT 1"
+        query += " ORDER BY created_at DESC LIMIT 1"
         
         # Ensure DB is connected (ignite in main.py usually handles this, but safe is better)
         if not db.pool:

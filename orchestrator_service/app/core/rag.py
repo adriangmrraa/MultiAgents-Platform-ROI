@@ -38,24 +38,26 @@ class RAGCore:
     def __init__(self, tenant_id: str, api_key: str = None, provider: str = "openai"):
         # Sanitize tenant_id for ChromaDB collection naming rules:
         sanitized_id = re.sub(r'[^a-zA-Z0-9]', '_', str(tenant_id))
-        self.tenant_id = tenant_id
-        self.collection_name = f"store_{sanitized_id}"
+        self.tenant_id = str(tenant_id)
+        # Isolation by Provider to prevent dimension mismatch (OpenAI 1536 vs Google 768)
+        self.collection_name = f"store_{sanitized_id}_{provider}"
         
         # Provider selection (v5.1 Multi-Provider RAG)
         self.provider = provider
+        self.api_key = api_key or (OPENAI_API_KEY if provider == "openai" else None)
         
         if provider == "google":
             from langchain_google_genai import GoogleGenerativeAIEmbeddings
             self.embedding_fn = GoogleGenerativeAIEmbeddings(
                 model="models/embedding-001",
-                google_api_key=api_key
+                google_api_key=self.api_key
             )
         else:
             # Default to OpenAI
             from langchain_openai import OpenAIEmbeddings
             self.embedding_fn = OpenAIEmbeddings(
                 model="text-embedding-3-small",
-                openai_api_key=api_key or OPENAI_API_KEY
+                openai_api_key=self.api_key
             )
             
         self._db = Chroma(
@@ -109,7 +111,7 @@ class RAGCore:
             llm_transform = ChatOpenAI(
                 model="gpt-4o-mini", # Cost-effective & Fast
                 temperature=0.3,
-                openai_api_key=self.openai_api_key
+                openai_api_key=self.api_key
             )
             
             # 1. Product Ingestion with "Smart Transformation"

@@ -3602,8 +3602,8 @@ async def search_rag(tenant_id: str, q: str, k: int = 5, source_ids: Optional[st
         from admin_routes import get_tenant_credential
         
         # 1. Fetch Sovereign Credential
-        openai_key = await get_tenant_credential(int(tenant_id), "openai", "%api_key%")
-        google_key = await get_tenant_credential(int(tenant_id), "google", "%api_key%")
+        openai_key = await get_tenant_credential(int(tenant_id), "openai")
+        google_key = await get_tenant_credential(int(tenant_id), "google")
         
         provider = "openai"
         api_key = openai_key
@@ -3615,13 +3615,21 @@ async def search_rag(tenant_id: str, q: str, k: int = 5, source_ids: Optional[st
         # 2. Initialize RAGCore with Sovereign Key
         rag = RAGCore(tenant_id, api_key=api_key, provider=provider)
         
-        # 3. Apply Filter if source_ids provided
-        filter_dict = None
+        # 3. Apply Filter (Sovereign Isolation Protocol v5.1)
+        # Always filter by tenant_id for Zero-Trust isolation
+        filter_dict = {"tenant_id": str(tenant_id)}
+        
         if source_ids:
             try:
                 ids = source_ids.split(",")
                 if ids:
-                    filter_dict = {"source_id": {"$in": ids}}
+                    # Strict $and filter to ensure tenant + specific files
+                    filter_dict = {
+                        "$and": [
+                            {"tenant_id": {"$eq": str(tenant_id)}},
+                            {"source_id": {"$in": ids}}
+                        ]
+                    }
             except:
                 pass
 
@@ -3709,8 +3717,8 @@ async def upload_knowledge_file(
 
     # 1b. Sovereign Credential Check (Protocol v5.1)
     from admin_routes import get_tenant_credential
-    openai_key = await get_tenant_credential(tenant_id, "openai", "%api_key%")
-    google_key = await get_tenant_credential(tenant_id, "google", "%api_key%")
+    openai_key = await get_tenant_credential(tenant_id, "openai")
+    google_key = await get_tenant_credential(tenant_id, "google")
     
     if not openai_key and not google_key:
         logger.warning(f"knowledge_upload_blocked_no_keys: tenant {tenant_id}")
@@ -3747,8 +3755,8 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, content: byte
     try:
         # 1. Fetch Sovereign Credential
         from admin_routes import get_tenant_credential # Ensure availability
-        openai_key = await get_tenant_credential(tenant_id, "openai", "%api_key%")
-        google_key = await get_tenant_credential(tenant_id, "google", "%api_key%")
+        openai_key = await get_tenant_credential(tenant_id, "openai")
+        google_key = await get_tenant_credential(tenant_id, "google")
         
         provider = "openai"
         api_key = openai_key
