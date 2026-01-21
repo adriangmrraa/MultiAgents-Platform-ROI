@@ -793,7 +793,16 @@ CATALOGO:
         RAISE NOTICE 'Failed to add onboarding_status to tenants';
     END $$;
     """,
-    # 23. Users & Auth (Sovereign Identity)
+    # 23. Agent Knowledge Linking (Nexus v5.1)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE agents ADD COLUMN IF NOT EXISTS knowledge_sources JSONB DEFAULT '[]';
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to add knowledge_sources to agents';
+    END $$;
+    """,
+    # 24. Users & Auth (Sovereign Identity)
     """
     CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY,
@@ -2010,6 +2019,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             # Prio 1: Agent Config
             raw_prompt = agent_row['system_prompt_template']
             enabled_tools = json.loads(agent_row['enabled_tools']) if agent_row['enabled_tools'] else []
+            knowledge_sources = agent_row['knowledge_sources'] if 'knowledge_sources' in agent_row and agent_row['knowledge_sources'] else []
             model_config = {
                 "provider": agent_row['model_provider'],
                 "version": agent_row['model_version'],
@@ -2020,6 +2030,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             # Prio 2: Tenant Config (Legacy / Fallback)
             raw_prompt = tenant_row.get("system_prompt_template") or GLOBAL_SYSTEM_PROMPT or "Eres un asistente virtual amable."
             enabled_tools = ["search_specific_products"] # Default set
+            knowledge_sources = []
             model_config = {"provider": "openai", "version": "gpt-4o"}
 
         # Variable Injection
@@ -2097,6 +2108,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             "agent_config": {
                 "tools": enabled_tools,
                 "tool_instructions": tool_instructions_list,
+                "knowledge_sources": knowledge_sources,
                 "model": model_config
             },
             "credentials": {

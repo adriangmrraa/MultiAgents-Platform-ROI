@@ -3649,15 +3649,40 @@ async def get_rag_galaxy(tenant_id: str):
 
 @router.get("/rag/search", dependencies=[Depends(verify_admin_token)])
 @safe_db_call
-async def search_rag(tenant_id: str, q: str, k: int = 5):
+async def search_rag(tenant_id: str, q: str, k: int = 5, source_ids: Optional[str] = None):
     """
-    Semantic search across the tenant's vector store.
-    Used by agents to query enriched knowledge.
+    Sovereign Semantic Search (v5.1).
+    Fetches the tenant's key and applies knowledge_sources filter.
     """
     try:
         from app.core.rag import RAGCore
-        rag = RAGCore(tenant_id)
-        context = rag.search(q, k=k)
+        from admin_routes import get_tenant_credential
+        
+        # 1. Fetch Sovereign Credential
+        openai_key = await get_tenant_credential(int(tenant_id), "openai", "%api_key%")
+        google_key = await get_tenant_credential(int(tenant_id), "google", "%api_key%")
+        
+        provider = "openai"
+        api_key = openai_key
+        
+        if google_key:
+            provider = "google"
+            api_key = google_key
+        
+        # 2. Initialize RAGCore with Sovereign Key
+        rag = RAGCore(tenant_id, api_key=api_key, provider=provider)
+        
+        # 3. Apply Filter if source_ids provided
+        filter_dict = None
+        if source_ids:
+            try:
+                ids = source_ids.split(",")
+                if ids:
+                    filter_dict = {"source_id": {"$in": ids}}
+            except:
+                pass
+
+        context = rag.search(q, k=k, filter=filter_dict)
         return {"ok": True, "context": context}
     except Exception as e:
         logger.error(f"RAG_SEARCH_FAIL: {e}")
@@ -3720,50 +3745,97 @@ async def list_knowledge_files(current_user: User = Depends(get_current_user)):
 from fastapi import File, UploadFile
 
 @router.post("/knowledge/upload")
-@safe_db_call
 async def upload_knowledge_file(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Upload a file to the private knowledge base.
-    Triggers RAG ingestion (Mocked/Stubbed for MVP).
+    Sovereign Knowledge Upload (v5.1).
+    Validates format, inserts pending record, and triggers async ingestion.
     """
     tenant_id = current_user.tenant_id
-    
-    # 1. Read File Info
-    content = await file.read() # Warning: check size in real prod
-    file_size = len(content)
     filename = file.filename
     file_type = file.content_type
     
-    # 2. Insert into DB (Pending)
+    # 1. Immediate format validation
+    allowed_extensions = {'.pdf', '.txt', '.csv', '.docx', '.doc', '.md'}
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in allowed_extensions:
+        raise HTTPException(400, f"Unsupported file format: {ext}. Allowed: {', '.join(allowed_extensions)}")
+
+    # 1b. Sovereign Credential Check (Protocol v5.1)
+    from admin_routes import get_tenant_credential
+    openai_key = await get_tenant_credential(tenant_id, "openai", "%api_key%")
+    google_key = await get_tenant_credential(tenant_id, "google", "%api_key%")
+    
+    if not openai_key and not google_key:
+        logger.warning("knowledge_upload_blocked_no_keys", tenant_id=tenant_id)
+        raise HTTPException(400, "Missing AI Credentials: No OpenAI or Google API keys found in vault.")
+
+    # 2. Read File Info
+    content = await file.read()
+    file_size = len(content)
+    
+    # 3. Insert into DB (Pending)
     doc_id = await db.pool.fetchval("""
         INSERT INTO rag_documents (tenant_id, filename, file_type, file_size, status, created_at)
         VALUES ($1, $2, $3, $4, 'processing', NOW())
         RETURNING id
     """, tenant_id, filename, file_type, file_size)
     
-    # 3. Trigger Async Processing (Here we simulate it)
-    # in real world: background_tasks.add_task(process_rag, doc_id, content)
-    # We'll just update to active immediately for MVP or scheduling
-    try:
-        # Simulate local storage logic or RAG Core call
-        # For now, just mark active.
-        await db.pool.execute("UPDATE rag_documents SET status = 'active' WHERE id = $1", doc_id)
-        
-        # Determine RAG status message
-        rag_status = "Indexed via Protocol Omega"
-    except Exception as e:
-        await db.pool.execute("UPDATE rag_documents SET status = 'error', meta = $2 WHERE id = $1", doc_id, json.dumps({'error': str(e)}))
-        raise HTTPException(500, f"Processing failed: {e}")
+    # 4. Trigger Async Sovereign Processing
+    background_tasks.add_task(process_knowledge_ingestion, doc_id, tenant_id, content, filename)
 
     return {
-        "status": "success",
+        "status": "processing",
         "id": str(doc_id),
-        "filename": filename,
-        "rag_status": "active" 
+        "filename": filename
     }
+
+async def process_knowledge_ingestion(doc_id: str, tenant_id: int, content: bytes, filename: str):
+    """
+    Background Task: Sovereign RAG Ingestion.
+    1. Fetches Tenant Credentials.
+    2. Initializes RAGCore with Sovereign Key.
+    3. Ingests and updates DB status.
+    """
+    logger.info("process_knowledge_bg_start", doc_id=doc_id, tenant_id=tenant_id)
+    try:
+        # 1. Fetch Sovereign Credential
+        from admin_routes import get_tenant_credential # Ensure availability
+        openai_key = await get_tenant_credential(tenant_id, "openai", "%api_key%")
+        google_key = await get_tenant_credential(tenant_id, "google", "%api_key%")
+        
+        provider = "openai"
+        api_key = openai_key
+        
+        if google_key: # Google takes precedence if both exist, or we can choose
+            provider = "google"
+            api_key = google_key
+        elif not openai_key:
+            raise Exception("No valid AI credentials found for ingestion.")
+
+        # 2. Ingest
+        from app.core.rag import RAGCore
+        rag = RAGCore(str(tenant_id), api_key=api_key, provider=provider)
+        
+        # Add metadata for link/cleanup
+        metadata = {"source_id": str(doc_id)}
+        
+        success = await rag.ingest_document(content, filename, metadata=metadata)
+        
+        if success:
+            await db.pool.execute("UPDATE rag_documents SET status = 'active' WHERE id = $1", doc_id)
+            logger.info("process_knowledge_bg_success", doc_id=doc_id)
+        else:
+            raise Exception("RAG ingestion engine returned failure.")
+
+    except Exception as e:
+        logger.error("process_knowledge_bg_fail", doc_id=doc_id, error=str(e))
+        meta = json.dumps({"error": str(e)})
+        await db.pool.execute("UPDATE rag_documents SET status = 'error', meta = $2 WHERE id = $1", doc_id, meta)
+
 
 @router.delete("/knowledge/{doc_id}")
 @safe_db_call
@@ -3804,6 +3876,7 @@ class AgentModel(BaseModel):
     temperature: float
     system_prompt_template: Optional[str] = ""
     enabled_tools: List[str] = []
+    knowledge_sources: List[str] = []
     channels: List[str] = []
     is_active: bool = True
     # Frontend might send 'id' or 'tenant_name' but we ignore/compute them
@@ -3835,6 +3908,9 @@ async def list_agents(current_user: User = Depends(get_current_user)):
         if isinstance(r.get('enabled_tools'), str):
             try: r['enabled_tools'] = json.loads(r['enabled_tools'])
             except: r['enabled_tools'] = []
+        if isinstance(r.get('knowledge_sources'), str):
+            try: r['knowledge_sources'] = json.loads(r['knowledge_sources'])
+            except: r['knowledge_sources'] = []
         if isinstance(r.get('channels'), str):
             try: r['channels'] = json.loads(r['channels'])
             except: r['channels'] = []
@@ -3870,6 +3946,12 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
             agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active
         )
         
+        # Update knowledge_sources separately if it exists (for schema flexibility)
+        try:
+             await db.pool.execute("UPDATE agents SET knowledge_sources = $1 WHERE id = $2", json.dumps(agent.knowledge_sources), agent_id)
+        except:
+             logger.warning("agent_kb_linking_failed_on_create", id=agent_id)
+
         return {"status": "ok", "id": agent_id}
     except Exception as e:
         logger.error(f"Error creating agent: {e}")
@@ -3924,6 +4006,13 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
             agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active,
             agent_id
         )
+        
+        # Update knowledge_sources
+        try:
+             await db.pool.execute("UPDATE agents SET knowledge_sources = $1 WHERE id = $2", json.dumps(agent.knowledge_sources), agent_id)
+        except:
+             logger.warning("agent_kb_linking_failed_on_update", id=agent_id)
+
         return {"status": "updated", "id": agent_id}
         
     except Exception as e:

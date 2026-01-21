@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Modal } from '../components/Modal';
 import { GlobalStreamLog } from '../components/GlobalStreamLog';
-import { Bot, Plus, Trash2, Edit, Activity, Lock } from 'lucide-react';
+import { Bot, Plus, Trash2, Edit, Activity, Lock, BookOpen } from 'lucide-react';
 
 interface Agent {
     id?: string;
@@ -17,9 +17,16 @@ interface Agent {
     temperature: number;
     system_prompt_template: string;
     enabled_tools: string[];
+    knowledge_sources: string[];
     channels?: string[];
     is_active: boolean;
     tenant_name?: string;
+}
+
+interface KnowledgeFile {
+    id: string;
+    filename: string;
+    status: string;
 }
 
 interface Tenant {
@@ -34,13 +41,15 @@ export const Agents: React.FC = () => {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [tools, setTools] = useState<any[]>([]);
+    const [knowledgeFiles, setKnowledgeFiles] = useState<KnowledgeFile[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Form State
     const defaultAgent: Agent = {
         name: '', role: 'sales', tenant_id: 0, model_provider: 'openai',
         model_version: 'gpt-4o', temperature: 0.3, system_prompt_template: '',
-        enabled_tools: ['search_specific_products'], channels: ['whatsapp', 'instagram', 'facebook', 'web'], is_active: true
+        enabled_tools: ['search_specific_products'], knowledge_sources: [],
+        channels: ['whatsapp', 'instagram', 'facebook', 'web'], is_active: true
     };
     const [formData, setFormData] = useState<Agent>(defaultAgent);
     const [isEditing, setIsEditing] = useState(false);
@@ -50,14 +59,16 @@ export const Agents: React.FC = () => {
     }, []);
 
     const loadData = async () => {
-        const [a, t, s] = await Promise.all([
+        const [a, t, s, k] = await Promise.all([
             fetchApi('/admin/agents'),
             fetchApi('/admin/tenants'),
-            fetchApi('/admin/tools')
+            fetchApi('/admin/tools'),
+            fetchApi('/admin/knowledge/list')
         ]);
         if (a) setAgents(a);
         if (t) setTenants(t);
         if (s) setTools(s);
+        if (k) setKnowledgeFiles(k);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -270,6 +281,35 @@ export const Agents: React.FC = () => {
                                 </label>
                             ))}
                             {tools.length === 0 && <span className="text-xs text-secondary italic">Cargando herramientas...</span>}
+                        </div>
+                    </div>
+
+                    <div className="form-group">
+                        <label className="flex items-center gap-2">
+                            <BookOpen size={16} className="text-accent" />
+                            Knowledge Base (RAG)
+                        </label>
+                        <div className="text-[11px] text-secondary mb-2 italic">
+                            Vincula archivos específicos para que este agente tenga acceso a su contenido.
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 mt-2 p-3 glass rounded border border-white/5 max-h-40 overflow-y-auto">
+                            {knowledgeFiles.filter(f => f.status === 'active').map(file => (
+                                <label key={file.id} className="flex items-center gap-2 cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.knowledge_sources?.includes(file.id)}
+                                        onChange={e => {
+                                            const current = formData.knowledge_sources || [];
+                                            if (e.target.checked) setFormData({ ...formData, knowledge_sources: [...current, file.id] });
+                                            else setFormData({ ...formData, knowledge_sources: current.filter(id => id !== file.id) });
+                                        }}
+                                    />
+                                    <span className="text-xs truncate">{file.filename}</span>
+                                </label>
+                            ))}
+                            {knowledgeFiles.filter(f => f.status === 'active').length === 0 && (
+                                <span className="text-xs text-secondary italic">No hay archivos activos en la base de conocimiento.</span>
+                            )}
                         </div>
                     </div>
 

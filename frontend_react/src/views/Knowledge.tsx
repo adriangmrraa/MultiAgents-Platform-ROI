@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
-import { FileText, Trash, Upload, Database, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Modal } from '../components/Modal';
+import { FileText, Trash, Upload, Database, CheckCircle, Clock, AlertCircle, Key, ChevronRight } from 'lucide-react';
 
 interface KnowledgeFile {
     id: string;
@@ -14,8 +16,10 @@ interface KnowledgeFile {
 
 export const Knowledge: React.FC = () => {
     const { fetchApi } = useApi();
+    const navigate = useNavigate();
     const [files, setFiles] = useState<KnowledgeFile[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [showCredModal, setShowCredModal] = useState(false);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const loadFiles = async () => {
@@ -46,8 +50,13 @@ export const Knowledge: React.FC = () => {
                 headers: {} // Let browser set Content-Type for FormData
             });
             await loadFiles();
-        } catch (e) {
-            alert('Upload failed');
+        } catch (e: any) {
+            const errorMsg = e.message || '';
+            if (errorMsg.includes('Missing AI Credentials')) {
+                setShowCredModal(true);
+            } else {
+                alert('Upload failed: ' + errorMsg);
+            }
         } finally {
             setUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -58,7 +67,7 @@ export const Knowledge: React.FC = () => {
         if (!confirm('Are you sure you want to delete this file from the knowledge base?')) return;
         try {
             await fetchApi(`/admin/knowledge/${id}`, { method: 'DELETE' });
-            setFiles(files.filter(f => f.id !== id));
+            setFiles(files.filter((f: KnowledgeFile) => f.id !== id));
         } catch (e) {
             alert('Delete failed');
         }
@@ -125,7 +134,7 @@ export const Knowledge: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/10">
-                            {files.map(file => (
+                            {files.map((file: KnowledgeFile) => (
                                 <tr key={file.id} className="hover:bg-white/5 transition-colors">
                                     <td className="p-4 flex items-center gap-3">
                                         <div className="bg-slate-800 p-2 rounded text-cyan-400">
@@ -169,6 +178,33 @@ export const Knowledge: React.FC = () => {
                     </table>
                 </div>
             )}
+
+            <Modal isOpen={showCredModal} onClose={() => setShowCredModal(false)} title="Configuración Requerida">
+                <div className="p-6 text-center">
+                    <div className="w-16 h-16 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Key size={32} />
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-2">Faltan Credenciales de IA</h3>
+                    <p className="text-slate-400 mb-6">
+                        Para procesar y vectorizar tus documentos, necesitamos que configures una API Key de <strong>OpenAI</strong> o <strong>Google Gemini</strong> en tu bóveda soberana.
+                    </p>
+                    <div className="flex flex-col gap-3">
+                        <button
+                            onClick={() => navigate('/settings/credentials')}
+                            className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
+                        >
+                            Configurar Credenciales Ahora
+                            <ChevronRight size={18} />
+                        </button>
+                        <button
+                            onClick={() => setShowCredModal(false)}
+                            className="w-full bg-slate-800 hover:bg-slate-700 text-white font-medium py-3 px-4 rounded-lg transition-all"
+                        >
+                            Tal vez más tarde
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };

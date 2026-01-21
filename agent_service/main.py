@@ -54,6 +54,7 @@ class AgentCredentials(BaseModel):
 class AgentConfig(BaseModel):
     tools: Optional[List[str]] = None
     tool_instructions: Optional[List[str]] = None
+    knowledge_sources: Optional[List[str]] = []
     model: Optional[Dict[str, Any]] = None
 
 class AgentThinkRequest(BaseModel):
@@ -70,6 +71,7 @@ ctx_store_id: ContextVar[str] = ContextVar("ctx_store_id", default="")
 ctx_token: ContextVar[str] = ContextVar("ctx_token", default="")
 ctx_service_url: ContextVar[str] = ContextVar("ctx_service_url", default="")
 ctx_internal_token: ContextVar[str] = ContextVar("ctx_internal_token", default="")
+ctx_knowledge_sources: ContextVar[List[str]] = ContextVar("ctx_knowledge_sources", default=[])
 
 parser = PydanticOutputParser(pydantic_object=OrchestratorResponse)
 
@@ -173,7 +175,14 @@ async def search_knowledge_base(q: str):
     # We use ctx_service_url as a base, but orchestrator is usually at 8000.
     orch_url = os.getenv("ORCHESTRATOR_URL", "http://orchestrator_service:8000")
     headers = {"X-Internal-Secret": ctx_internal_token.get(), "x-admin-token": os.getenv("ADMIN_TOKEN", "admin-secret-99")}
+    
+    # Protocol Omega: Inject filters (v5.1)
+    ks = ctx_knowledge_sources.get()
+    source_ids = ",".join(ks) if ks else None
+    
     params = {"tenant_id": ctx_store_id.get(), "q": q}
+    if source_ids:
+        params["source_ids"] = source_ids
     
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -211,6 +220,7 @@ async def execute_agent(
     ctx_token.set(request.credentials.tiendanube_access_token.get_secret_value() if request.credentials.tiendanube_access_token else "")
     ctx_service_url.set(request.credentials.tiendanube_service_url)
     ctx_internal_token.set(x_internal_secret or "")
+    ctx_knowledge_sources.set(request.agent_config.knowledge_sources if request.agent_config else [])
 
     # 1. Prepare History
     history = []

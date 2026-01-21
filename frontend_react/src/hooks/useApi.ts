@@ -45,18 +45,23 @@ export function useApi() {
 
         const executeFetch = async (attempt: number): Promise<any> => {
             try {
+                const isFormData = options.body instanceof FormData;
                 const headers: Record<string, string> = {
-                    'Content-Type': 'application/json',
                     'x-admin-token': ADMIN_TOKEN,
                     ...options.headers
                 };
+
+                // CRITICAL: For FormData, we must let the browser set the boundary header
+                if (!isFormData) {
+                    headers['Content-Type'] = 'application/json';
+                }
 
                 const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
 
                 const response = await fetch(url, {
                     method: options.method || 'GET',
                     headers,
-                    body: options.body ? JSON.stringify(options.body) : undefined,
+                    body: isFormData ? options.body : (options.body ? JSON.stringify(options.body) : undefined),
                     credentials: 'include' // CRITICAL: Send HttpOnly Cookies
                 });
 
@@ -84,16 +89,21 @@ export function useApi() {
                     }
                     try {
                         const jsonErr = JSON.parse(errorData);
-                        let finalMsg = jsonErr.detail || jsonErr.message || `HTTP ${response.status}`;
+                        let finalMsg: any = jsonErr.detail || jsonErr.message || `HTTP ${response.status}`;
+
+                        // PROTOCOL OMEGA: Handle structured FastAPI errors (list/dict)
+                        if (typeof finalMsg !== 'string') {
+                            finalMsg = JSON.stringify(finalMsg);
+                        }
 
                         // UX SHIELD: Hide raw SQL/DB errors
                         const techKeywords = ["violates", "constraint", "foreign key", "sql", "pydantic", "execution", "integrity", "table", "column"];
-                        if (techKeywords.some(k => finalMsg.toLowerCase().includes(k))) {
+                        if (techKeywords.some(k => String(finalMsg).toLowerCase().includes(k))) {
                             console.warn("Sanitized Technical Error:", finalMsg);
                             finalMsg = "No se pudo completar la operación debido a dependencias activas.";
                         }
 
-                        throw new Error(finalMsg);
+                        throw new Error(String(finalMsg));
                     } catch (err: any) {
                         if (err.message && err.message !== "Unexpected end of JSON input") throw err;
                         throw new Error("Error de comunicación con el servidor.");

@@ -10,6 +10,14 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
+from langchain_community.document_loaders import (
+    PyPDFLoader, 
+    TextLoader, 
+    CSVLoader, 
+    UnstructuredWordDocumentLoader,
+    Docx2txtLoader
+)
+import tempfile
 
 logger = structlog.get_logger()
 
@@ -27,21 +35,29 @@ class RAGCore:
     Handles Persistent Vector Storage using ChromaDB and OpenAI Embeddings.
     """
     
-    def __init__(self, tenant_id: str, openai_api_key: str = None):
+    def __init__(self, tenant_id: str, api_key: str = None, provider: str = "openai"):
         # Sanitize tenant_id for ChromaDB collection naming rules:
-        # 3-512 chars, alphanumeric, underscores, hyphens, dots. Start/end with alphanumeric.
-        # We replace non-alphanumeric with underscores.
         sanitized_id = re.sub(r'[^a-zA-Z0-9]', '_', str(tenant_id))
         self.tenant_id = tenant_id
         self.collection_name = f"store_{sanitized_id}"
         
-        # Use provided key or fallback to global setting
-        self.openai_api_key = openai_api_key or OPENAI_API_KEY
+        # Provider selection (v5.1 Multi-Provider RAG)
+        self.provider = provider
         
-        self.embedding_fn = OpenAIEmbeddings(
-            model="text-embedding-3-small",
-            openai_api_key=self.openai_api_key
-        )
+        if provider == "google":
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+            self.embedding_fn = GoogleGenerativeAIEmbeddings(
+                model="models/embedding-001",
+                google_api_key=api_key
+            )
+        else:
+            # Default to OpenAI
+            from langchain_openai import OpenAIEmbeddings
+            self.embedding_fn = OpenAIEmbeddings(
+                model="text-embedding-3-small",
+                openai_api_key=api_key or OPENAI_API_KEY
+            )
+            
         self._db = Chroma(
             collection_name=self.collection_name,
             embedding_function=self.embedding_fn,
@@ -147,13 +163,74 @@ class RAGCore:
             logger.error("rag_ingestion_critical_error", error=str(e))
             return False
 
-    def search(self, query: str, k: int = 4) -> str:
+    async def ingest_document(self, content: bytes, filename: str, metadata: dict = {}) -> bool:
+        """
+        Sovereign Document Ingestion (v5.1).
+        Supports PDF, TXT, CSV, DOCX.
+        """
+        logger.info("rag_document_ingestion_start", tenant=self.tenant_id, filename=filename)
+        
+        try:
+            # 1. Save to temp file for LangChain loaders
+            suffix = os.path.splitext(filename)[1].lower()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+
+            # 2. Select Loader
+            loader = None
+            if suffix == '.pdf':
+                loader = PyPDFLoader(tmp_path)
+            elif suffix == '.txt' or suffix == '.md':
+                loader = TextLoader(tmp_path, encoding='utf-8')
+            elif suffix == '.csv':
+                loader = CSVLoader(tmp_path)
+            elif suffix == '.docx':
+                loader = Docx2txtLoader(tmp_path)
+            elif suffix == '.doc':
+                loader = UnstructuredWordDocumentLoader(tmp_path)
+            
+            if not loader:
+                logger.error("rag_unsupported_format", format=suffix)
+                os.unlink(tmp_path)
+                return False
+
+            # 3. Load and Split
+            raw_docs = loader.load()
+            
+            # Enrich metadata
+            for d in raw_docs:
+                d.metadata.update(metadata)
+                d.metadata["tenant_id"] = self.tenant_id
+                d.metadata["source_name"] = filename
+
+            splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+            docs = splitter.split_documents(raw_docs)
+
+            # 4. Vectorize
+            if docs:
+                # Force rebuild of _db to ensure correct API Key is used if it was updated
+                self._db.add_documents(docs)
+                logger.info("rag_document_ingestion_success", count=len(docs))
+                os.unlink(tmp_path)
+                return True
+                
+            os.unlink(tmp_path)
+            return False
+
+        except Exception as e:
+            logger.error("rag_document_ingestion_failed", error=str(e))
+            return False
+
+    def search(self, query: str, k: int = 4, filter: dict = None) -> str:
         """
         Semantic Search for the Agent.
         Returns a single string block of context.
+        Supports metadata filtering (e.g. by knowledge_sources).
         """
         try:
-            results = self._db.similarity_search(query, k=k)
+            # ChromaDB filter syntax: {"source_id": {"$in": ["id1", "id2"]}}
+            results = self._db.similarity_search(query, k=k, filter=filter)
             context_block = "\n---\n".join([doc.page_content for doc in results])
             return context_block
         except Exception as e:
