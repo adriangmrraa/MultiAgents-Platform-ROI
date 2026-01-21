@@ -3770,7 +3770,7 @@ async def upload_knowledge_file(
     google_key = await get_tenant_credential(tenant_id, "google", "%api_key%")
     
     if not openai_key and not google_key:
-        logger.warning("knowledge_upload_blocked_no_keys", tenant_id=tenant_id)
+        logger.warning(f"knowledge_upload_blocked_no_keys: tenant {tenant_id}")
         raise HTTPException(400, "Missing AI Credentials: No OpenAI or Google API keys found in vault.")
 
     # 2. Read File Info
@@ -3800,7 +3800,7 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, content: byte
     2. Initializes RAGCore with Sovereign Key.
     3. Ingests and updates DB status.
     """
-    logger.info("process_knowledge_bg_start", doc_id=doc_id, tenant_id=tenant_id)
+    logger.info(f"process_knowledge_bg_start: doc={doc_id}, tenant={tenant_id}")
     try:
         # 1. Fetch Sovereign Credential
         from admin_routes import get_tenant_credential # Ensure availability
@@ -3827,12 +3827,12 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, content: byte
         
         if success:
             await db.pool.execute("UPDATE rag_documents SET status = 'active' WHERE id = $1", doc_id)
-            logger.info("process_knowledge_bg_success", doc_id=doc_id)
+            logger.info(f"process_knowledge_bg_success: doc={doc_id}")
         else:
             raise Exception("RAG ingestion engine returned failure.")
 
     except Exception as e:
-        logger.error("process_knowledge_bg_fail", doc_id=doc_id, error=str(e))
+        logger.error(f"process_knowledge_bg_fail: doc={doc_id}, error={str(e)}")
         meta = json.dumps({"error": str(e)})
         await db.pool.execute("UPDATE rag_documents SET status = 'error', meta = $2 WHERE id = $1", doc_id, meta)
 

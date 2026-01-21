@@ -99,7 +99,7 @@ class RAGCore:
         Ingests strict Catalog Data + Public HTML Context into Vector Store.
         Now async to support LLM calls.
         """
-        logger.info("rag_ingestion_start", tenant=self.tenant_id, count=len(product_data))
+        logger.info(f"rag_ingestion_start: tenant={self.tenant_id}, count={len(product_data)}")
         
         try:
             docs = []
@@ -135,7 +135,7 @@ class RAGCore:
             # 2. HTML Scraper (Contextual DNA) - Kept robust
             if public_url:
                 try:
-                    logger.info("rag_scraping_url", url=public_url)
+                    logger.info(f"rag_scraping_url: {public_url}")
                     response = requests.get(public_url, timeout=10)
                     if response.status_code == 200:
                         soup = BeautifulSoup(response.text, "html.parser")
@@ -154,7 +154,7 @@ class RAGCore:
             # 3. Vectorization & Storage
             if docs:
                 self._db.add_documents(docs)
-                logger.info("rag_ingestion_success", count=len(docs))
+                logger.info(f"rag_ingestion_success: count={len(docs)}")
                 return True
                 
             return False
@@ -168,7 +168,7 @@ class RAGCore:
         Sovereign Document Ingestion (v5.1).
         Supports PDF, TXT, CSV, DOCX.
         """
-        logger.info("rag_document_ingestion_start", tenant=self.tenant_id, filename=filename)
+        logger.info(f"rag_document_ingestion_start: tenant={self.tenant_id}, filename={filename}")
         
         try:
             # 1. Save to temp file for LangChain loaders
@@ -211,7 +211,7 @@ class RAGCore:
             if docs:
                 # Force rebuild of _db to ensure correct API Key is used if it was updated
                 self._db.add_documents(docs)
-                logger.info("rag_document_ingestion_success", count=len(docs))
+                logger.info(f"rag_document_ingestion_success: count={len(docs)}")
                 os.unlink(tmp_path)
                 return True
                 
@@ -245,7 +245,7 @@ class RAGCore:
         Deletes vectors matching specific metadata (e.g., {'source_id': '123'}).
         """
         try:
-            logger.info("rag_deletion_start", key=key, value=value)
+            logger.info(f"rag_deletion_start: {key}={value}")
             # ChromaDB specific delete
             self._db.delete(where={key: value})
             return True
