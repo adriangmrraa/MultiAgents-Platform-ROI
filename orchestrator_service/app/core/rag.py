@@ -172,6 +172,7 @@ class RAGCore:
         """
         logger.info(f"rag_document_ingestion_start: tenant={self.tenant_id}, filename={filename}")
         
+        tmp_path = None
         try:
             # 1. Save to temp file for LangChain loaders
             suffix = os.path.splitext(filename)[1].lower()
@@ -181,24 +182,28 @@ class RAGCore:
 
             # 2. Select Loader
             loader = None
-            if suffix == '.pdf':
-                loader = PyPDFLoader(tmp_path)
-            elif suffix == '.txt' or suffix == '.md':
-                loader = TextLoader(tmp_path, encoding='utf-8')
-            elif suffix == '.csv':
-                loader = CSVLoader(tmp_path)
-            elif suffix == '.docx':
-                loader = Docx2txtLoader(tmp_path)
-            elif suffix == '.doc':
-                loader = UnstructuredWordDocumentLoader(tmp_path)
+            try:
+                if suffix == '.pdf':
+                    loader = PyPDFLoader(tmp_path)
+                elif suffix == '.txt' or suffix == '.md':
+                    loader = TextLoader(tmp_path, encoding='utf-8')
+                elif suffix == '.csv':
+                    loader = CSVLoader(tmp_path)
+                elif suffix == '.docx':
+                    loader = Docx2txtLoader(tmp_path)
+                elif suffix == '.doc':
+                    loader = UnstructuredWordDocumentLoader(tmp_path)
+            except Exception as loader_init_err:
+                raise Exception(f"Failed to initialize loader for {suffix}: {str(loader_init_err)}")
             
             if not loader:
-                logger.error("rag_unsupported_format", format=suffix)
-                os.unlink(tmp_path)
-                return False
+                raise Exception(f"Unsupported file format: {suffix}. Ensure appropriate parser is installed.")
 
             # 3. Load and Split
-            raw_docs = loader.load()
+            try:
+                raw_docs = loader.load()
+            except Exception as load_err:
+                raise Exception(f"Failed to extract text from {filename}: {str(load_err)}. Possible corruption or unsupported version.")
             
             # Enrich metadata
             for d in raw_docs:
@@ -211,18 +216,22 @@ class RAGCore:
 
             # 4. Vectorize
             if docs:
-                # Force rebuild of _db to ensure correct API Key is used if it was updated
-                self._db.add_documents(docs)
+                try:
+                    self._db.add_documents(docs)
+                except Exception as vector_err:
+                    raise Exception(f"Vector Database Error: {str(vector_err)}. Check API Key and Provider settings.")
+                
                 logger.info(f"rag_document_ingestion_success: count={len(docs)}")
-                os.unlink(tmp_path)
                 return True
                 
-            os.unlink(tmp_path)
-            return False
+            raise Exception("No text content could be extracted from the document.")
 
         except Exception as e:
             logger.error("rag_document_ingestion_failed", error=str(e))
-            return False
+            raise e # Bubble up to background worker
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
     def search(self, query: str, k: int = 4, filter: dict = None) -> str:
         """

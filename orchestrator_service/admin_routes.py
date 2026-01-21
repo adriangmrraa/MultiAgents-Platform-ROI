@@ -3780,11 +3780,19 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, content: byte
             await db.pool.execute("UPDATE rag_documents SET status = 'active' WHERE id = $1", doc_id)
             logger.info(f"process_knowledge_bg_success: doc={doc_id}")
         else:
-            raise Exception("RAG ingestion engine returned failure.")
+            # RAGCore.ingest_document now raises exceptions, but just in case it returns False
+            raise Exception("RAG ingestion engine returned failure without specific error.")
 
     except Exception as e:
-        logger.error(f"process_knowledge_bg_fail: doc={doc_id}, error={str(e)}")
-        meta = json.dumps({"error": str(e)})
+        error_detailed = str(e)
+        logger.error(f"process_knowledge_bg_fail: doc={doc_id}, error={error_detailed}")
+        
+        # Protocol Omega: Store structured error for UI Tooltips
+        meta = json.dumps({
+            "error_detail": error_detailed,
+            "failed_at": datetime.now().isoformat(),
+            "stack": "process_knowledge_ingestion"
+        })
         await db.pool.execute("UPDATE rag_documents SET status = 'error', meta = $2 WHERE id = $1", doc_id, meta)
 
 

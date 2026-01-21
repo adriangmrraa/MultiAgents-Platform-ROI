@@ -26,3 +26,5 @@ python-jose[cryptography]
 python-multipart
 email-validator
 fastapi-mail
+pypdf
+docx2txt

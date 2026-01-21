@@ -12,6 +12,7 @@ interface KnowledgeFile {
     status: string;
     created_at: string;
     storage_url?: string;
+    meta?: string;
 }
 
 export const Knowledge: React.FC = () => {
@@ -155,7 +156,17 @@ export const Knowledge: React.FC = () => {
                                             </span>
                                         )}
                                         {file.status === 'error' && (
-                                            <span className="px-2 py-1 bg-red-500/10 text-red-400 rounded text-xs flex items-center gap-1 w-fit">
+                                            <span
+                                                className="px-2 py-1 bg-red-500/10 text-red-400 rounded text-xs flex items-center gap-1 w-fit cursor-help"
+                                                title={(() => {
+                                                    try {
+                                                        const meta = JSON.parse(file.meta || '{}');
+                                                        return meta.error_detail || 'Unknown error occurred during ingestion.';
+                                                    } catch (e) {
+                                                        return file.meta || 'Failed to process document.';
+                                                    }
+                                                })()}
+                                            >
                                                 <AlertCircle size={12} /> Failed
                                             </span>
                                         )}
