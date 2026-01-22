@@ -1,4 +1,22 @@
+# --- CRITICAL SQLITE PATCH START ---
+import sys
 import os
+
+# Forzar el uso de pysqlite3 si está disponible
+try:
+    __import__('pysqlite3')
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass
+
+import sqlite3
+# Loguear la versión real para depuración (aparecerá en logs del contenedor)
+print(f"🔍 [RAG DEBUG] SQLite Version: {sqlite3.sqlite_version}", flush=True)
+
+if sqlite3.sqlite_version < "3.35.0":
+    print("⚠️ [RAG WARNING] SQLite version is too old for ChromaDB. Expect crashes.", flush=True)
+# --- CRITICAL SQLITE PATCH END ---
+
 import shutil
 import uuid
 import structlog
@@ -60,11 +78,17 @@ class RAGCore:
                 openai_api_key=self.api_key
             )
             
-        self._db = Chroma(
-            collection_name=self.collection_name,
-            embedding_function=self.embedding_fn,
-            persist_directory=CHROMA_PERSIST_DIRECTORY
-        )
+        try:
+            self._db = Chroma(
+                collection_name=self.collection_name,
+                embedding_function=self.embedding_fn,
+                persist_directory=CHROMA_PERSIST_DIRECTORY
+            )
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            logger.error("rag_chroma_init_failed", error=str(e), traceback=tb)
+            raise Exception(f"Failed to initialize Vector Store: {str(e)}. Detailed Cause: {tb[:200]}...")
 
     async def transform_product_with_llm(self, product: Dict, llm: Any) -> str:
         """

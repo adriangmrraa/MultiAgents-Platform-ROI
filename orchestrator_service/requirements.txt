@@ -29,4 +29,3 @@ email-validator
 fastapi-mail
 pypdf
 docx2txt
-chromadb
