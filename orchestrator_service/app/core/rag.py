@@ -36,8 +36,9 @@ class RAGCore:
     Handles Persistent Vector Storage using Supabase (pgvector) and OpenAI Embeddings.
     """
     
-    def __init__(self, tenant_id: str, api_key: str = None, provider: str = "openai"):
+    def __init__(self, tenant_id: str, user_id: str = None, api_key: str = None, provider: str = "openai"):
         self.tenant_id = str(tenant_id)
+        self.user_id = str(user_id) if user_id else None
         self.provider = provider
         
         # Priority: 1. Passed api_key (Tenant specific), 2. Global Fallback
@@ -143,6 +144,7 @@ class RAGCore:
                     "source": "catalog", 
                     "product_id": str(p.get("id")),
                     "tenant_id": self.tenant_id,
+                    "user_id": self.user_id, # Strict Isolation (Nexus v5.10)
                     "price": str(p.get("price", "0")),
                     "handle": p.get("handle", {}).get("es", "")
                 }
@@ -162,7 +164,10 @@ class RAGCore:
                         text = soup.get_text()
                         
                         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-                        html_docs = splitter.create_documents([text], metadatas=[{"source": "website", "url": public_url, "tenant_id": self.tenant_id}])
+                        html_docs = splitter.create_documents(
+                            [text], 
+                            metadatas=[{"source": "website", "url": public_url, "tenant_id": self.tenant_id, "user_id": self.user_id}]
+                        )
                         docs.extend(html_docs)
                 except Exception as e:
                     logger.error("rag_scraping_failed", error=str(e))
@@ -213,6 +218,7 @@ class RAGCore:
             for d in raw_docs:
                 d.metadata.update(metadata)
                 d.metadata["tenant_id"] = self.tenant_id
+                d.metadata["user_id"] = self.user_id # Strict Isolation (Nexus v5.10)
                 d.metadata["source_name"] = filename
 
             splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
@@ -234,13 +240,19 @@ class RAGCore:
 
     def search(self, query: str, k: int = 4, filter: dict = None) -> str:
         """
-        Semantic Search for the Agent.
+        Semantic Search with Strict User Isolation.
         """
+        if not self.user_id:
+            logger.error("rag_search_blocked", reason="missing_user_id")
+            return "Error: Strict isolation requires user_id context."
+
         try:
-            # Combined filter with tenant_id for isolation
+            # Combined filter with tenant_id AND user_id for strict isolation
             combined_filter = (filter or {}).copy()
             combined_filter["tenant_id"] = self.tenant_id
+            combined_filter["user_id"] = self.user_id
             
+            # Mandamiento de Búsqueda: "Nunca llamarás a similarity_search sin pasar filter={'user_id': ...}."
             results = self._db.similarity_search(query, k=k, filter=combined_filter)
             context_block = "\n---\n".join([doc.page_content for doc in results])
             return context_block
@@ -250,10 +262,13 @@ class RAGCore:
 
     def count_vectors(self) -> int:
         """
-        Counts vectors for this tenant.
+        Counts vectors for this tenant/user.
         """
         try:
-            resp = self.supabase.table("documents").select("id", count="exact").eq("metadata->>tenant_id", self.tenant_id).execute()
+            query = self.supabase.table("documents").select("id", count="exact").eq("metadata->>tenant_id", self.tenant_id)
+            if self.user_id:
+                query = query.eq("metadata->>user_id", self.user_id)
+            resp = query.execute()
             return resp.count if resp.count is not None else 0
         except Exception as e:
             logger.error("rag_count_failed", error=str(e))
@@ -261,11 +276,14 @@ class RAGCore:
 
     def delete_document_by_metadata(self, key: str, value: str) -> bool:
         """
-        Deletes vectors matching specific metadata.
+        Deletes vectors matching specific metadata, scoped to tenant and user.
         """
         try:
             logger.info(f"rag_deletion_start: {key}={value}")
-            self.supabase.table("documents").delete().eq(f"metadata->>{key}", value).eq("metadata->>tenant_id", self.tenant_id).execute()
+            query = self.supabase.table("documents").delete().eq(f"metadata->>{key}", value).eq("metadata->>tenant_id", self.tenant_id)
+            if self.user_id:
+                query = query.eq("metadata->>user_id", self.user_id)
+            query.execute()
             return True
         except Exception as e:
             logger.error("rag_deletion_failed", error=str(e))

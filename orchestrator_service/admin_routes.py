@@ -3620,18 +3620,32 @@ async def get_rag_galaxy(tenant_id: str):
         logger.error(f"RAG_GALAXY_FAIL: {e}")
         return []
 
-@router.get("/rag/search", dependencies=[Depends(verify_admin_token)])
+@router.get("/rag/search", dependencies=[Depends(verify_internal_token)]) # Allow internal/admin
 @safe_db_call
-async def search_rag(tenant_id: str, q: str, k: int = 5, source_ids: Optional[str] = None):
+async def search_rag(
+    tenant_id: str, 
+    q: str, 
+    k: int = 5, 
+    source_ids: Optional[str] = None, 
+    user_id: Optional[str] = None, # Explicit user_id for Agent Tools
+    current_user: Optional[User] = Depends(get_current_user)
+):
     """
-    Sovereign Semantic Search (v5.1).
-    Fetches the tenant's key and applies knowledge_sources filter.
+    Sovereign Semantic Search (v5.10).
+    Enforces strict user isolation.
     """
     try:
         from app.core.rag import RAGCore
         from admin_routes import get_tenant_credential
         
-        # 1. Fetch Sovereign Credential
+        # 1. Resolve effective User ID
+        # If user_id is provided, we use it (Trusting verify_internal_token/admin_token)
+        # Otherwise fallback to current_user
+        effective_user_id = user_id or (str(current_user.id) if current_user else None)
+        
+        if not effective_user_id:
+            return {"ok": False, "error": "Missing user_id context for strict isolation"}
+
         openai_key = await get_tenant_credential(int(tenant_id), "openai")
         google_key = await get_tenant_credential(int(tenant_id), "google")
         
@@ -3649,12 +3663,12 @@ async def search_rag(tenant_id: str, q: str, k: int = 5, source_ids: Optional[st
             api_key = settings.OPENAI_API_KEY
             provider = "openai"
         
-        # 2. Initialize RAGCore with Sovereign Key
-        rag = RAGCore(tenant_id, api_key=api_key, provider=provider)
+        # 2. Initialize RAGCore with Sovereign Key and User ID
+        rag = RAGCore(tenant_id, user_id=effective_user_id, api_key=api_key, provider=provider)
         
-        # 3. Apply Filter (Sovereign Isolation Protocol v5.1)
-        # Always filter by tenant_id for Zero-Trust isolation
-        filter_dict = {"tenant_id": str(tenant_id)}
+        # 3. Apply Filter (Sovereign Isolation Protocol v5.10)
+        # Always filter by tenant_id AND user_id for Zero-Trust isolation
+        filter_dict = {"tenant_id": str(tenant_id), "user_id": effective_user_id}
         
         if source_ids:
             try:
@@ -3664,6 +3678,7 @@ async def search_rag(tenant_id: str, q: str, k: int = 5, source_ids: Optional[st
                     filter_dict = {
                         "$and": [
                             {"tenant_id": {"$eq": str(tenant_id)}},
+                            {"user_id": {"$eq": effective_user_id}}, # Mandamiento de Búsqueda
                             {"source_id": {"$in": ids}}
                         ]
                     }
@@ -3767,13 +3782,13 @@ async def upload_knowledge_file(
     
     # 3. Insert into DB (Pending)
     doc_id = await db.pool.fetchval("""
-        INSERT INTO rag_documents (tenant_id, filename, file_type, file_size, status, created_at)
-        VALUES ($1, $2, $3, $4, 'processing', NOW())
+        INSERT INTO rag_documents (tenant_id, user_id, filename, file_type, file_size, status, created_at)
+        VALUES ($1, $2, $3, $4, $5, 'processing', NOW())
         RETURNING id
-    """, tenant_id, filename, file_type, file_size)
+    """, tenant_id, str(current_user.id), filename, file_type, file_size)
     
     # 4. Trigger Async Sovereign Processing
-    background_tasks.add_task(process_knowledge_ingestion, doc_id, tenant_id, content, filename)
+    background_tasks.add_task(process_knowledge_ingestion, doc_id, tenant_id, str(current_user.id), content, filename)
 
     return {
         "status": "processing",
@@ -3781,7 +3796,7 @@ async def upload_knowledge_file(
         "filename": filename
     }
 
-async def process_knowledge_ingestion(doc_id: str, tenant_id: int, content: bytes, filename: str):
+async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str, content: bytes, filename: str):
     """
     Background Task: Sovereign RAG Ingestion.
     1. Fetches Tenant Credentials.
@@ -3812,7 +3827,7 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, content: byte
 
         # 2. Ingest
         from app.core.rag import RAGCore
-        rag = RAGCore(str(tenant_id), api_key=api_key, provider=provider)
+        rag = RAGCore(str(tenant_id), user_id=user_id, api_key=api_key, provider=provider)
         
         # Add metadata for link/cleanup
         metadata = {"source_id": str(doc_id)}
@@ -3857,7 +3872,7 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     # Trigger RAG deletion from Chroma
     try:
         from app.core.rag import RAGCore
-        rag = RAGCore(str(tenant_id))
+        rag = RAGCore(str(tenant_id), user_id=str(current_user.id))
         # Assuming we index files with metadata 'source_id' = doc_id OR 'file_id' = doc_id
         # Since ingest is simulated, we implement the DELETE side correctly so it works when ingest is real.
         # We'll use 'source_id' as the standard key for file-based docs.
@@ -3936,9 +3951,9 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
         
         q = """
             INSERT INTO agents (
-                name, role, tenant_id, model_provider, model_version, temperature, 
+                name, role, tenant_id, user_id, model_provider, model_version, temperature, 
                 system_prompt_template, enabled_tools, channels, is_active, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
             RETURNING id
         """
         
@@ -3947,8 +3962,10 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
         
         agent_id = await db.pool.fetchval(
             q, 
-            agent.name, agent.role, target_tenant_id, agent.model_provider, validated_model, agent.temperature,
-            agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active
+            agent.name, agent.role, target_tenant_id, str(current_user.id),
+            agent.model_provider, validated_model, agent.temperature,
+            agent.system_prompt_template, json.dumps(agent.enabled_tools),
+            json.dumps(agent.channels), agent.is_active
         )
         
         # Update knowledge_sources separately if it exists (for schema flexibility)

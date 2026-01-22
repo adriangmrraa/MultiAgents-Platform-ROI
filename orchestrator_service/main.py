@@ -2103,6 +2103,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         # 4. Prepare Agent Payload
         agent_request = {
             "tenant_id": tenant_id,
+            "user_id": str(agent_row['user_id']) if agent_row and 'user_id' in agent_row else None, # Isolation context
             "message": content,
             "history": remote_history,
             "context": {
@@ -2305,6 +2306,7 @@ BEGIN
     -- Just in case table exists but lacks new V3 spec columns
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='agents') THEN
         ALTER TABLE agents ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'sales';
+        ALTER TABLE agents ADD COLUMN IF NOT EXISTS user_id UUID;
         ALTER TABLE agents ADD COLUMN IF NOT EXISTS temperature FLOAT DEFAULT 0.3;
         ALTER TABLE agents ALTER COLUMN whatsapp_number DROP NOT NULL;
         ALTER TABLE agents ALTER COLUMN system_prompt_template SET NOT NULL;
@@ -2359,6 +2361,11 @@ BEGIN
     -- Chat Conversations Provider (Hybrid Output)
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='chat_conversations') THEN
         ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS provider VARCHAR(32) DEFAULT 'chatwoot';
+    END IF;
+
+    -- RAG Multi-Tenancy (Nexus v5.10)
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='rag_documents') THEN
+        ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS user_id UUID;
     END IF;
 
 END $$;

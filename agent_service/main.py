@@ -61,6 +61,7 @@ class AgentConfig(BaseModel):
 
 class AgentThinkRequest(BaseModel):
     tenant_id: int
+    user_id: Optional[str] = None # Strict Isolation Context (Nexus v5.10)
     message: str
     history: List[Dict[str, str]]
     context: AgentContext
@@ -74,6 +75,7 @@ ctx_token: ContextVar[str] = ContextVar("ctx_token", default="")
 ctx_service_url: ContextVar[str] = ContextVar("ctx_service_url", default="")
 ctx_internal_token: ContextVar[str] = ContextVar("ctx_internal_token", default="")
 ctx_knowledge_sources: ContextVar[List[str]] = ContextVar("ctx_knowledge_sources", default=[])
+ctx_user_id: ContextVar[str] = ContextVar("ctx_user_id", default="") # Strict Isolation (v5.10)
 
 parser = PydanticOutputParser(pydantic_object=OrchestratorResponse)
 
@@ -178,11 +180,14 @@ async def search_knowledge_base(q: str):
     orch_url = os.getenv("ORCHESTRATOR_URL", "http://orchestrator_service:8000")
     headers = {"X-Internal-Secret": ctx_internal_token.get(), "x-admin-token": os.getenv("ADMIN_TOKEN", "admin-secret-99")}
     
-    # Protocol Omega: Inject filters (v5.1)
+    # Protocol Omega: Inject filters (v5.10)
     ks = ctx_knowledge_sources.get()
     source_ids = ",".join(ks) if ks else None
+    user_id = ctx_user_id.get()
     
     params = {"tenant_id": ctx_store_id.get(), "q": q}
+    if user_id:
+        params["user_id"] = user_id # Mandamiento de Búsqueda
     if source_ids:
         params["source_ids"] = source_ids
     
@@ -223,6 +228,7 @@ async def execute_agent(
     ctx_service_url.set(request.credentials.tiendanube_service_url)
     ctx_internal_token.set(x_internal_secret or "")
     ctx_knowledge_sources.set(request.agent_config.knowledge_sources if request.agent_config else [])
+    ctx_user_id.set(request.user_id or "")
 
     # 1. Prepare History
     history = []
