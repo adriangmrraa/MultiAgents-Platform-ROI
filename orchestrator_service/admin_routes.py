@@ -1593,6 +1593,20 @@ async def health_check():
         "timestamp": datetime.now().isoformat()
     }
 
+@router.get("/system/init-db")
+async def manual_init_db():
+    """Manual trigger for RAG database initialization (Supabase/pgvector)."""
+    from app.core.db_setup import init_rag_db
+    try:
+        result = init_rag_db()
+        return {"status": "ok", "message": "Tables created successfully", "detail": result}
+    except Exception as e:
+        logger.error("manual_init_db_failed", error=str(e))
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Database initialization failed: {str(e)}"
+        )
+
 @router.get("/chats")
 @safe_db_call
 async def list_chats(
