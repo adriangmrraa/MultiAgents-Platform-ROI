@@ -26,6 +26,26 @@ class Database:
         if self.pool:
             await self.pool.close()
 
+    async def execute(self, query: str, *args):
+        """Helper to execute SQL directly via the pool."""
+        async with self.pool.acquire() as conn:
+            return await conn.execute(query, *args)
+
+    async def fetch(self, query: str, *args):
+        """Helper to fetch rows directly via the pool."""
+        async with self.pool.acquire() as conn:
+            return await conn.fetch(query, *args)
+
+    async def fetchrow(self, query: str, *args):
+        """Helper to fetch a single row directly via the pool."""
+        async with self.pool.acquire() as conn:
+            return await conn.fetchrow(query, *args)
+
+    async def fetchval(self, query: str, *args):
+        """Helper to fetch a single value directly via the pool."""
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(query, *args)
+
     async def try_insert_inbound(self, provider: str, provider_message_id: str, event_id: str, from_number: str, payload: dict, correlation_id: str) -> bool:
         """
         Legacy wrapper. Now we use chat_messages as source of truth.

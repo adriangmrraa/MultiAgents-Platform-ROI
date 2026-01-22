@@ -146,30 +146,7 @@ from app.routes.ingest_routes import router as ingest_router # NEW
 from app.core.database import AsyncSessionLocal, engine
 from app.core.init_data import init_db
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup: Initialize DB
-    await init_db()
-    # verify redis
-    try:
-        await redis_client.ping()
-        logger.info("system_startup_redis_ok")
-    except Exception as e:
-        logger.error(f"system_startup_redis_fail: {e}")
-        
-    yield
-    # Shutdown
-    await db.close()
-
-app = FastAPI(
-    title="Orchestrator Service",
-    description="Protocol Omega Core",
-    version="5.9.130",
-    lifespan=lifespan
-)
-
-# Register Middleware (Rate Limiting)
-app.add_middleware(RateLimitMiddleware)
+# (Redundant app instance removed for Protocol Omega v5.4)
 
 # --- Auto-Migration for EasyPanel (Raw SQL Steps) ---
 # Since the db/ folder isn't copied to the container, we inline critical schema here.
@@ -887,9 +864,10 @@ async def lifespan(app: FastAPI):
         for i, step in enumerate(migration_steps):
             try:
                 if step.strip():
-                    await db.pool.execute(step)
+                    # Protocol Omega: Use the new helper method for consistency
+                    await db.execute(step)
             except Exception as step_err:
-                # Log but verify severity. "Index already exists" is fine. "No unique constraint" is fatal later but maybe here we are fixing it.
+                # Log but verify severity. "Index already exists" is fine.
                 logger.debug(f"migration_step_ignored", index=i, error=str(step_err))
 
         logger.info("maintenance_robot_complete", status="tables_verified")
@@ -932,6 +910,7 @@ async def lifespan(app: FastAPI):
     
     # Migration: Ensure Users table has profile fields
     try:
+        # Use the fixed helper method
         await db.execute("""
             ALTER TABLE users 
             ADD COLUMN IF NOT EXISTS full_name VARCHAR(255),
@@ -940,7 +919,7 @@ async def lifespan(app: FastAPI):
         """)
         await db.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
     except Exception as e:
-        logger.warning(f"Migration profile fields check: {e}")
+        logger.warning(f"Migration profile fields check failed (ignoring for shutdown): {e}")
 
     # Shutdown
     await db.disconnect()
@@ -957,6 +936,7 @@ app = FastAPI(
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(platform_router) # Platform Router (God Mode)
+app.add_middleware(RateLimitMiddleware)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
