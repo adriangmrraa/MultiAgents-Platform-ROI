@@ -1,4 +1,4 @@
-# NEXUS ARCHITECTURAL BLUEPRINT (v5.1 Sovereign)
+# NEXUS ARCHITECTURAL BLUEPRINT (v5.4 Sovereign)
 
 ## 🌌 Introduction
 Nexus is a multi-tenant AI Orchestration platform built on the principle of **Total Sovereignty**. Unlike traditional SaaS where the provider controls all API keys and infrastructure, Nexus empowers the Tenant (Owner) to provide their own "fuel" (API keys, SMTP, etc.), ensuring privacy, cost transparency, and independent rate limits.
@@ -8,39 +8,45 @@ Nexus is a multi-tenant AI Orchestration platform built on the principle of **To
 ## 🏗️ Core Technology Stack
 - **Frontend**: React (Vite) + Tailwind CSS + Lucide Icons.
 - **Backend API**: FastAPI (Python 3.10+).
-- **Database**: PostgreSQL (Relational data + Credential Vault).
+- **Database**: PostgreSQL (Relational) + **Supabase pgvector** (RAG memory).
 - **Cache/PubSub**: Redis (Session management and real-time triggers).
-- **AI Framework**: LangChain / Custom Agentic logic.
+- **AI Framework**: LangChain / **Polymorphic Agent Service** (Custom Factory).
 - **Security**: AES-256 (Fernet) encryption for sensitive data.
 
 ---
 
 ## 🗝️ The Sovereign Credentials System
-This is the heart of the v5.1 upgrade. The system has moved away from `.env`-based global keys to a dynamic, tenant-specific lookup.
+This is the heart of the v5.1+ upgrade. The system has moved away from `.env`-based global keys to a dynamic, tenant-specific lookup.
 
 ### Data Flow for AI Execution:
-1. **Request**: A user interacts with an AI agent (e.g., Creative Director).
+1. **Request**: A user interacts with an AI agent (e.g., Sales Agent).
 2. **Lookup**: The service calls `get_tenant_credential(tenant_id, category, key_name)`.
 3. **Vault Access**: The system queries the `credentials` table, filtering by `tenant_id`.
 4. **Decryption**: The `Fernet` key (system-level) decrypts the value on-the-fly.
 5. **Injection**: The decrypted key is injected into the AI model instantiation (OpenAI, Google Gemini, etc.).
 
 ### Categories Protected:
-- `openai`: GPT-o1, GPT-4o, etc.
+- `openai`: GPT-4o, o1-preview, etc.
 - `google`: Gemini 2.x, Imagen 3 (Via Google AI Studio).
 - `smtp`: Custom brand-specific email delivery.
 - `tiendanube`: E-commerce access tokens.
 
 ---
 
-## 🧠 AI & Agentic Logic
-Nexus uses a specialized agentic workflow divided into "Departments":
+## 🧠 AI & Agentic Logic (Nexus v5.30 Polymorphism)
+Nexus has evolved from a single-agent system to a **Polymorphic Agent Service**.
 
-### 1. RAG Core (The Librarian)
-- **Engine**: ChromaDB / Vector Search logic.
-- **Sovereignty**: Uses the Tenant's OpenAI key for embeddings and retrieval, ensuring search costs are allocated to the correct account.
+### 1. The Agent Template Factory
+Instead of hardcoded "prompts", the system uses a Factory Pattern to instantiate agents:
+- **Sales Agent**: Aggressive closing, full catalogue access.
+- **Support Agent**: Empathetic, limited tools (no browsing), focuses on `knowledge_base`.
+- **Leads Agent**: Data collection focus (Qualify -> Handoff).
+- **Logistics Agent**: Tracking-only, low temperature (concise).
 
-- **Tooling**: Found in `orchestrator_service/app/core/image_utils.py`.
+### 2. RAG Core (Supabase pgvector)
+- **Engine**: Supabase `vector` extension.
+- **Sovereignty**: Tenant isolation via `metadata->>'tenant_id'` filters in all vector queries.
+- **Bootstrapper**: Critical services auto-initialize the database schema on startup if missing.
 
 ### 3. The Meta Diplomat (Microservice)
 - **Role**: Handles the complex OAuth dance with Facebook/Instagram/WhatsApp.

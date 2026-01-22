@@ -31,6 +31,12 @@ Integración completa del panorama de IA de Enero 2026.
 AES-256 para proteger el negocio de tus clientes.
 *   Cada inquilino gestiona sus propias cuotas y límites directamente desde el Panel de Configuración.
 
+### 🧠 5. Multi-Agent Orchestration (v5.30)
+Evolución de monocanal a **Polimorfismo Especializado**.
+*   **Roles Dinámicos**: Plantillas nativas para **Ventas**, **Soporte**, **Leads** y **Logística**.
+*   **Dynamic Wizard**: Configuración en lenguaje natural con Live Preview (Simulación en Tiempo Real).
+*   **Auto-Onboarding**: Creación automática del Agente de Ventas al conectar la tienda.
+
 ---
 
 ## 🚀 Despliegue en EasyPanel
@@ -50,6 +56,8 @@ AES-256 para proteger el negocio de tus clientes.
 *   **[Guía de Despliegue](./docs/DEPLOYMENT.md)**: Pasos detallados para entorno de producción.
 *   **[Referencia de API](./docs/API_REFERENCE.md)**: Endpoints de sistema y gestión de modelos.
 *   **[Manual de Vuelo v5.4](./Manual%20de%20Vuelo%20Nexus%20v5.md)**: Guía operativa para administradores.
+*   **[Arquitectura de Agentes](./docs/AGENT_ARCHITECTURE.md)**: Deep Dive en el motor polimórfico y seguridad.
+*   **[Wizard & Onboarding](./docs/WIZARD_WIRING.md)**: Flujos de configuración dinámica y "Live Preview".
 
 ---
 

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react'; // Nexus v5.26 Fix
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
-import { Save, Info, Sparkles, ArrowRight, CheckCircle2, RotateCcw, ShieldCheck, AlertCircle, Store, LifeBuoy, Truck, Calendar, MessageSquare, Send, X, Bot, User, Trash2 } from 'lucide-react';
+import { Save, Info, Sparkles, ArrowRight, CheckCircle2, RotateCcw, ShieldCheck, AlertCircle, Store, LifeBuoy, Truck, Calendar, MessageSquare, Send, Bot, User, Trash2 } from 'lucide-react';
 
 interface FieldConfig {
     key: string;
@@ -154,8 +154,8 @@ const LivePreviewPanel = ({ formData, tenantId = 1 }: { formData: Record<string,
                             {m.role === 'user' ? <User size={14} className="text-white" /> : <Bot size={14} className="text-white" />}
                         </div>
                         <div className={`p-3 rounded-2xl text-sm max-w-[85%] leading-relaxed shadow-sm ${m.role === 'user'
-                                ? 'bg-white/10 text-white rounded-tr-sm'
-                                : 'bg-black/60 border border-white/10 text-white/90 rounded-tl-sm'
+                            ? 'bg-white/10 text-white rounded-tr-sm'
+                            : 'bg-black/60 border border-white/10 text-white/90 rounded-tl-sm'
                             }`}>
                             {m.content}
                         </div>

@@ -152,11 +152,11 @@ async def get_or_create_sales_agent(tenant_id: int) -> dict:
         )
         
         agent_id = await db.fetchval(
-            \"\"\"
+            """
             INSERT INTO agents (name, role, tenant_id, system_prompt_template, model_provider, model_version, is_active)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
-            \"\"\",
+            """,
             "Agente de Ventas (IA)", "sales", tenant_id, prompt, "openai", "gpt-4o", True
         )
         
