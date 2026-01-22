@@ -3037,7 +3037,8 @@ async def report_assisted_gmv(tenant_id: Optional[str] = None, days: int = 30):
 class PromptImproveRequest(BaseModel):
     text: str
     tenant_id: int # Sovereign Credentials requirement
-    context: str = "tool" # 'tool' or 'catalog'
+    context: str = "tool" # 'tool', 'catalog' or 'field'
+    field: Optional[str] = None # Specific for Nexus v5.19 agents meta-prompts
 
 @router.post("/ai/improve-prompt", dependencies=[Depends(verify_admin_token)])
 async def improve_prompt(req: PromptImproveRequest):
@@ -3045,6 +3046,7 @@ async def improve_prompt(req: PromptImproveRequest):
     try:
         from langchain_openai import ChatOpenAI
         from langchain.schema import SystemMessage, HumanMessage
+        from app.api.agents import FIELD_SYSTEM_PROMPTS
         
         # Sovereign Credentials: Fetch key from DB with fallback to global settings
         openai_key = await get_tenant_credential(req.tenant_id, "openai", "%api_key%")
@@ -3054,18 +3056,30 @@ async def improve_prompt(req: PromptImproveRequest):
         if not openai_key:
             raise HTTPException(400, detail="Please configure your AI Credentials in Settings. No global key found.")
             
-        llm = ChatOpenAI(model="gpt-4o", temperature=0.5, openai_api_key=openai_key)
+        # Nexus v5.19: Lower temperature for consistency (0.2)
+        llm = ChatOpenAI(model="gpt-4o", temperature=0.2, openai_api_key=openai_key)
         
-        system_msg = "Eres un experto en ingeniería de prompts para agentes de IA de e-commerce. Tu objetivo es refinar el texto del usuario para que sea claro, directo y efectivo. "
-        if req.context == "tool":
-            system_msg += "El contexto es una instrucción para una herramienta (tool injection). Debe ser imperativo y técnico."
+        # Determine system message
+        system_msg = ""
+        if req.field and req.field in FIELD_SYSTEM_PROMPTS:
+            system_msg = FIELD_SYSTEM_PROMPTS[req.field].replace("{user_input}", req.text)
         else:
-            system_msg += "El contexto es la descripción de un catálogo o tienda. Debe ser estructurado, mencionando categorías y tipos de productos formalmente."
+            system_msg = "Eres un experto en ingeniería de prompts para agentes de IA de e-commerce. Tu objetivo es refinar el texto del usuario para que sea claro, directo y efectivo. "
+            if req.context == "tool":
+                system_msg += "El contexto es una instrucción para una herramienta (tool injection). Debe ser imperativo y técnico."
+            else:
+                system_msg += "El contexto es la descripción de un catálogo o tienda. Debe ser estructurado, mencionando categorías y tipos de productos formalmente."
 
-        response = await llm.ainvoke([
-            SystemMessage(content=system_msg),
-            HumanMessage(content=f"Refina este texto: {req.text}")
-        ])
+        # If we used a template, the user input is already wrapped. Otherwise, we send as separate message.
+        if req.field and req.field in FIELD_SYSTEM_PROMPTS:
+            messages = [SystemMessage(content=system_msg)]
+        else:
+            messages = [
+                SystemMessage(content=system_msg),
+                HumanMessage(content=f"Refina este texto: {req.text}")
+            ]
+
+        response = await llm.ainvoke(messages)
         
         return {"status": "ok", "refined_text": response.content}
     except Exception as e:
