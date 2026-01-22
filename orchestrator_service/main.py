@@ -60,8 +60,8 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 from db import db, redis_client
-from app.core.credentials import get_tenant_credential # NEW
-from app.core.db_setup import init_rag_db # Supabase RAG Setup
+from app.core.credentials import get_tenant_credential 
+from app.core.db_setup import background_db_setup  # Nexus v5.9 Self-Healing
 
 # Configuration & Environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -872,9 +872,11 @@ async def lifespan(app: FastAPI):
 
         logger.info("maintenance_robot_complete", status="tables_verified")
 
-        # 5. Supabase RAG Bootstrapper (Auto-Healing pgvector)
-        logger.info("rag_bootstrapper_start")
-        init_rag_db()
+        # 5. Supabase RAG Bootstrapper (Nexus v5.9 Self-Healing Protocol)
+        # Non-blocking start: Allows the server to bind and respond instantly.
+        # The background task will retry up to 10 times with 5s delays.
+        logger.info("rag_bootstrapper_queued")
+        asyncio.create_task(background_db_setup())
 
         # 6. Universal Schema Creation (SQLAlchemy)
         # CRITICAL: Must import all models to ensure they are registered in Base.metadata
