@@ -18,6 +18,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Model Registry 2026 (Nexus v5.3)
+from app.core.models import MODEL_REGISTRY, validate_model, DEFAULT_MODEL
+
 # Configuration
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-99")
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY")
@@ -1607,6 +1610,14 @@ async def manual_init_db():
             detail=f"Database initialization failed: {str(e)}"
         )
 
+@router.get("/system/available-models")
+async def get_available_models():
+    """Returns the list of SOTA 2026 models for the frontend selector."""
+    return {
+        "default_model": DEFAULT_MODEL,
+        "models": MODEL_REGISTRY
+    }
+
 @router.get("/chats")
 @safe_db_call
 async def list_chats(
@@ -3035,9 +3046,14 @@ async def improve_prompt(req: PromptImproveRequest):
         from langchain_openai import ChatOpenAI
         from langchain.schema import SystemMessage, HumanMessage
         
-        # Sovereign Credentials: Fetch key from DB
+        # Sovereign Credentials: Fetch key from DB with fallback to global settings
         openai_key = await get_tenant_credential(req.tenant_id, "openai", "%api_key%")
+        if not openai_key:
+            openai_key = settings.OPENAI_API_KEY
         
+        if not openai_key:
+            raise HTTPException(400, detail="Please configure your AI Credentials in Settings. No global key found.")
+            
         llm = ChatOpenAI(model="gpt-4o", temperature=0.5, openai_api_key=openai_key)
         
         system_msg = "Eres un experto en ingeniería de prompts para agentes de IA de e-commerce. Tu objetivo es refinar el texto del usuario para que sea claro, directo y efectivo. "
@@ -3619,12 +3635,19 @@ async def search_rag(tenant_id: str, q: str, k: int = 5, source_ids: Optional[st
         openai_key = await get_tenant_credential(int(tenant_id), "openai")
         google_key = await get_tenant_credential(int(tenant_id), "google")
         
-        provider = "openai"
-        api_key = openai_key
-        
         if google_key:
             provider = "google"
             api_key = google_key
+        elif openai_key:
+            provider = "openai"
+            api_key = openai_key
+        elif settings.GOOGLE_API_KEY:
+            provider = "google"
+            api_key = settings.GOOGLE_API_KEY
+        else:
+            # Global Fallback Default
+            api_key = settings.OPENAI_API_KEY
+            provider = "openai"
         
         # 2. Initialize RAGCore with Sovereign Key
         rag = RAGCore(tenant_id, api_key=api_key, provider=provider)
@@ -3772,14 +3795,20 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, content: byte
         openai_key = await get_tenant_credential(tenant_id, "openai")
         google_key = await get_tenant_credential(tenant_id, "google")
         
-        provider = "openai"
-        api_key = openai_key
-        
-        if google_key: # Google takes precedence if both exist, or we can choose
+        if google_key: # Google takes precedence if both exist
             provider = "google"
             api_key = google_key
-        elif not openai_key:
-            raise Exception("No valid AI credentials found for ingestion.")
+        elif openai_key:
+            provider = "openai"
+            api_key = openai_key
+        elif settings.GOOGLE_API_KEY:
+            provider = "google"
+            api_key = settings.GOOGLE_API_KEY
+        elif settings.OPENAI_API_KEY:
+            provider = "openai"
+            api_key = settings.OPENAI_API_KEY
+        else:
+            raise Exception("Missing AI Credentials. Please configure OpenAI or Google keys in Settings.")
 
         # 2. Ingest
         from app.core.rag import RAGCore
@@ -3913,9 +3942,12 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
             RETURNING id
         """
         
+        # 2026 Validation: Ensure model is valid, otherwise fallback
+        validated_model = validate_model(agent.model_version)
+        
         agent_id = await db.pool.fetchval(
             q, 
-            agent.name, agent.role, target_tenant_id, agent.model_provider, agent.model_version, agent.temperature,
+            agent.name, agent.role, target_tenant_id, agent.model_provider, validated_model, agent.temperature,
             agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active
         )
         
@@ -3950,6 +3982,9 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
              # FORK
              logger.info(f"Forking Agent Template {agent_id} for User {current_user.id}")
              
+             # 2026 Validation
+             validated_model = validate_model(agent.model_version)
+             
              new_id = await db.pool.fetchval("""
                 INSERT INTO agents (
                     name, role, tenant_id, model_provider, model_version, temperature, 
@@ -3957,7 +3992,7 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
                 RETURNING id
              """, 
-             agent.name, agent.role, current_user.tenant_id, agent.model_provider, agent.model_version, agent.temperature,
+             agent.name, agent.role, current_user.tenant_id, agent.model_provider, validated_model, agent.temperature,
              agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active)
              
              return {"status": "forked", "id": new_id, "message": "Agent cloned from template."}
@@ -3967,6 +4002,9 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
         if existing['tenant_id'] != current_user.tenant_id and current_user.role != "SuperAdmin":
              raise HTTPException(403, "Cannot edit agent from another tenant")
              
+        # 2026 Validation
+        validated_model = validate_model(agent.model_version)
+
         q = """
             UPDATE agents SET 
                 name = $1, role = $2, model_provider = $3, model_version = $4, temperature = $5,
@@ -3975,7 +4013,7 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
         """
         await db.pool.execute(
             q,
-            agent.name, agent.role, agent.model_provider, agent.model_version, agent.temperature,
+            agent.name, agent.role, agent.model_provider, validated_model, agent.temperature,
             agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active,
             agent_id
         )

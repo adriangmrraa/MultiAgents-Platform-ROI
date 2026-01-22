@@ -88,10 +88,7 @@ GLOBAL_STORE_DESCRIPTION = os.getenv("GLOBAL_STORE_DESCRIPTION")
 GLOBAL_CATALOG_KNOWLEDGE = os.getenv("GLOBAL_CATALOG_KNOWLEDGE")
 GLOBAL_SYSTEM_PROMPT = os.getenv("GLOBAL_SYSTEM_PROMPT")
 
-if not OPENAI_API_KEY:
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-    if not OPENAI_API_KEY:
-        print("CRITICAL ERROR: OPENAI_API_KEY not found.")
+# Protocol Omega Ready
 
 # Initialize Structlog
 structlog.configure(

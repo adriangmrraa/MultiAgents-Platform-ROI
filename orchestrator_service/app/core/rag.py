@@ -1,7 +1,7 @@
 import os
 import uuid
 import structlog
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from bs4 import BeautifulSoup
 import requests
 import tempfile
@@ -27,7 +27,8 @@ logger = structlog.get_logger(__name__)
 # Configuration from settings
 SUPABASE_URL = settings.SUPABASE_URL
 SUPABASE_SERVICE_KEY = settings.SUPABASE_SERVICE_KEY
-OPENAI_API_KEY = settings.OPENAI_API_KEY
+GLOBAL_OPENAI_API_KEY = settings.OPENAI_API_KEY
+GLOBAL_GOOGLE_API_KEY = settings.GOOGLE_API_KEY
 
 class RAGCore:
     """
@@ -38,44 +39,59 @@ class RAGCore:
     def __init__(self, tenant_id: str, api_key: str = None, provider: str = "openai"):
         self.tenant_id = str(tenant_id)
         self.provider = provider
-        self.api_key = api_key or (OPENAI_API_KEY if provider == "openai" else None)
         
-        # Initialize Supabase Client
+        # Priority: 1. Passed api_key (Tenant specific), 2. Global Fallback
+        if provider == "google":
+            self.api_key = api_key or GLOBAL_GOOGLE_API_KEY
+        else:
+            self.api_key = api_key or GLOBAL_OPENAI_API_KEY
+            
+        self._db_instance = None
+        
+        # Initialize Supabase Client (Infrastructure must be present)
         if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-             raise Exception("Supabase credentials missing in configuration.")
+             raise Exception("Supabase infrastructure credentials missing.")
         
         self.supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-        
-        # Provider selection (v5.1 Multi-Provider RAG)
-        # Note: User SQL specifies vector(1536), which is OpenAI compatible.
-        if provider == "google":
-            from langchain_google_genai import GoogleGenerativeAIEmbeddings
-            self.embedding_fn = GoogleGenerativeAIEmbeddings(
-                model="models/embedding-001",
-                google_api_key=self.api_key
-            )
-            # CAUTION: Google embeddings are 768 dimensions. 
-            # If the DB table is fixed at 1536, this will fail.
-            # For now, we follow the user's lead on 1536.
-        else:
-            # Default to OpenAI
-            self.embedding_fn = OpenAIEmbeddings(
-                model="text-embedding-3-small",
-                openai_api_key=self.api_key
-            )
+
+    def _ensure_credentials(self):
+        """Lazy check for credentials before any AI operations."""
+        if not self.api_key:
+            provider_name = "Google" if self.provider == "google" else "OpenAI"
+            raise Exception(f"Missing {provider_name} Credentials. Please configure them in Settings.")
+
+    @property
+    def _db(self) -> SupabaseVectorStore:
+        """Lazy initialization of the vector store."""
+        if self._db_instance is None:
+            self._ensure_credentials()
             
-        try:
-            self._db = SupabaseVectorStore(
-                client=self.supabase,
-                embedding=self.embedding_fn,
-                table_name="documents",
-                query_name="match_documents"
-            )
-        except Exception as e:
-            import traceback
-            tb = traceback.format_exc()
-            logger.error("rag_supabase_init_failed", error=str(e), traceback=tb)
-            raise Exception(f"Failed to initialize Vector Store: {str(e)}")
+            # Provider selection
+            if self.provider == "google":
+                from langchain_google_genai import GoogleGenerativeAIEmbeddings
+                embedding_fn = GoogleGenerativeAIEmbeddings(
+                    model="models/embedding-001",
+                    google_api_key=self.api_key
+                )
+            else:
+                # Default to OpenAI
+                embedding_fn = OpenAIEmbeddings(
+                    model="text-embedding-3-small",
+                    openai_api_key=self.api_key
+                )
+            
+            try:
+                self._db_instance = SupabaseVectorStore(
+                    client=self.supabase,
+                    embedding=embedding_fn,
+                    table_name="documents",
+                    query_name="match_documents"
+                )
+            except Exception as e:
+                logger.error("rag_supabase_init_failed", error=str(e))
+                raise Exception(f"Failed to initialize Vector Store: {str(e)}")
+        
+        return self._db_instance
 
     async def transform_product_with_llm(self, product: Dict, llm: Any) -> str:
         """
@@ -107,6 +123,7 @@ class RAGCore:
         """
         Ingests strict Catalog Data + Public HTML Context into Vector Store.
         """
+        self._ensure_credentials()
         logger.info(f"rag_ingestion_start: tenant={self.tenant_id}, count={len(product_data)}")
         
         try:
@@ -166,6 +183,7 @@ class RAGCore:
         Sovereign Document Ingestion (v5.1).
         Supports PDF, TXT, CSV, DOCX.
         """
+        self._ensure_credentials()
         logger.info(f"rag_document_ingestion_start: tenant={self.tenant_id}, filename={filename}")
         
         tmp_path = None
@@ -219,11 +237,10 @@ class RAGCore:
         Semantic Search for the Agent.
         """
         try:
-            # Combine provided filter with tenant_id for isolation
+            # Combined filter with tenant_id for isolation
             combined_filter = (filter or {}).copy()
             combined_filter["tenant_id"] = self.tenant_id
             
-            # SupabaseVectorStore uses similarity_search
             results = self._db.similarity_search(query, k=k, filter=combined_filter)
             context_block = "\n---\n".join([doc.page_content for doc in results])
             return context_block
@@ -248,8 +265,6 @@ class RAGCore:
         """
         try:
             logger.info(f"rag_deletion_start: {key}={value}")
-            # Direct Supabase delete
-            # metadata is a jsonb column
             self.supabase.table("documents").delete().eq(f"metadata->>{key}", value).eq("metadata->>tenant_id", self.tenant_id).execute()
             return True
         except Exception as e:

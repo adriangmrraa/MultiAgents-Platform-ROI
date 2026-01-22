@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Header, Depends, Body
 from pydantic import BaseModel, Field, SecretStr
 from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain.output_parsers import PydanticOutputParser
@@ -46,7 +47,8 @@ class AgentContext(BaseModel):
     system_prompt: str
 
 class AgentCredentials(BaseModel):
-    openai_api_key: str
+    openai_api_key: Optional[str] = None
+    google_api_key: Optional[str] = None
     tiendanube_store_id: Optional[str] = None
     tiendanube_access_token: Optional[SecretStr] = None
     tiendanube_service_url: str = "http://tiendanube-service:8003"
@@ -245,12 +247,49 @@ async def execute_agent(
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ]).partial(format_instructions=parser.get_format_instructions())
     
-    # 3. Initialize LLM
-    llm = ChatOpenAI(
-        model="gpt-4o-mini",
-        api_key=request.credentials.openai_api_key,
-        temperature=0
-    )
+    # 3. Detect Provider and Resolve API Key (Lazy Resolution)
+    model_name = "gpt-4o-mini" # Default
+    if request.agent_config and request.agent_config.model and "name" in request.agent_config.model:
+        model_name = request.agent_config.model["name"]
+
+    provider = "openai"
+    if model_name.startswith("gemini"):
+        provider = "google"
+    
+    # Priority: 1. Request Credentials (Tenant) 2. Environment (Global)
+    resolved_api_key = None
+    if provider == "openai":
+        resolved_api_key = request.credentials.openai_api_key or os.getenv("OPENAI_API_KEY")
+    else:
+        resolved_api_key = request.credentials.google_api_key or os.getenv("GOOGLE_API_KEY")
+
+    if not resolved_api_key:
+        logger.warning("agent_execution_paused_missing_key", provider=provider, tenant_id=request.tenant_id)
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Execution Paused: Missing {provider.capitalize()} Credentials. Please configure them in Settings."
+        )
+
+    # 4. Initialize LLM (with Tier-based Timeout)
+    # Premium models (o3, Deep Think) get more time for CoT, but need validation
+    llm_timeout = 60 # Standard 2026 timeout
+    if model_name in ["o3-high", "gemini-3-deep-think"]:
+        llm_timeout = 180 # Extended for Reasoning
+        
+    if provider == "google":
+        llm = ChatGoogleGenerativeAI(
+            model=model_name,
+            google_api_key=resolved_api_key,
+            temperature=0,
+            timeout=llm_timeout
+        )
+    else:
+        llm = ChatOpenAI(
+            model=model_name,
+            api_key=resolved_api_key,
+            temperature=0,
+            timeout=llm_timeout
+        )
     
     # 4. Construct Agent
 
@@ -279,21 +318,53 @@ async def execute_agent(
     agent_def = create_openai_functions_agent(llm, tools_list, prompt)
     executor = AgentExecutor(agent=agent_def, tools=tools_list, verbose=True)
     
-    # 5. Execute
+    # 5. Execute with Intelligent Fallback
+    fallback_taken = False
     try:
-        # Protocol Omega: Max Timeout for CoT
-        # While the HTTP client has 300s, the AgentExecutor doesn't have a direct timeout param, 
-        # but we rely on the client-side timeout we set in tools and the overall request timeout.
-        
         result = await executor.ainvoke({
             "input": request.message,
             "chat_history": history
         })
+    except Exception as e:
+        logger.error("agent_execution_primary_failed", model=model_name, error=str(e))
         
+        # Fallback Strategy (Premium -> Advanced)
+        fallback_model = None
+        if model_name == "o3-high": fallback_model = "gpt-5.2"
+        elif model_name == "gemini-3-deep-think": fallback_model = "gemini-3-pro"
+        
+        if fallback_model:
+            logger.info("triggering_intelligent_fallback", from_model=model_name, to_model=fallback_model)
+            fallback_taken = True
+            
+            # Re-initialize LLM with Fallback
+            if fallback_model.startswith("gemini"):
+                llm = ChatGoogleGenerativeAI(model=fallback_model, google_api_key=resolved_api_key, temperature=0)
+            else:
+                llm = ChatOpenAI(model=fallback_model, api_key=resolved_api_key, temperature=0)
+            
+            agent_def = create_openai_functions_agent(llm, tools_list, prompt)
+            executor = AgentExecutor(agent=agent_def, tools=tools_list, verbose=True)
+            
+            result = await executor.ainvoke({
+                "input": request.message,
+                "chat_history": history
+            })
+        else:
+            # No fallback possible (already at economy or economy failed)
+            raise e
+
+    try:
         output_text = result["output"]
         
         # 6. Parse Output into structured messages
         messages = []
+        
+        if fallback_taken:
+            messages.append(OrchestratorMessage(
+                text="⚠️ Usando modelo estándar por alta demanda.",
+                metadata={"fallback_event": True, "original_model": model_name}
+            ))
         
         # Extract metadata (Chain of Thought / Tool steps)
         metadata = {

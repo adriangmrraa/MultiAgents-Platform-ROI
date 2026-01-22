@@ -32,19 +32,20 @@ class NexusEngine:
         logger.info("engine_ignite_start_v3_3", tenant_id=self.tenant_id)
         
         # 0. Context Preparation
-        # Fetch Tenant-Specific OpenAI Key (Sovereign Credentials System)
+        # Fetch Tenant-Specific AI Keys (Sovereign Credentials System)
         self.openai_api_key = await get_tenant_credential(int(self.tenant_id), "openai", "%api_key%")
-        if not self.openai_api_key:
-            logger.warning("engine_missing_tenant_openai_key", tenant_id=self.tenant_id)
-            await self._publish_log(">> Warning: OpenAI API Key not found for your tenant. Using global fallback if available.")
-        
-        # Initialize RAG with the tenant-specific key
-        self.rag = RAGCore(self.tenant_id, openai_api_key=self.openai_api_key)
-
-        # Fetch Tenant-Specific Google Key (Nano Banana)
         self.google_api_key = await get_tenant_credential(int(self.tenant_id), "google", "%api_key%")
-        if not self.google_api_key:
-             logger.warning("engine_missing_tenant_google_key", tenant_id=self.tenant_id)
+        
+        # Initialize RAG (RAGCore handles tenant-first, global-fallback internally now)
+        self.rag = RAGCore(self.tenant_id, api_key=self.openai_api_key)
+
+        from app.core.config import settings
+        if not self.openai_api_key and not settings.OPENAI_API_KEY:
+            logger.warning("engine_missing_all_openai_keys", tenant_id=self.tenant_id)
+            await self._publish_log(">> Warning: No OpenAI API Key found (Tenant or Global). Some features may fail.")
+
+        if not self.google_api_key and not settings.GOOGLE_API_KEY:
+             logger.warning("engine_missing_all_google_keys", tenant_id=self.tenant_id)
 
         tn_store_id = self.context.get('credentials', {}).get('tiendanube_store_id')
         tn_token = self.context.get('credentials', {}).get('tiendanube_access_token')
@@ -258,7 +259,12 @@ class NexusEngine:
             - methodology: Breve descripción de su enfoque comercial.
             """
             
-            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=self.openai_api_key)
+            from app.core.config import settings
+            effective_openai_key = self.openai_api_key or settings.OPENAI_API_KEY
+            if not effective_openai_key:
+                 raise Exception("Missing OpenAI Credentials. Please configure them in Settings.")
+                 
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=effective_openai_key)
             resp = await llm.ainvoke(prompt)
             
             # Extract JSON from response
@@ -324,7 +330,12 @@ class NexusEngine:
                 )
                 
                 # 3. Call Multimodal Transformation
-                gen_url = await generate_ad_from_product(b64_product, fusion_prompt, google_api_key=self.google_api_key)
+                from app.core.config import settings
+                effective_google_key = self.google_api_key or settings.GOOGLE_API_KEY
+                if not effective_google_key:
+                     raise Exception("Missing Google Credentials. Please configure them in Settings.")
+                
+                gen_url = await generate_ad_from_product(b64_product, fusion_prompt, google_api_key=effective_google_key)
                 
                 visual_assets.append({
                     "asset_name": f"Visual Stop - {p.get('name', {}).get('es')}",
@@ -364,7 +375,12 @@ class NexusEngine:
             Formato: JSON con una lista 'scripts' que contiene objetos {{stage, framework, copy}}.
             """
             
-            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7, openai_api_key=self.openai_api_key)
+            from app.core.config import settings
+            effective_openai_key = self.openai_api_key or settings.OPENAI_API_KEY
+            if not effective_openai_key:
+                 raise Exception("Missing OpenAI Credentials. Please configure them in Settings.")
+
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7, openai_api_key=effective_openai_key)
             resp = await llm.ainvoke(prompt)
             
             try:
@@ -434,10 +450,9 @@ class NexusEngine:
         logger.info("librarian_rag_start", url=store_url)
         
         if products and tn_token:
-             # Protocol Omega: Call the ingestion wrapper with correct 4 arguments
-             # We use a localized version to avoid circular imports from admin_routes
+             # Protocol Omega: Call the ingestion wrapper 
              from app.core.rag import RAGCore
-             rag = RAGCore(self.tenant_id, openai_api_key=self.openai_api_key)
+             rag = RAGCore(self.tenant_id, api_key=self.openai_api_key)
 
              # Optimization V5.9.119: Skip redundant scraping if vectors exist (Speed Boost)
              vector_count = 0

@@ -12,25 +12,10 @@ from io import BytesIO
 logger = structlog.get_logger()
 
 # Configure Google AI Client (Nano Banana)
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-client = None
-if GOOGLE_API_KEY:
-    # Protocol Omega: Revert to default SDK (v1beta) but use explicit model version
-    client = genai.Client(api_key=GOOGLE_API_KEY)
-    
-    # DEBUG: List available models to find the correct name
-    # Commented out for production
-    # try:
-    #     logger.info("gemini_debug_list_start")
-    #     for m in client.models.list():
-    #         if 'generateContent' in m.supported_generation_methods:
-    #             logger.info("gemini_available_model", name=m.name, display=m.display_name)
-    # except Exception as e:
-    #     logger.error("gemini_debug_list_failed", error=str(e))
-
 def get_google_client(api_key: str = None):
-    """Returns a GenAI client using the provided key or the global one."""
-    target_key = api_key or GOOGLE_API_KEY
+    """Returns a GenAI client using the provided key or the global one (Lazy Resolution)."""
+    from app.core.config import settings
+    target_key = api_key or settings.GOOGLE_API_KEY
     if not target_key:
         return None
     # We create a new client for each request if a specific key is used to ensure isolation
