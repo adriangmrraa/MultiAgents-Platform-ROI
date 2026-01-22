@@ -20,6 +20,7 @@ import httpx
 import tiktoken
 from fastapi.responses import StreamingResponse
 from contextvars import ContextVar # Protocol Omega: Isolation
+from app.core.agent_templates import AgentTemplateFactory # Nexus v5.27
 
 # --- Initialize Structlog ---
 structlog.configure(
@@ -60,6 +61,8 @@ class AgentConfig(BaseModel):
     tool_instructions: Optional[List[str]] = None
     knowledge_sources: Optional[List[str]] = []
     model: Optional[Dict[str, Any]] = None
+    template_type: Optional[str] = "sales" # Nexus v5.27
+    wizard_overrides: Optional[Dict[str, Any]] = {} # Nexus v5.27: Stores "tone", "business_rules", etc.
 
 class AgentThinkRequest(BaseModel):
     tenant_id: int
@@ -348,7 +351,37 @@ async def execute_agent(
             streaming=True
         )
     
-    # 4. Construct Agent
+    
+    # 5. Polymorphic Agent Construction (Nexus v5.27)
+    # Extract Template Type
+    template_type = "sales"
+    if request.agent_config and request.agent_config.template_type:
+        template_type = request.agent_config.template_type
+    
+    # Prepare Context for Template (Merge Context + Overrides)
+    # request.context.system_prompt might contain the raw wizard data or we use wizard_overrides
+    template_ctx = {
+        "store_name": request.context.store_name,
+        **request.agent_config.wizard_overrides
+    }
+    
+    # Instantiate Template
+    template = AgentTemplateFactory.get_template(template_type, template_ctx)
+    
+    # Generate System Prompt
+    final_system_prompt = template.build_system_prompt()
+    
+    # Add Sandwich Defense
+    prompt_msgs = [
+        SystemMessage(content=final_system_prompt),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("user", "{input}"),
+        SystemMessage(content=sandwich_guard),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ]
+    prompt = ChatPromptTemplate.from_messages(prompt_msgs).partial(format_instructions=parser.get_format_instructions())
+
+    # Filter Tools
     all_tools = [
         search_specific_products, 
         browse_general_storefront, 
@@ -359,12 +392,15 @@ async def execute_agent(
         derivhumano
     ]
     
-    # Filter tools if config provided
+    # 1. Template Filter
+    template_tools = template.filter_tools(all_tools)
+    
+    # 2. Config Filter (if specific whitelist provided)
     if request.agent_config and request.agent_config.tools is not None:
         allowed_names = set(request.agent_config.tools)
-        tools_list = [t for t in all_tools if t.name in allowed_names]
+        tools_list = [t for t in template_tools if t.name in allowed_names]
     else:
-        tools_list = all_tools
+        tools_list = template_tools
 
     agent_def = create_openai_functions_agent(llm, tools_list, prompt)
     executor = AgentExecutor(agent=agent_def, tools=tools_list, verbose=True)

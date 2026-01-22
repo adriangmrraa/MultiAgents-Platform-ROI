@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Modal } from '../components/Modal';
 import { GlobalStreamLog } from '../components/GlobalStreamLog';
-import { Bot, Plus, Trash2, Edit, Activity, Lock, BookOpen } from 'lucide-react';
+import { Bot, Plus, Trash2, Edit, Activity, Lock, BookOpen, Sparkles, Zap, Store, ChevronRight, Star } from 'lucide-react';
 
 interface Agent {
     id?: string;
@@ -38,6 +39,7 @@ export const Agents: React.FC = () => {
     const { t } = useLanguage();
     const { fetchApi } = useApi();
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [agents, setAgents] = useState<Agent[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
     const [tools, setTools] = useState<any[]>([]);
@@ -103,9 +105,21 @@ export const Agents: React.FC = () => {
             alert("Por favor verifica tu correo para crear nuevos agentes.");
             return;
         }
-        setFormData(defaultAgent);
-        setIsEditing(false);
-        setIsModalOpen(true);
+        navigate('/admin/agents/new');
+    };
+
+    const handleActivateSalesAgent = async () => {
+        if (!user?.tenant_id) return;
+        try {
+            // Nexus v5.24: Auto-provision Sales Agent
+            const res = await fetchApi(`/admin/agents/sales-config/${user.tenant_id}`);
+            if (res && res.id) {
+                navigate(`/admin/agents/${res.id}`);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error activating sales agent. Please contact support.");
+        }
     };
 
     return (
@@ -133,6 +147,40 @@ export const Agents: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Featured Agent Card (Nexus v5.24) */}
+            {!agents.some(a => a.role === 'sales') && (
+                <div className="mb-8 relative group">
+                    <div className="absolute -inset-1 bg-gradient-to-r from-accent to-purple-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+                    <div className="relative glass p-6 rounded-2xl border border-white/10 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div className="flex items-center gap-6">
+                            <div className="bg-gradient-to-br from-accent to-purple-600 p-4 rounded-xl shadow-lg shadow-accent/20">
+                                <Store size={32} className="text-white" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <h3 className="text-xl font-bold text-white">Agente de Ventas (IA)</h3>
+                                    <span className="bg-accent/20 text-accent text-[10px] font-bold px-2 py-0.5 rounded-full border border-accent/20 flex items-center gap-1">
+                                        <Star size={10} fill="currentColor" /> RECOMENDADO
+                                    </span>
+                                </div>
+                                <p className="text-secondary text-sm max-w-lg">
+                                    Tu vendedor experto 24/7. Gestiona catálogo, stock, variantes y cierre de ventas automáticamente.
+                                    Pre-entrenado con las mejores prácticas de e-commerce.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleActivateSalesAgent}
+                            className="bg-white text-black hover:bg-gray-200 px-6 py-3 rounded-xl font-bold shadow-xl flex items-center gap-2 transition-all transform hover:scale-105 active:scale-95 whitespace-nowrap"
+                        >
+                            <Sparkles size={18} className="text-accent" />
+                            Activar Ahora
+                            <ChevronRight size={18} className="opacity-50" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="glass">
                 <table className="data-table">
@@ -176,7 +224,25 @@ export const Agents: React.FC = () => {
                             </tr>
                         ))}
                         {agents.length === 0 && (
-                            <tr><td colSpan={6} className="text-center p-8 text-secondary">No hay agentes configurados</td></tr>
+                            <tr>
+                                <td colSpan={6} className="text-center p-20">
+                                    <div className="flex flex-col items-center gap-4">
+                                        <div className="bg-accent/10 p-4 rounded-full text-accent scale-150 mb-4 animate-bounce-subtle">
+                                            <Bot size={40} />
+                                        </div>
+                                        <h3 className="text-xl font-black text-white">{t('agents.noAgentsTitle') || 'Tu Armada está vacía'}</h3>
+                                        <p className="text-secondary text-sm max-w-xs mx-auto">
+                                            {t('agents.noAgentsDesc') || 'Aún no tienes agentes configurados. Comienza creando uno con nuestra plantilla maestra.'}
+                                        </p>
+                                        <button
+                                            className="btn-primary mt-4 px-8 py-3"
+                                            onClick={openNew}
+                                        >
+                                            <Plus size={18} className="mr-2" /> {t('agents.newAgent') || 'Crear mi primer Agente'}
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
                         )}
                     </tbody>
                 </table>

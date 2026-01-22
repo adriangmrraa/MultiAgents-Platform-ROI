@@ -1,4 +1,80 @@
-from typing import Dict
+from typing import Dict, Any, List
+from db import Database
+from sales_template import get_sales_prompt
+
+# Nexus v5.25 - Multi-Objective Templates Config
+AGENT_TEMPLATES: Dict[str, Dict[str, Any]] = {
+    "sales": {
+        "label": "Vendedor Maestro (E-commerce)",
+        "description": "Foco en conversión, catálogo, cierre de ventas y manejo de stock.",
+        "icon": "Zap",
+        "fields": {
+            "agent_tone": (
+                "## TONO Y PERSONALIDAD (ARGENTINA 'BUENA ONDA')\n\n"
+                "* **Estilo:** Hablá como una compañera de danza experta. Usá 'vos', sé cálida y empática.\n"
+                "* **Puntuación (ESTRICTO):** Usá solo el signo de pregunta al final (?), nunca el de apertura (¿).\n"
+                "* **Prohibido:** No uses 'usted', 'su', 'has', 'podéis'. No uses frases de telemarketing.\n"
+                "* **Naturalidad:** Usá frases puente como 'Mirá', 'Te cuento', 'Fijate', 'Dale'."
+            ),
+            "business_rules": (
+                "## REGLAS UNIVERSALES DE SEGURIDAD (NO BORRAR):\n"
+                "1. VERACIDAD ABSOLUTA: PROHIBIDO inventar precios, stock o variantes.\n"
+                "2. ALCANCE: Solo respondé sobre la tienda y el proceso de compra.\n"
+                "3. DERIVACIÓN: Usá `derivhumano` si el cliente está enojado o pide hablar con una persona.\n"
+                "4. ANTI-REPETICIÓN: No repitas productos que ya mostraste si no hay stock nuevo.\n\n"
+                "## REGLA DE ORO: Tu objetivo es que el cliente llegue al checkout. Si duda, ofrece asesoramiento."
+            ),
+            "synonym_dictionary": (
+                "## DICCIONARIO DE SINÓNIMOS\n\n"
+                "* **LEOTARDOS:** malla, mallas, body, leotardo, maillot.\n"
+                "* **ZAPATILLAS DE PUNTA:** puntas, pointe, calzado de punta.\n"
+                "* **MEDIAS:** medias, panty, pantymedia, medias de ballet."
+            )
+        }
+    },
+    "support": {
+        "label": "Soporte y Posventa",
+        "description": "Empatía, resolución de problemas y gestión de reclamos.",
+        "icon": "MessageCircle",
+        "fields": {
+            "agent_tone": "Profesional, paciente y resolutivo. Usa un tono calmado. Trato de 'Usted' o 'Vos' según la marca.",
+            "business_rules": (
+                "1. EMPATÍA: Primero valida el sentimiento del cliente ('Entiendo tu frustración...').\n"
+                "2. IDENTIFICACIÓN: SIEMPRE pedí el número de orden antes de dar info específica.\n"
+                "3. RESOLUCIÓN: Si no podés resolver en el chat, derivá a humano inmediatamente indicando el motivo.\n"
+                "4. REGLA DE ORO: Calmar al cliente y resolver su duda. PROHIBIDO vender productos nuevos si hay un reclamo activo."
+            )
+        }
+    },
+    "logistics": {
+        "label": "Logística y Envíos",
+        "description": "Rastreo de pedidos, tiempos y políticas de entrega.",
+        "icon": "Truck",
+        "fields": {
+            "agent_tone": "Informativo, preciso y directo. Evita lenguaje ambiguo.",
+            "business_rules": (
+                "1. RASTREO: Usa la tool de `orders` para dar el estado exacto del envío.\n"
+                "2. RANGOS: PROHIBIDO dar fechas exactas. Usa siempre: 'El tiempo estimado es de X a Y días hábiles'.\n"
+                "3. RECOLECCIÓN: Explica claramente los horarios de sucursales si el cliente elige retiro.\n"
+                "4. REGLA DE ORO: Sos experto en distribución. Precisión total en rangos de entrega."
+            )
+        }
+    },
+    "leads": {
+        "label": "Captación de Leads",
+        "description": "Calificación de prospectos y agendamiento de citas.",
+        "icon": "Calendar",
+        "fields": {
+            "agent_tone": "Persuasivo, servicial y curioso. Haz preguntas que inciten a la respuesta.",
+            "business_rules": (
+                "1. DATOS: El objetivo es conseguir Nombre, Email y Motivo de consulta.\n"
+                "2. CALIFICACIÓN: Pregunta sobre el presupuesto o la urgencia de forma natural.\n"
+                "3. AGENDAMIENTO: Una vez calificado, ofrece la tool de derivación o link de agenda.\n"
+                "4. REGLA DE ORO: Tu único objetivo es conseguir el contacto para agendar una llamada."
+            )
+        }
+    }
+}
 
 # Nexus v5.19 - Enriched Meta-Prompts for retail-optimized agents
 FIELD_SYSTEM_PROMPTS: Dict[str, str] = {
@@ -17,7 +93,7 @@ FIELD_SYSTEM_PROMPTS: Dict[str, str] = {
         "Eres el Gerente de Operaciones de una Tienda Minorista. Estás redactando el 'Manual de Procedimientos' "
         "para tu nuevo empleado virtual. Estas reglas definen qué puede y qué NO puede hacer el agente.\n\n"
         "CONTEXTO: El agente de IA debe manejar quejas, envíos y dudas técnicas. Necesita límites claros "
-        "para no prometer cosas imposibles (como envíos gratis si no existen) ni dar consejos peligrosos.\n\n"
+        "para no prometer cosas imposibles (como envíos gratis if no existen) ni dar consejos peligrosos.\n\n"
         "TU TAREA: Convierte las ideas del usuario en COMANDOS OPERATIVOS IMPERATIVOS.\n"
         "1. Usa lenguaje de control: 'ESTÁ PROHIBIDO', 'ES OBLIGATORIO', 'SIEMPRE'.\n"
         "2. Define flujos condicionales: 'Si el cliente pregunta por precios mayoristas, derivar a humano'.\n"
@@ -47,3 +123,50 @@ FIELD_SYSTEM_PROMPTS: Dict[str, str] = {
         "INPUT DEL USUARIO: {user_input}"
     )
 }
+
+async def get_or_create_sales_agent(tenant_id: int) -> dict:
+    """
+    Nexus v5.24 - Auto-provisions a featured sales agent for a store.
+    """
+    db = Database()
+    try:
+        # 1. Look for existing sales agent
+        agent = await db.fetchrow(
+            "SELECT * FROM agents WHERE tenant_id = $1 AND role = 'sales' AND is_active = true LIMIT 1",
+            tenant_id
+        )
+        if agent:
+            return dict(agent)
+            
+        # 2. Fetch tenant info for prompt injection
+        tenant = await db.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
+        if not tenant:
+            return None
+            
+        # 3. Create one if not exists
+        prompt = get_sales_prompt(
+            store_name=tenant.get('store_name', 'Nueva Tienda'),
+            store_description=tenant.get('store_description', 'Tienda conectada al ecosistema Nexus'),
+            store_address=tenant.get('store_location', 'Online'),
+            store_website=tenant.get('store_website', '')
+        )
+        
+        agent_id = await db.fetchval(
+            \"\"\"
+            INSERT INTO agents (name, role, tenant_id, system_prompt_template, model_provider, model_version, is_active)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id
+            \"\"\",
+            "Agente de Ventas (IA)", "sales", tenant_id, prompt, "openai", "gpt-4o", True
+        )
+        
+        return {
+            "id": agent_id,
+            "name": "Agente de Ventas (IA)",
+            "role": "sales",
+            "tenant_id": tenant_id,
+            "is_active": True
+        }
+    except Exception as e:
+        print(f"Error in get_or_create_sales_agent: {e}")
+        return None

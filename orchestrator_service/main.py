@@ -735,6 +735,7 @@ CATALOGO:
                 channels JSONB DEFAULT '["whatsapp", "instagram", "facebook"]',
                 config JSONB DEFAULT '{}',
                 is_active BOOLEAN DEFAULT TRUE,
+                template_type VARCHAR(50), 
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
             );
@@ -2050,6 +2051,17 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                 "temperature": agent_row['temperature'],
                 "config": json.loads(agent_row['config']) if agent_row['config'] else {}
             }
+            # Nexus v5.27: Extract wizard overrides for Polymorphism
+            wizard_overrides = {}
+            if agent_row['config']:
+                try:
+                    conf = json.loads(agent_row['config'])
+                    # We map specific wizard keys that the templates expect
+                    # agent_templates.py expects: tone, business_rules, synonym_dictionary
+                    wizard_overrides['tone'] = conf.get('agent_tone')
+                    wizard_overrides['business_rules'] = conf.get('business_rules')
+                    wizard_overrides['synonym_dictionary'] = conf.get('synonym_dictionary')
+                except: pass
         else:
             # Prio 2: Tenant Config (Legacy / Fallback)
             raw_prompt = tenant_row.get("system_prompt_template") or GLOBAL_SYSTEM_PROMPT or "Eres un asistente virtual amable."
@@ -2087,7 +2099,15 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             "message": content,
             "history": remote_history,
             "context": {"store_name": tenant_row['store_name'], "system_prompt": sys_template, "current_channel": channel_source},
-            "agent_config": {"tools": enabled_tools, "tool_instructions": tool_instructions_list, "knowledge_sources": knowledge_sources, "model": model_config},
+            "context": {"store_name": tenant_row['store_name'], "system_prompt": sys_template, "current_channel": channel_source},
+            "agent_config": {
+                "tools": enabled_tools, 
+                "tool_instructions": tool_instructions_list, 
+                "knowledge_sources": knowledge_sources, 
+                "model": model_config,
+                "template_type": agent_row['template_type'] if agent_row else "sales", # Nexus v5.27
+                "wizard_overrides": wizard_overrides if agent_row else {} # Nexus v5.27
+            },
             "credentials": {"openai_api_key": openai_key or OPENAI_API_KEY, "tiendanube_store_id": tenant_row['tiendanube_store_id'], "tiendanube_access_token": tn_token or tenant_row.get('tiendanube_access_token'), "tiendanube_service_url": TIENDANUBE_SERVICE_URL}
         }
 

@@ -29,8 +29,7 @@ INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECR
 from app.core.resilience import safe_db_call
 from app.core.engine import NexusEngine # NEW
 from app.core.credentials import get_tenant_credential # NEW
-
-
+from app.api.agents import get_or_create_sales_agent, AGENT_TEMPLATES # Nexus v5.25
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -323,6 +322,7 @@ class AgentCreate(BaseModel):
     enabled_tools: Optional[List[str]] = []
     config: Optional[dict] = {}
     is_active: bool = True
+    template_type: Optional[str] = None
 
 class AgentModel(BaseModel):
     name: str
@@ -337,6 +337,7 @@ class AgentModel(BaseModel):
     channels: Optional[List[str]] = ["whatsapp", "instagram", "facebook", "web"]
     config: Optional[dict] = {}
     is_active: bool = True
+    template_type: Optional[str] = None
 
 
 
@@ -4002,8 +4003,8 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
         q = """
             INSERT INTO agents (
                 name, role, tenant_id, user_id, model_provider, model_version, temperature, 
-                system_prompt_template, enabled_tools, channels, is_active, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+                system_prompt_template, enabled_tools, channels, is_active, template_type, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
             RETURNING id
         """
         
@@ -4015,7 +4016,7 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
             agent.name, agent.role, target_tenant_id, str(current_user.id),
             agent.model_provider, validated_model, agent.temperature,
             agent.system_prompt_template, json.dumps(agent.enabled_tools),
-            json.dumps(agent.channels), agent.is_active
+            json.dumps(agent.channels), agent.is_active, agent.template_type
         )
         
         # Update knowledge_sources separately if it exists (for schema flexibility)
@@ -4075,14 +4076,13 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
         q = """
             UPDATE agents SET 
                 name = $1, role = $2, model_provider = $3, model_version = $4, temperature = $5,
-                system_prompt_template = $6, enabled_tools = $7, channels = $8, is_active = $9, updated_at = NOW()
-            WHERE id = $10
+                system_prompt_template = $6, enabled_tools = $7, channels = $8, is_active = $9, 
+                template_type = $10, config = $11, updated_at = NOW()
+            WHERE id = $12
         """
-        await db.pool.execute(
-            q,
             agent.name, agent.role, agent.model_provider, validated_model, agent.temperature,
             agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active,
-            agent_id
+            agent.template_type, json.dumps(agent.config), agent_id
         )
         
         # Update knowledge_sources
@@ -4115,6 +4115,39 @@ async def delete_agent(agent_id: int, current_user: User = Depends(get_current_u
         return {"status": "ok"}
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+# --- Nexus v5.24 - v5.25: Native Sales Agent & Templates ---
+
+@router.get("/agent-templates", dependencies=[Depends(verify_admin_token)])
+async def list_agent_templates():
+    """
+    Nexus v5.25 Filter: Returns list of available wizard templates.
+    """
+    return AGENT_TEMPLATES
+
+@router.get("/agents/sales-config/{tenant_id}", dependencies=[Depends(verify_admin_token)])
+async def get_sales_agent_config(tenant_id: int):
+    """
+    Nexus v5.24 Bridge: Fetches or creates the Native Sales Agent for a store.
+    """
+    agent = await get_or_create_sales_agent(tenant_id)
+    if not agent:
+        raise HTTPException(404, "Could not provision sales agent")
+    return agent
+
+@router.get("/agents/{agent_id}/config", dependencies=[Depends(verify_admin_token)])
+async def get_agent_config_details(agent_id: int):
+    """
+    Nexus v5.24: Deep fetches config for Wizard pre-filling.
+    """
+    row = await db.pool.fetchrow("SELECT id, name, role, system_prompt_template, template_type, config FROM agents WHERE id = $1", agent_id)
+    if not row:
+        raise HTTPException(404, "Agent not found")
+    
+    # Simple heuristic to extract previous prompts if stored in config or parse raw?
+    # For now, we return the raw row and let frontend decide how to hydrate Wizard
+    return dict(row)
 
 # --- Webhook Management (Sovereign Integration) ---
 

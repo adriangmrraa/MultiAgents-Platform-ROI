@@ -100,7 +100,8 @@ function App() {
                     <Route path="/forge" element={<BusinessForge />} />
                     <Route path="/stores" element={<Stores />} />
                     <Route path="/agents" element={<Agents />} />
-                    <Route path="/agents/new" element={<DynamicAgentWizard />} />
+                    <Route path="/admin/agents/new" element={<DynamicAgentWizard />} />
+                    <Route path="/admin/agents/:agentId" element={<DynamicAgentWizard />} />
                     <Route path="/logs" element={<Logs />} />
                     <Route path="/analytics" element={<Analytics />} />
                     <Route path="/credentials" element={<Credentials />} />
