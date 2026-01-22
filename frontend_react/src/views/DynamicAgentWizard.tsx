@@ -1,6 +1,7 @@
+import { useRef, useState, useEffect } from 'react'; // Nexus v5.26 Fix
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
-import { Save, Info, Sparkles, ArrowRight, CheckCircle2, RotateCcw, ShieldCheck, AlertCircle, Store, LifeBuoy, Truck, Calendar } from 'lucide-react';
+import { Save, Info, Sparkles, ArrowRight, CheckCircle2, RotateCcw, ShieldCheck, AlertCircle, Store, LifeBuoy, Truck, Calendar, MessageSquare, Send, X, Bot, User, Trash2 } from 'lucide-react';
 
 interface FieldConfig {
     key: string;
@@ -76,315 +77,468 @@ const AGENT_CONFIG_SCHEMA: FieldConfig[] = [
     }
 ];
 
-const { fetchApi, loading } = useApi();
-const navigate = useNavigate();
-const { agentId } = useParams(); // Start editing logic support
-const [schema] = useState<FieldConfig[]>(AGENT_CONFIG_SCHEMA);
-const [templates, setTemplates] = useState<Record<string, any>>({});
-const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-const [formData, setFormData] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
-    AGENT_CONFIG_SCHEMA.forEach(f => initial[f.key] = f.defaultValue);
-    return initial;
-});
-const [isSaving, setIsSaving] = useState(false);
-const [error, setError] = useState<string | null>(null);
-const [success, setSuccess] = useState(false);
-const [resetFeedback, setResetFeedback] = useState<string | null>(null);
-const [improvingFields, setImprovingFields] = useState<Record<string, boolean>>({});
-const [improveError, setImproveError] = useState<string | null>(null);
+// --- Nexus v5.26: Live Preview Panel ---
+const LivePreviewPanel = ({ formData, tenantId = 1 }: { formData: Record<string, any>, tenantId?: number }) => {
+    const { fetchApi } = useApi();
+    const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant', content: string }>>([
+        { role: 'assistant', content: 'Hola, soy tu agente en modo prueba. Edita las reglas a la izquierda y probame en tiempo real.' }
+    ]);
+    const [input, setInput] = useState('');
+    const [isThinking, setIsThinking] = useState(false);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
-// Initial loading is no longer needed via Effect if schema is static, 
-// but kept structure for consistency if dynamic loading is added back.
-useEffect(() => {
-    // Load Templates
-    const loadTemplates = async () => {
+    // Auto-scroll
+    useEffect(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, [messages, isThinking]);
+
+    const handleSend = async () => {
+        if (!input.trim() || isThinking) return;
+        const text = input;
+        setInput('');
+        setMessages(prev => [...prev, { role: 'user', content: text }]);
+        setIsThinking(true);
+
         try {
-            const tpls = await fetchApi('/admin/agent-templates');
-            setTemplates(tpls);
-        } catch (err) {
-            console.error("Failed to load templates", err);
+            // Call Nexus v5.26 Simulation Endpoint
+            // We pass the RAW formData so the backend constructs the transient agent
+            const res = await fetchApi('/admin/agents/simulate', {
+                method: 'POST',
+                body: {
+                    tenant_id: tenantId,
+                    message: text,
+                    formData: formData, // Dynamic overrides
+                    history: messages.slice(-6) // Keep context tight
+                }
+            });
+
+            if (res.status === 'success') {
+                setMessages(prev => [...prev, { role: 'assistant', content: res.response }]);
+            } else {
+                setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Error simulando respuesta.' }]);
+            }
+        } catch (e) {
+            console.error(e);
+            setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Error de conexión con el simulador.' }]);
+        } finally {
+            setIsThinking(false);
         }
     };
-    loadTemplates();
 
-    // Load Agent Data if ID provided (Edit Mode / Sales Config)
-    if (agentId) {
-        // TODO: Implement load logic for specific agent
-    }
-}, [agentId]);
-
-const handleTemplateSelect = (key: string) => {
-    const tpl = templates[key];
-    if (!tpl) return;
-
-    setSelectedTemplate(key);
-    setFormData(prev => ({
-        ...prev,
-        agent_tone: tpl.agent_tone,
-        business_rules: tpl.business_rules,
-        synonym_dictionary: tpl.synonym_dictionary,
-        // Keep specific store fields if they were modified by user, or reset? 
-        // Better to overwrite with template defaults for the AI fields, keep Store Name/Desc
-    }));
-};
-
-const getIconForTemplate = (key: string) => {
-    switch (key) {
-        case 'sales': return <Store size={24} />;
-        case 'support': return <LifeBuoy size={24} />;
-        case 'logistics': return <Truck size={24} />;
-        case 'leads': return <Calendar size={24} />;
-        default: return <Sparkles size={24} />;
-    }
-};
-
-const handleChange = (key: string, value: string) => {
-    setFormData(prev => ({ ...prev, [key]: value }));
-};
-
-const handleResetField = (key: string) => {
-    const field = schema.find(f => f.key === key);
-    if (field) {
-        setFormData(prev => ({ ...prev, [key]: field.defaultValue }));
-        setResetFeedback(`Campo "${field.label}" restaurado al ejemplo.`);
-        setTimeout(() => setResetFeedback(null), 3000);
-    }
-};
-
-const handleImproveField = async (key: string) => {
-    const text = formData[key];
-    if (!text) return;
-
-    setImprovingFields(prev => ({ ...prev, [key]: true }));
-    setImproveError(null);
-    try {
-        // Nexus v5.19 - Calling enriched field improvement endpoint
-        const res = await fetchApi('/admin/ai/improve-prompt', {
-            method: 'POST',
-            body: { text, context: 'field', field: key, tenant_id: 0 }
-        });
-
-        if (res.refined_text) {
-            setFormData(prev => ({ ...prev, [key]: res.refined_text }));
-        }
-    } catch (err: any) {
-        console.error(`Failed to improve field ${key}`, err);
-        if (err.status === 400 || err.message?.includes('API KEY')) {
-            setImproveError('Configura tu API Key de OpenAI en Ajustes para usar la mejora con IA.');
-        } else {
-            setImproveError('Error al procesar la mejora. Revisa tu conexión o configuración.');
-        }
-        setTimeout(() => setImproveError(null), 5000);
-    } finally {
-        setImprovingFields(prev => ({ ...prev, [key]: false }));
-    }
-};
-
-const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
-    setError(null);
-    setSuccess(false);
-
-    // Validation for critical fields
-    const criticalFields = ['agent_tone', 'synonym_dictionary', 'business_rules'];
-    const emptyFields = criticalFields.filter(key => !formData[key]?.trim());
-
-    if (emptyFields.length > 0) {
-        setError(`Los campos críticos (${emptyFields.map(k => schema.find(f => f.key === k)?.label).join(', ')}) no pueden estar vacíos. ¿Quieres cargar el ejemplo por defecto?`);
-        setIsSaving(false);
-        return;
-    }
-
-    try {
-        await fetchApi('/admin/agents', {
-            method: 'POST',
-            body: { ...formData, template_type: selectedTemplate }
-        });
-        setSuccess(true);
-        setTimeout(() => setSuccess(false), 5000);
-    } catch (err: any) {
-        setError(err.message || 'Error al guardar el agente.');
-    } finally {
-        setIsSaving(false);
-    }
-};
-
-if (loading && schema.length === 0) {
     return (
-        <div className="flex items-center justify-center min-h-screen">
-            <Sparkles className="animate-pulse text-accent w-12 h-12" />
-        </div>
-    );
-}
-
-return (
-    <div className="view active animate-fade-in p-6 overflow-y-auto max-w-4xl mx-auto pb-24">
-        {resetFeedback && (
-            <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] bg-accent/90 backdrop-blur text-white px-6 py-3 rounded-full shadow-2xl animate-bounce-subtle flex items-center gap-2 text-sm font-bold">
-                <RotateCcw size={16} />
-                {resetFeedback}
+        <div className="flex flex-col h-full bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+            {/* Header */}
+            <div className="p-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    <span className="font-bold text-white text-sm">Prueba en Vivo</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase tracking-widest text-white/40 border border-white/10 px-2 py-1 rounded-full">Modo Borrador</span>
+                    <button
+                        onClick={() => setMessages([{ role: 'assistant', content: 'Chat reiniciado.' }])}
+                        className="p-1.5 hover:bg-white/10 rounded-full text-white/40 hover:text-white transition-colors"
+                        title="Limpiar Chat"
+                    >
+                        <Trash2 size={14} />
+                    </button>
+                </div>
             </div>
-        )}
 
-        {improveError && (
-            <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl animate-shake flex items-center gap-2 text-sm font-bold">
-                <AlertCircle size={16} />
-                {improveError}
-            </div>
-        )}
-
-        <header className="mb-8">
-            <div className="flex items-center gap-2 text-accent mb-2">
-                <Sparkles size={20} />
-                <span className="text-sm font-bold tracking-widest uppercase">Nexus v5.16 Safety</span>
-            </div>
-            <h1 className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-white/40 mb-4">
-                Dynamic Agent Wizard
-            </h1>
-            <p className="text-secondary max-w-2xl">
-                Crea tu Agente Maestro. Hemos pre-cargado el ejemplo de <span className="text-white font-bold">Pointe Coach</span> para guiarte. Si te pierdes, usa el botón de restaurar.
-            </p>
-        </header>
-
-        {/* Template Selector - Nexus v5.25 */}
-        <div className="mb-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {Object.entries(templates).map(([key, tpl]: [string, any]) => (
-                <button
-                    key={key}
-                    onClick={() => handleTemplateSelect(key)}
-                    type="button"
-                    className={`relative p-5 rounded-2xl border text-left transition-all group ${selectedTemplate === key
-                            ? 'bg-accent/20 border-accent text-white shadow-lg shadow-accent/10'
-                            : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20 text-gray-400 hover:text-white'
-                        }`}
-                >
-                    <div className={`mb-3 ${selectedTemplate === key ? 'text-accent' : 'text-gray-500 group-hover:text-white'}`}>
-                        {getIconForTemplate(key)}
-                    </div>
-                    <h3 className="font-bold text-lg mb-1">{tpl.label}</h3>
-                    <p className="text-xs opacity-70 leading-relaxed">{tpl.description}</p>
-
-                    {selectedTemplate === key && (
-                        <div className="absolute top-4 right-4 text-accent animate-scale-in">
-                            <CheckCircle2 size={18} />
+            {/* Chat Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 font-sans" ref={scrollRef}>
+                {messages.map((m, i) => (
+                    <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${m.role === 'user' ? 'bg-white/10' : 'bg-accent'
+                            }`}>
+                            {m.role === 'user' ? <User size={14} className="text-white" /> : <Bot size={14} className="text-white" />}
                         </div>
-                    )}
-                </button>
-            ))}
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-8">
-            <div className="grid gap-6">
-                {schema.map((field) => (
-                    <div key={field.key} className="glass p-6 rounded-2xl border border-white/5 hover:border-white/10 transition-all group relative">
-                        <div className="flex items-center justify-between mb-4">
-                            <label className="block">
-                                <span className="text-sm font-bold text-gray-300 group-hover:text-white transition-colors">
-                                    {field.label}
-                                    {['agent_tone', 'synonym_dictionary', 'business_rules'].includes(field.key) && (
-                                        <span className="text-accent ml-1">*</span>
-                                    )}
-                                </span>
-                            </label>
-                            <div className="flex items-center gap-3">
-                                {(['agent_tone', 'synonym_dictionary', 'business_rules', 'store_description'].includes(field.key)) && (
-                                    <button
-                                        type="button"
-                                        onClick={() => handleImproveField(field.key)}
-                                        disabled={improvingFields[field.key]}
-                                        className="flex items-center gap-1 text-[10px] text-accent hover:text-white transition-colors disabled:opacity-50"
-                                    >
-                                        <Sparkles size={12} className={improvingFields[field.key] ? 'animate-pulse' : ''} />
-                                        {improvingFields[field.key] ? 'Mejorando...' : 'Mejorar con IA'}
-                                    </button>
-                                )}
-                                <button
-                                    type="button"
-                                    onClick={() => handleResetField(field.key)}
-                                    className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white transition-colors"
-                                    title="Restaurar valor de ejemplo"
-                                >
-                                    <RotateCcw size={12} />
-                                    Restaurar Ejemplo
-                                </button>
-                            </div>
-                        </div>
-
-                        {field.type === 'textarea' ? (
-                            <textarea
-                                value={formData[field.key] || ''}
-                                onChange={(e) => handleChange(field.key, e.target.value)}
-                                placeholder={field.placeholder}
-                                className={`w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:border-accent outline-none transition-all placeholder:text-white/10 ${field.rows && field.rows >= 10 ? 'font-mono text-xs leading-relaxed' : 'text-sm'
-                                    }`}
-                                style={{ minHeight: field.rows ? `${field.rows * 24}px` : '120px' }}
-                            />
-                        ) : (
-                            <input
-                                type="text"
-                                value={formData[field.key] || ''}
-                                onChange={(e) => handleChange(field.key, e.target.value)}
-                                placeholder={field.placeholder}
-                                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-accent outline-none transition-all placeholder:text-white/10"
-                            />
-                        )}
-
-                        <div className="mt-3 flex items-start gap-2 text-xs text-white/40">
-                            <Info size={14} className="mt-0.5 shrink-0" />
-                            <span>{field.description}</span>
+                        <div className={`p-3 rounded-2xl text-sm max-w-[85%] leading-relaxed shadow-sm ${m.role === 'user'
+                                ? 'bg-white/10 text-white rounded-tr-sm'
+                                : 'bg-black/60 border border-white/10 text-white/90 rounded-tl-sm'
+                            }`}>
+                            {m.content}
                         </div>
                     </div>
                 ))}
-            </div>
-
-            {error && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-2xl flex items-start gap-4 animate-shake">
-                    <AlertCircle size={24} className="shrink-0" />
-                    <div>
-                        <p className="font-bold mb-1">Error de Validación</p>
-                        <p className="text-sm opacity-80">{error}</p>
+                {isThinking && (
+                    <div className="flex gap-3">
+                        <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center shrink-0">
+                            <Bot size={14} className="text-white" />
+                        </div>
+                        <div className="bg-black/60 border border-white/10 px-4 py-3 rounded-2xl rounded-tl-sm flex gap-1 items-center">
+                            <div className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <div className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <div className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
                     </div>
+                )}
+            </div>
+
+            {/* Input Area */}
+            <div className="p-3 border-t border-white/10 bg-white/5">
+                <form
+                    onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+                    className="relative flex items-center gap-2"
+                >
+                    <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        placeholder="Escribe un mensaje de prueba..."
+                        className="w-full bg-black/40 border border-white/10 rounded-xl pl-4 pr-10 py-3 text-sm text-white focus:border-accent outline-none placeholder:text-white/20 transition-all"
+                    />
+                    <button
+                        type="submit"
+                        disabled={!input.trim() || isThinking}
+                        className="absolute right-2 p-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg shadow-lg disabled:opacity-0 transition-all transform hover:scale-105"
+                    >
+                        <Send size={14} />
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+export const DynamicAgentWizard = () => {
+    const { fetchApi, loading } = useApi();
+    const navigate = useNavigate();
+    const { agentId } = useParams(); // Start editing logic support
+    const [schema] = useState<FieldConfig[]>(AGENT_CONFIG_SCHEMA);
+    const [templates, setTemplates] = useState<Record<string, any>>({});
+    const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+    const [formData, setFormData] = useState<Record<string, string>>(() => {
+        const initial: Record<string, string> = {};
+        AGENT_CONFIG_SCHEMA.forEach(f => initial[f.key] = f.defaultValue);
+        return initial;
+    });
+    const [isSaving, setIsSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState(false);
+    const [resetFeedback, setResetFeedback] = useState<string | null>(null);
+    const [improvingFields, setImprovingFields] = useState<Record<string, boolean>>({});
+    const [improveError, setImproveError] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Load Templates
+        const loadTemplates = async () => {
+            try {
+                const tpls = await fetchApi('/admin/agent-templates');
+                setTemplates(tpls);
+            } catch (err) {
+                console.error("Failed to load templates", err);
+            }
+        };
+        loadTemplates();
+
+        // Load Agent Data if ID provided (Edit Mode / Sales Config)
+        if (agentId) {
+            // TODO: Implement load logic for specific agent
+        }
+    }, [agentId, fetchApi]);
+
+    const handleLoadTemplate = (key: string) => {
+        const tpl = templates[key];
+        if (!tpl) return;
+
+        setSelectedTemplate(key);
+        setFormData(prev => ({
+            ...prev,
+            agent_tone: tpl.agent_tone,
+            business_rules: tpl.business_rules,
+            synonym_dictionary: tpl.synonym_dictionary,
+            template_type: key // Important for simulation
+        }));
+    };
+
+    const getIconForTemplate = (key: string) => {
+        switch (key) {
+            case 'sales': return <Store size={24} />;
+            case 'support': return <LifeBuoy size={24} />;
+            case 'logistics': return <Truck size={24} />;
+            case 'leads': return <Calendar size={24} />;
+            default: return <Sparkles size={24} />;
+        }
+    };
+
+    const handleChange = (key: string, value: string) => {
+        setFormData(prev => ({ ...prev, [key]: value }));
+    };
+
+    const handleResetField = (key: string) => {
+        const field = schema.find(f => f.key === key);
+        if (field) {
+            setFormData(prev => ({ ...prev, [key]: field.defaultValue }));
+            setResetFeedback(`Campo "${field.label}" restaurado al ejemplo.`);
+            setTimeout(() => setResetFeedback(null), 3000);
+        }
+    };
+
+    const handleImproveField = async (key: string) => {
+        const text = formData[key];
+        if (!text) return;
+
+        setImprovingFields(prev => ({ ...prev, [key]: true }));
+        setImproveError(null);
+        try {
+            const res = await fetchApi('/admin/ai/improve-prompt', {
+                method: 'POST',
+                body: { text, context: 'field', field: key, tenant_id: 0 }
+            });
+
+            if (res.refined_text) {
+                setFormData(prev => ({ ...prev, [key]: res.refined_text }));
+            }
+        } catch (err: any) {
+            console.error(`Failed to improve field ${key}`, err);
+            if (err.status === 400 || err.message?.includes('API KEY')) {
+                setImproveError('Configura tu API Key de OpenAI en Ajustes para usar la mejora con IA.');
+            } else {
+                setImproveError('Error al procesar la mejora. Revisa tu conexión o configuración.');
+            }
+            setTimeout(() => setImproveError(null), 5000);
+        } finally {
+            setImprovingFields(prev => ({ ...prev, [key]: false }));
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSaving(true);
+        setError(null);
+        setSuccess(false);
+
+        const criticalFields = ['agent_tone', 'synonym_dictionary', 'business_rules'];
+        const emptyFields = criticalFields.filter(key => !formData[key]?.trim());
+
+        if (emptyFields.length > 0) {
+            setError(`Los campos críticos (${emptyFields.map(k => schema.find(f => f.key === k)?.label).join(', ')}) no pueden estar vacíos. ¿Quieres cargar el ejemplo por defecto?`);
+            setIsSaving(false);
+            return;
+        }
+
+        try {
+            await fetchApi('/admin/agents', {
+                method: 'POST',
+                body: { ...formData, template_type: selectedTemplate }
+            });
+            setSuccess(true);
+            setTimeout(() => setSuccess(false), 5000);
+        } catch (err: any) {
+            setError(err.message || 'Error al guardar el agente.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    if (loading && schema.length === 0) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <Sparkles className="animate-pulse text-accent w-12 h-12" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="max-w-7xl mx-auto px-6 py-12 relative h-screen overflow-hidden">
+            {resetFeedback && (
+                <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] bg-accent/90 backdrop-blur text-white px-6 py-3 rounded-full shadow-2xl animate-bounce-subtle flex items-center gap-2 text-sm font-bold">
+                    <RotateCcw size={16} />
+                    {resetFeedback}
                 </div>
             )}
 
-            {success && (
-                <div className="bg-green-500/10 border border-green-500/20 text-green-500 p-6 rounded-2xl flex items-center gap-4 animate-fade-in">
-                    <CheckCircle2 size={24} className="shrink-0" />
-                    <p className="font-bold">Agente configurado exitosamente. La Armada se ha actualizado.</p>
+            {improveError && (
+                <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl animate-shake flex items-center gap-2 text-sm font-bold">
+                    <AlertCircle size={16} />
+                    {improveError}
                 </div>
             )}
 
-            {/* Security Footer */}
-            <div className="glass p-8 rounded-3xl border border-accent/10 flex items-center gap-6 mt-12 mb-24 grayscale-[0.5] opacity-80 hover:grayscale-0 hover:opacity-100 transition-all">
-                <div className="bg-accent/20 p-4 rounded-2xl text-accent">
-                    <ShieldCheck size={32} />
+            <button
+                onClick={() => navigate('/agents')}
+                className="mb-8 flex items-center gap-2 text-white/40 hover:text-white transition-colors group"
+            >
+                <div className="p-2 bg-white/5 rounded-xl group-hover:bg-white/10 transition-colors">
+                    <ArrowRight className="rotate-180" size={18} />
                 </div>
-                <div>
-                    <h4 className="font-bold text-white mb-1 uppercase tracking-widest text-xs">Protección de Inteligencia Central</h4>
-                    <p className="text-sm text-secondary leading-relaxed">
-                        Tu agente incluye protección **anti-alucinaciones**, **Sandwich Defense** contra inyecciones y **formato JSON automático**. Tus datos alimentan la plantilla, pero la seguridad de Nexus te protege por detrás.
-                    </p>
+                <span className="font-medium text-sm">Volver a mis Agentes</span>
+            </button>
+
+            {/* Main Grid Layout (Nexus v5.26) */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start h-[calc(100vh-150px)]">
+
+                {/* Left Column: Form (Scrollable) */}
+                <div className="lg:col-span-3 h-full overflow-y-auto pr-2 custom-scrollbar pb-24">
+                    <div className="mb-10">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-3 bg-accent rounded-2xl shadow-lg shadow-accent/20">
+                                <Sparkles className="text-white" size={24} />
+                            </div>
+                            <h1 className="text-4xl font-black text-white tracking-tight">
+                                {agentId ? 'Editar Agente' : 'Nuevo Agente'} {selectedTemplate && <span className="text-white/30 text-2xl font-normal">/ {selectedTemplate}</span>}
+                            </h1>
+                        </div>
+                        <p className="text-white/50 text-lg leading-relaxed max-w-2xl">
+                            Configura el cerebro de tu IA. Nexus inyectará estas reglas en el sistema base <span className="text-accent font-bold">Pointe Coach™</span> para alinear el comportamiento con tu marca.
+                        </p>
+                    </div>
+
+                    {/* Template Selector */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+                        {Object.entries(templates).map(([key, tpl]: [string, any]) => (
+                            <button
+                                key={key}
+                                type="button"
+                                onClick={() => handleLoadTemplate(key)}
+                                className={`
+                                    relative p-4 rounded-2xl border text-left transition-all group overflow-hidden
+                                    ${selectedTemplate === key
+                                        ? 'bg-accent border-accent text-white shadow-xl shadow-accent/20 scale-[1.02]'
+                                        : 'bg-white/5 border-white/10 text-white/60 hover:border-white/30 hover:bg-white/10'}
+                                `}
+                            >
+                                <div className={`mb-3 p-2 rounded-xl w-fit ${selectedTemplate === key ? 'bg-white/20' : 'bg-white/5'}`}>
+                                    {getIconForTemplate(key)}
+                                </div>
+                                <h3 className={`font-bold text-sm mb-1 ${selectedTemplate === key ? 'text-white' : 'text-white'}`}>
+                                    {tpl.label}
+                                </h3>
+                                <p className={`text-[10px] leading-relaxed ${selectedTemplate === key ? 'text-white/80' : 'text-white/40'}`}>
+                                    {tpl.description}
+                                </p>
+                            </button>
+                        ))}
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-8">
+                        <div className="grid gap-6">
+                            {schema.map((field) => (
+                                <div key={field.key} className="glass p-6 rounded-2xl border border-white/5 hover:border-white/10 transition-all group relative">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <label className="block">
+                                            <span className="text-sm font-bold text-gray-300 group-hover:text-white transition-colors">
+                                                {field.label}
+                                                {['agent_tone', 'synonym_dictionary', 'business_rules'].includes(field.key) && (
+                                                    <span className="text-accent ml-1">*</span>
+                                                )}
+                                            </span>
+                                        </label>
+                                        <div className="flex items-center gap-3">
+                                            {(['agent_tone', 'synonym_dictionary', 'business_rules', 'store_description'].includes(field.key)) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleImproveField(field.key)}
+                                                    disabled={improvingFields[field.key]}
+                                                    className="flex items-center gap-1 text-[10px] text-accent hover:text-white transition-colors disabled:opacity-50"
+                                                >
+                                                    <Sparkles size={12} className={improvingFields[field.key] ? 'animate-pulse' : ''} />
+                                                    {improvingFields[field.key] ? 'Mejorando...' : 'Mejorar con IA'}
+                                                </button>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleResetField(field.key)}
+                                                className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white transition-colors"
+                                                title="Restaurar valor de ejemplo"
+                                            >
+                                                <RotateCcw size={12} />
+                                                Restaurar Ejemplo
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {field.type === 'textarea' ? (
+                                        <textarea
+                                            value={formData[field.key] || ''}
+                                            onChange={(e) => handleChange(field.key, e.target.value)}
+                                            placeholder={field.placeholder}
+                                            className={`w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:border-accent outline-none transition-all placeholder:text-white/10 ${field.rows && field.rows >= 10 ? 'font-mono text-xs leading-relaxed' : 'text-sm'
+                                                }`}
+                                            style={{ minHeight: field.rows ? `${field.rows * 24}px` : '120px' }}
+                                        />
+                                    ) : (
+                                        <input
+                                            type="text"
+                                            value={formData[field.key] || ''}
+                                            onChange={(e) => handleChange(field.key, e.target.value)}
+                                            placeholder={field.placeholder}
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-accent outline-none transition-all placeholder:text-white/10"
+                                        />
+                                    )}
+
+                                    <div className="mt-3 flex items-start gap-2 text-xs text-white/40">
+                                        <Info size={14} className="mt-0.5 shrink-0" />
+                                        <span>{field.description}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {error && (
+                            <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-2xl flex items-start gap-4 animate-shake">
+                                <AlertCircle size={24} className="shrink-0" />
+                                <div>
+                                    <p className="font-bold mb-1">Error de Validación</p>
+                                    <p className="text-sm opacity-80">{error}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {success && (
+                            <div className="bg-green-500/10 border border-green-500/20 text-green-500 p-6 rounded-2xl flex items-center gap-4 animate-fade-in">
+                                <CheckCircle2 size={24} className="shrink-0" />
+                                <p className="font-bold">Agente configurado exitosamente. La Armada se ha actualizado.</p>
+                            </div>
+                        )}
+
+                        {/* Security Footer */}
+                        <div className="glass p-8 rounded-3xl border border-accent/10 flex items-center gap-6 mt-12 mb-24 grayscale-[0.5] opacity-80 hover:grayscale-0 hover:opacity-100 transition-all">
+                            <div className="bg-accent/20 p-4 rounded-2xl text-accent">
+                                <ShieldCheck size={32} />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-white mb-1 uppercase tracking-widest text-xs">Protección de Inteligencia Central</h4>
+                                <p className="text-sm text-secondary leading-relaxed">
+                                    Tu agente incluye protección **anti-alucinaciones**, **Sandwich Defense** contra inyecciones y **formato JSON automático**. Tus datos alimentan la plantilla, pero la seguridad de Nexus te protege por detrás.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="fixed bottom-8 right-8 lg:right-[42%] z-50">
+                            <button
+                                type="submit"
+                                disabled={isSaving}
+                                className="bg-accent hover:bg-accent-hover text-white px-8 py-4 rounded-full font-bold shadow-2xl shadow-accent/40 flex items-center gap-3 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50"
+                            >
+                                {isSaving ? (
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                    <Save size={20} />
+                                )}
+                                {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                {/* Right Column: Live Preview (Desktop) */}
+                <div className="hidden lg:flex lg:col-span-2 h-full flex-col sticky top-8">
+                    <LivePreviewPanel formData={formData} />
                 </div>
             </div>
 
-            <div className="fixed bottom-8 right-8 z-50">
+            {/* Mobile Floating Preview Button */}
+            <div className="fixed bottom-8 left-8 z-40 lg:hidden">
                 <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="bg-accent hover:bg-accent-hover text-white px-10 py-5 rounded-full font-bold shadow-2xl shadow-accent/40 flex items-center gap-3 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50"
+                    onClick={() => { }}
+                    className="bg-white text-black p-4 rounded-full shadow-xl font-bold flex items-center gap-2"
                 >
-                    {isSaving ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                        <Save size={20} />
-                    )}
-                    {isSaving ? 'Guardando...' : 'Guardar Configuración Agente'}
-                    <ArrowRight size={18} />
+                    <MessageSquare size={20} />
+                    <span className="text-xs">Probar Chat</span>
                 </button>
             </div>
-        </form>
-    </div >
-);
+        </div>
+    );
 };
