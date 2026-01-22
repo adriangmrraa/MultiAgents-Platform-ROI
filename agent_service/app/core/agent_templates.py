@@ -79,6 +79,7 @@ class SalesTemplate(BaseAgentTemplate):
 
     def filter_tools(self, all_tools: List[Any]) -> List[Any]:
         # Sales agents need everything, especially product search and orders.
+        # They should NOT use 'derivhumano' too early, but we allow it.
         return all_tools
 
 
@@ -96,9 +97,9 @@ class SupportTemplate(BaseAgentTemplate):
 """
     
     def filter_tools(self, all_tools: List[Any]) -> List[Any]:
-        # Support agents might not need extensive catalog browsing if they are just checking orders,
-        # but kept for context. We might prioritize different RAG docs.
-        return all_tools
+        # Support agents should NOT 'browse' vaguely, they need specific answers.
+        # Ban 'browse_general_storefront' to prevent hallucinating new collections.
+        return [t for t in all_tools if t.name not in ["browse_general_storefront"]]
 
 class LeadsTemplate(BaseAgentTemplate):
     def get_system_role(self) -> str:

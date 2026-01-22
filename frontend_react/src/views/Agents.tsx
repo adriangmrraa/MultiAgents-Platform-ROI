@@ -95,9 +95,10 @@ export const Agents: React.FC = () => {
     };
 
     const openEdit = (agent: Agent) => {
-        setFormData(agent);
-        setIsEditing(true);
-        setIsModalOpen(true);
+        // Nexus v5.28: Redirect to Dynamic Wizard for editing
+        if (agent.id) {
+            navigate(`/admin/agents/${agent.id}`);
+        }
     };
 
     const openNew = () => {

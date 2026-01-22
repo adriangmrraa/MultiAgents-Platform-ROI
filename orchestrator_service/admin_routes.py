@@ -4003,8 +4003,8 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
         q = """
             INSERT INTO agents (
                 name, role, tenant_id, user_id, model_provider, model_version, temperature, 
-                system_prompt_template, enabled_tools, channels, is_active, template_type, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+                system_prompt_template, enabled_tools, channels, is_active, template_type, config, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
             RETURNING id
         """
         
@@ -4016,7 +4016,7 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
             agent.name, agent.role, target_tenant_id, str(current_user.id),
             agent.model_provider, validated_model, agent.temperature,
             agent.system_prompt_template, json.dumps(agent.enabled_tools),
-            json.dumps(agent.channels), agent.is_active, agent.template_type
+            json.dumps(agent.channels), agent.is_active, agent.template_type, json.dumps(agent.config or {})
         )
         
         # Update knowledge_sources separately if it exists (for schema flexibility)
@@ -4080,6 +4080,8 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
                 template_type = $10, config = $11, updated_at = NOW()
             WHERE id = $12
         """
+        await db.pool.execute(
+            q,
             agent.name, agent.role, agent.model_provider, validated_model, agent.temperature,
             agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active,
             agent.template_type, json.dumps(agent.config), agent_id
