@@ -934,6 +934,31 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# --- CORS Policy Restoration (Nexus v5.5) ---
+# Hardcoded fallbacks as per mission requirements
+default_origins = [
+    "https://multiagents-frontend.yn8wow.easypanel.host",
+    "http://localhost:3000",
+    "http://localhost:5173"
+]
+
+# Load from ENV if available
+env_origins = os.getenv("ALLOWED_ORIGINS", "")
+if env_origins:
+    extra_origins = [o.strip() for o in env_origins.split(",") if o.strip()]
+    default_origins.extend(extra_origins)
+
+# Deduplicate
+final_origins = list(set(default_origins))
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=final_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(platform_router) # Platform Router (God Mode)
 app.add_middleware(RateLimitMiddleware)
@@ -952,14 +977,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
-# CORS Configuration - Dynamically loaded from settings
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# (CORS Configuration moved to top for startup priority)
 
 # Root Endpoint for basic health checks (Traefik/EasyPanel)
 @app.get("/")
