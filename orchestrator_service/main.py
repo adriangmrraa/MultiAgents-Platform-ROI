@@ -1,15 +1,5 @@
-# ---------------------------------------------------------
-# CRITICAL FIX: ChromaDB SQLite Compatibility Patch
-# Must run before ANY other import that uses sqlite3
-# ---------------------------------------------------------
-import sys
-try:
-    __import__('pysqlite3')
-    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-    print("✅ [BOOT] SQLite patched with pysqlite3-binary", flush=True)
-except ImportError:
-    print("⚠️ [BOOT] pysqlite3-binary not found, using system sqlite3", flush=True)
-# ---------------------------------------------------------
+# Nexus v5.1 - Protocol Omega
+# Orchestrator Service Main Entry
 
 import os
 from dotenv import load_dotenv
@@ -71,6 +61,7 @@ from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_
 
 from db import db, redis_client
 from app.core.credentials import get_tenant_credential # NEW
+from app.core.db_setup import init_rag_db # Supabase RAG Setup
 
 # Configuration & Environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -906,7 +897,11 @@ async def lifespan(app: FastAPI):
 
         logger.info("maintenance_robot_complete", status="tables_verified")
 
-        # 5. Universal Schema Creation (SQLAlchemy)
+        # 5. Supabase RAG Bootstrapper (Auto-Healing pgvector)
+        logger.info("rag_bootstrapper_start")
+        init_rag_db()
+
+        # 6. Universal Schema Creation (SQLAlchemy)
         # CRITICAL: Must import all models to ensure they are registered in Base.metadata
         from app.models.base import Base
         from app.models.tenant import Tenant

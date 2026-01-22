@@ -68,4 +68,9 @@ class Settings(BaseSettings):
     INTERNAL_API_TOKEN: SecretStr = SecretStr("internal_token_fallback")
     ENCRYPTION_KEY: str = "agente-js-secret-key-2024"
 
+    # Supabase (RAG)
+    SUPABASE_URL: str = "https://multiagents-supabase.yn8wow.easypanel.host"
+    SUPABASE_SERVICE_KEY: str | None = None
+    SUPABASE_DB_URL: str = "postgresql://postgres:postgres@supabase-db:5432/postgres"
+
 settings = Settings()

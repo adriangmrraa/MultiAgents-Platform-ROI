@@ -1,31 +1,14 @@
-# --- CRITICAL SQLITE PATCH START ---
-import sys
 import os
-
-# Forzar el uso de pysqlite3 si está disponible
-try:
-    __import__('pysqlite3')
-    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-except ImportError:
-    pass
-
-import sqlite3
-# Loguear la versión real para depuración (aparecerá en logs del contenedor)
-print(f"🔍 [RAG DEBUG] SQLite Version: {sqlite3.sqlite_version}", flush=True)
-
-if sqlite3.sqlite_version < "3.35.0":
-    print("⚠️ [RAG WARNING] SQLite version is too old for ChromaDB. Expect crashes.", flush=True)
-# --- CRITICAL SQLITE PATCH END ---
-
-import shutil
 import uuid
 import structlog
 from typing import List, Dict, Any
 from bs4 import BeautifulSoup
 import requests
+import tempfile
+import re
 
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import SupabaseVectorStore
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from langchain_community.document_loaders import (
@@ -35,68 +18,70 @@ from langchain_community.document_loaders import (
     UnstructuredWordDocumentLoader,
     Docx2txtLoader
 )
-import tempfile
-
-logger = structlog.get_logger()
+from supabase.client import create_client, Client
 
 from app.core.config import settings
 
-# Configuration
-CHROMA_PERSIST_DIRECTORY = "/app/data/chroma"
-OPENAI_API_KEY = settings.OPENAI_API_KEY
+logger = structlog.get_logger(__name__)
 
-import re
+# Configuration from settings
+SUPABASE_URL = settings.SUPABASE_URL
+SUPABASE_SERVICE_KEY = settings.SUPABASE_SERVICE_KEY
+OPENAI_API_KEY = settings.OPENAI_API_KEY
 
 class RAGCore:
     """
     The 'Stellar Map' of the Nexus Business Engine.
-    Handles Persistent Vector Storage using ChromaDB and OpenAI Embeddings.
+    Handles Persistent Vector Storage using Supabase (pgvector) and OpenAI Embeddings.
     """
     
     def __init__(self, tenant_id: str, api_key: str = None, provider: str = "openai"):
-        # Sanitize tenant_id for ChromaDB collection naming rules:
-        sanitized_id = re.sub(r'[^a-zA-Z0-9]', '_', str(tenant_id))
         self.tenant_id = str(tenant_id)
-        # Isolation by Provider to prevent dimension mismatch (OpenAI 1536 vs Google 768)
-        self.collection_name = f"store_{sanitized_id}_{provider}"
-        
-        # Provider selection (v5.1 Multi-Provider RAG)
         self.provider = provider
         self.api_key = api_key or (OPENAI_API_KEY if provider == "openai" else None)
         
+        # Initialize Supabase Client
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+             raise Exception("Supabase credentials missing in configuration.")
+        
+        self.supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        
+        # Provider selection (v5.1 Multi-Provider RAG)
+        # Note: User SQL specifies vector(1536), which is OpenAI compatible.
         if provider == "google":
             from langchain_google_genai import GoogleGenerativeAIEmbeddings
             self.embedding_fn = GoogleGenerativeAIEmbeddings(
                 model="models/embedding-001",
                 google_api_key=self.api_key
             )
+            # CAUTION: Google embeddings are 768 dimensions. 
+            # If the DB table is fixed at 1536, this will fail.
+            # For now, we follow the user's lead on 1536.
         else:
             # Default to OpenAI
-            from langchain_openai import OpenAIEmbeddings
             self.embedding_fn = OpenAIEmbeddings(
                 model="text-embedding-3-small",
                 openai_api_key=self.api_key
             )
             
         try:
-            self._db = Chroma(
-                collection_name=self.collection_name,
-                embedding_function=self.embedding_fn,
-                persist_directory=CHROMA_PERSIST_DIRECTORY
+            self._db = SupabaseVectorStore(
+                client=self.supabase,
+                embedding=self.embedding_fn,
+                table_name="documents",
+                query_name="match_documents"
             )
         except Exception as e:
             import traceback
             tb = traceback.format_exc()
-            logger.error("rag_chroma_init_failed", error=str(e), traceback=tb)
-            raise Exception(f"Failed to initialize Vector Store: {str(e)}. Detailed Cause: {tb[:200]}...")
+            logger.error("rag_supabase_init_failed", error=str(e), traceback=tb)
+            raise Exception(f"Failed to initialize Vector Store: {str(e)}")
 
     async def transform_product_with_llm(self, product: Dict, llm: Any) -> str:
         """
         Uses LLM to transform raw product JSON into a rich, semantic description.
-        This is the "Smart Data Extraction" layer.
         """
         try:
-            # Construct a raw representation for the model
             raw_text = (
                 f"Name: {product.get('name', {}).get('es', '')}\n"
                 f"Description: {product.get('description', {}).get('es', '')}\n"
@@ -105,7 +90,6 @@ class RAGCore:
                 f"Tags: {product.get('tags', '')}"
             )
             
-            # Simple prompt for high-speed transformation (using the passed LLM instance)
             from langchain.schema import SystemMessage, HumanMessage
             
             messages = [
@@ -117,67 +101,55 @@ class RAGCore:
             return response.content
         except Exception as e:
             logger.warning("rag_llm_transform_failed", error=str(e), product_id=product.get("id"))
-            # Fallback to critical fields
             return f"{product.get('name', {}).get('es', '')} - {product.get('description', {}).get('es', '')}"
 
     async def ingest_store(self, product_data: List[Dict], public_url: str = None) -> bool:
         """
         Ingests strict Catalog Data + Public HTML Context into Vector Store.
-        Now async to support LLM calls.
         """
         logger.info(f"rag_ingestion_start: tenant={self.tenant_id}, count={len(product_data)}")
         
         try:
             docs = []
             
-            # Initialize LLM for transformation (Lightweight model)
             from langchain_openai import ChatOpenAI
             llm_transform = ChatOpenAI(
-                model="gpt-4o-mini", # Cost-effective & Fast
+                model="gpt-4o-mini",
                 temperature=0.3,
                 openai_api_key=self.api_key
             )
             
-            # 1. Product Ingestion with "Smart Transformation"
             for p in product_data:
-                # Transform using Model
                 text_content = await self.transform_product_with_llm(p, llm_transform)
                 
-                # Metadata for retrieval
                 metadata = {
                     "source": "catalog", 
                     "product_id": str(p.get("id")),
                     "tenant_id": self.tenant_id,
-                    "price": str(p.get("price", "0")), # Strings for Chroma metadata safety
+                    "price": str(p.get("price", "0")),
                     "handle": p.get("handle", {}).get("es", "")
                 }
                 docs.append(Document(page_content=text_content, metadata=metadata))
                 
-                # Protocol Omega: Balanced Throttle (60 RPM) to prevent 429 on lower tiers 
-                # Reduced from 4s to 1s for better UX while remaining safe.
                 import asyncio
                 await asyncio.sleep(1)
             
-            # 2. HTML Scraper (Contextual DNA) - Kept robust
             if public_url:
                 try:
                     logger.info(f"rag_scraping_url: {public_url}")
                     response = requests.get(public_url, timeout=10)
                     if response.status_code == 200:
                         soup = BeautifulSoup(response.text, "html.parser")
-                        # Extract main text, omitting scripts/styles
                         for script in soup(["script", "style"]):
                             script.extract()
                         text = soup.get_text()
                         
-                        # Chunking Strategy for HTML
                         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
                         html_docs = splitter.create_documents([text], metadatas=[{"source": "website", "url": public_url, "tenant_id": self.tenant_id}])
                         docs.extend(html_docs)
                 except Exception as e:
                     logger.error("rag_scraping_failed", error=str(e))
             
-            # 3. Vectorization & Storage
             if docs:
                 self._db.add_documents(docs)
                 logger.info(f"rag_ingestion_success: count={len(docs)}")
@@ -198,38 +170,28 @@ class RAGCore:
         
         tmp_path = None
         try:
-            # 1. Save to temp file for LangChain loaders
             suffix = os.path.splitext(filename)[1].lower()
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 tmp.write(content)
                 tmp_path = tmp.name
 
-            # 2. Select Loader
             loader = None
-            try:
-                if suffix == '.pdf':
-                    loader = PyPDFLoader(tmp_path)
-                elif suffix == '.txt' or suffix == '.md':
-                    loader = TextLoader(tmp_path, encoding='utf-8')
-                elif suffix == '.csv':
-                    loader = CSVLoader(tmp_path)
-                elif suffix == '.docx':
-                    loader = Docx2txtLoader(tmp_path)
-                elif suffix == '.doc':
-                    loader = UnstructuredWordDocumentLoader(tmp_path)
-            except Exception as loader_init_err:
-                raise Exception(f"Failed to initialize loader for {suffix}: {str(loader_init_err)}")
+            if suffix == '.pdf':
+                loader = PyPDFLoader(tmp_path)
+            elif suffix == '.txt' or suffix == '.md':
+                loader = TextLoader(tmp_path, encoding='utf-8')
+            elif suffix == '.csv':
+                loader = CSVLoader(tmp_path)
+            elif suffix == '.docx':
+                loader = Docx2txtLoader(tmp_path)
+            elif suffix == '.doc':
+                loader = UnstructuredWordDocumentLoader(tmp_path)
             
             if not loader:
-                raise Exception(f"Unsupported file format: {suffix}. Ensure appropriate parser is installed.")
+                raise Exception(f"Unsupported file format: {suffix}")
 
-            # 3. Load and Split
-            try:
-                raw_docs = loader.load()
-            except Exception as load_err:
-                raise Exception(f"Failed to extract text from {filename}: {str(load_err)}. Possible corruption or unsupported version.")
+            raw_docs = loader.load()
             
-            # Enrich metadata
             for d in raw_docs:
                 d.metadata.update(metadata)
                 d.metadata["tenant_id"] = self.tenant_id
@@ -238,21 +200,16 @@ class RAGCore:
             splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
             docs = splitter.split_documents(raw_docs)
 
-            # 4. Vectorize
             if docs:
-                try:
-                    self._db.add_documents(docs)
-                except Exception as vector_err:
-                    raise Exception(f"Vector Database Error: {str(vector_err)}. Check API Key and Provider settings.")
-                
+                self._db.add_documents(docs)
                 logger.info(f"rag_document_ingestion_success: count={len(docs)}")
                 return True
                 
-            raise Exception("No text content could be extracted from the document.")
+            raise Exception("No text content extracted")
 
         except Exception as e:
             logger.error("rag_document_ingestion_failed", error=str(e))
-            raise e # Bubble up to background worker
+            raise e
         finally:
             if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
@@ -260,12 +217,14 @@ class RAGCore:
     def search(self, query: str, k: int = 4, filter: dict = None) -> str:
         """
         Semantic Search for the Agent.
-        Returns a single string block of context.
-        Supports metadata filtering (e.g. by knowledge_sources).
         """
         try:
-            # ChromaDB filter syntax: {"source_id": {"$in": ["id1", "id2"]}}
-            results = self._db.similarity_search(query, k=k, filter=filter)
+            # Combine provided filter with tenant_id for isolation
+            combined_filter = (filter or {}).copy()
+            combined_filter["tenant_id"] = self.tenant_id
+            
+            # SupabaseVectorStore uses similarity_search
+            results = self._db.similarity_search(query, k=k, filter=combined_filter)
             context_block = "\n---\n".join([doc.page_content for doc in results])
             return context_block
         except Exception as e:
@@ -273,16 +232,25 @@ class RAGCore:
             return ""
 
     def count_vectors(self) -> int:
-        return self._db._collection.count()
+        """
+        Counts vectors for this tenant.
+        """
+        try:
+            resp = self.supabase.table("documents").select("id", count="exact").eq("metadata->>tenant_id", self.tenant_id).execute()
+            return resp.count if resp.count is not None else 0
+        except Exception as e:
+            logger.error("rag_count_failed", error=str(e))
+            return 0
 
     def delete_document_by_metadata(self, key: str, value: str) -> bool:
         """
-        Deletes vectors matching specific metadata (e.g., {'source_id': '123'}).
+        Deletes vectors matching specific metadata.
         """
         try:
             logger.info(f"rag_deletion_start: {key}={value}")
-            # ChromaDB specific delete
-            self._db.delete(where={key: value})
+            # Direct Supabase delete
+            # metadata is a jsonb column
+            self.supabase.table("documents").delete().eq(f"metadata->>{key}", value).eq("metadata->>tenant_id", self.tenant_id).execute()
             return True
         except Exception as e:
             logger.error("rag_deletion_failed", error=str(e))

@@ -17,8 +17,6 @@ Pillow
 tiktoken
 prometheus-client
 requests
-chromadb
-pysqlite3-binary
 beautifulsoup4
 sse-starlette
 passlib[bcrypt]
@@ -29,3 +27,6 @@ email-validator
 fastapi-mail
 pypdf
 docx2txt
+supabase
+psycopg2-binary
+vecs
