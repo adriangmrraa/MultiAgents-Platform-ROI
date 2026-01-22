@@ -12,3 +12,4 @@ python-dotenv
 prometheus-client
 requests
 langchain-google-genai
+tiktoken

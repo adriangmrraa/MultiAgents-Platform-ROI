@@ -3747,15 +3747,15 @@ async def list_knowledge_files(current_user: User = Depends(get_current_user)):
 
 from fastapi import File, UploadFile
 
-@router.post("/knowledge/upload")
+@router.post("/knowledge/upload", status_code=202)
 async def upload_knowledge_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Sovereign Knowledge Upload (v5.1).
-    Validates format, inserts pending record, and triggers async ingestion.
+    Sovereign Knowledge Upload (v5.12).
+    Harden: Uses Disk Buffering + BackgroundTasks to prevent Timeouts (504).
     """
     tenant_id = current_user.tenant_id
     filename = file.filename
@@ -3767,7 +3767,7 @@ async def upload_knowledge_file(
     if ext not in allowed_extensions:
         raise HTTPException(400, f"Unsupported file format: {ext}. Allowed: {', '.join(allowed_extensions)}")
 
-    # 1b. Sovereign Credential Check (Protocol v5.1)
+    # 1b. Sovereign Credential Check
     from admin_routes import get_tenant_credential
     openai_key = await get_tenant_credential(tenant_id, "openai")
     google_key = await get_tenant_credential(tenant_id, "google")
@@ -3776,19 +3776,35 @@ async def upload_knowledge_file(
         logger.warning(f"knowledge_upload_blocked_no_keys: tenant {tenant_id}")
         raise HTTPException(400, "Missing AI Credentials: No OpenAI or Google API keys found in vault.")
 
-    # 2. Read File Info
-    content = await file.read()
-    file_size = len(content)
+    # 2. Disk Buffering (Prevent 504 Timeouts)
+    import shutil
+    import uuid
+    import tempfile
     
-    # 3. Insert into DB (Pending)
+    # Create temp directory if not exists
+    temp_dir = os.path.join(tempfile.gettempdir(), "nexus_uploads")
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    doc_uuid = str(uuid.uuid4())
+    temp_path = os.path.join(temp_dir, f"{doc_uuid}{ext}")
+    
+    try:
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        file_size = os.path.getsize(temp_path)
+    except Exception as e:
+        logger.error(f"Failed to buffer upload: {e}")
+        raise HTTPException(500, "Buffered storage failure")
+
+    # 3. Insert into DB (Status: processing)
     doc_id = await db.pool.fetchval("""
-        INSERT INTO rag_documents (tenant_id, user_id, filename, file_type, file_size, status, created_at)
-        VALUES ($1, $2, $3, $4, $5, 'processing', NOW())
+        INSERT INTO rag_documents (id, tenant_id, user_id, filename, file_type, file_size, status, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, 'processing', NOW())
         RETURNING id
-    """, tenant_id, str(current_user.id), filename, file_type, file_size)
+    """, doc_uuid, tenant_id, str(current_user.id), filename, file_type, file_size)
     
-    # 4. Trigger Async Sovereign Processing
-    background_tasks.add_task(process_knowledge_ingestion, doc_id, tenant_id, str(current_user.id), content, filename)
+    # 4. Trigger Async Sovereign Processing with Disk Path
+    background_tasks.add_task(process_knowledge_ingestion, str(doc_id), tenant_id, str(current_user.id), temp_path, filename)
 
     return {
         "status": "processing",
@@ -3796,12 +3812,10 @@ async def upload_knowledge_file(
         "filename": filename
     }
 
-async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str, content: bytes, filename: str):
+async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str, file_path: str, filename: str):
     """
     Background Task: Sovereign RAG Ingestion.
-    1. Fetches Tenant Credentials.
-    2. Initializes RAGCore with Sovereign Key.
-    3. Ingests and updates DB status.
+    Refactored for v5.12: Reads from disk and ensures cleanup.
     """
     logger.info(f"process_knowledge_bg_start: doc={doc_id}, tenant={tenant_id}")
     try:
@@ -3829,6 +3843,10 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str,
         from app.core.rag import RAGCore
         rag = RAGCore(str(tenant_id), user_id=user_id, api_key=api_key, provider=provider)
         
+        # Read content from disk
+        with open(file_path, "rb") as f:
+            content = f.read()
+            
         # Add metadata for link/cleanup
         metadata = {"source_id": str(doc_id)}
         
@@ -3852,35 +3870,53 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str,
             "stack": "process_knowledge_ingestion"
         })
         await db.pool.execute("UPDATE rag_documents SET status = 'error', meta = $2 WHERE id = $1", doc_id, meta)
+    finally:
+        # 3. Cleanup temp file
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logger.info(f"process_knowledge_cleanup_success: {file_path}")
+        except Exception as ce:
+            logger.warning(f"process_knowledge_cleanup_failed: {ce}")
 
 
 @router.delete("/knowledge/{doc_id}")
 @safe_db_call
 async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_current_user)):
     """
-    Delete a file from the knowledge base.
+    Delete a file from the knowledge base (v5.12).
+    Harden: Implements transactional cascading delete to prevent "Zombie Knowledge".
     """
     tenant_id = current_user.tenant_id
+    user_id = str(current_user.id)
     
-    # Verify ownership
-    exists = await db.pool.fetchval("SELECT 1 FROM rag_documents WHERE id = $1 AND tenant_id = $2", doc_id, tenant_id)
-    if not exists:
-        raise HTTPException(404, "File not found or access denied")
+    # 1. Verify ownership and existence
+    doc_row = await db.pool.fetchrow("SELECT tenant_id, user_id FROM rag_documents WHERE id = $1", doc_id)
+    if not doc_row:
+        raise HTTPException(404, "Knowledge file not found")
         
-    await db.pool.execute("DELETE FROM rag_documents WHERE id = $1", doc_id)
-    
-    # Trigger RAG deletion from Chroma
+    if doc_row['tenant_id'] != tenant_id or str(doc_row['user_id']) != user_id:
+        raise HTTPException(403, "Access denied: You can only delete your own documents.")
+
+    # 2. Transactional Cascading Delete (Vectors First!)
     try:
         from app.core.rag import RAGCore
-        rag = RAGCore(str(tenant_id), user_id=str(current_user.id))
-        # Assuming we index files with metadata 'source_id' = doc_id OR 'file_id' = doc_id
-        # Since ingest is simulated, we implement the DELETE side correctly so it works when ingest is real.
-        # We'll use 'source_id' as the standard key for file-based docs.
-        rag.delete_document_by_metadata("source_id", doc_id)
+        rag = RAGCore(str(tenant_id), user_id=user_id)
+        
+        # Mandamiento de Búsqueda/Borrado: Filter by user_id and source_id
+        # RagCore.delete_document_by_metadata already includes user_id and tenant_id filters internally
+        deleted_vectors = rag.delete_document_by_metadata("source_id", doc_id)
+        if not deleted_vectors:
+             logger.warning(f"No vectors found for document {doc_id}, proceeding with DB deletion.")
+             
+        # 3. Delete DB record ONLY if vector cleanup attempt was made
+        await db.pool.execute("DELETE FROM rag_documents WHERE id = $1", doc_id)
+        logger.info(f"cascading_delete_success: doc={doc_id}")
+        return {"status": "deleted", "id": doc_id}
+        
     except Exception as e:
-        logger.error(f"Failed to clean up vectors for doc {doc_id}: {e}")
-    
-    return {"status": "deleted", "id": doc_id}
+        logger.error(f"cascading_delete_failed: doc={doc_id}, error={e}")
+        raise HTTPException(500, f"Failure during cascading delete: {str(e)}")
 
 # --- Agents Management (QA Phase 3) ---
 

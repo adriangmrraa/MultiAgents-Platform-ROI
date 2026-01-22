@@ -1,0 +1,51 @@
+{
+    "fields": [
+        {
+            "key": "business_name",
+            "label": "Nombre del Negocio",
+            "type": "text",
+            "description": "Nombre de la tienda/empresa.",
+            "defaultValue": "Pointe Coach"
+        },
+        {
+            "key": "business_context",
+            "label": "Descripción Comercial (Contexto)",
+            "type": "textarea",
+            "rows": 3,
+            "description": "Explica brevemente qué vendes y cuál es tu propuesta de valor.",
+            "defaultValue": "Tienda líder en danza y ballet, distribuidores oficiales de las mejores marcas internacionales."
+        },
+        {
+            "key": "tone_and_personality",
+            "label": "Personalidad y Tono del Agente",
+            "type": "textarea",
+            "rows": 5,
+            "description": "Define el estilo de habla (ej: voseo, formal, uso de emojis).",
+            "defaultValue": "Hablá como una compañera de danza experta. Usá 'vos', sé cálida y empática. Solo usá el signo de pregunta al final (?). Evitá el exceso de signos de admiración."
+        },
+        {
+            "key": "synonym_dictionary",
+            "label": "Diccionario de Sinónimos (Mapeo Inteligente)",
+            "type": "textarea",
+            "rows": 10,
+            "description": "Define cómo tus clientes llaman informalmente a tus productos. Formato: CATEGORÍA REAL: sinónimo1, sinónimo2.",
+            "defaultValue": "ZAPATILLAS DE PUNTA: puntas, pointe shoes, calzado de punta, pointe.\\nMEDIA PUNTA: media punta, zapatillas de ensayo, slippers de ballet.\\nLEOTARDOS: malla, mallas, body, maillot, enteriza."
+        },
+        {
+            "key": "business_rules",
+            "label": "Reglas de Oro del Negocio",
+            "type": "textarea",
+            "rows": 7,
+            "description": "Instrucciones críticas, procesos especiales y política de envíos.",
+            "defaultValue": "1. FITTING (SOLO PUNTAS): Ofrecelo exclusivamente para zapatillas de punta. Si acepta, derivar.\\n2. ENVÍOS: Trabajamos con Correo Argentino. El costo se calcula al final de la compra según ubicación.\\n3. PROHIBIDO: Dar guías técnicas de cuidado de calzado."
+        },
+        {
+            "key": "catalog_knowledge",
+            "label": "Conocimiento de Categorías",
+            "type": "textarea",
+            "rows": 5,
+            "description": "Mapa mental de tus categorías principales para búsquedas proactivas.",
+            "defaultValue": "- Zapatillas: Puntas, Media punta.\\n- Accesorios: Elásticos, Cintas, Punteras.\\n- Otros: Bolsos, Leotardos."
+        }
+    ]
+}
