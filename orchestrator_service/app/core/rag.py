@@ -1,13 +1,3 @@
-import sys
-import sqlite3
-
-# Fix for ChromaDB in environments Docker/Linux antiguos (SQLite < 3.35)
-try:
-    import pysqlite3
-    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-except ImportError:
-    pass
-
 import os
 import shutil
 import uuid

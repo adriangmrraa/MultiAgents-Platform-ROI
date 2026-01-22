@@ -1,3 +1,16 @@
+# ---------------------------------------------------------
+# CRITICAL FIX: ChromaDB SQLite Compatibility Patch
+# Must run before ANY other import that uses sqlite3
+# ---------------------------------------------------------
+import sys
+try:
+    __import__('pysqlite3')
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+    print("✅ [BOOT] SQLite patched with pysqlite3-binary", flush=True)
+except ImportError:
+    print("⚠️ [BOOT] pysqlite3-binary not found, using system sqlite3", flush=True)
+# ---------------------------------------------------------
+
 import os
 from dotenv import load_dotenv
 
