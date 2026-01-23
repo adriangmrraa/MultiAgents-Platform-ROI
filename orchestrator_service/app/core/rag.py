@@ -211,31 +211,51 @@ class RAGCore:
                      # Just re-raise for now.
                      raise
             elif suffix == '.txt' or suffix == '.md':
-                # v5.49 WhatsApp Parser Intercept
-                # Check if it looks like a WhatsApp chat?
-                # Or just use WhatsAppParser for all TXT?
-                # Parser is robust enough to handle normal text too?
-                # Let's try WhatsAppParser first, if it returns structured docs (with timestamps), good.
-                # Logic: If content has [Date time], it parses. Else, maybe it returns empty or lines?
-                # WhatsAppParser as implemented returns docs. if not matching regex, it skips lines.
-                # That's risky for normal TXT. 
-                # Better: Check content signature or use hero_name presence as trigger?
-                # User Requirement: "Nuevo Parser... Input: .txt". 
-                # Let's read the file content string to decide or just default to TextLoader if generic.
-                
-                # For now, let's read text.
-                with open(tmp_path, 'r', encoding='utf-8') as f:
-                    text_content = f.read()
-                
-                # Heuristic: [dd/mm/yy
-                if re.search(r"^\s*\[?\d{1,2}/\d{1,2}", text_content[:100]):
-                     logger.info("rag_parser_whatsapp_detected")
-                     # Use the class directly on content string
+                # v5.57: Robust Encoding Fallback (UTF-8 -> Latin-1)
+                text_content = ""
+                try:
+                    # v5.59: Encoding Ladder (UTF-8-SIG > UTF-8 > Latin-1)
+                    with open(tmp_path, 'r', encoding='utf-8-sig') as f:
+                        text_content = f.read()
+                except UnicodeDecodeError:
+                    try:
+                        with open(tmp_path, 'r', encoding='utf-8') as f:
+                            text_content = f.read()
+                    except UnicodeDecodeError:
+                        logger.warning("rag_encoding_fallback_latin1", filename=filename)
+                        with open(tmp_path, 'r', encoding='latin-1') as f:
+                            text_content = f.read()
+
+                if not text_content.strip():
+                    raise Exception("El archivo está vacío o corrupto (No text content extracted).")
+
+                # v5.57: Strict Routing & Parser Activation
+                # Priority 1: Explicit Identity Collection (ADN Personal + Hero Name)
+                if collection == "ADN Personal" and hero_name:
+                     logger.info("rag_parser_identity_mode_forced", hero=hero_name)
+                     from app.core.parsers.whatsapp import WhatsAppParser
                      raw_docs = WhatsAppParser.parse(text_content, hero_name=hero_name, source_name=filename)
+                     
+                     if not raw_docs:
+                         logger.warning("rag_parser_identity_no_docs", reason="Parsing returned empty list")
+                         # Fallback to TextLoader if Parser failing is not acceptable? 
+                         # User said: "Nunca hagas fallback a 'General'".
+                         # We should probably error out if it was meant to be parsed but failed?
+                         # Or we allow it to be stored as a flat document in 'ADN Personal'.
+                         # Let's fallback to flat text but KEEP collection 'ADN Personal'.
+                         raw_docs = [Document(page_content=text_content, metadata={"source": filename})]
+
+                # Priority 2: Auto-Detection (Legacy behavior)
+                elif re.search(r"^\s*\[?\d{1,2}/\d{1,2}", text_content[:100]):
+                     logger.info("rag_parser_whatsapp_detected_auto")
+                     from app.core.parsers.whatsapp import WhatsAppParser
+                     raw_docs = WhatsAppParser.parse(text_content, hero_name=hero_name, source_name=filename)
+                
+                # Priority 3: Plain Text
                 else:
                      logger.info("rag_parser_standard_text")
-                     loader = TextLoader(tmp_path, encoding='utf-8')
-                     raw_docs = loader.load()
+                     # We already read the content, so we create Document directly to avoid re-reading
+                     raw_docs = [Document(page_content=text_content, metadata={"source": filename})]
 
             elif suffix == '.csv':
                 loader = CSVLoader(tmp_path)

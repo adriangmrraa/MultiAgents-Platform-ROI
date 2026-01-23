@@ -16,74 +16,73 @@ class WhatsAppParser:
     # Regex to capture "[Date Time] Name: Message"
     # Example: [21/01/2026 14:30:00] Cliente: Hola que tal
     # regex slightly flexible for different exported formats (iOS vs Android)
-    MSG_PATTERN = re.compile(r"^\[?(\d{1,2}/\d{1,2}/\d{2,4},?\s+\d{1,2}:\d{2}(?::\d{2})?)\]?\s+([^:]+):\s+(.*)$")
+    # v5.59: New Strict Pattern for Spanish formats [dd/mm/yy, hh:mm:ss p. m.]
+    # Captures: 1=Timestamp, 2=Sender, 3=Message
+    MSG_PATTERN = re.compile(r"^\[(.*?)\] (.*?): (.*)$")
 
     @staticmethod
     def parse(file_content: str, hero_name: Optional[str] = None, source_name: str = "whatsapp_chat") -> List[Document]:
-        lines = file_content.split('\n')
+        # Clean invisible unicode characters (LTR marks, etc)
+        # v5.59: Advanced Cleaning
+        cleaned_content = file_content.replace('\u200e', '').replace('\u202f', ' ').replace('\u202d', '').replace('\u202c', '')
+        lines = cleaned_content.split('\n')
+        
         documents = []
-        
-        current_buffer = [] # For simple grouping if needed, or keeping context
-        
-        # We will parse line by line.
-        # If Hero Mode is active:
-        # We accumulate "Other" messages. When "Hero" speaks, we form a training pair:
-        # Input: [Other messages]
-        # Output: [Hero message]
-        # And we vectorise that pair for "Style Retrieval".
-        
-        # If Hero Mode is OFF (Knowledge Base Mode):
-        # We just vectorize blocks of conversation to provide factual context.
-        
-        context_window = []
+        context_window = [] # Stores "Other" messages as input context
         
         for line in lines:
             line = line.strip()
             if not line: continue
             
+            # v5.59: Noise Filtering
+            if "<adjunto:" in line or "encryp" in line.lower() or "cifrados" in line.lower():
+                continue
+            
+            # Check for direct links without text (low value style)
+            if line.startswith("http") and " " not in line:
+                continue
+
             match = WhatsAppParser.MSG_PATTERN.match(line)
             if match:
                 timestamp_str, sender, message = match.groups()
-                # Clean characters
-                sender = sender.replace("\u202a", "").replace("\u202c", "").strip() 
+                sender = sender.strip()
+                message = message.strip()
                 
                 if hero_name and sender.lower() == hero_name.lower():
-                    # It's the HERO.
-                    # Create a document that captures the CONTEXT leading up to this answer.
+                    # --- HERO SPEAKS (OUTPUT) ---
+                    # We form a pair: Input (Context) -> Output (Hero)
                     if context_window:
-                        # Join context
                         context_str = "\n".join(context_window)
-                        full_content = f"CONTEXT:\n{context_str}\n\nRESPONSE ({sender}):\n{message}"
+                        
+                        # Style Training Pair
+                        full_content = f"User said:\n{context_str}\n\nHero replied:\n{message}"
                         
                         doc = Document(
                             page_content=full_content,
                             metadata={
                                 "source": source_name,
+                                "collection": "ADN Personal", # Enforced by logic
                                 "type": "style_training",
                                 "hero": sender,
-                                "timestamp": timestamp_str,
-                                "role": "assistant"
+                                "role": "hero_response",
+                                "timestamp": timestamp_str
                             }
                         )
                         documents.append(doc)
-                        # Reset context? Or keep sliding? 
-                        # Usually for Q&A pairs we reset, but sliding might be better. 
-                        # Let's simple reset for clear Q&A pairs.
+                        
+                        # Reset context after usage
                         context_window = []
                     else:
-                        # Hero spoke without context? Maybe start of chat or monologue.
-                        # Just digest it as knowledge.
+                        # Hero spoke first or monologue. We skip or log?
+                        # For style, monologue is less useful without prompt.
                         pass
                 else:
-                    # It's SOMEONE ELSE.
-                    # Add to context window.
-                    context_window.append(f"[{timestamp_str}] {sender}: {message}")
+                    # --- OTHER SPEAKS (INPUT) ---
+                    # Add to context accumulator
+                    context_window.append(message)
                     
-                    # Also, if functionality is just "Ingest Facts", we might want to store this raw message too.
-                    # But for now, let's assume the user wants either Context Pairs (Hero) or just full chat.
-                    
+                    # If not in Hero Mode (Standard), we just save the line
                     if not hero_name:
-                         # Standard Mode: Just document the line
                          doc = Document(
                             page_content=f"[{timestamp_str}] {sender}: {message}",
                             metadata={
@@ -94,10 +93,10 @@ class WhatsAppParser:
                         )
                          documents.append(doc)
             else:
-                # Continuation of previous message?
+                # Line didn't match pattern. Continuation?
+                # If we have a context window, append to last message?
                 if context_window and not hero_name:
-                     # Append to last doc if needed? 
-                     # Simplifying: Ignore non-matching lines (system messages like "Messages are encrypted")
+                     # Simple continuation for standard mode
                      pass
 
         logger.info("whatsapp_parsed", docs_generated=len(documents), mode="hero" if hero_name else "standard")

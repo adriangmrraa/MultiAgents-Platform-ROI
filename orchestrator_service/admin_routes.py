@@ -4566,7 +4566,8 @@ async def rag_search(
     q: str, 
     tenant_id: int, 
     user_id: Optional[str] = None, 
-    source_ids: Optional[str] = None
+    source_ids: Optional[str] = None,
+    collection: Optional[str] = None # Nexus v5.60: Collection Filtering
 ):
     """
     Standard Knowledge Base Retrieval.
@@ -4580,8 +4581,10 @@ async def rag_search(
         filters = {}
         if source_ids:
             # Metadata filter logic would go here if supported by SupabaseVectorStore filter syntax
-            # For now, we assume standard retrieval
             pass
+            
+        if collection:
+            filters["collection"] = collection
             
         context = rag.search(q, k=4, filter=filters)
         return {"ok": True, "context": context}

@@ -111,14 +111,25 @@ const LivePreviewPanel = ({ formData, tenantId = 1 }: { formData: Record<string,
         try {
             // Call Nexus v5.26 Simulation Endpoint
             // We pass the RAW formData so the backend constructs the transient agent
+            // v5.58 Fix: Provide full identity context
+            const payload = {
+                tenant_id: tenantId || 1,
+                message: text,
+                history: messages.slice(-6), // Keep context tight
+                // Transient Agent Config
+                agent_config: {
+                    name: formData['store_name'] || "Agente Simulado",
+                    tenant_id: tenantId || 1,
+                    role: 'sales',
+                    model_version: 'gpt-4o',
+                    ...formData,
+                    template_type: formData['template_type']
+                }
+            };
+
             const res = await fetchApi('/admin/agents/simulate', {
                 method: 'POST',
-                body: {
-                    tenant_id: tenantId,
-                    message: text,
-                    formData: formData, // Dynamic overrides
-                    history: messages.slice(-6) // Keep context tight
-                }
+                body: payload
             });
 
             if (res.status === 'success') {
@@ -322,19 +333,39 @@ export const DynamicAgentWizard = () => {
         const emptyFields = criticalFields.filter(key => !formData[key]?.trim());
 
         if (emptyFields.length > 0) {
-            setError(`Los campos críticos (${emptyFields.map(k => schema.find(f => f.key === k)?.label).join(', ')}) no pueden estar vacíos. ¿Quieres cargar el ejemplo por defecto?`);
+            setError(`Los campos críticos (${emptyFields.map(k => schema.find(f => f.key === k)?.label).join(', ')}) no pueden estar vacíos.`);
             setIsSaving(false);
             return;
         }
 
         try {
-            await fetchApi('/admin/agents', {
-                method: 'POST',
-                body: { ...formData, template_type: selectedTemplate }
+            // Nexus v5.58 Fix: Construct Valid Payload for Pydantic Schema
+            // The backend expects 'name', 'tenant_id' at root level. 
+            // We assume editing the first agent or a specific one.
+            // For now, we hardcode defaults or fetch from context if available.
+            // Warning: logic assumes we are updating the current active agent or creating one.
+
+            // To create/update properly, we need the agent identity. 
+            // If creating, we provide defaults. If editing, we should ideally have the agent object.
+            // Since we don't have full agent state here, we infer.
+            const payload = {
+                name: formData['store_name'] || "Agente de Ventas",
+                tenant_id: 1, // Fallback default, ideally from useApi/Context
+                role: 'sales',
+                model_version: 'gpt-4o',
+                ...formData, // Flatten config fields
+                template_type: selectedTemplate
+            };
+
+            await fetchApi(agentId ? `/admin/agents/${agentId}` : '/admin/agents', {
+                method: agentId ? 'PUT' : 'POST',
+                body: payload
             });
+
             setSuccess(true);
             setTimeout(() => setSuccess(false), 5000);
         } catch (err: any) {
+            console.error("Save Error:", err);
             setError(err.message || 'Error al guardar el agente.');
         } finally {
             setIsSaving(false);

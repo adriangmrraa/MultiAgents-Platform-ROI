@@ -256,6 +256,75 @@ async def derivhumano(reason: str):
 async def health():
     return {"status": "ok", "service": "agent_service"}
 
+
+# --- Nexus v5.60: Hybrid Memory Routing ---
+async def retrieve_context(
+    query: str, 
+    tenant_id: int, 
+    user_id: Optional[str], 
+    headers: Dict[str, str], 
+    orch_url: str,
+    shadow_enabled: bool = False
+) -> str:
+    """
+    Mult-Source Context Fusion:
+    1. ADN Personal (Style/Personality) - Mandatory
+    2. Shadow RAG (Recent History) - Conditional
+    3. General (Technical Manuals) - Supplemental
+    """
+    context_accumulator = ""
+    
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        # Source 1: ADN Personal (Identity)
+        try:
+            resp_adn = await client.get(
+                f"{orch_url}/admin/rag/search", 
+                params={"q": query, "tenant_id": tenant_id, "user_id": user_id, "collection": "ADN Personal"},
+                headers=headers
+            )
+            if resp_adn.status_code == 200:
+                data = resp_adn.json()
+                if data.get("ok") and data.get("context"):
+                    if data["context"].strip():
+                        context_accumulator += f"\n\n### GUÍA DE ESTILO (ADN PERSONAL):\n{data['context']}\n"
+        except Exception as e:
+            logger.warning("rag_adn_fetch_failed", error=str(e))
+
+        # Source 2: Shadow RAG (Memory)
+        if shadow_enabled and user_id:
+            try:
+                resp_shadow = await client.get(
+                    f"{orch_url}/admin/rag/shadow-search", 
+                    params={"q": query, "tenant_id": tenant_id, "user_id": user_id},
+                    headers=headers
+                )
+                if resp_shadow.status_code == 200:
+                    data = resp_shadow.json()
+                    if data.get("ok") and data.get("results"):
+                        shadow_results = data["results"]
+                        shadow_block = "\n".join([f"- [{item['metadata'].get('timestamp','?')}]: {item['content']}" for item in shadow_results])
+                        if shadow_block:
+                            context_accumulator += f"\n\n### CONTEXTO RECIENTE (SHADOW MEMORY):\n{shadow_block}\n"
+            except Exception as e:
+                logger.warning("rag_shadow_fetch_failed", error=str(e))
+
+        # Source 3: General Knowledge (Manuals/Policies)
+        try:
+            resp_gen = await client.get(
+                f"{orch_url}/admin/rag/search", 
+                params={"q": query, "tenant_id": tenant_id, "user_id": user_id, "collection": "General"},
+                headers=headers
+            )
+            if resp_gen.status_code == 200:
+                data = resp_gen.json()
+                if data.get("ok") and data.get("context"):
+                     if data["context"].strip():
+                        context_accumulator += f"\n\n### INFORMACIÓN TÉCNICA (MANUALES):\n{data['context']}\n"
+        except Exception as e:
+             logger.warning("rag_general_fetch_failed", error=str(e))
+             
+    return context_accumulator
+
 @app.post("/v1/agent/execute")
 async def execute_agent(
     request: AgentThinkRequest,
@@ -287,53 +356,27 @@ async def execute_agent(
     # 1.1 Apply Rolling Window Memory Management (Nexus v5.13)
     history = prune_history(raw_history, max_tokens=4000)
 
-    # 1.2 SHADOW RAG RETRIEVAL (Hybrid Brain v5.34)
-    shadow_context_block = ""
-    # Check if enabled in Agent Config (passed via request.agent_config)
-    if request.agent_config and getattr(request.agent_config, 'shadow_rag_enabled', False):
-        try:
-            orch_url = os.getenv("ORCHESTRATOR_URL", "http://orchestrator_service:8000")
-            headers = {"X-Internal-Secret": x_internal_secret, "x-admin-token": os.getenv("ADMIN_TOKEN", "admin-secret-99")}
-            
-            # Need user_id or contact info. In AgentThinkRequest we have user_id (for RAG isolation) or we infer from history?
-            # request.user_id is the primary identifier (e.g., phone number or uuid)
-            
-            # We assume request.user_id is set correctly by Orchestrator
-            if request.user_id:
-                async with httpx.AsyncClient(timeout=5.0) as client: # Fast timeout
-                    # 1. Style Retrieval
-                    # We don't have 'circle' info here easily unless passed in metadata. 
-                    # Orchestrator should pass it in context or we blindly search.
-                    # We'll just search for "General Context" for now based on user.
-                    
-                    # Fetch "Facts/Topics"
-                    # We query "temas importantes" or just use recent history content to find semantic matches
-                    last_user_msg = next((m['content'] for m in reversed(request.history) if m['role'] == 'user'), "")
-                    
-                    if last_user_msg:
-                        resp = await client.get(
-                            f"{orch_url}/admin/rag/shadow-search", 
-                            params={"q": last_user_msg, "tenant_id": request.tenant_id, "user_id": request.user_id},
-                            headers=headers
-                        )
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            if data.get("ok") and data.get("results"):
-                                shadow_results = data["results"]
-                                # Format context
-                                shadow_context_block = "\n\n### CONTEXTO HISTÓRICO Y ESTILO (SHADOW RAG):\n"
-                                shadow_context_block += "Usa este contexto para mantener la continuidad, PERO NO inventes hechos nuevos.\n"
-                                for item in shadow_results:
-                                    content = item.get("content", "").replace("\n", " ")
-                                    meta = item.get("metadata", {})
-                                    ts = meta.get("timestamp", "?")
-                                    shadow_context_block += f"- [{ts}]: {content}\n"
-        except Exception as e:
-            logger.warning("shadow_rag_fetch_failed", error=str(e))
+    # 1.2 HYBRID MEMORY ROUTING (Nexus v5.60)
+    hybrid_context_block = ""
+    orch_url = os.getenv("ORCHESTRATOR_URL", "http://orchestrator_service:8000")
+    headers = {"X-Internal-Secret": x_internal_secret, "x-admin-token": os.getenv("ADMIN_TOKEN", "admin-secret-99")}
+    
+    # Extract last user message for query
+    last_user_msg = next((m['content'] for m in reversed(request.history) if m['role'] == 'user'), "")
+    
+    if last_user_msg:
+        hybrid_context_block = await retrieve_context(
+            query=last_user_msg,
+            tenant_id=request.tenant_id,
+            user_id=request.user_id,
+            headers=headers,
+            orch_url=orch_url,
+            shadow_enabled=getattr(request.agent_config, 'shadow_rag_enabled', False) if request.agent_config else False
+        )
             
     # 2. Build Prompt
     # Protocol Omega: Inject Tool Instructions
-    final_system_prompt = request.context.system_prompt + shadow_context_block
+    final_system_prompt = request.context.system_prompt + hybrid_context_block
     if request.agent_config and request.agent_config.tool_instructions:
         final_system_prompt += "\n\n### PROTOCOLO DE HERRAMIENTAS ACTIVAS:"
         for instr in request.agent_config.tool_instructions:
