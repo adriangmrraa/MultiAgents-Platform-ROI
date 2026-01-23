@@ -3950,15 +3950,53 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
 
     logger.info(f"rag_precision_delete_start: target='{target_vector_source}' doc={doc_id}")
 
-    # 2. Vector Attempt (Precision)
+    # 2. Vector Attempt (Precision + Offline Fallback)
     try:
         from app.core.rag import RAGCore
+        # Try standard RAGCore first (Requires OpenAI Key)
         rag = RAGCore(str(tenant_id), user_id=user_id)
         
         if target_vector_source:
              rag.delete_vectors(target_vector_source)
+             
     except Exception as e:
-        logger.warning(f"rag_precision_delete_skipped: error={e}") 
+        logger.warning(f"rag_init_failed: {e}. Attempting Offline Deletion Mode...")
+        
+        # Nexus v5.77: Offline Vector Deletion Fix
+        # If OpenAI Key is missing, usage of FakeEmbeddings allows deletion of metadata.
+        if target_vector_source:
+            try:
+                from langchain_community.vectorstores import SupabaseVectorStore
+                from supabase.client import create_client
+                from app.core.config import settings
+
+                # Mock Class for Embeddings
+                class MockEmbeddings:
+                    def embed_documents(self, texts): return [[0.0]*1536] * len(texts)
+                    def embed_query(self, text): return [0.0]*1536
+                
+                logger.info("⚠️ Manual Override: Switching to MockEmbeddings for Vector Deletion.")
+                
+                # Direct Supabase Client
+                supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+                
+                # VectorStore with Mock
+                vector_store = SupabaseVectorStore(
+                    client=supabase, 
+                    embedding=MockEmbeddings(), 
+                    table_name="documents",
+                    query_name="match_documents"
+                )
+                
+                # Execute Deletion (Metadata Only)
+                vector_store.delete(filter={
+                    "source": target_vector_source, 
+                    "tenant_id": str(tenant_id)
+                })
+                logger.info(f"rag_offline_delete_success: target='{target_vector_source}'")
+                
+            except Exception as inner_e:
+                logger.error(f"rag_offline_delete_failed: {inner_e}")
 
     # 3. Disk Attempt (Silent)
     # file_path is now safely defined (None if missing)
