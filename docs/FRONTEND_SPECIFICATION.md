@@ -17,6 +17,7 @@
 | `/settings/integrations` | `MetaOnboardingWizard.tsx` | **Meta Diplomat UI**: Explicit asset selection (Pages/WA) after Sovereign Connection. |
 | `/chats` | `Chats.tsx` | Omnichannel HUD with human handoff controls. |
 | `/platform` | `PlatformTower.tsx`| Global metrics and infrastructure health for SuperAdmin. |
+| `/knowledge` | `Knowledge.tsx` | **Sovereign Library**: Master-Detail view with Collections Sidebar. Implements **Hard Delete** and **Hero Identity** parsing. |
 
 ---
 
@@ -61,9 +62,20 @@ interface Tenant {
 }
 ```
 
+
 ---
 
-## 4. API Integration Strategy (`useApi.ts`)
+## 4. Identity & Knowledge (Hero Engine)
+
+### `HeroIdentityModal`
+Componente modal que se activa automáticamente al subir un archivo `.txt` en la colección "ADN Personal".
+- **Trigger**: Detección de extensión `.txt` + Colección `ADN Personal`.
+- **Input**: `Hero Name` (String).
+- **Output**: Inyecta `hero_name` en el `FormData` de subida para activar el `WhatsAppParser` en el backend.
+
+---
+
+## 5. API Integration Strategy (`useApi.ts`)
 
 The `useApi` hook remains the single point of contact with the backend, implementing the **Sovereign Handshake**:
 

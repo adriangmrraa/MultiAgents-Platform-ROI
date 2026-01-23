@@ -31,13 +31,32 @@ El usuario arrastra un archivo PDF.
     -   Inserta vectores en ChromaDB con metadatos `{ source: filename, tenant_id: 123 }`.
 4.  **Completion**: Actualiza el status SQL a `active`.
 
-### 2. Eliminación (Olvido)
-Cuando el usuario borra un archivo:
--   **Frontend**: `DELETE /admin/knowledge/{id}`.
--   **Backend**:
-    -   Borra el registro SQL.
-    -   Borra el archivo físico.
-    -   **Crítico**: Ejecuta `chroma.delete(where={"source": filename})` para eliminar el "conocimiento" del cerebro. Si esto falla, el bot seguiría recordando el documento borrado (Zombie Knowledge).
+### 2. Eliminación (Olvido - Hard Delete)
+Cuando el usuario borra un archivo, se ejecuta un proceso atómico de 3 pasos (Hard Delete Sincronizado):
+1.  **Supabase Vector Delete**: Se eliminan los vectores filtrando por `metadata={'source': filename}`. Esto es crítico para evitar "Zombie Knowledge".
+2.  **File System Purge**: Se borra el archivo físico del disco.
+3.  **SQL Delete**: Solo si los pasos anteriores tienen éxito, se elimina el registro de la base de datos PostgreSQL.
+
+Este flujo asegura que no queden datos huérfanos ni en el vector store ni en el disco.
+
+---
+
+## 3. Arquitectura de Colecciones
+
+El sistema ahora organiza los documentos en agrupaciones lógicas (`collection`) para segmentar el conocimiento:
+
+*   **General**: Documentos técnicos, manuales y políticas generales (PDF/DOCX).
+*   **ADN Personal (Chats)**: Historiales de conversación (.txt) usados para la clonación de estilo y entrenamiento de personalidad.
+
+## 4. El Parser de WhatsApp (Identity Engine)
+
+Al subir un archivo `.txt` a la colección **ADN Personal**, se dispara el `WhatsAppParser`.
+
+*   **Input**: Archivo crudo + `hero_name` (Nombre del usuario/marca en el chat).
+*   **Lógica**: El parser discrimina entre:
+    *   **Contexto**: Lo que dijeron otros participantes.
+    *   **Estilo**: Lo que dijo el Héroe (usado para entrenar al agente en mimetismo).
+*   **Vectorización**: Se generan pares de contexto/respuesta para stored patterns.
 
 ---
 

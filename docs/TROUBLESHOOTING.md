@@ -39,3 +39,12 @@ Este documento recopila los errores más comunes encontrados durante el desplieg
     1. Revisa los logs del servicio `orchestrator`.
     2. Si ves errores relacionados con `init_db()` o `AttributeError: Database object has no attribute execute`, asegúrate de estar usando la versión `fix11` del código (Nexus v5.9).
     3. Verifica que la base de datos esté aceptando conexiones antes de que el backend intente inicializar.
+
+## 5. Errores de Arquitectura (Backend v5.5+)
+
+### Error: `ImportError: cannot import name 'Base'` o `cannot import name 'get_db'`
+*   **Causa**: Dependencias circulares. `main.py` importa `models`, que importa `db`, que a su vez importaba `models` (Ciclo de la Muerte).
+*   **Solución**:
+    1. **Arquitectura Limpia**: `db.py` debe ser "puro" (solo define engine, session, Base). **NUNCA** debe importar modelos.
+    2. **Inyección Inversa**: Los modelos deben importar `Base` desde `db.py`.
+    3. **Router Deps**: Asegúrate de que `app/api/deps.py` exporte correctamente las funciones que `app/api/templates.py` intenta importar.

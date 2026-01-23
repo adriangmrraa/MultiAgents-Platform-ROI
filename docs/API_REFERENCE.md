@@ -34,3 +34,18 @@ Disparador manual para el bootstrapper de Supabase/pgvector.
 ### 🔄 Actualizar Agente
 `PUT /admin/agents/{id}`
 *   **Intelligent Sync**: Si cambias a un modelo **Premium**, el sistema ajustará automáticamente los timeouts de respuesta en el `agent_service`.
+
+## Gestión de Conocimiento (Knowledge v5.56)
+
+### 📤 Upload Document (RAG)
+`POST /admin/knowledge/upload`
+*   **Content-Type**: `multipart/form-data`
+*   **Parámetros**:
+    *   `file`: (Binary) Archivo PDF, DOCX, TXT.
+    *   `collection`: (String) Nombre de la colección (ej. 'General', 'ADN Personal').
+    *   `hero_name`: (String, Opcional) Nombre del Héroe para el `WhatsAppParser` si la colección es de identidad.
+
+### 🗑️ Delete Document
+`DELETE /admin/knowledge/{id}`
+*   **Comportamiento Destructivo**: Esta operación es **irreversible** en Supabase.
+*   **Performance**: Puede tardar 1-2 segundos en retornar mientras limpia los vectores embebidos del clúster de ChromaDB.

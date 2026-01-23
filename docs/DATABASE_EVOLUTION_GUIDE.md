@@ -115,6 +115,21 @@ CREATE TABLE IF NOT EXISTS tools (
 *   **`chat_messages`**: Nueva columna `is_shadow_indexed` (Boolean) para controlar el worker de memoria.
 *   **ChromaDB**: Nueva colección `chats_vectors` con metadatos extendidos (`participant`, `role`, `timestamp`).
 
+### `documents` (RAG Knowledge Base - v5.48+)
+Tabla espejo de los vectores en Supabase/Chroma para gestión de integridad.
+```sql
+CREATE TABLE IF NOT EXISTS documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id INTEGER REFERENCES tenants(id),
+    content TEXT,
+    metadata JSONB DEFAULT '{}',
+    collection VARCHAR(255) DEFAULT 'General', -- v5.56: Segmentation
+    file_path TEXT, -- v5.56: Hard Delete Sync
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX idx_documents_collection ON documents(collection);
+```
+
 ## 4. Identificadores y Migración
 
 ### UUID vs Integers
@@ -149,5 +164,16 @@ RESTART IDENTITY CASCADE;
 Las credenciales de la tienda se destruyen permanentemente al eliminar el tenant.
 
 ---
+
+---
+
+## 6. Estabilidad del Core (v5.55)
+
+### Refactorización de Arquitectura (Circular Import Fix)
+En la versión v5.55 se refactorizó `app/db.py` para eliminar importaciones circulares que bloqueaban el arranque.
+
+*   **db.py Puro**: Ahora solo define `Base`, `engine`, `AsyncSessionLocal` y `get_db`. **NUNCA** debe importar modelos.
+*   **Modelos**: Importan `Base` desde `db.py` (o `app.models.base`).
+*   **Main**: Importa los modelos después de la inicialización de la DB.
 
 **© 2026 Platform AI Solutions - Sovereign Data Engineering**
