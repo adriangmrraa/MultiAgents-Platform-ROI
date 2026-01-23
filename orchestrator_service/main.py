@@ -39,6 +39,7 @@ from app.api.deps import get_current_tenant_webhook, get_current_tenant_header
 from app.models.customer import Customer # Schema Drift Prevention
 from app.models.template import WhatsAppTemplate # v5.42 WhatsApp Module
 from app.models.rag import Document # v5.48 RAG Collections
+from app.workers.shadow_indexer import ShadowIndexer # v5.32 Shadow RAG
 
 # --- Dynamic Context ---
 tenant_store_id: ContextVar[Optional[str]] = ContextVar("tenant_store_id", default=None)
@@ -1869,33 +1870,32 @@ async def chat_endpoint(
             ) RETURNING id
         """, media_uuid, tenant_id, channel, m.provider_id, m.type, m.mime_type or "application/octet-stream", m.file_name, m.url)
     
-from app.workers.shadow_indexer import ShadowIndexer
 
-    # Store User Message
-    correlation_id = event.correlation_id or str(uuid.uuid4())
-    content = event.text or "" # Can be empty if just image
-    user_msg_id = uuid.uuid4()
-    
-    await db.pool.execute("""
-        INSERT INTO chat_messages (
-            id, tenant_id, conversation_id, role, content, 
-            correlation_id, created_at, message_type, media_id, from_number, channel_source
-        ) VALUES (
-            $1, $2, $3, $4, $5,
-            $6, NOW(), $7, $8, $9, $10
-        )
-    """, user_msg_id, tenant_id, conv_id, event.role, content, correlation_id, message_type, media_id, event.from_number, event.channel_source)
+        # Store User Message
+        correlation_id = event.correlation_id or str(uuid.uuid4())
+        content = event.text or "" # Can be empty if just image
+        user_msg_id = uuid.uuid4()
+        
+        await db.pool.execute("""
+            INSERT INTO chat_messages (
+                id, tenant_id, conversation_id, role, content, 
+                correlation_id, created_at, message_type, media_id, from_number, channel_source
+            ) VALUES (
+                $1, $2, $3, $4, $5,
+                $6, NOW(), $7, $8, $9, $10
+            )
+        """, user_msg_id, tenant_id, conv_id, event.role, content, correlation_id, message_type, media_id, event.from_number, event.channel_source)
 
-    # Nexus v5.32: Shadow RAG Ingestion (User Message)
-    background_tasks.add_task(ShadowIndexer.process_message, str(user_msg_id), tenant_id)
-    
-    # Update Conversation Metadata
-    preview_text = content[:50] if content else f"[{message_type}]"
-    await db.pool.execute("""
-        UPDATE chat_conversations 
-        SET last_message_at = NOW(), last_message_preview = $1, updated_at = NOW()
-        WHERE id = $2
-    """, preview_text, conv_id)
+        # Nexus v5.32: Shadow RAG Ingestion (User Message)
+        background_tasks.add_task(ShadowIndexer.process_message, str(user_msg_id), tenant_id)
+        
+        # Update Conversation Metadata
+        preview_text = content[:50] if content else f"[{message_type}]"
+        await db.pool.execute("""
+            UPDATE chat_conversations 
+            SET last_message_at = NOW(), last_message_preview = $1, updated_at = NOW()
+            WHERE id = $2
+        """, preview_text, conv_id)
 
     # CHECK LOCKOUT: If locked, Abort AI
     if is_locked:

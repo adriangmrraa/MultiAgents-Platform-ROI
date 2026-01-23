@@ -30,101 +30,60 @@ const AGENT_CONFIG_SCHEMA: FieldConfig[] = [
         "placeholder": "",
         "description": "ADVERTENCIA: Si activas esto, el agente leerá el historial de chats pasados para imitar el estilo y recordar contexto. Consume más tokens."
     },
+
     {
         "key": "store_description",
-// ... (rest of fields unchanged until rendering)
-
-// Inside render loop:
-                                    {
-        field.type === 'textarea' ? (
-            <textarea
-                value={formData[field.key] || ''}
-                onChange={(e) => handleChange(field.key, e.target.value)}
-                placeholder={field.placeholder}
-                className={`w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:border-accent outline-none transition-all placeholder:text-white/10 ${field.rows && field.rows >= 10 ? 'font-mono text-xs leading-relaxed' : 'text-sm'
-                    }`}
-                style={{ minHeight: field.rows ? `${field.rows * 24}px` : '120px' }}
-            />
-        ) : field.type === 'toggle' ? (
-            <div className="flex items-center justify-between bg-black/40 border border-white/10 rounded-xl p-4">
-                <div className="text-sm text-gray-300">{field.placeholder || "Activar función"}</div>
-                <button
-                    type="button"
-                    onClick={() => handleChange(field.key, formData[field.key] === 'true' ? 'false' : 'true')}
-                    className={`relative w-12 h-6 rounded-full transition-colors ${formData[field.key] === 'true' ? 'bg-accent' : 'bg-gray-600'}`}
-                >
-                    <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${formData[field.key] === 'true' ? 'translate-x-6' : ''}`} />
-                </button>
-            </div>
-        ) : (
-            <input
-                type="text"
-                value={formData[field.key] || ''}
-                onChange={(e) => handleChange(field.key, e.target.value)}
-                placeholder={field.placeholder}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-accent outline-none transition-all placeholder:text-white/10"
-            />
-        )
-    }
-        "label": "Nombre del Negocio",
-    "type": "text",
-    "defaultValue": "Pointe Coach",
-    "placeholder": "Ej: Ferrería Central",
-    "description": "El nombre oficial de tu tienda que usará el agente para presentarse."
-    },
-{
-    "key": "store_description",
         "label": "Descripción Comercial (Contexto)",
-            "type": "textarea",
-                "rows": 5,
-                    "defaultValue": "Pointe Coach es una tienda especializada en artículos de danza y ballet, distribuidores oficiales de las mejores marcas internacionales. Ofrecemos zapatillas de punta, media punta, indumentaria y accesorios técnicos para bailarines de todos los niveles.",
-                        "placeholder": "Ej: Distribuidora líder de herramientas industriales y para el hogar con más de 20 años de experiencia.",
-                            "description": "El 'Quiénes Somos' que le da contexto al cerebro del agente."
-},
-{
-    "key": "agent_tone",
+        "type": "textarea",
+        "rows": 5,
+        "defaultValue": "Pointe Coach es una tienda especializada en artículos de danza y ballet, distribuidores oficiales de las mejores marcas internacionales. Ofrecemos zapatillas de punta, media punta, indumentaria y accesorios técnicos para bailarines de todos los niveles.",
+        "placeholder": "Ej: Distribuidora líder de herramientas industriales y para el hogar con más de 20 años de experiencia.",
+        "description": "El 'Quiénes Somos' que le da contexto al cerebro del agente."
+    },
+    {
+        "key": "agent_tone",
         "label": "Personalidad / Tono",
-            "type": "textarea",
-                "rows": 15,
-                    "defaultValue": "## TONO Y PERSONALIDAD (ARGENTINA 'BUENA ONDA')\n\n* **Estilo:** Hablá como una compañera de danza experta. Usá 'vos', sé cálida y empática.\n* **Puntuación (ESTRICTO):** Usá solo el signo de pregunta al final (?), nunca el de apertura (¿). Evitá el exceso de signos de admiración; si los usás, solo al final (!) y de forma muy medida.\n* **Prohibido:** No uses 'usted', 'su', 'has', 'podéis'. No uses frases de telemarketing.\n* **Naturalidad:** Usá frases puente como 'Mirá', 'Te cuento', 'Fijate', 'Dale'.\n* **Empatía:** Si el usuario te pregunta '¿Cómo estás?', respondé con calidez y preguntale a él también antes de avanzar. Si el usuario tiene dudas o problemas (talle, dolor), validá su sentimiento y ofrecé ayuda.",
-                        "placeholder": "Ej: Formal, serio y profesional. Usa 'Usted' y evita modismos.",
-                            "description": "Define la voz de tu marca. Copia este formato para especificar dialectos, uso de emojis y reglas de puntuación estrictas."
-},
-{
-    "key": "synonym_dictionary",
+        "type": "textarea",
+        "rows": 15,
+        "defaultValue": "## TONO Y PERSONALIDAD (ARGENTINA 'BUENA ONDA')\n\n* **Estilo:** Hablá como una compañera de danza experta. Usá 'vos', sé cálida y empática.\n* **Puntuación (ESTRICTO):** Usá solo el signo de pregunta al final (?), nunca el de apertura (¿). Evitá el exceso de signos de admiración; si los usás, solo al final (!) y de forma muy medida.\n* **Prohibido:** No uses 'usted', 'su', 'has', 'podéis'. No uses frases de telemarketing.\n* **Naturalidad:** Usá frases puente como 'Mirá', 'Te cuento', 'Fijate', 'Dale'.\n* **Empatía:** Si el usuario te pregunta '¿Cómo estás?', respondé con calidez y preguntale a él también antes de avanzar. Si el usuario tiene dudas o problemas (talle, dolor), validá su sentimiento y ofrecé ayuda.",
+        "placeholder": "Ej: Formal, serio y profesional. Usa 'Usted' y evita modismos.",
+        "description": "Define la voz de tu marca. Copia este formato para especificar dialectos, uso de emojis y reglas de puntuación estrictas."
+    },
+    {
+        "key": "synonym_dictionary",
         "label": "Diccionario de Sinónimos (Mapeo Inteligente)",
-            "type": "textarea",
-                "rows": 20,
-                    "defaultValue": "## DICCIONARIO DE SINÓNIMOS\n\n* **ZAPATILLAS DE PUNTA:** puntas, zapatillas de punta, pointe, pointe shoes, calzado de punta, etc.\n* **MEDIA PUNTA:** media punta, medias puntas, zapatillas de media punta, zapatillas de ensayo, zapatillas de tela, slippers de ballet.\n* **MEDIAS:** medias, medias de ballet, medias de danza, medias convertibles, convertible socks, panty, pantymedia.\n* **BOLSOS:** bolso, bolso de danza, bolso de ballet, mochila de danza, mochila para ballet, bag de danza.\n* **LEOTARDOS:** malla, mallas, leotardo, leotard, maillot, body, malla de ballet, body de danza, enterito, enteriza, malla entera.\n* **PUNTERAS:** punteras, punteras de gel, almohadillas para puntas, protectores de dedos, pads de punteras.\n* **PROTECTORES DE PUNTAS:** protectores de puntas, toppers de puntas, protectores de punta de gel.\n* **METATARSIANAS:** metatarsianas, almohadillas metatarsianas, pads metatarsianas, gel metatarsianas.\n* **CINTAS:** cintas, cintas de satén, cintas elásticas, satén ballet ribbons.",
-                        "placeholder": "CATEGORÍA_REAL: sinónimo1, sinónimo2",
-                            "description": "CRÍTICO: El agente usa esto para entender jerga. Formato obligatorio: CATEGORÍA_REAL: sinónimo1, sinónimo2. Si tu cliente dice 'puntas', el agente buscará 'Zapatillas de Punta'."
-},
-{
-    "key": "business_rules",
+        "type": "textarea",
+        "rows": 20,
+        "defaultValue": "## DICCIONARIO DE SINÓNIMOS\n\n* **ZAPATILLAS DE PUNTA:** puntas, zapatillas de punta, pointe, pointe shoes, calzado de punta, etc.\n* **MEDIA PUNTA:** media punta, medias puntas, zapatillas de media punta, zapatillas de ensayo, zapatillas de tela, slippers de ballet.\n* **MEDIAS:** medias, medias de ballet, medias de danza, medias convertibles, convertible socks, panty, pantymedia.\n* **BOLSOS:** bolso, bolso de danza, bolso de ballet, mochila de danza, mochila para ballet, bag de danza.\n* **LEOTARDOS:** malla, mallas, leotardo, leotard, maillot, body, malla de ballet, body de danza, enterito, enteriza, malla entera.\n* **PUNTERAS:** punteras, punteras de gel, almohadillas para puntas, protectores de dedos, pads de punteras.\n* **PROTECTORES DE PUNTAS:** protectores de puntas, toppers de puntas, protectores de punta de gel.\n* **METATARSIANAS:** metatarsianas, almohadillas metatarsianas, pads metatarsianas, gel metatarsianas.\n* **CINTAS:** cintas, cintas de satén, cintas elásticas, satén ballet ribbons.",
+        "placeholder": "CATEGORÍA_REAL: sinónimo1, sinónimo2",
+        "description": "CRÍTICO: El agente usa esto para entender jerga. Formato obligatorio: CATEGORÍA_REAL: sinónimo1, sinónimo2. Si tu cliente dice 'puntas', el agente buscará 'Zapatillas de Punta'."
+    },
+    {
+        "key": "business_rules",
         "label": "Reglas de Oro del Negocio",
-            "type": "textarea",
-                "rows": 20,
-                    "defaultValue": "## REGLAS UNIVERSALES DE SEGURIDAD (NO BORRAR):\n1. VERACIDAD ABSOLUTA: Está PROHIBIDO inventar precios, stock, variantes o fechas de entrega. Si la herramienta no te da el dato, decí \"No tengo esa información en este momento\" y derivá a un humano.\n2. ALCANCE: Solo respondé preguntas relacionadas con la tienda, los productos y el proceso de compra. Si te preguntan de política, religión o competencia, respondé amablemente que solo podés ayudar con productos de la tienda.\n3. DERIVACIÓN INTELIGENTE: Usá la tool `derivhumano` inmediatamente si: (A) El cliente está enojado o frustrado. (B) Hay un problema con un pago o envío demorado. (C) Piden hablar con una persona.\n4. PROMOCIONES: Solo mencioná descuentos o cupones si aparecen explícitamente en la tool `cupones_list`. No asumas que hay envíos gratis a menos que sea una regla confirmada.\n5. ANTI-REPETICIÓN: Si ya mostraste un producto y el usuario pide \"más opciones\" pero no hay más, decí la verdad. No repitas los mismos productos como si fueran nuevos.\n\n## REGLAS ESPECÍFICAS DE ESTE NEGOCIO (EJEMPLO - MODIFICAR):\n6. FITTING (EJEMPLO): Ofrecelo exclusivamente para zapatillas de punta. Si acepta, derivar a humano.\n7. ENVÍOS (EJEMPLO): Trabajamos con Andreani. El costo se calcula en el checkout.",
-                        "placeholder": "1. Regla de envíos...\n2. Regla de devoluciones...",
-                            "description": "Incluye reglas base de seguridad. Mantené las primeras 5 y modificá las reglas específicas (punto 6 en adelante) según tu negocio."
-},
-{
-    "key": "catalog_summary",
+        "type": "textarea",
+        "rows": 20,
+        "defaultValue": "## REGLAS UNIVERSALES DE SEGURIDAD (NO BORRAR):\n1. VERACIDAD ABSOLUTA: Está PROHIBIDO inventar precios, stock, variantes o fechas de entrega. Si la herramienta no te da el dato, decí \"No tengo esa información en este momento\" y derivá a un humano.\n2. ALCANCE: Solo respondé preguntas relacionadas con la tienda, los productos y el proceso de compra. Si te preguntan de política, religión o competencia, respondé amablemente que solo podés ayudar con productos de la tienda.\n3. DERIVACIÓN INTELIGENTE: Usá la tool `derivhumano` inmediatamente si: (A) El cliente está enojado o frustrado. (B) Hay un problema con un pago o envío demorado. (C) Piden hablar con una persona.\n4. PROMOCIONES: Solo mencioná descuentos o cupones si aparecen explícitamente en la tool `cupones_list`. No asumas que hay envíos gratis a menos que sea una regla confirmada.\n5. ANTI-REPETICIÓN: Si ya mostraste un producto y el usuario pide \"más opciones\" pero no hay más, decí la verdad. No repitas los mismos productos como si fueran nuevos.\n\n## REGLAS ESPECÍFICAS DE ESTE NEGOCIO (EJEMPLO - MODIFICAR):\n6. FITTING (EJEMPLO): Ofrecelo exclusivamente para zapatillas de punta. Si acepta, derivar a humano.\n7. ENVÍOS (EJEMPLO): Trabajamos con Andreani. El costo se calcula en el checkout.",
+        "placeholder": "1. Regla de envíos...\n2. Regla de devoluciones...",
+        "description": "Incluye reglas base de seguridad. Mantené las primeras 5 y modificá las reglas específicas (punto 6 en adelante) según tu negocio."
+    },
+    {
+        "key": "catalog_summary",
         "label": "Resumen de Categorías",
-            "type": "textarea",
-                "rows": 8,
-                    "defaultValue": "- Zapatillas: Puntas, Media punta.\n- Medias: Convertibles, Socks, Contemporáneo, Poliamida, Patín.\n- Accesorios: Metatarsianas, Bolsa de red, Elásticos, Cintas, Endurecedor de puntas, Punteras, Protectores.\n- Otros: Bolsos, Leotardos.",
-                        "placeholder": "Lista de tus categorías principales.",
-                            "description": "Mapa mental de tus categorías principales para búsquedas proactivas."
-},
-{
-    "key": "store_website",
+        "type": "textarea",
+        "rows": 8,
+        "defaultValue": "- Zapatillas: Puntas, Media punta.\n- Medias: Convertibles, Socks, Contemporáneo, Poliamida, Patín.\n- Accesorios: Metatarsianas, Bolsa de red, Elásticos, Cintas, Endurecedor de puntas, Punteras, Protectores.\n- Otros: Bolsos, Leotardos.",
+        "placeholder": "Lista de tus categorías principales.",
+        "description": "Mapa mental de tus categorías principales para búsquedas proactivas."
+    },
+    {
+        "key": "store_website",
         "label": "URL de la Web",
-            "type": "text",
-                "defaultValue": "https://www.pointecoach.shop",
-                    "placeholder": "https://tu-tienda.com",
-                        "description": "Link principal para el Call to Action final."
-}
+        "type": "text",
+        "defaultValue": "https://www.pointecoach.shop",
+        "placeholder": "https://tu-tienda.com",
+        "description": "Link principal para el Call to Action final."
+    }
 ];
 
 // --- Nexus v5.26: Live Preview Panel ---
