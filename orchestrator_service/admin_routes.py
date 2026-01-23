@@ -3944,17 +3944,29 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     # We bypass LangChain/RAGCore entirely and hit the Supabase 'documents' table directly.
     if target_source:
         try:
-            logger.info(f"rag_nuclear_delete: source='{target_source}' tenant='{tenant_id}'")
+            # 1. Diagnostic Logging
+            target_tenant = str(tenant_id)
+            logger.info(f"🔍 DEBUG TARGET: filename='{target_source}' tenant='{target_tenant}'")
             
+            # 2. Query with Defensive Casting & Return
+            # We use ::text to ensure strict string comparison against JSONB values
             query = """
                 DELETE FROM documents 
                 WHERE metadata->>'source' = $1 
-                AND metadata->>'tenant_id' = $2;
+                AND (metadata->>'tenant_id')::text = $2::text
+                RETURNING id;
             """
-            # Ensure we cast tenant_id to string for JSONB comparison
-            await db.pool.execute(query, target_source, str(tenant_id))
             
-            logger.info("rag_nuclear_delete_success")
+            # 3. Execute and Count
+            deleted_rows = await db.pool.fetch(query, target_source, target_tenant)
+            count = len(deleted_rows)
+            
+            # 4. Result Logging
+            logger.info(f"💥 SQL RESULT: Deleted {count} vectors from Supabase.")
+            
+            if count == 0:
+                logger.warning("⚠️ GHOST DELETE: SQL ran but found no matches. Check metadata formatting in Supabase.")
+                
         except Exception as e:
             logger.error(f"rag_nuclear_delete_error: {e}")
             # Non-blocking, proceed to clean remnants
