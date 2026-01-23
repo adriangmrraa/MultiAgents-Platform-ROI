@@ -3932,7 +3932,8 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
 
     # 1. Recuperar datos locales (DB Auth/App)
     # Usamos el pool normal de la app
-    doc = await db.pool.fetchrow("SELECT id, filename, tenant_id, file_path, storage_path FROM rag_documents WHERE id=$1", doc_id)
+    # Nexus v5.87: Schema Fix - Removed file_path/storage_path to prevent UndefinedColumnError
+    doc = await db.pool.fetchrow("SELECT id, filename, tenant_id FROM rag_documents WHERE id=$1", doc_id)
     
     if not doc:
         raise HTTPException(404, "Knowledge file not found")
@@ -3972,16 +3973,7 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     else:
         logger.error("❌ CONFIG ERROR: SUPABASE_DB_URL is missing. Cannot delete vectors.")
     
-    # 3. BORRADO DE ARCHIVO FÍSICO (Si existe)
-    file_path = doc.get('file_path') or doc.get('storage_path')
-    if file_path and os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-            logger.info(f"🗑️ FS CLEANUP: Deleted file {file_path}")
-        except Exception as e:
-            logger.warning(f"⚠️ FS ERROR: Could not delete file {file_path}: {e}")
-
-    # 4. BORRADO LOCAL (DB Auth/App)
+    # 3. BORRADO LOCAL (DB Auth/App)
     # Esto elimina el archivo de la lista visual del usuario
     await db.pool.execute("DELETE FROM rag_documents WHERE id=$1", doc_id)
     logger.info(f"🗑️ LOCAL CLEANUP: Metadata record {doc_uuid} deleted from App DB.")
