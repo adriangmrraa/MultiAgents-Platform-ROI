@@ -3940,41 +3940,44 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     filename = doc.get('filename')
     target_source = os.path.basename(filename) if filename else None
     
-    # 2. Omni-Delete Strategy (Redundant SQL)
-    # Target source_id (UUID), source (path), or source_name (filename) match.
+    # 2. "Search & Destroy" Strategy (Nexus v5.81)
+    # If standard JSON lookups fail, we hunt for the filename string inside the raw metadata text.
     if filename:
         try:
-            # 1. Variables Preparadas
-            doc_id_str = str(doc_id)
-            tenant_str = str(tenant_id)
-
-            logger.info(f"🔱 OMNI-DELETE: Targeting ID='{doc_id_str}' OR File='{filename}'")
-
-            # 2. La Query Triple (Escopeta)
-            query = """
-                DELETE FROM documents 
-                WHERE (metadata->>'tenant_id')::text = $1::text
-                AND (
-                    (metadata->>'source_id')::text = $2::text  -- Coincidencia por UUID (Infalible)
-                    OR metadata->>'source' = $3               -- Coincidencia por path
-                    OR metadata->>'source_name' = $3          -- Coincidencia por nombre
-                )
-                RETURNING id;
-            """
-
-            # 3. Ejecución pasando (tenant, doc_id, filename)
-            deleted_rows = await db.pool.fetch(query, tenant_str, doc_id_str, filename)
+            logger.info(f"🕵️ HUNTING: Searching for '%{filename}%' inside metadata blob...")
             
-            # 4. Log de Victoria
-            count = len(deleted_rows)
-            if count > 0:
-                logger.info(f"✅ DELETED {count} VECTORS via Omni-Match strategy.")
+            tenant_str = str(tenant_id)
+            search_term = f"%{filename}%"
+            
+            # Step 1: Locate Target
+            # We search for the filename as a substring in the entire JSON blob
+            # BUT we strictly enforce tenant_id using the JSON field to prevent cross-tenant collision.
+            find_query = """
+                SELECT id, metadata 
+                FROM documents 
+                WHERE metadata::text LIKE $1
+                AND (metadata->>'tenant_id')::text = $2::text
+                LIMIT 1;
+            """
+            
+            row = await db.pool.fetchrow(find_query, search_term, tenant_str)
+            
+            # Step 2: Destroy Target
+            if row:
+                found_id = row['id']
+                found_meta = row['metadata']
+                logger.info(f"🎯 TARGET ACQUIRED: Found ID={found_id}")
+                logger.info(f"📝 METADATA REVEALED: {found_meta}") 
+
+                # Borrado Quirúrgico por ID
+                delete_query = "DELETE FROM documents WHERE id = $1"
+                await db.pool.execute(delete_query, found_id)
+                logger.info(f"💥 DESTROYED: Document {found_id} deleted successfully.")
             else:
-                logger.error(f"❌ STILL GHOSTING: Tried ID={doc_id_str} and Name={filename} but found 0 vectors.")
-                
+                logger.error(f"👻 GHOST: Even a full text search for '%{filename}%' returned nothing.")
+
         except Exception as e:
-            logger.error(f"rag_omni_delete_error: {e}")
-            # Non-blocking, proceed to clean remnants
+            logger.error(f"rag_search_destroy_error: {e}")
             
     # 3. Physical File Deletion
     file_path = doc.get('file_path') or doc.get('storage_path')
