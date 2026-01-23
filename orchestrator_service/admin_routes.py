@@ -3930,7 +3930,9 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     user_id = str(current_user.id)
     
     # 1. Recovery: Verify ownership and existence
-    # Nexus v5.67: Fix "UndefinedColumnError" by selecting * and using .get()
+    # 1. Recovery: Verify ownership and existence
+    # Nexus v5.76: Fix NameError & Precision Deletion
+    # We fetch specifically what we need, plus file_path if available
     doc_row = await db.pool.fetchrow("SELECT * FROM rag_documents WHERE id = $1", doc_id)
     
     if not doc_row:
@@ -3939,20 +3941,12 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     if doc_row.get('tenant_id') != tenant_id or str(doc_row.get('user_id')) != user_id:
         raise HTTPException(403, "Access denied: You can only delete your own documents.")
 
-    # Nexus v5.75: Precision Vector Deletion
-    # Evidence shows metadata->>'source' is EXACTLY the filename (e.g. "_chat.txt")
-    target_vector_source = None
-    if doc_row.get('filename'):
-        target_vector_source = os.path.basename(doc_row.get('filename'))
+    # 1. Target Definition (Precision)
+    filename = doc_row.get('filename')
+    target_vector_source = os.path.basename(filename) if filename else None
     
-    if not target_vector_source:
-         # Fallback to metadata extraction if filename is missing (Unlikely)
-         meta = doc_row.get('metadata')
-         if meta:
-            if isinstance(meta, str):
-                try: meta = json.loads(meta) 
-                except: meta = {}
-            target_vector_source = meta.get('source_name')
+    # Extract file_path safely for disk deletion
+    file_path = doc_row.get('file_path') or doc_row.get('storage_path')
 
     logger.info(f"rag_precision_delete_start: target='{target_vector_source}' doc={doc_id}")
 
@@ -3962,12 +3956,12 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
         rag = RAGCore(str(tenant_id), user_id=user_id)
         
         if target_vector_source:
-            # RAGCore.delete_vectors (v5.71) handles strict tenant_id and both 'source'/'source_name' fields
-            rag.delete_vectors(target_vector_source)
+             rag.delete_vectors(target_vector_source)
     except Exception as e:
         logger.warning(f"rag_precision_delete_skipped: error={e}") 
 
     # 3. Disk Attempt (Silent)
+    # file_path is now safely defined (None if missing)
     if file_path:
         try:
              if os.path.exists(file_path):
