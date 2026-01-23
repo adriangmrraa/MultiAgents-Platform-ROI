@@ -162,3 +162,6 @@ async def get_current_super_admin(
         logger.warning("unauthorized_super_admin_attempt", user_id=current_user.id)
         raise HTTPException(status_code=403, detail="Not enough privileges")
     return current_user
+
+# Alias for backward compatibility / cleaner imports
+get_current_tenant = get_current_tenant_header
