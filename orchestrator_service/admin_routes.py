@@ -3940,6 +3940,29 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     filename = doc.get('filename')
     target_source = os.path.basename(filename) if filename else None
     
+    # ------------------------------------------------------------------
+    # Nexus v5.82: System Audit (Connection & Visibility)
+    # ------------------------------------------------------------------
+    # 1. WHO AM I?
+    try:
+        identity = await db.pool.fetchrow("SELECT current_user, current_database(), version();")
+        logger.info(f"🆔 DB IDENTITY: User='{identity['current_user']}' DB='{identity['current_database']}' Ver='{identity['version'][:15]}...'")
+    except Exception as e:
+        logger.error(f"❌ DB CONNECTION FAIL: {e}")
+
+    # 2. WHAT DO I SEE?
+    try:
+        # Traemos TODO, sin filtros. Solo para ver si la tabla es legible.
+        rows = await db.pool.fetch("SELECT id, metadata FROM documents LIMIT 5;")
+        logger.info(f"👀 VISIBILITY CHECK: Found {len(rows)} total rows in 'documents' table (Sample).")
+
+        for i, row in enumerate(rows):
+            logger.info(f"   Row {i+1}: ID={row['id']} Meta={str(row['metadata'])[:100]}...")
+
+    except Exception as e:
+        logger.error(f"🙈 BLINDNESS: Could not read 'documents' table. Error: {e}")
+    # ------------------------------------------------------------------
+
     # 2. "Search & Destroy" Strategy (Nexus v5.81)
     # If standard JSON lookups fail, we hunt for the filename string inside the raw metadata text.
     if filename:
