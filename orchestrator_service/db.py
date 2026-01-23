@@ -3,28 +3,54 @@ import os
 import json
 import redis.asyncio as aioredis 
 from typing import List, Tuple, Optional
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Metadata Registry
-Base = declarative_base()
-
+# --- Configuration ---
 POSTGRES_DSN = os.getenv("POSTGRES_DSN")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 
-# Sanitize for asyncpg (must not have +asyncpg)
+# Sanitize for asyncpg (Legacy & New)
 if POSTGRES_DSN:
     if "+asyncpg" in POSTGRES_DSN:
         POSTGRES_DSN = POSTGRES_DSN.replace("+asyncpg", "")
     elif POSTGRES_DSN.startswith("postgres://"):
         POSTGRES_DSN = POSTGRES_DSN.replace("postgres://", "postgresql://", 1)
 
+DATABASE_URL = os.getenv("POSTGRES_DSN") or "postgresql+asyncpg://user:pass@localhost/db"
+# Ensure DATABASE_URL has +asyncpg for SQLAlchemy if missing and using postgres
+if DATABASE_URL.startswith("postgresql://") and "+asyncpg" not in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+# --- 1. SQLAlchemy Stack (New - Nexus v5.42+) ---
+engine = create_async_engine(DATABASE_URL, echo=False)
+
+AsyncSessionLocal = sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autoflush=False
+)
+
+Base = declarative_base()
+
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+# --- 2. Legacy Database Class (AsyncPG Pool - Protocol Omega) ---
 class Database:
     def __init__(self):
         self.pool: Optional[asyncpg.Pool] = None
 
     async def connect(self):
         if not self.pool:
-            self.pool = await asyncpg.create_pool(POSTGRES_DSN)
+            # use the sanitized DSN (no +asyncpg) for asyncpg
+            dsn = POSTGRES_DSN 
+            self.pool = await asyncpg.create_pool(dsn)
 
     async def disconnect(self):
         if self.pool:
@@ -55,14 +81,10 @@ class Database:
         Legacy wrapper. Now we use chat_messages as source of truth.
         Returns True if not a duplicate (using Redis for fast dedup).
         """
-        # Dedup is now handled in main.py via Redis, but we keep this for legacy compatibility if needed
         return True
 
     async def log_system_event(self, level: str, event_type: str, message: str, metadata: dict = None):
         """Standardized system event logging (Protocol Omega: UUID)."""
-        # Note: ID is gen_random_uuid in DB, so we don't need to pass it, but if we did:
-        # query = "INSERT INTO system_events (id, severity, event_type, message, payload) VALUES ($1, $2, $3, $4, $5)"
-        # We'll stick to DB generation for simplicity unless required.
         query = "INSERT INTO system_events (severity, event_type, message, payload) VALUES ($1, $2, $3, $4)"
         async with self.pool.acquire() as conn:
             await conn.execute(query, level, event_type, message, json.dumps(metadata or {}))
@@ -79,6 +101,6 @@ class Database:
             rows = await conn.fetch(query, from_number, limit)
             return [dict(row) for row in reversed(rows)]
 
-# Global instance
+# --- Global Instances ---
 db = Database()
 redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
