@@ -3,6 +3,10 @@ import os
 import json
 import redis.asyncio as aioredis 
 from typing import List, Tuple, Optional
+from sqlalchemy.orm import declarative_base
+
+# Metadata Registry
+Base = declarative_base()
 
 POSTGRES_DSN = os.getenv("POSTGRES_DSN")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
