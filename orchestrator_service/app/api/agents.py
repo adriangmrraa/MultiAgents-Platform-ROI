@@ -1,6 +1,10 @@
 from typing import Dict, Any, List
-from db import Database
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from db import get_db
 from sales_template import get_sales_prompt
+
+router = APIRouter()
 
 # Nexus v5.25 - Multi-Objective Templates Config
 AGENT_TEMPLATES: Dict[str, Dict[str, Any]] = {
