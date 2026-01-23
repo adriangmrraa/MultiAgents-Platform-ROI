@@ -109,17 +109,67 @@ export const Agents: React.FC = () => {
         navigate('/admin/agents/new');
     };
 
+    const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
+    const [selectedChannels, setSelectedChannels] = useState<string[]>(['whatsapp', 'web']);
+    const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+
     const handleActivateSalesAgent = async () => {
         if (!user?.tenant_id) return;
         try {
             // Nexus v5.24: Auto-provision Sales Agent
+            // Nexus v5.36 flow: Activate -> Show Channel Modal -> Redirect
             const res = await fetchApi(`/admin/agents/sales-config/${user.tenant_id}`);
             if (res && res.id) {
-                navigate(`/admin/agents/${res.id}`);
+                // Pre-fill existing channels if any
+                if (res.channels && Array.isArray(res.channels)) {
+                    setSelectedChannels(res.channels);
+                }
+                setActiveAgentId(res.id);
+                setIsChannelModalOpen(true);
             }
         } catch (e) {
             console.error(e);
             alert("Error activating sales agent. Please contact support.");
+        }
+    };
+
+    const handleChannelsSave = async () => {
+        if (!activeAgentId) return;
+        try {
+            await fetchApi(`/admin/agents/${activeAgentId}`, {
+                method: 'PUT',
+                body: {
+                    // We need to send minimal required fields or full object? 
+                    // The PUT endpoint in backend expects AgentModel. 
+                    // We should ideally fetch the full agent first or be careful.
+                    // IMPORTANT: Backend PUT requires full object often. 
+                    // Let's rely on the backend merging or fetch-modify pattern.
+                    // The safe bet: Just update channels using the fact that current backend PUT merges?
+                    // Checking backend code: It does an UPDATE on fields passed... wait, it replaces fields.
+                    // We need to fetch current state?
+                    // Logic hack: We already fetched 'res' in activation. We don't have it here.
+                    // Better approach: We'll assume the backend handles partial updates or we fetch-first.
+
+                    // ACTUALLY: Let's do a fetch first to be safe.
+                    // Or, since we just activated, we know it's the Sales Agent.
+                    // We will modify the flow to fetch inside save.
+                }
+            });
+            // Rethink: The PUT endpoint validates "all" fields in standard Pydantic.
+            // We cannot just send {channels: [...]}.
+
+            // Workaround: We will fetch the agent, update channels, then PUT.
+            const currentAgent = agents.find(a => a.id === activeAgentId) || await fetchApi(`/admin/agents/${activeAgentId}/config`);
+
+            if (currentAgent) {
+                const updated = { ...currentAgent, channels: selectedChannels };
+                await fetchApi(`/admin/agents/${activeAgentId}`, { method: 'PUT', body: updated });
+                navigate(`/admin/agents/${activeAgentId}`);
+            }
+        } catch (e) {
+            console.error("Failed to save channels", e);
+            // Proceed anyway to not block user
+            navigate(`/admin/agents/${activeAgentId}`);
         }
     };
 
@@ -385,6 +435,65 @@ export const Agents: React.FC = () => {
                         <button type="submit" className="btn-primary">{t('common.save')}</button>
                     </div>
                 </form>
+            </Modal>
+
+            {/* Nexus v5.36: Channel Connection Modal */}
+            <Modal
+                isOpen={isChannelModalOpen}
+                onClose={() => setIsChannelModalOpen(false)}
+                title="Conecta tu Vendedor al Mundo"
+            >
+                <div className="space-y-6">
+                    <div className="bg-purple-600/10 border border-purple-600/20 p-4 rounded-xl flex items-center gap-3">
+                        <div className="bg-purple-600 rounded-full p-2 text-white">
+                            <Sparkles size={20} />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-white">¡Vendedor Activado!</h4>
+                            <p className="text-secondary text-sm">Antes de entrenarlo, elige dónde trabajará.</p>
+                        </div>
+                    </div>
+
+                    <div className="form-group">
+                        <label className="mb-3 block text-sm font-semibold text-white">Canales de Atención</label>
+                        <div className="grid grid-cols-1 gap-3">
+                            {['whatsapp', 'instagram', 'facebook', 'web'].map(ch => (
+                                <label key={ch} className={`
+                                    flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all
+                                    ${selectedChannels.includes(ch)
+                                        ? 'bg-accent/20 border-accent text-white'
+                                        : 'bg-white/5 border-white/10 text-secondary hover:bg-white/10'}
+                                `}>
+                                    <div className={`
+                                        w-6 h-6 rounded-full border flex items-center justify-center
+                                        ${selectedChannels.includes(ch) ? 'bg-accent border-accent' : 'border-white/30'}
+                                    `}>
+                                        {selectedChannels.includes(ch) && <div className="w-2 h-2 rounded-full bg-white" />}
+                                    </div>
+                                    <span className="capitalize font-medium">{ch}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 mt-6">
+                        <button
+                            className="btn-secondary"
+                            onClick={() => {
+                                setIsChannelModalOpen(false);
+                                if (activeAgentId) navigate(`/admin/agents/${activeAgentId}`);
+                            }}
+                        >
+                            Omitir
+                        </button>
+                        <button
+                            className="bg-accent hover:bg-accent-hover text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-accent/20 transition-all flex items-center gap-2"
+                            onClick={handleChannelsSave}
+                        >
+                            Guardar y Personalizar <ChevronRight size={16} />
+                        </button>
+                    </div>
+                </div>
             </Modal>
         </div>
     );

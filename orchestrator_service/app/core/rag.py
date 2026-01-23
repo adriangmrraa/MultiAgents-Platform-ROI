@@ -21,6 +21,7 @@ from langchain_community.document_loaders import (
 from supabase.client import create_client, Client
 
 from app.core.config import settings
+from app.core.parsers.whatsapp import WhatsAppParser # v5.49
 
 logger = structlog.get_logger(__name__)
 
@@ -183,7 +184,7 @@ class RAGCore:
             logger.error("rag_ingestion_critical_error", error=str(e))
             return False
 
-    async def ingest_document(self, content: bytes, filename: str, metadata: dict = {}) -> bool:
+    async def ingest_document(self, content: bytes, filename: str, metadata: dict = {}, collection: str = "General", hero_name: str = None) -> bool:
         """
         Sovereign Document Ingestion (v5.1).
         Supports PDF, TXT, CSV, DOCX.
@@ -201,8 +202,41 @@ class RAGCore:
             loader = None
             if suffix == '.pdf':
                 loader = PyPDFLoader(tmp_path)
+                try:
+                    raw_docs = loader.load()
+                except Exception:
+                     # Fallback for some PDFs
+                     logger.warning("rag_pdf_fallback")
+                     loader = UnstructuredWordDocumentLoader(tmp_path) # Sometimes works? No, distinct. 
+                     # Just re-raise for now.
+                     raise
             elif suffix == '.txt' or suffix == '.md':
-                loader = TextLoader(tmp_path, encoding='utf-8')
+                # v5.49 WhatsApp Parser Intercept
+                # Check if it looks like a WhatsApp chat?
+                # Or just use WhatsAppParser for all TXT?
+                # Parser is robust enough to handle normal text too?
+                # Let's try WhatsAppParser first, if it returns structured docs (with timestamps), good.
+                # Logic: If content has [Date time], it parses. Else, maybe it returns empty or lines?
+                # WhatsAppParser as implemented returns docs. if not matching regex, it skips lines.
+                # That's risky for normal TXT. 
+                # Better: Check content signature or use hero_name presence as trigger?
+                # User Requirement: "Nuevo Parser... Input: .txt". 
+                # Let's read the file content string to decide or just default to TextLoader if generic.
+                
+                # For now, let's read text.
+                with open(tmp_path, 'r', encoding='utf-8') as f:
+                    text_content = f.read()
+                
+                # Heuristic: [dd/mm/yy
+                if re.search(r"^\s*\[?\d{1,2}/\d{1,2}", text_content[:100]):
+                     logger.info("rag_parser_whatsapp_detected")
+                     # Use the class directly on content string
+                     raw_docs = WhatsAppParser.parse(text_content, hero_name=hero_name, source_name=filename)
+                else:
+                     logger.info("rag_parser_standard_text")
+                     loader = TextLoader(tmp_path, encoding='utf-8')
+                     raw_docs = loader.load()
+
             elif suffix == '.csv':
                 loader = CSVLoader(tmp_path)
             elif suffix == '.docx':
@@ -210,16 +244,22 @@ class RAGCore:
             elif suffix == '.doc':
                 loader = UnstructuredWordDocumentLoader(tmp_path)
             
-            if not loader:
-                raise Exception(f"Unsupported file format: {suffix}")
-
-            raw_docs = loader.load()
+            if not suffix == '.txt' and not suffix == '.md':
+                # Loaders that were not handled in the if/else block above (e.g. PDF/DOCX)
+                if not loader:
+                     if suffix in ['.docx', '.doc', '.csv']:
+                         pass # handled
+                     else:
+                        raise Exception(f"Unsupported file format: {suffix}")
+                raw_docs = loader.load()
             
+            # Post-processing
             for d in raw_docs:
                 d.metadata.update(metadata)
                 d.metadata["tenant_id"] = self.tenant_id
-                d.metadata["user_id"] = self.user_id # Strict Isolation (Nexus v5.10)
+                d.metadata["user_id"] = self.user_id 
                 d.metadata["source_name"] = filename
+                d.metadata["collection"] = collection # v5.49
 
             splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
             docs = splitter.split_documents(raw_docs)
@@ -237,6 +277,55 @@ class RAGCore:
         finally:
             if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
+
+    async def ingest_chat_message(self, message_content: str, metadata: dict) -> bool:
+        """
+        Shadow RAG: Ingests chat messages for long-term memory.
+        Target Table: 'chats_vectors' (if specified) or 'documents' with specific metadata.
+        User Requirement: "Nueva Colección chats_vectors".
+        """
+        self._ensure_credentials()
+        try:
+            # We strictly use the 'chats_vectors' table as requested in v5.32
+            # NOTE: SupabaseVectorStore in LangChain usually takes table_name in __init__.
+            # We need a transient instance or re-init for this specific table if we want a separate table.
+            
+            # Lazy re-init for this specific operation
+            from langchain_openai import OpenAIEmbeddings
+            from langchain_community.vectorstores import SupabaseVectorStore
+            
+            embedding_fn = None
+            if self.provider == "google":
+                from langchain_google_genai import GoogleGenerativeAIEmbeddings
+                embedding_fn = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=self.api_key)
+            else:
+                embedding_fn = OpenAIEmbeddings(model="text-embedding-3-small", openai_api_key=self.api_key)
+
+            # Metadata Enhancement
+            final_metadata = {
+                "source": "shadow_chat",
+                "tenant_id": self.tenant_id,
+                "user_id": self.user_id,
+                **metadata
+            }
+
+            # Create transient vector store pointing to 'chats_vectors'
+            vector_store = SupabaseVectorStore(
+                client=self.supabase,
+                embedding=embedding_fn,
+                table_name="chats_vectors",
+                query_name="match_chats" # Needs a matching function in Postgres/Supabase
+            )
+
+            doc = Document(page_content=message_content, metadata=final_metadata)
+            vector_store.add_documents([doc])
+            
+            logger.info(f"rag_shadow_ingestion_success: tenant={self.tenant_id}")
+            return True
+
+        except Exception as e:
+            logger.error("rag_shadow_ingestion_failed", error=str(e))
+            return False
 
     def search(self, query: str, k: int = 4, filter: dict = None) -> str:
         """
@@ -259,6 +348,47 @@ class RAGCore:
         except Exception as e:
             logger.error("rag_search_failed", error=str(e))
             return ""
+
+    def search_shadow(self, query: str, k: int = 4, filter: dict = None) -> List[Document]:
+        """
+        Shadow RAG Search: Retrieves user-specific context from 'chats_vectors'.
+        Returns list of Documents instead of string for granular control.
+        """
+        self._ensure_credentials()
+        try:
+            # Lazy re-init for chats_vectors (Shared logic with ingestion)
+            from langchain_openai import OpenAIEmbeddings
+            from langchain_community.vectorstores import SupabaseVectorStore
+            
+            embedding_fn = None
+            if self.provider == "google":
+                from langchain_google_genai import GoogleGenerativeAIEmbeddings
+                embedding_fn = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=self.api_key)
+            else:
+                embedding_fn = OpenAIEmbeddings(model="text-embedding-3-small", openai_api_key=self.api_key)
+
+            # Create transient vector store pointing to 'chats_vectors'
+            vector_store = SupabaseVectorStore(
+                client=self.supabase,
+                embedding=embedding_fn,
+                table_name="chats_vectors",
+                query_name="match_chats"
+            )
+            
+            # Strict Isolation Filters
+            combined_filter = (filter or {}).copy()
+            combined_filter["tenant_id"] = self.tenant_id
+            # Optional: Allow searching across all circles if needed, but strict user_id if present
+            # Shadow RAG is usually scoped to the CONTACT (User), so user_id is crucial.
+            if self.user_id:
+                combined_filter["user_id"] = self.user_id
+            
+            results = vector_store.similarity_search(query, k=k, filter=combined_filter)
+            return results
+            
+        except Exception as e:
+            logger.error("rag_shadow_search_failed", error=str(e))
+            return []
 
     def count_vectors(self) -> int:
         """
@@ -288,3 +418,40 @@ class RAGCore:
         except Exception as e:
             logger.error("rag_deletion_failed", error=str(e))
             return False
+
+    def delete_vectors(self, file_name: str) -> bool:
+        """
+        Nexus v5.49 - Critical Fix: Deletes vectors for a specific file.
+        Used by the Knowledge Delete Endpoint.
+        """
+        self._ensure_credentials()
+        try:
+            logger.info(f"rag_delete_vectors_start: file={file_name}, tenant={self.tenant_id}")
+            
+            # Using the 'delete_document_by_metadata' logic but specific to source/source_name
+            # Metadata usually stores filename in 'source_name' or 'source' (depending on loader).
+            # Document Ingestion sets: d.metadata["source_name"] = filename
+            
+            # We delete where source_name == file_name AND tenant_id matches
+            # Also checking 'source' just in case (LangChain default)
+            
+            query = self.supabase.table("documents").delete().eq("metadata->>tenant_id", self.tenant_id)
+            if self.user_id:
+                query = query.eq("metadata->>user_id", self.user_id)
+            
+            # OR logic is hard in single chain.
+            # We'll try deleting by source_name first (Our standard)
+            # Then by source (Legacy)
+            
+            # 1. By source_name
+            q1 = query.eq("metadata->>source_name", file_name)
+            r1 = q1.execute()
+            
+            # 2. By source
+            # q2 = ... (If needed, but let's trust source_name for v5.49+)
+            
+            logger.info("rag_delete_vectors_success")
+            return True
+        except Exception as e:
+            logger.error("rag_delete_vectors_failed", error=str(e))
+            raise e # Create 500 in Endpoint

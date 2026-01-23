@@ -14,7 +14,8 @@ import {
     Sparkles,
     Menu,
     X,
-    Database
+    Database,
+    FileText
 } from 'lucide-react';
 
 import { useLanguage } from '../contexts/LanguageContext';
@@ -60,6 +61,7 @@ export const Sidebar: React.FC = () => {
                     <NavItem to="/agents" icon={<Zap size={20} />} label={t('sidebar.agentSquad')} desc={t('sidebar.agentSquadDesc')} />
                     <NavItem to="/knowledge" icon={<Database size={20} />} label={t('sidebar.knowledge')} desc={t('sidebar.knowledgeDesc')} />
                     <NavItem to="/chats" icon={<MessageCircle size={20} />} label={t('sidebar.commsChannel')} desc={t('sidebar.commsChannelDesc')} />
+                    <NavItem to="/templates" icon={<FileText size={20} />} label="Plantillas WA" desc="Gestor de Plantillas WhatsApp" />
 
                     <div className="h-px bg-white/5 w-8 mx-auto my-4" />
 

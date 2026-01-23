@@ -124,22 +124,33 @@ FIELD_SYSTEM_PROMPTS: Dict[str, str] = {
     )
 }
 
-async def get_or_create_sales_agent(tenant_id: int) -> dict:
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+
+async def get_or_create_sales_agent(tenant_id: int, db: AsyncSession) -> dict:
     """
     Nexus v5.24 - Auto-provisions a featured sales agent for a store.
+    Fixed in v5.36 to use sqlalchemy AsyncSession.
     """
-    db = Database()
     try:
         # 1. Look for existing sales agent
-        agent = await db.fetchrow(
-            "SELECT * FROM agents WHERE tenant_id = $1 AND role = 'sales' AND is_active = true LIMIT 1",
-            tenant_id
+        result = await db.execute(
+            text("SELECT * FROM agents WHERE tenant_id = :tenant_id AND role = 'sales' AND is_active = true LIMIT 1"),
+            {"tenant_id": tenant_id}
         )
+        agent = result.mappings().one_or_none()
+        
         if agent:
+            # Helper to serialize if needed, but dict() works on mappings
             return dict(agent)
             
         # 2. Fetch tenant info for prompt injection
-        tenant = await db.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
+        t_result = await db.execute(
+            text("SELECT * FROM tenants WHERE id = :id"),
+            {"id": tenant_id}
+        )
+        tenant = t_result.mappings().one_or_none()
+        
         if not tenant:
             return None
             
@@ -151,14 +162,25 @@ async def get_or_create_sales_agent(tenant_id: int) -> dict:
             store_website=tenant.get('store_website', '')
         )
         
-        agent_id = await db.fetchval(
-            """
+        # Insert
+        q_insert = text("""
             INSERT INTO agents (name, role, tenant_id, system_prompt_template, model_provider, model_version, is_active)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES (:name, :role, :tenant_id, :prompt, :provider, :version, :is_active)
             RETURNING id
-            """,
-            "Agente de Ventas (IA)", "sales", tenant_id, prompt, "openai", "gpt-4o", True
-        )
+        """)
+        
+        insert_result = await db.execute(q_insert, {
+            "name": "Agente de Ventas (IA)", 
+            "role": "sales", 
+            "tenant_id": tenant_id, 
+            "prompt": prompt, 
+            "provider": "openai", 
+            "version": "gpt-4o", 
+            "is_active": True
+        })
+        
+        agent_id = insert_result.scalar() # fetchval equivalent
+        await db.commit()
         
         return {
             "id": agent_id,

@@ -158,4 +158,15 @@ Tokens are NEVER stored in the browser alongside the session. They are immediate
 
 ---
 
+---
+
+## 8. Shadow Indexing Worker
+
+*   **Propósito**: Ingesta pasiva de chats para el Shadow RAG.
+*   **Trigger**: Evento `message.created`.
+*   **Lógica**: Si `SHADOW_RAG_ENABLED=True`, el worker vectoriza el mensaje asíncronamente y lo etiqueta con el `circle` del contacto.
+*   **Seguridad**: Usa la `SOVEREIGN_OPENAI_KEY` del tenant para generar los embeddings.
+
+---
+
 **© 2026 Platform AI Solutions - Sovereign Architecture Division**

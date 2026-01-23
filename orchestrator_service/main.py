@@ -37,6 +37,8 @@ print(">> SYSTEM STARTUP: Protocol Omega v5.9.129 (Stream+SQL Fix Loaded)")
 from app.core.tenant import TenantContext
 from app.api.deps import get_current_tenant_webhook, get_current_tenant_header
 from app.models.customer import Customer # Schema Drift Prevention
+from app.models.template import WhatsAppTemplate # v5.42 WhatsApp Module
+from app.models.rag import Document # v5.48 RAG Collections
 
 # --- Dynamic Context ---
 tenant_store_id: ContextVar[Optional[str]] = ContextVar("tenant_store_id", default=None)
@@ -964,6 +966,10 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
+from app.api import agents, templates
+
+app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
+app.include_router(templates.router, prefix="/api/templates", tags=["templates"])
 app.include_router(platform_router) # Platform Router (God Mode)
 app.add_middleware(RateLimitMiddleware)
 
@@ -1863,9 +1869,12 @@ async def chat_endpoint(
             ) RETURNING id
         """, media_uuid, tenant_id, channel, m.provider_id, m.type, m.mime_type or "application/octet-stream", m.file_name, m.url)
     
+from app.workers.shadow_indexer import ShadowIndexer
+
     # Store User Message
     correlation_id = event.correlation_id or str(uuid.uuid4())
     content = event.text or "" # Can be empty if just image
+    user_msg_id = uuid.uuid4()
     
     await db.pool.execute("""
         INSERT INTO chat_messages (
@@ -1875,7 +1884,10 @@ async def chat_endpoint(
             $1, $2, $3, $4, $5,
             $6, NOW(), $7, $8, $9, $10
         )
-    """, uuid.uuid4(), tenant_id, conv_id, event.role, content, correlation_id, message_type, media_id, event.from_number, event.channel_source)
+    """, user_msg_id, tenant_id, conv_id, event.role, content, correlation_id, message_type, media_id, event.from_number, event.channel_source)
+
+    # Nexus v5.32: Shadow RAG Ingestion (User Message)
+    background_tasks.add_task(ShadowIndexer.process_message, str(user_msg_id), tenant_id)
     
     # Update Conversation Metadata
     preview_text = content[:50] if content else f"[{message_type}]"
@@ -1999,6 +2011,26 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         if not tenant_row:
             logger.error("tenant_not_found_on_execution", tenant_id=tenant_id)
             return
+
+        # 1.5 Enforce 24h Policy (Hybrid Brain v5.34)
+        # Check if conversation is within 24h window
+        conv_status_row = await db.pool.fetchrow("""
+             SELECT last_message_at, status FROM chat_conversations WHERE id = $1
+        """, conv_id)
+        
+        if conv_status_row:
+             last_msg_at = conv_status_row['last_message_at']
+             # If last_msg_at is None, assume open (newly created) or closed? Assume open for safety if new.
+             if last_msg_at:
+                 # Check delta
+                 # Ensure timezone awareness if needed, assuming naive UTC or same TZ
+                 if (datetime.utcnow() - last_msg_at).total_seconds() > 24 * 3600:
+                     logger.warning("agent_execution_blocked_24h_policy", conv_id=str(conv_id))
+                     yield {"type": "error", "content": "SESSION_CLOSED_24H_POLICY"}
+                     
+                     # Trigger Re-engagement Suggestion (Optional Auto-Template)
+                     # For now, we just stop.
+                     return
 
         # 2. Fetch History for Context (Unificado Omnicanal - Protocolo Nexus v4.2.2)
         history_rows = await db.pool.fetch("""
@@ -2137,10 +2169,14 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                 continue
 
             # Persist
+            agent_msg_id = uuid.uuid4()
             await db.pool.execute("""
                 INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number, channel_source)
                 VALUES ($1, $2, $3, 'assistant', $4, $5, NOW(), $6, (SELECT channel_source FROM chat_conversations WHERE id = $3))
-            """, uuid.uuid4(), tenant_id, conv_id, text_content, correlation_id, from_number)
+            """, agent_msg_id, tenant_id, conv_id, text_content, correlation_id, from_number)
+            
+            # Nexus v5.32: Shadow RAG Ingestion (Agent Message)
+            asyncio.create_task(ShadowIndexer.process_message(str(agent_msg_id), tenant_id))
             
             # Deliver
             conv_meta = await db.pool.fetchrow("SELECT provider, external_user_id, channel_source FROM chat_conversations WHERE id = $1", conv_id)

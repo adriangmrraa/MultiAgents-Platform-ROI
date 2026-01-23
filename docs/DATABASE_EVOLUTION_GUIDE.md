@@ -108,7 +108,12 @@ CREATE TABLE IF NOT EXISTS tools (
 );
 ```
 
----
+### Nuevas Entidades v5.38
+
+*   **`whatsapp_templates`**: Almacena HSMs (`id`, `name`, `body`, `status`, `language`).
+*   **`chat_contacts`**: Nueva columna `circle` (ENUM: `family`, `work`, `client`, `unknown`).
+*   **`chat_messages`**: Nueva columna `is_shadow_indexed` (Boolean) para controlar el worker de memoria.
+*   **ChromaDB**: Nueva colección `chats_vectors` con metadatos extendidos (`participant`, `role`, `timestamp`).
 
 ## 4. Identificadores y Migración
 

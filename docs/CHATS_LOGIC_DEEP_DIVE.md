@@ -13,6 +13,7 @@ La vista de Chats no es simplemente un lector de base de datos; implementa un pa
 2.  **API Polling (`/admin/chats/summary`)**: Mecanismo de actualización de lista de contactos.
 3.  **Message Loop (`loadHistory`)**: Loop optimizado para traer nuevos mensajes de la conversación activa.
 4.  **Send Tunnel (`/admin/whatsapp/send`)**: Túnel único de salida unificado.
+5.  **Template Manager (`Templates.tsx`)**: Gestor de plantillas HSM aprobadas por Meta.
 
 ---
 
@@ -144,8 +145,15 @@ Esta sección es para desarrolladores que necesitan depurar errores en la vista 
 *   **Body**: `{ "locked": true }`
 *   **Efecto**: Bloquea al bot para que NO responda en este chat.
 
-### 3. Logs de Consola Comunes
-*   `⚠️ Chat ID undefined`: Ocurre cuando se hace click en un contacto que no tiene `id` válido en la respuesta `/summary`.
-*   `Failed to fetch messages`: Error de red o endpoint 500 en `/messages`.
 *   `Error sending message`: Generalmente por falta de `channel_source` o problemas con la API de Meta.
+
+---
+
+## 4. Reglas de Cumplimiento (Meta 24h Window)
+
+El sistema impone un bloqueo estricto de UI y Backend:
+
+*   **Semáforo**: Si `last_interaction` > 24h, el input de texto libre se bloquea.
+*   **Re-enganche**: El usuario debe seleccionar una **Plantilla Aprobada** para abrir una nueva ventana de conversación.
+*   **Endpoint**: `POST /admin/templates/sync` mantiene los estados (APPROVED/REJECTED) sincronizados con Meta.
 

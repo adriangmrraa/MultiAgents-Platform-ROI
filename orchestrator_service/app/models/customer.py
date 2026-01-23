@@ -28,6 +28,7 @@ class Customer(Base, TimestampMixin):
     # Business Logic
     tags: Mapped[dict] = mapped_column(JSONB, server_default='[]')
     ltv_score: Mapped[Optional[float]] = mapped_column(Integer, default=0)
+    circle: Mapped[str] = mapped_column(String(20), server_default='unknown', default='unknown') # 'family', 'work', 'friends', 'clients', 'unknown'
     
     # Constraints: Unique Phone per Tenant, Unique IG per Tenant, etc.
     __table_args__ = (

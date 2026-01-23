@@ -63,6 +63,7 @@ class AgentConfig(BaseModel):
     model: Optional[Dict[str, Any]] = None
     template_type: Optional[str] = "sales" # Nexus v5.27
     wizard_overrides: Optional[Dict[str, Any]] = {} # Nexus v5.27: Stores "tone", "business_rules", etc.
+    shadow_rag_enabled: Optional[bool] = False # Nexus v5.34
 
 class AgentThinkRequest(BaseModel):
     tenant_id: int
@@ -285,10 +286,54 @@ async def execute_agent(
     
     # 1.1 Apply Rolling Window Memory Management (Nexus v5.13)
     history = prune_history(raw_history, max_tokens=4000)
+
+    # 1.2 SHADOW RAG RETRIEVAL (Hybrid Brain v5.34)
+    shadow_context_block = ""
+    # Check if enabled in Agent Config (passed via request.agent_config)
+    if request.agent_config and getattr(request.agent_config, 'shadow_rag_enabled', False):
+        try:
+            orch_url = os.getenv("ORCHESTRATOR_URL", "http://orchestrator_service:8000")
+            headers = {"X-Internal-Secret": x_internal_secret, "x-admin-token": os.getenv("ADMIN_TOKEN", "admin-secret-99")}
+            
+            # Need user_id or contact info. In AgentThinkRequest we have user_id (for RAG isolation) or we infer from history?
+            # request.user_id is the primary identifier (e.g., phone number or uuid)
+            
+            # We assume request.user_id is set correctly by Orchestrator
+            if request.user_id:
+                async with httpx.AsyncClient(timeout=5.0) as client: # Fast timeout
+                    # 1. Style Retrieval
+                    # We don't have 'circle' info here easily unless passed in metadata. 
+                    # Orchestrator should pass it in context or we blindly search.
+                    # We'll just search for "General Context" for now based on user.
+                    
+                    # Fetch "Facts/Topics"
+                    # We query "temas importantes" or just use recent history content to find semantic matches
+                    last_user_msg = next((m['content'] for m in reversed(request.history) if m['role'] == 'user'), "")
+                    
+                    if last_user_msg:
+                        resp = await client.get(
+                            f"{orch_url}/admin/rag/shadow-search", 
+                            params={"q": last_user_msg, "tenant_id": request.tenant_id, "user_id": request.user_id},
+                            headers=headers
+                        )
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            if data.get("ok") and data.get("results"):
+                                shadow_results = data["results"]
+                                # Format context
+                                shadow_context_block = "\n\n### CONTEXTO HISTÓRICO Y ESTILO (SHADOW RAG):\n"
+                                shadow_context_block += "Usa este contexto para mantener la continuidad, PERO NO inventes hechos nuevos.\n"
+                                for item in shadow_results:
+                                    content = item.get("content", "").replace("\n", " ")
+                                    meta = item.get("metadata", {})
+                                    ts = meta.get("timestamp", "?")
+                                    shadow_context_block += f"- [{ts}]: {content}\n"
+        except Exception as e:
+            logger.warning("shadow_rag_fetch_failed", error=str(e))
             
     # 2. Build Prompt
     # Protocol Omega: Inject Tool Instructions
-    final_system_prompt = request.context.system_prompt
+    final_system_prompt = request.context.system_prompt + shadow_context_block
     if request.agent_config and request.agent_config.tool_instructions:
         final_system_prompt += "\n\n### PROTOCOLO DE HERRAMIENTAS ACTIVAS:"
         for instr in request.agent_config.tool_instructions:

@@ -21,11 +21,11 @@ El sistema utiliza la plantilla `SalesTemplate` para generar el agente:
 
 ## Flujo de UI (Agents.tsx)
 1.  **Banner de Activación**: Si el usuario no tiene agente de ventas activo, `Agents.tsx` muestra un banner premium "Activar Agente de Ventas".
-2.  **One-Click Activation**:
-    *   Al hacer clic, el frontend llama a `GET /admin/agents/sales-config/{tenant_id}`.
-    *   Si el agente ya existía (creado por el backend en background), se devuelve su ID.
-    *   Si no, se crea en el momento.
-3.  **Redirección Inmediata**: El usuario es llevado directamente al `Dynamic Wizard` (`/admin/agents/{id}`) para personalizar el Tono y las Reglas, saltando la configuración técnica (Modelo, Temperatura, etc.).
+2.  **Actualización v5.37 (Channel Modal)**:
+    *   **One-Click Activation**: El usuario hace clic en activar.
+    *   **Backend Fix**: Se llama a `get_or_create` (garantizado 200 OK, sin errores 404).
+    *   **Selección de Canales (Nuevo Paso)**: Antes de ir al Wizard, se abre un Modal para vincular el agente a WhatsApp/IG inmediatamente.
+    *   **Redirección**: Solo tras guardar canales se viaja a `/agents/{id}`.
 
 ## Beneficio
 El usuario pasa de "Conectar Tienda" a "Probar Chat" en menos de 3 clics, con un agente que ya conoce sus productos.

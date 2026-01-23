@@ -569,27 +569,71 @@ export const Chats: React.FC = () => {
                                 })}
                             </div>
 
-                            {/* Input (Pinned at bottom) */}
+                            {/* Input Area or Template Selector */}
                             <div className="p-4 bg-black/60 backdrop-blur-xl border-t border-white/10 sticky bottom-0 z-30">
-                                <div className="flex gap-2">
-                                    <textarea
-                                        className="flex-1 bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-accent outline-none resize-none h-[50px]"
-                                        placeholder="Escribir mensaje manual..."
-                                        value={newMessage}
-                                        onChange={(e) => setNewMessage(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                e.preventDefault();
-                                                handleSendMessage();
-                                            }
-                                        }}
-                                    ></textarea>
-                                    <button
-                                        onClick={handleSendMessage}
-                                        className="bg-accent hover:bg-accent-hover text-white rounded-xl px-6 font-semibold transition-all">
-                                        Enviar
-                                    </button>
-                                </div>
+                                {(() => {
+                                    // 24h Window Logic
+                                    const lastMsgTime = new Date(selectedChat.timestamp).getTime();
+                                    const now = new Date().getTime();
+                                    const hoursSinceLastMessage = (now - lastMsgTime) / (1000 * 60 * 60);
+                                    const isSessionClosed = hoursSinceLastMessage > 24;
+
+                                    if (isSessionClosed && selectedChat.channel.includes('whatsapp')) {
+                                        return (
+                                            <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-4">
+                                                <div className="flex items-center gap-2 text-yellow-500 mb-3">
+                                                    <RefreshCw size={18} />
+                                                    <span className="font-bold text-sm">Sesión de 24hs Cerrada</span>
+                                                </div>
+                                                <p className="text-xs text-gray-400 mb-3">
+                                                    Para reconectar, debes enviar una Plantilla Aprobada.
+                                                </p>
+
+                                                <TemplateSelector
+                                                    onSend={async (tmpl, vars) => {
+                                                        try {
+                                                            await fetchApi(`/api/chats/${selectedChatId}/send`, {
+                                                                method: 'POST',
+                                                                body: JSON.stringify({
+                                                                    type: 'template',
+                                                                    template_name: tmpl.name,
+                                                                    language: tmpl.language,
+                                                                    parameters: vars
+                                                                })
+                                                            });
+                                                            // Optimistic update
+                                                            setRefreshTrigger(p => p + 1);
+                                                        } catch (e) {
+                                                            alert('Error sending template');
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div className="flex gap-2">
+                                            <textarea
+                                                className="flex-1 bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-accent outline-none resize-none h-[50px]"
+                                                placeholder="Escribir mensaje manual..."
+                                                value={newMessage}
+                                                onChange={(e) => setNewMessage(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                                        e.preventDefault();
+                                                        handleSendMessage();
+                                                    }
+                                                }}
+                                            ></textarea>
+                                            <button
+                                                onClick={handleSendMessage}
+                                                className="bg-accent hover:bg-accent-hover text-white rounded-xl px-6 font-semibold transition-all">
+                                                Enviar
+                                            </button>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </>
                     ) : (
@@ -601,6 +645,74 @@ export const Chats: React.FC = () => {
                     )}
                 </div>
             </div>
-        </div >
+        </div>
+    );
+};
+
+// --- Template Selector Component ---
+const TemplateSelector = ({ onSend }: { onSend: (t: any, vars: string[]) => void }) => {
+    const { fetchApi } = useApi();
+    const [templates, setTemplates] = useState<any[]>([]);
+    const [selectedTmpl, setSelectedTmpl] = useState<any>(null);
+    const [variables, setVariables] = useState<string[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        fetchApi('/api/templates/').then(data => {
+            setTemplates(data?.filter((t: any) => t.status === 'APPROVED') || []);
+        });
+    }, []);
+
+    const handleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const t = templates.find(x => x.id === e.target.value);
+        setSelectedTmpl(t);
+        // Detect variable count simply by parsing body (not perfect but OK for MVP)
+        // Or assume body has {{1}}, {{2}}...
+        // Doing a simple regex count
+        const matches = t?.body_text.match(/\{\{\d+\}\}/g);
+        const count = matches ? new Set(matches).size : 0;
+        setVariables(new Array(count).fill(''));
+    };
+
+    return (
+        <div className="flex flex-col gap-2">
+            <select
+                onChange={handleSelect}
+                className="bg-black/50 border border-gray-600 rounded p-2 text-sm text-white"
+            >
+                <option value="">-- Seleccionar Plantilla --</option>
+                {templates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.category})</option>
+                ))}
+            </select>
+
+            {selectedTmpl && (
+                <div className="mt-2 text-sm text-gray-300 font-mono bg-black/20 p-2 rounded">
+                    {selectedTmpl.body_text}
+                </div>
+            )}
+
+            {selectedTmpl && variables.map((v, i) => (
+                <input
+                    key={i}
+                    placeholder={`Variable {{${i + 1}}}`}
+                    className="bg-black/30 border border-gray-600 rounded p-2 text-sm text-white"
+                    value={v}
+                    onChange={e => {
+                        const newVars = [...variables];
+                        newVars[i] = e.target.value;
+                        setVariables(newVars);
+                    }}
+                />
+            ))}
+
+            <button
+                onClick={() => selectedTmpl && onSend(selectedTmpl, variables)}
+                disabled={!selectedTmpl || loading}
+                className="bg-green-600 hover:bg-green-500 text-white rounded p-2 text-sm font-bold mt-1"
+            >
+                Enviar Plantilla
+            </button>
+        </div>
     );
 };

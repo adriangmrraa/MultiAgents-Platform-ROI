@@ -75,6 +75,7 @@ class ChatMessage(Base, TimestampMixin):
     
     # Metadata
     human_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_shadow_indexed: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false') # Nexus v5.32 Shadow RAG
     sent_from: Mapped[Optional[str]] = mapped_column(String(50)) 
     
     # Polymorphism (Nexus)

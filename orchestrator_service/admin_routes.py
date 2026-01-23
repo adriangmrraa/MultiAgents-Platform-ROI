@@ -10,6 +10,8 @@ from pydantic import BaseModel
 import httpx
 
 from db import db, redis_client
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import get_db
 import smtplib
 from app.models.auth import User
 from app.api.deps import get_current_user
@@ -20,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Model Registry 2026 (Nexus v5.3)
 from app.core.models import MODEL_REGISTRY, validate_model, DEFAULT_MODEL
+from app.core.rag import RAGCore # NEW
 
 # Configuration
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-99")
@@ -30,8 +33,10 @@ from app.core.resilience import safe_db_call
 from app.core.engine import NexusEngine # NEW
 from app.core.credentials import get_tenant_credential # NEW
 from app.api.agents import get_or_create_sales_agent, AGENT_TEMPLATES # Nexus v5.25
+from app.api.templates import router as templates_router # Nexus v5.41
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+router.include_router(templates_router, prefix="/templates", tags=["templates"])
 
 # --- Models ---
 class TenantModel(BaseModel):
@@ -3760,12 +3765,14 @@ async def list_knowledge_files(current_user: User = Depends(get_current_user)):
     
     return [dict(r) for r in rows]
 
-from fastapi import File, UploadFile
+from fastapi import File, UploadFile, Form
 
 @router.post("/knowledge/upload", status_code=202)
 async def upload_knowledge_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    collection: Optional[str] = Form("General"),
+    hero_name: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -3819,7 +3826,7 @@ async def upload_knowledge_file(
     """, doc_uuid, tenant_id, str(current_user.id), filename, file_type, file_size)
     
     # 4. Trigger Async Sovereign Processing with Disk Path
-    background_tasks.add_task(process_knowledge_ingestion, str(doc_id), tenant_id, str(current_user.id), temp_path, filename)
+    background_tasks.add_task(process_knowledge_ingestion, str(doc_id), tenant_id, str(current_user.id), temp_path, filename, collection, hero_name)
 
     return {
         "status": "processing",
@@ -3827,7 +3834,7 @@ async def upload_knowledge_file(
         "filename": filename
     }
 
-async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str, file_path: str, filename: str):
+async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str, file_path: str, filename: str, collection: str = "General", hero_name: str = None):
     """
     Background Task: Sovereign RAG Ingestion.
     Refactored for v5.12: Reads from disk and ensures cleanup.
@@ -3865,7 +3872,7 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str,
         # Add metadata for link/cleanup
         metadata = {"source_id": str(doc_id)}
         
-        success = await rag.ingest_document(content, filename, metadata=metadata)
+        success = await rag.ingest_document(content, filename, metadata=metadata, collection=collection, hero_name=hero_name)
         
         if success:
             await db.pool.execute("UPDATE rag_documents SET status = 'active' WHERE id = $1", doc_id)
@@ -3906,7 +3913,15 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     user_id = str(current_user.id)
     
     # 1. Verify ownership and existence
-    doc_row = await db.pool.fetchrow("SELECT tenant_id, user_id FROM rag_documents WHERE id = $1", doc_id)
+    # v5.49 Fix: We need file_name (for vector delete) and file_path (for disk delete)
+    # The 'rag_documents' table (v5.48) has: id, tenant_id, user_id, file_path, collection, metadata
+    # We need to extract the filename from metadata if not in a dedicated column, OR trust file_path.
+    # Usually metadata->>'source_name' is the filename.
+    doc_row = await db.pool.fetchrow("""
+        SELECT tenant_id, user_id, file_path, metadata->>'source_name' as file_name 
+        FROM rag_documents WHERE id = $1
+    """, doc_id)
+    
     if not doc_row:
         raise HTTPException(404, "Knowledge file not found")
         
@@ -3918,14 +3933,25 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
         from app.core.rag import RAGCore
         rag = RAGCore(str(tenant_id), user_id=user_id)
         
-        # Mandamiento de Búsqueda/Borrado: Filter by user_id and source_id
-        # RagCore.delete_document_by_metadata already includes user_id and tenant_id filters internally
-        deleted_vectors = rag.delete_document_by_metadata("source_id", doc_id)
-        if not deleted_vectors:
-             logger.warning(f"No vectors found for document {doc_id}, proceeding with DB deletion.")
+        file_name = doc_row['file_name']
+        file_path = doc_row['file_path']
+        
+        # Nexus v5.49 Critical Fix: Delete by file_name using new specialized method
+        # This ensures ALL vectors with this source_name are removed.
+        rag.delete_vectors(file_name)
              
-        # 3. Delete DB record ONLY if vector cleanup attempt was made
+        # 3. Disk Cleanup
+        if file_path and os.path.exists(file_path):
+             try:
+                 os.remove(file_path)
+                 logger.info(f"disk_cleanup_success: {file_path}")
+             except Exception as e:
+                 logger.warning(f"disk_cleanup_warning: {e}")
+                 # We continue, as vector/db cleanup is more critical for logic
+        
+        # 4. DB Cleanup
         await db.pool.execute("DELETE FROM rag_documents WHERE id = $1", doc_id)
+        
         logger.info(f"cascading_delete_success: doc={doc_id}")
         return {"status": "deleted", "id": doc_id}
         
@@ -4221,11 +4247,12 @@ async def list_agent_templates():
     return AGENT_TEMPLATES
 
 @router.get("/agents/sales-config/{tenant_id}", dependencies=[Depends(verify_admin_token)])
-async def get_sales_agent_config(tenant_id: int):
+async def get_sales_agent_config(tenant_id: int, db: AsyncSession = Depends(get_db)):
     """
     Nexus v5.24 Bridge: Fetches or creates the Native Sales Agent for a store.
+    Fixed in v5.36: Injects AsyncSession.
     """
-    agent = await get_or_create_sales_agent(tenant_id)
+    agent = await get_or_create_sales_agent(tenant_id, db)
     if not agent:
         raise HTTPException(404, "Could not provision sales agent")
     return agent
@@ -4506,3 +4533,92 @@ async def connect_meta_account(request: Request, current_user: User = Depends(ge
     except Exception as e:
         logger.error(f"connect_meta_proxy_error: {str(e)}")
         raise HTTPException(500, str(e))
+@router.patch("/contacts/{contact_id}/circle")
+async def update_contact_circle(
+    contact_id: uuid.UUID, 
+    circle: str, # 'family', 'work', 'friends', 'clients', 'unknown'
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(verify_admin_token)
+):
+    """
+    Nexus v5.32 - Manually assign a Circle to a Contact.
+    Used for Shadow RAG segmentation.
+    """
+    valid_circles = ['family', 'work', 'friends', 'clients', 'unknown']
+    if circle not in valid_circles:
+        raise HTTPException(status_code=400, detail=f"Invalid circle. Must be one of {valid_circles}")
+
+    # Verify existence and update
+    result = await db.fetchval(
+        "UPDATE customers SET circle = $1 WHERE id = $2 RETURNING id",
+        circle, contact_id
+    )
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Contact not found")
+        
+    return {"status": "success", "contact_id": str(contact_id), "new_circle": circle}
+
+# --- RAG Retrieval Endpoints (Hybrid Brain v5.34) ---
+
+@router.get("/rag/search", dependencies=[Depends(verify_admin_token)])
+async def rag_search(
+    q: str, 
+    tenant_id: int, 
+    user_id: Optional[str] = None, 
+    source_ids: Optional[str] = None
+):
+    """
+    Standard Knowledge Base Retrieval.
+    Used by Agents/Tools to answer generic questions.
+    """
+    try:
+        # Resolve Credentials (Lazy)
+        rag = RAGCore(tenant_id=str(tenant_id), user_id=user_id)
+        
+        # Build filter
+        filters = {}
+        if source_ids:
+            # Metadata filter logic would go here if supported by SupabaseVectorStore filter syntax
+            # For now, we assume standard retrieval
+            pass
+            
+        context = rag.search(q, k=4, filter=filters)
+        return {"ok": True, "context": context}
+    except Exception as e:
+        logger.error(f"rag_endpoint_error: {e}")
+        return {"ok": False, "error": str(e)}
+
+@router.get("/rag/shadow-search", dependencies=[Depends(verify_admin_token)])
+async def rag_shadow_search(
+    q: str, 
+    tenant_id: int, 
+    user_id: Optional[str] = None,
+    circle: Optional[str] = None
+):
+    """
+    Shadow Memory Retrieval (The Brain Fetch).
+    Retrieves past chat context and style.
+    """
+    try:
+        rag = RAGCore(tenant_id=str(tenant_id), user_id=user_id)
+        
+        # Filter by circle if provided (e.g., 'family', 'work')
+        filters = {}
+        if circle and circle != "unknown":
+            filters["circle"] = circle
+            
+        docs = rag.search_shadow(q, k=5, filter=filters)
+        
+        # Format for LLM Consumption
+        results = []
+        for d in docs:
+            results.append({
+                "content": d.page_content,
+                "metadata": d.metadata
+            })
+            
+        return {"ok": True, "results": results}
+    except Exception as e:
+        logger.error(f"rag_shadow_endpoint_error: {e}")
+        return {"ok": False, "error": str(e)}

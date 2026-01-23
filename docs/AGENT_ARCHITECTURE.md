@@ -43,3 +43,16 @@ El sistema implementa una gestión de memoria deslizante basada en tokens (`tikt
 *   **Límite Duro**: 4000 tokens de historia.
 *   **Poda Inteligente**: Si la conversación excede el límite, se eliminan los mensajes más antiguos (User/Assistant pairs) preservando el `System Prompt` intacto.
 *   **Prevención de Crashes**: Evita errores de `context_length_exceeded` en sesiones largas de WhatsApp.
+
+## 🧠 The Hybrid Brain (Cerebro Híbrido)
+
+A partir de la v5.35, el AgentService consulta dos fuentes de memoria simultáneas:
+
+*   **Static Knowledge Base**: Manuales PDF/TXT (Colección estándar).
+*   **Shadow RAG (Memoria Profunda)**: Una colección separada (`chats_vectors`) que almacena interacciones pasadas.
+
+### Objetivo
+Imitación de estilo (Mimicry) y recuerdo de contexto ("Ayer me dijiste X").
+
+### Segmentación
+Los vectores se filtran por `circle` (Family, Work, Clients) para evitar mezclar tonos.
