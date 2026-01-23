@@ -3922,103 +3922,61 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str,
 @safe_db_call
 async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_current_user)):
     """
-    Force Delete Knowledge File (v5.66).
-    Protocol: Fail-Safe Clean.
-    Ensures 'Zombie Records' are removed from DB even if Vectors or Disk files are missing.
+    Nexus v5.78 - Direct SQL Vector Deletion.
+    Replaces LangChain abstraction with Raw SQL for reliability and speed (Nuclear Option).
     """
     tenant_id = current_user.tenant_id
     user_id = str(current_user.id)
     
-    # 1. Recovery: Verify ownership and existence
-    # 1. Recovery: Verify ownership and existence
-    # Nexus v5.76: Fix NameError & Precision Deletion
-    # We fetch specifically what we need, plus file_path if available
-    doc_row = await db.pool.fetchrow("SELECT * FROM rag_documents WHERE id = $1", doc_id)
+    # 1. Fetch Metadata
+    doc = await db.pool.fetchrow("SELECT * FROM rag_documents WHERE id = $1", doc_id)
     
-    if not doc_row:
+    if not doc:
         raise HTTPException(404, "Knowledge file not found")
         
-    if doc_row.get('tenant_id') != tenant_id or str(doc_row.get('user_id')) != user_id:
+    if doc.get('tenant_id') != tenant_id:
         raise HTTPException(403, "Access denied: You can only delete your own documents.")
-
-    # 1. Target Definition (Precision)
-    filename = doc_row.get('filename')
-    target_vector_source = os.path.basename(filename) if filename else None
+        
+    filename = doc.get('filename')
+    target_source = os.path.basename(filename) if filename else None
     
-    # Extract file_path safely for disk deletion
-    file_path = doc_row.get('file_path') or doc_row.get('storage_path')
-
-    logger.info(f"rag_precision_delete_start: target='{target_vector_source}' doc={doc_id}")
-
-    # 2. Vector Attempt (Precision + Offline Fallback)
-    try:
-        from app.core.rag import RAGCore
-        # Try standard RAGCore first (Requires OpenAI Key)
-        rag = RAGCore(str(tenant_id), user_id=user_id)
-        
-        if target_vector_source:
-             rag.delete_vectors(target_vector_source)
-             
-    except Exception as e:
-        logger.warning(f"rag_init_failed: {e}. Attempting Offline Deletion Mode...")
-        
-        # Nexus v5.77: Offline Vector Deletion Fix
-        # If OpenAI Key is missing, usage of FakeEmbeddings allows deletion of metadata.
-        if target_vector_source:
-            try:
-                from langchain_community.vectorstores import SupabaseVectorStore
-                from supabase.client import create_client
-                from app.core.config import settings
-
-                # Mock Class for Embeddings
-                class MockEmbeddings:
-                    def embed_documents(self, texts): return [[0.0]*1536] * len(texts)
-                    def embed_query(self, text): return [0.0]*1536
-                
-                logger.info("⚠️ Manual Override: Switching to MockEmbeddings for Vector Deletion.")
-                
-                # Direct Supabase Client
-                supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
-                
-                # VectorStore with Mock
-                vector_store = SupabaseVectorStore(
-                    client=supabase, 
-                    embedding=MockEmbeddings(), 
-                    table_name="documents",
-                    query_name="match_documents"
-                )
-                
-                # Execute Deletion (Metadata Only)
-                vector_store.delete(filter={
-                    "source": target_vector_source, 
-                    "tenant_id": str(tenant_id)
-                })
-                logger.info(f"rag_offline_delete_success: target='{target_vector_source}'")
-                
-            except Exception as inner_e:
-                logger.error(f"rag_offline_delete_failed: {inner_e}")
-
-    # 3. Disk Attempt (Silent)
-    # file_path is now safely defined (None if missing)
+    # 2. Raw SQL Vector Deletion (Nuclear Option)
+    # We bypass LangChain/RAGCore entirely and hit the Supabase 'documents' table directly.
+    if target_source:
+        try:
+            logger.info(f"rag_nuclear_delete: source='{target_source}' tenant='{tenant_id}'")
+            
+            query = """
+                DELETE FROM documents 
+                WHERE metadata->>'source' = $1 
+                AND metadata->>'tenant_id' = $2;
+            """
+            # Ensure we cast tenant_id to string for JSONB comparison
+            await db.pool.execute(query, target_source, str(tenant_id))
+            
+            logger.info("rag_nuclear_delete_success")
+        except Exception as e:
+            logger.error(f"rag_nuclear_delete_error: {e}")
+            # Non-blocking, proceed to clean remnants
+            
+    # 3. Physical File Deletion
+    file_path = doc.get('file_path') or doc.get('storage_path')
     if file_path:
         try:
-             if os.path.exists(file_path):
-                 os.remove(file_path)
-                 logger.info(f"force_delete_disk_success: {file_path}")
-        except FileNotFoundError:
-             pass # Already gone
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logger.info(f"fs_delete_success: {file_path}")
         except Exception as e:
-             logger.warning(f"force_delete_disk_warning: {e}")
-
-    # 4. SQL Execution (Mandatory)
+            logger.warning(f"fs_delete_error: {e}")
+            
+    # 4. Local DB Record Deletion
     try:
         await db.pool.execute("DELETE FROM rag_documents WHERE id = $1", doc_id)
-        logger.info(f"force_delete_db_success: doc={doc_id}")
     except Exception as e:
-        logger.error(f"force_delete_db_failed: {e}")
+        logger.error(f"db_delete_failed: {e}")
         raise HTTPException(500, "Database deletion failed")
-
-    return {"status": "deleted", "mode": "force_clean", "id": doc_id}
+    
+    return {"status": "deleted", "mode": "nuclear_sql", "id": doc_id}
 
 # --- Agents Management (QA Phase 3) ---
 
