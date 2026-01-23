@@ -3939,40 +3939,33 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     if doc_row.get('tenant_id') != tenant_id or str(doc_row.get('user_id')) != user_id:
         raise HTTPException(403, "Access denied: You can only delete your own documents.")
 
-    # Robust Field Extraction
-    file_path = doc_row.get('file_path') or doc_row.get('storage_path')
+    # Nexus v5.75: Precision Vector Deletion
+    # Evidence shows metadata->>'source' is EXACTLY the filename (e.g. "_chat.txt")
+    target_vector_source = None
+    if doc_row.get('filename'):
+        target_vector_source = os.path.basename(doc_row.get('filename'))
     
-    # Metadata extraction (source_name)
-    file_name = None
-    meta = doc_row.get('metadata')
-    if meta:
-        if isinstance(meta, str):
-            try:
-                meta = json.loads(meta) 
-            except: 
-                meta = {}
-        file_name = meta.get('source_name')
-
-    # Nexus v5.68: Ensure clean filename for Vector Deletion
-    # Fix Orphan Vectors: Supabase stores 'filename', DB stores 'fullpath'
-    target_vector_source = file_name
-    if not target_vector_source and file_path:
-        target_vector_source = os.path.basename(file_path)
-    elif target_vector_source:
-        target_vector_source = os.path.basename(target_vector_source)
-        
     if not target_vector_source:
-        logger.warning(f"force_delete_vector_skipped_no_name: doc={doc_id}")
+         # Fallback to metadata extraction if filename is missing (Unlikely)
+         meta = doc_row.get('metadata')
+         if meta:
+            if isinstance(meta, str):
+                try: meta = json.loads(meta) 
+                except: meta = {}
+            target_vector_source = meta.get('source_name')
 
-    # 2. Vector Attempt (Silent)
+    logger.info(f"rag_precision_delete_start: target='{target_vector_source}' doc={doc_id}")
+
+    # 2. Vector Attempt (Precision)
     try:
         from app.core.rag import RAGCore
         rag = RAGCore(str(tenant_id), user_id=user_id)
-        # Nexus v5.66: Ignore failures during vector deletion
+        
         if target_vector_source:
+            # RAGCore.delete_vectors (v5.71) handles strict tenant_id and both 'source'/'source_name' fields
             rag.delete_vectors(target_vector_source)
     except Exception as e:
-        logger.warning(f"force_delete_vector_skipped: doc={doc_id}, error={e}") 
+        logger.warning(f"rag_precision_delete_skipped: error={e}") 
 
     # 3. Disk Attempt (Silent)
     if file_path:

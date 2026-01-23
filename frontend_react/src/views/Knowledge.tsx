@@ -5,7 +5,7 @@ import { Modal } from '../components/Modal';
 import {
     FileText, Trash, Upload, Database, CheckCircle, Clock,
     AlertCircle, Key, ChevronRight, Folder, FolderPlus,
-    Search, User, Lock, BookOpen
+    User, Lock, BookOpen
 } from 'lucide-react';
 
 interface KnowledgeFile {
@@ -379,7 +379,11 @@ export const Knowledge: React.FC = () => {
 
                     <div className="flex gap-3">
                         <button
-                            onClick={() => performUpload(pendingUploadFile!, activeCollection, heroName)}
+                            onClick={() => {
+                                performUpload(pendingUploadFile!, activeCollection, heroName);
+                                setShowHeroModal(false);
+                                setHeroName('');
+                            }}
                             className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-3 rounded-lg transition-all"
                         >
                             Confirmar Subida
