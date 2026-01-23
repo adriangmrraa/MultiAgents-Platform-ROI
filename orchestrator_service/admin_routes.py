@@ -3914,19 +3914,28 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     user_id = str(current_user.id)
     
     # 1. Recovery: Verify ownership and existence
-    doc_row = await db.pool.fetchrow("""
-        SELECT tenant_id, user_id, file_path, metadata->>'source_name' as file_name 
-        FROM rag_documents WHERE id = $1
-    """, doc_id)
+    # Nexus v5.67: Fix "UndefinedColumnError" by selecting * and using .get()
+    doc_row = await db.pool.fetchrow("SELECT * FROM rag_documents WHERE id = $1", doc_id)
     
     if not doc_row:
         raise HTTPException(404, "Knowledge file not found")
         
-    if doc_row['tenant_id'] != tenant_id or str(doc_row['user_id']) != user_id:
+    if doc_row.get('tenant_id') != tenant_id or str(doc_row.get('user_id')) != user_id:
         raise HTTPException(403, "Access denied: You can only delete your own documents.")
 
-    file_name = doc_row['file_name']
-    file_path = doc_row['file_path']
+    # Robust Field Extraction
+    file_path = doc_row.get('file_path') or doc_row.get('storage_path')
+    
+    # Metadata extraction (source_name)
+    file_name = None
+    meta = doc_row.get('metadata')
+    if meta:
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta) 
+            except: 
+                meta = {}
+        file_name = meta.get('source_name')
 
     # 2. Vector Attempt (Silent)
     try:
