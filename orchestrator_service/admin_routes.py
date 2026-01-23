@@ -3941,26 +3941,31 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     target_source = os.path.basename(filename) if filename else None
     
     # ------------------------------------------------------------------
-    # Nexus v5.82: System Audit (Connection & Visibility)
+    # Nexus v5.84: Diagnostic Visibility (Rayos X)
     # ------------------------------------------------------------------
-    # 1. WHO AM I?
+    logger.info("🏥 STARTING DATABASE X-RAY...")
+    
     try:
-        identity = await db.pool.fetchrow("SELECT current_user, current_database(), version();")
-        logger.info(f"🆔 DB IDENTITY: User='{identity['current_user']}' DB='{identity['current_database']}' Ver='{identity['version'][:15]}...'")
+        # 1. Identidad de Conexión
+        identity = await db.pool.fetchrow("SELECT current_user, current_database(), current_schema();")
+        logger.info(f"🆔 WHO AM I: User='{identity['current_user']}' | DB='{identity['current_database']}' | Schema='{identity['current_schema']}'")
+
+        # 2. Conteo Bruto (Sin filtros)
+        count_row = await db.pool.fetchrow("SELECT count(*) FROM documents;")
+        total_rows = count_row['count']
+        logger.info(f"📊 TABLE STATUS: The 'documents' table has {total_rows} total rows.")
+
+        # 3. Muestra de Datos (Si hay filas)
+        if total_rows > 0:
+            sample_rows = await db.pool.fetch("SELECT id, metadata FROM documents LIMIT 3;")
+            for i, row in enumerate(sample_rows):
+                logger.info(f"   👁️ ROW {i+1}: ID={row['id']} | Meta={str(row['metadata'])[:150]}...")
+        else:
+            logger.error("🚫 EMPTY VIEW: The application sees the table as EMPTY. (Check RLS or Permissions)")
+            
     except Exception as e:
-        logger.error(f"❌ DB CONNECTION FAIL: {e}")
-
-    # 2. WHAT DO I SEE?
-    try:
-        # Traemos TODO, sin filtros. Solo para ver si la tabla es legible.
-        rows = await db.pool.fetch("SELECT id, metadata FROM documents LIMIT 5;")
-        logger.info(f"👀 VISIBILITY CHECK: Found {len(rows)} total rows in 'documents' table (Sample).")
-
-        for i, row in enumerate(rows):
-            logger.info(f"   Row {i+1}: ID={row['id']} Meta={str(row['metadata'])[:100]}...")
-
-    except Exception as e:
-        logger.error(f"🙈 BLINDNESS: Could not read 'documents' table. Error: {e}")
+        logger.error(f"❌ CRITICAL ERROR reading DB: {e}")
+    # ------------------------------------------------------------------
     # ------------------------------------------------------------------
 
     # 2. "Search & Destroy" Strategy (Nexus v5.81)
