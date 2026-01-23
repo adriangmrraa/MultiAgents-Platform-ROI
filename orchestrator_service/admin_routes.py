@@ -3819,11 +3819,27 @@ async def upload_knowledge_file(
         raise HTTPException(500, "Buffered storage failure")
 
     # 3. Insert into DB (Status: processing)
-    doc_id = await db.pool.fetchval("""
-        INSERT INTO rag_documents (id, tenant_id, user_id, filename, file_type, file_size, status, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, 'processing', NOW())
-        RETURNING id
-    """, doc_uuid, tenant_id, str(current_user.id), filename, file_type, file_size)
+    try:
+        doc_id = await db.pool.fetchval("""
+            INSERT INTO rag_documents (id, tenant_id, user_id, filename, file_type, file_size, status, created_at, collection)
+            VALUES ($1, $2, $3, $4, $5, $6, 'processing', NOW(), $7)
+            RETURNING id
+        """, doc_uuid, tenant_id, str(current_user.id), filename, file_type, file_size, collection or "General")
+    except Exception as e:
+        # Nexus v5.72: Auto-Healing Schema
+        if "UndefinedColumn" in str(e) or 'column "collection" of relation "rag_documents" does not exist' in str(e):
+            logger.warning("rag_schema_healing: Adding missing 'collection' column to rag_documents")
+            await db.pool.execute("ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS collection VARCHAR DEFAULT 'General'")
+            
+            # Retry Insert
+            doc_id = await db.pool.fetchval("""
+                INSERT INTO rag_documents (id, tenant_id, user_id, filename, file_type, file_size, status, created_at, collection)
+                VALUES ($1, $2, $3, $4, $5, $6, 'processing', NOW(), $7)
+                RETURNING id
+            """, doc_uuid, tenant_id, str(current_user.id), filename, file_type, file_size, collection or "General")
+        else:
+            raise e
+
     
     # 4. Trigger Async Sovereign Processing with Disk Path
     background_tasks.add_task(process_knowledge_ingestion, str(doc_id), tenant_id, str(current_user.id), temp_path, filename, collection, hero_name)
