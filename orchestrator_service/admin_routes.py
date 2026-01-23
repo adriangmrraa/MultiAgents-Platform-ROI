@@ -3906,17 +3906,14 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str,
 @safe_db_call
 async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_current_user)):
     """
-    Delete a file from the knowledge base (v5.12).
-    Harden: Implements transactional cascading delete to prevent "Zombie Knowledge".
+    Force Delete Knowledge File (v5.66).
+    Protocol: Fail-Safe Clean.
+    Ensures 'Zombie Records' are removed from DB even if Vectors or Disk files are missing.
     """
     tenant_id = current_user.tenant_id
     user_id = str(current_user.id)
     
-    # 1. Verify ownership and existence
-    # v5.49 Fix: We need file_name (for vector delete) and file_path (for disk delete)
-    # The 'rag_documents' table (v5.48) has: id, tenant_id, user_id, file_path, collection, metadata
-    # We need to extract the filename from metadata if not in a dedicated column, OR trust file_path.
-    # Usually metadata->>'source_name' is the filename.
+    # 1. Recovery: Verify ownership and existence
     doc_row = await db.pool.fetchrow("""
         SELECT tenant_id, user_id, file_path, metadata->>'source_name' as file_name 
         FROM rag_documents WHERE id = $1
@@ -3928,36 +3925,38 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     if doc_row['tenant_id'] != tenant_id or str(doc_row['user_id']) != user_id:
         raise HTTPException(403, "Access denied: You can only delete your own documents.")
 
-    # 2. Transactional Cascading Delete (Vectors First!)
+    file_name = doc_row['file_name']
+    file_path = doc_row['file_path']
+
+    # 2. Vector Attempt (Silent)
     try:
         from app.core.rag import RAGCore
         rag = RAGCore(str(tenant_id), user_id=user_id)
-        
-        file_name = doc_row['file_name']
-        file_path = doc_row['file_path']
-        
-        # Nexus v5.49 Critical Fix: Delete by file_name using new specialized method
-        # This ensures ALL vectors with this source_name are removed.
+        # Nexus v5.66: Ignore failures during vector deletion
         rag.delete_vectors(file_name)
-             
-        # 3. Disk Cleanup
-        if file_path and os.path.exists(file_path):
-             try:
-                 os.remove(file_path)
-                 logger.info(f"disk_cleanup_success: {file_path}")
-             except Exception as e:
-                 logger.warning(f"disk_cleanup_warning: {e}")
-                 # We continue, as vector/db cleanup is more critical for logic
-        
-        # 4. DB Cleanup
-        await db.pool.execute("DELETE FROM rag_documents WHERE id = $1", doc_id)
-        
-        logger.info(f"cascading_delete_success: doc={doc_id}")
-        return {"status": "deleted", "id": doc_id}
-        
     except Exception as e:
-        logger.error(f"cascading_delete_failed: doc={doc_id}, error={e}")
-        raise HTTPException(500, f"Failure during cascading delete: {str(e)}")
+        logger.warning(f"force_delete_vector_skipped: doc={doc_id}, error={e}") 
+
+    # 3. Disk Attempt (Silent)
+    if file_path:
+        try:
+             if os.path.exists(file_path):
+                 os.remove(file_path)
+                 logger.info(f"force_delete_disk_success: {file_path}")
+        except FileNotFoundError:
+             pass # Already gone
+        except Exception as e:
+             logger.warning(f"force_delete_disk_warning: {e}")
+
+    # 4. SQL Execution (Mandatory)
+    try:
+        await db.pool.execute("DELETE FROM rag_documents WHERE id = $1", doc_id)
+        logger.info(f"force_delete_db_success: doc={doc_id}")
+    except Exception as e:
+        logger.error(f"force_delete_db_failed: {e}")
+        raise HTTPException(500, "Database deletion failed")
+
+    return {"status": "deleted", "mode": "force_clean", "id": doc_id}
 
 # --- Agents Management (QA Phase 3) ---
 
