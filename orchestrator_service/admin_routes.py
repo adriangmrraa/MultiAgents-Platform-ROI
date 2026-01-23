@@ -3922,109 +3922,71 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str,
 @safe_db_call
 async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_current_user)):
     """
-    Nexus v5.78 - Direct SQL Vector Deletion.
-    Replaces LangChain abstraction with Raw SQL for reliability and speed (Nuclear Option).
+    Nexus v5.86 - Dual DB Precision Delete (Hybrid Architecture).
+    - Local DB (Auth/App): Reads/Deletes the 'rag_documents' record.
+    - Remote DB (Vectors): Deletes vectors from 'documents' table via direct transient connection.
+    - Precision: Targets 'metadata->source_id' (UUID) for exact match.
     """
-    tenant_id = current_user.tenant_id
-    user_id = str(current_user.id)
-    
-    # 1. Fetch Metadata
-    doc = await db.pool.fetchrow("SELECT * FROM rag_documents WHERE id = $1", doc_id)
+    import asyncpg
+    import os
+
+    # 1. Recuperar datos locales (DB Auth/App)
+    # Usamos el pool normal de la app
+    doc = await db.pool.fetchrow("SELECT id, filename, tenant_id, file_path, storage_path FROM rag_documents WHERE id=$1", doc_id)
     
     if not doc:
         raise HTTPException(404, "Knowledge file not found")
-        
-    if doc.get('tenant_id') != tenant_id:
+
+    if doc.get('tenant_id') != current_user.tenant_id:
         raise HTTPException(403, "Access denied: You can only delete your own documents.")
-        
-    filename = doc.get('filename')
-    target_source = os.path.basename(filename) if filename else None
-    
-    # ------------------------------------------------------------------
-    # Nexus v5.84: Diagnostic Visibility (Rayos X)
-    # ------------------------------------------------------------------
-    logger.info("🏥 STARTING DATABASE X-RAY...")
-    
-    try:
-        # 1. Identidad de Conexión
-        identity = await db.pool.fetchrow("SELECT current_user, current_database(), current_schema();")
-        logger.info(f"🆔 WHO AM I: User='{identity['current_user']}' | DB='{identity['current_database']}' | Schema='{identity['current_schema']}'")
 
-        # 2. Conteo Bruto (Sin filtros)
-        count_row = await db.pool.fetchrow("SELECT count(*) FROM documents;")
-        total_rows = count_row['count']
-        logger.info(f"📊 TABLE STATUS: The 'documents' table has {total_rows} total rows.")
+    doc_uuid = str(doc['id'])
+    filename = doc['filename']
+    tenant_id = str(doc['tenant_id'])
 
-        # 3. Muestra de Datos (Si hay filas)
-        if total_rows > 0:
-            sample_rows = await db.pool.fetch("SELECT id, metadata FROM documents LIMIT 3;")
-            for i, row in enumerate(sample_rows):
-                logger.info(f"   👁️ ROW {i+1}: ID={row['id']} | Meta={str(row['metadata'])[:150]}...")
-        else:
-            logger.error("🚫 EMPTY VIEW: The application sees the table as EMPTY. (Check RLS or Permissions)")
-            
-    except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR reading DB: {e}")
-    # ------------------------------------------------------------------
-    # ------------------------------------------------------------------
-
-    # 2. "Search & Destroy" Strategy (Nexus v5.81)
-    # If standard JSON lookups fail, we hunt for the filename string inside the raw metadata text.
-    if filename:
+    # 2. CONEXIÓN A SUPABASE (Vectores)
+    supabase_url = os.getenv("SUPABASE_DB_URL")
+    if supabase_url:
+        logger.info(f"🔌 CONNECTING to Supabase to delete vectors for ID: {doc_uuid}")
         try:
-            logger.info(f"🕵️ HUNTING: Searching for '%{filename}%' inside metadata blob...")
-            
-            tenant_str = str(tenant_id)
-            search_term = f"%{filename}%"
-            
-            # Step 1: Locate Target
-            # We search for the filename as a substring in the entire JSON blob
-            # BUT we strictly enforce tenant_id using the JSON field to prevent cross-tenant collision.
-            find_query = """
-                SELECT id, metadata 
-                FROM documents 
-                WHERE metadata::text LIKE $1
-                AND (metadata->>'tenant_id')::text = $2::text
-                LIMIT 1;
-            """
-            
-            row = await db.pool.fetchrow(find_query, search_term, tenant_str)
-            
-            # Step 2: Destroy Target
-            if row:
-                found_id = row['id']
-                found_meta = row['metadata']
-                logger.info(f"🎯 TARGET ACQUIRED: Found ID={found_id}")
-                logger.info(f"📝 METADATA REVEALED: {found_meta}") 
+            conn = await asyncpg.connect(supabase_url)
+            try:
+                # BORRADO QUIRÚRGICO POR ID
+                # Buscamos coincidencias exactas en el campo 'source_id' de la metadata
+                # Opcional: añadimos 'source' (filename) como respaldo por si acaso (OR)
+                query = """
+                    DELETE FROM documents 
+                    WHERE metadata->>'source_id' = $1::text
+                    OR (metadata->>'source' = $2 AND metadata->>'tenant_id' = $3::text)
+                    RETURNING id;
+                """
+                deleted = await conn.fetch(query, doc_uuid, filename, tenant_id)
+                logger.info(f"✅ SUPABASE CLEANUP: Deleted {len(deleted)} vectors linked to ID {doc_uuid}")
 
-                # Borrado Quirúrgico por ID
-                delete_query = "DELETE FROM documents WHERE id = $1"
-                await db.pool.execute(delete_query, found_id)
-                logger.info(f"💥 DESTROYED: Document {found_id} deleted successfully.")
-            else:
-                logger.error(f"👻 GHOST: Even a full text search for '%{filename}%' returned nothing.")
-
+            finally:
+                await conn.close()
+                logger.info("🔌 DISCONNECTED form Supabase.")
         except Exception as e:
-            logger.error(f"rag_search_destroy_error: {e}")
-            
-    # 3. Physical File Deletion
+            logger.error(f"⚠️ SUPABASE ERROR: Failed to delete vectors. Reason: {e}")
+            # No detenemos el proceso, permitimos que se borre el registro local para no dejar 'zombies' en la UI
+    else:
+        logger.error("❌ CONFIG ERROR: SUPABASE_DB_URL is missing. Cannot delete vectors.")
+    
+    # 3. BORRADO DE ARCHIVO FÍSICO (Si existe)
     file_path = doc.get('file_path') or doc.get('storage_path')
-    if file_path:
+    if file_path and os.path.exists(file_path):
         try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                logger.info(f"fs_delete_success: {file_path}")
+            os.remove(file_path)
+            logger.info(f"🗑️ FS CLEANUP: Deleted file {file_path}")
         except Exception as e:
-            logger.warning(f"fs_delete_error: {e}")
-            
-    # 4. Local DB Record Deletion
-    try:
-        await db.pool.execute("DELETE FROM rag_documents WHERE id = $1", doc_id)
-    except Exception as e:
-        logger.error(f"db_delete_failed: {e}")
-        raise HTTPException(500, "Database deletion failed")
+            logger.warning(f"⚠️ FS ERROR: Could not delete file {file_path}: {e}")
+
+    # 4. BORRADO LOCAL (DB Auth/App)
+    # Esto elimina el archivo de la lista visual del usuario
+    await db.pool.execute("DELETE FROM rag_documents WHERE id=$1", doc_id)
+    logger.info(f"🗑️ LOCAL CLEANUP: Metadata record {doc_uuid} deleted from App DB.")
     
-    return {"status": "deleted", "mode": "nuclear_sql", "id": doc_id}
+    return {"status": "deleted", "mode": "hybrid_precision", "id": doc_id}
 
 # --- Agents Management (QA Phase 3) ---
 
