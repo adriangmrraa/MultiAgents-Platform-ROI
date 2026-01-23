@@ -3937,12 +3937,24 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
                 meta = {}
         file_name = meta.get('source_name')
 
+    # Nexus v5.68: Ensure clean filename for Vector Deletion
+    # Fix Orphan Vectors: Supabase stores 'filename', DB stores 'fullpath'
+    target_vector_source = file_name
+    if not target_vector_source and file_path:
+        target_vector_source = os.path.basename(file_path)
+    elif target_vector_source:
+        target_vector_source = os.path.basename(target_vector_source)
+        
+    if not target_vector_source:
+        logger.warning(f"force_delete_vector_skipped_no_name: doc={doc_id}")
+
     # 2. Vector Attempt (Silent)
     try:
         from app.core.rag import RAGCore
         rag = RAGCore(str(tenant_id), user_id=user_id)
         # Nexus v5.66: Ignore failures during vector deletion
-        rag.delete_vectors(file_name)
+        if target_vector_source:
+            rag.delete_vectors(target_vector_source)
     except Exception as e:
         logger.warning(f"force_delete_vector_skipped: doc={doc_id}, error={e}") 
 

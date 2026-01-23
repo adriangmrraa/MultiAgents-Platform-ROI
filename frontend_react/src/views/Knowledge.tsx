@@ -110,7 +110,12 @@ export const Knowledge: React.FC = () => {
         setUploading(true);
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('collection', collection);
+
+        // Nexus v5.69: Strict Collection Binding
+        // Ensure we never send partial/undefined values
+        const targetCollection = collection || 'General';
+        formData.append('collection', targetCollection);
+
         if (hero) formData.append('hero_name', hero); // v5.49 Support
 
         try {
@@ -182,8 +187,8 @@ export const Knowledge: React.FC = () => {
                             key={col.id}
                             onClick={() => setActiveCollection(col.id)}
                             className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeCollection === col.id
-                                    ? 'bg-slate-800 text-cyan-400 shadow-lg shadow-black/20'
-                                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                                ? 'bg-slate-800 text-cyan-400 shadow-lg shadow-black/20'
+                                : 'text-slate-400 hover:bg-white/5 hover:text-white'
                                 }`}
                         >
                             <col.icon size={18} />
