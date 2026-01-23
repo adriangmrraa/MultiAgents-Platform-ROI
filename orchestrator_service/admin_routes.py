@@ -3940,35 +3940,40 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     filename = doc.get('filename')
     target_source = os.path.basename(filename) if filename else None
     
-    # 2. Raw SQL Vector Deletion (Nuclear Option)
-    # We bypass LangChain/RAGCore entirely and hit the Supabase 'documents' table directly.
-    if target_source:
+    # 2. Omni-Delete Strategy (Redundant SQL)
+    # Target source_id (UUID), source (path), or source_name (filename) match.
+    if filename:
         try:
-            # 1. Diagnostic Logging
-            target_tenant = str(tenant_id)
-            logger.info(f"🔍 DEBUG TARGET: filename='{target_source}' tenant='{target_tenant}'")
-            
-            # 2. Query with Defensive Casting & Return
-            # We use ::text to ensure strict string comparison against JSONB values
+            # 1. Variables Preparadas
+            doc_id_str = str(doc_id)
+            tenant_str = str(tenant_id)
+
+            logger.info(f"🔱 OMNI-DELETE: Targeting ID='{doc_id_str}' OR File='{filename}'")
+
+            # 2. La Query Triple (Escopeta)
             query = """
                 DELETE FROM documents 
-                WHERE metadata->>'source' = $1 
-                AND (metadata->>'tenant_id')::text = $2::text
+                WHERE (metadata->>'tenant_id')::text = $1::text
+                AND (
+                    (metadata->>'source_id')::text = $2::text  -- Coincidencia por UUID (Infalible)
+                    OR metadata->>'source' = $3               -- Coincidencia por path
+                    OR metadata->>'source_name' = $3          -- Coincidencia por nombre
+                )
                 RETURNING id;
             """
+
+            # 3. Ejecución pasando (tenant, doc_id, filename)
+            deleted_rows = await db.pool.fetch(query, tenant_str, doc_id_str, filename)
             
-            # 3. Execute and Count
-            deleted_rows = await db.pool.fetch(query, target_source, target_tenant)
+            # 4. Log de Victoria
             count = len(deleted_rows)
-            
-            # 4. Result Logging
-            logger.info(f"💥 SQL RESULT: Deleted {count} vectors from Supabase.")
-            
-            if count == 0:
-                logger.warning("⚠️ GHOST DELETE: SQL ran but found no matches. Check metadata formatting in Supabase.")
+            if count > 0:
+                logger.info(f"✅ DELETED {count} VECTORS via Omni-Match strategy.")
+            else:
+                logger.error(f"❌ STILL GHOSTING: Tried ID={doc_id_str} and Name={filename} but found 0 vectors.")
                 
         except Exception as e:
-            logger.error(f"rag_nuclear_delete_error: {e}")
+            logger.error(f"rag_omni_delete_error: {e}")
             # Non-blocking, proceed to clean remnants
             
     # 3. Physical File Deletion
