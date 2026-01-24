@@ -1,4 +1,4 @@
-# API Reference: System & Management (Nexus v5.4)
+# API Reference: System & Management (Nexus v6.0)
 
 ## Infraestructura y Control
 
@@ -12,8 +12,12 @@ Devuelve la lista de modelos de IA soportados, categorizados por su capacidad.
     {
       "default_model": "gpt-5-mini",
       "models": [
-        { "id": "gpt-5-mini", "tier": "economy", "ui_metadata": { ... } },
-        { "id": "o3-high", "tier": "premium", "ui_metadata": { ... } }
+        { "id": "gpt-5.2", "tier": "flagship", "name": "GPT-5.2 (Flagship)" },
+        { "id": "gpt-5-mini", "tier": "economy", "name": "GPT-5 Mini" },
+        { "id": "gpt-5.2-pro", "tier": "premium", "name": "GPT-5.2 Pro" },
+        { "id": "gpt-5.2-codex", "tier": "advanced", "name": "GPT-5.2 Codex" },
+        { "id": "gemini-3-pro", "tier": "advanced", "name": "Gemini 3 Pro" },
+        { "id": "gemini-3-flash", "tier": "economy", "name": "Gemini 3 Flash" }
       ]
     }
     ```
@@ -25,7 +29,7 @@ Disparador manual para el bootstrapper de Supabase/pgvector.
 *   **Auth**: Requiere `X-Admin-Token`.
 *   **Uso**: En caso de errores de "Table not found" o migraciones corruptas.
 
-## Agentes (Gestión v5.4)
+## Agentes (Gestión v6.0)
 
 ### 🤖 Crear Agente
 `POST /admin/agents`
@@ -33,9 +37,12 @@ Disparador manual para el bootstrapper de Supabase/pgvector.
 
 ### 🔄 Actualizar Agente
 `PUT /admin/agents/{id}`
-*   **Intelligent Sync**: Si cambias a un modelo **Premium**, el sistema ajustará automáticamente los timeouts de respuesta en el `agent_service`.
+*   **Evolución v6.0 Payload**:
+    *   `model_provider`, `model_version` y `enabled_tools` viven en la **raíz** del JSON.
+    *   `config` (JSONB) encapsula parámetros dinámicos: `reasoning_effort`, `text_verbosity`, `agent_tone`.
+*   **Intelligent Sync**: Si cambias a un modelo **Premium/Flagship**, el sistema ajustará automáticamente los timeouts y filtros de razonamiento.
 
-## Gestión de Conocimiento (Knowledge v5.56)
+## Gestión de Conocimiento (Knowledge v6.0)
 
 ### 📤 Upload Document (RAG)
 `POST /admin/knowledge/upload`
@@ -48,4 +55,4 @@ Disparador manual para el bootstrapper de Supabase/pgvector.
 ### 🗑️ Delete Document
 `DELETE /admin/knowledge/{id}`
 *   **Comportamiento Destructivo**: Esta operación es **irreversible** en Supabase.
-*   **Performance**: Puede tardar 1-2 segundos en retornar mientras limpia los vectores embebidos del clúster de ChromaDB.
+*   **Performance**: Puede tardar 1-2 segundos en retornar mientras limpia los vectores embebidos del clúster de Supabase (pgvector).

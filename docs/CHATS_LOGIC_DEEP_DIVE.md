@@ -10,9 +10,9 @@ La vista de Chats no es simplemente un lector de base de datos; implementa un pa
 
 ### Componentes Clave
 1.  **Frontend (`Chats.tsx`)**: Interfaz unificada para WhatsApp, Instagram y Facebook.
-2.  **API Polling (`/admin/chats/summary`)**: Mecanismo de actualización de lista de contactos.
-3.  **Message Loop (`loadHistory`)**: Loop optimizado para traer nuevos mensajes de la conversación activa.
-4.  **Send Tunnel (`/admin/whatsapp/send`)**: Túnel único de salida unificado.
+2.  **API Polling (`/admin/chats/summary`)**: Mecanismo de actualización de lista de contactos resuelto vía Tabla `users` (Integer ID).
+3.  **Traceability Index**: Uso de `correlation_id` para vincular mensajes con logs de razonamiento de la IA.
+4.  **Send Tunnel (`/admin/whatsapp/send`)**: Túnel de salida unificado que inyecta `sent_context` para auditoría.
 5.  **Template Manager (`Templates.tsx`)**: Gestor de plantillas HSM aprobadas por Meta.
 
 ---
@@ -32,7 +32,7 @@ Al iniciar, el sistema llama a `loadChats`:
 Cuando seleccionas un chat (`selectedChatId`), se activa un loop dedicado de alta frecuencia:
 -   **Frecuencia**: 3 segundos.
 -   **Endpoint**: `GET /admin/chats/{id}/messages`
--   **Optimización**: El backend devuelve todo el historial. En futuras versiones (v6), esto migrará a Delta Sync (solo lo nuevo).
+-   **Optimización**: El sistema v6.0 utiliza **Delta Sync** para traer solo los nuevos mensajes, optimizando el ancho de banda.
 -   **Renderizado**:
     -   **Texto**: Detecta enlaces y los hace clicables.
     -   **Adjuntos**: Renderiza imágenes, videos y audios basándose en el array `attachments` del payload JSON.
@@ -50,7 +50,8 @@ El operador escribe y envía:
       "channel_source": "instagram" // Vital para saber a qué API externa llamar
     }
     ```
-4.  **Backend Routing**: El orquestador detecta `channel_source` y enruta al microservicio correcto (`whatsapp_service` o `meta_service`).
+4.  **Backend Routing**: El orquestador detecta `channel_source` y enruta al microservicio correcto.
+5.  **Omnichannel Identity (v6.0)**: Las conversaciones ahora incluyen `platform_origin` y `source_identifier` para rastrear exactamente qué cuenta de Meta o YCloud recibió el mensaje, permitiendo múltiples números por tenant.
 
 ---
 

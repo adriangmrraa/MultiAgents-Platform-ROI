@@ -18,10 +18,17 @@ Nexus no tiene un solo "Bot". Tiene una **Fuerza Laboral Digital**. Esta vista p
 
 ## 🔄 Flujo de Configuración
 
-### 1. Inyección de Identidad (System Prompt)
-El campo más poderoso es el `system_prompt_template`.
--   **Variable Mágica**: El usuario escribe texto estático, pero el sistema inyecta variables de contexto en tiempo de ejecución (`{catalog}`, `{store_name}`).
--   **Recomendación UI**: "Núcleo Omega" es un preset que carga las mejores prácticas de venta consultiva.
+### 1. Inyección de Identidad (Hybrid Prompting)
+El sistema ahora separa la inteligencia en capas:
+-   **System Prompt Técnico (Core Rules)**: Reglas JSON, seguridad (`business_rules`) y manuales de herramientas. Está desacoplado y es gestionado por el sistema.
+-   **Personalidad del Usuario (Agent Tone)**: Editable en la UI. Permite definir si el bot es cínico, alegre o profesional sin romper las reglas de seguridad.
+-   **Variable Mágica**: Inyección en tiempo de ejecución de `{catalog}`, `{store_name}`, y el `{synonym_dictionary}`.
+
+### 2. Seed Data: El Legado de "Pointe Coach"
+Todo nuevo Agente de Ventas nace pre-configurado con los valores de éxito de **Pointe Coach**. 
+-   **Tono**: Optimizado para calidez y voseo argentino.
+-   **Diccionario**: Mapeo automático de términos de danza (Leotardos -> Mallas).
+-   **Reglas**: Filtros de veracidad absoluta y derivación humana proactiva.
 
 ### 2. Selección de Herramientas (Brain Extensions)
 El agente por sí solo es solo un LLM. Las herramientas le dan "manos".
@@ -57,7 +64,7 @@ Al pie de página, el componente `GlobalStreamLog` se conecta vía WebSocket/SSE
 
 ---
 
-## 🚀 Evolución Nexus v5.99
+## 🚀 Estándares Nexus v6.0
 
 ### 1. Gestión de Canales Omnicanal
 Se ha introducido el componente `ChannelSelector` directamente en el Wizard.
@@ -65,10 +72,10 @@ Se ha introducido el componente `ChannelSelector` directamente en el Wizard.
 -   **Sincronización**: El Wizard consulta `/admin/integrations/status` para deshabilitar canales que no tengan una conexión activa en Meta o TiendaNube.
 -   **Persistencia**: Las selecciones se guardan en la columna `channels` (JSONB) y se mantienen sincronizadas entre el modal de pre-activación y el Wizard profundo.
 
-### 2. Live Preview & Simulation (Fixed)
-La simulación de chat ha sido re-diseñada para mayor robustez.
+### 2. Live Preview & Simulation (Protocol Omega)
+La simulación de chat ha sido re-diseñada para mayor robustez bajo el Protocolo Omega.
 -   **SSE Handling**: El backend ahora decodifica correctamente el flujo de tokens (Server-Sent Events) evitando burbujas vacías.
--   **Schema v1/v2 Sync**: Se ha unificado la versión del esquema entre el Orquestador y el Agent Service para evitar errores de incompatibilidad con LangChain.
+-   **Schema Consistency**: Se ha unificado la versión del esquema en la v6.0 entre el Orquestador y el Agent Service para evitar errores de incompatibilidad.
 -   **Contexto de Identidad**: La simulación hereda el `tenant_id` real del administrador para usar sus propias API Keys.
 
 ### 3. Persistencia de URL Web
@@ -104,7 +111,15 @@ La simulación de chat ha sido re-diseñada para mayor robustez.
       "channels": ["whatsapp"]
     }
     ```
-*   **Validación Backend**: El backend verifica que el `tenant_id` pertenezca al usuario (o sea SuperAdmin).
+*   **Validación Backend**: El backend verifica que el `tenant_id` pertenezca al usuario (Resolviendo vía Tabla `users` para evitar Schema Drift).
+
+#### C. Flujo de Persistencia (January 2026 Standard)
+1.  **Frontend**: Form dinámico captura datos de Model, Tools y Wizard.
+2.  **API Gateway**: El Orquestador recibe un JSON Payload masivo.
+3.  **Pydantic Conversion**: `AgentModel` valida los tipos y limpia campos nulos.
+4.  **DB Column Mapping**: 
+    - Campos core (`model_version`, `enabled_tools`) van a columnas dedicadas.
+    - Parámetros SOTA (`reasoning_effort`, `agent_tone`) se consolidan en la columna `config` (JSONB).
 
 #### B. Cargar Herramientas
 *   **Request**: `GET /api/admin/tools`

@@ -55,13 +55,17 @@ Una vez conectado, la UI muestra una grilla con los iconos de FB/IG/WA.
 -   **Alerta Amarilla**: Permiso faltante (ej: usuario conectó FB pero olvidó dar permiso a WA).
 # 🌐 Integraciones: Web Widget (Zero-Config Channel)
 
-Nexus v5.99 introduce el **Web Widget**, un canal directo sin dependencias de terceros (como Meta o TiendaNube) que se instala en cualquier sitio web.
+Nexus v6.0 introduce el **Web Widget**, un canal directo sin dependencias de terceros (como Meta o TiendaNube) que se instala en cualquier sitio web.
 
-### 🏗️ Lógica de Activación
-A diferencia de WhatsApp o Facebook, el canal Web no requiere un flujo de OAuth externo. Se considera "Siempre Disponible" en el sistema.
+### 🏗️ Lógica de Activación y Descubrimiento (v6.0)
+A diferencia de versiones anteriores donde la lista de canales era estática, el nuevo **ChannelModal** implementa un descubrimiento dinámico basado en las capacidades del tenant.
 
-1.  **Configuración Visual**: En `Settings > Canal Web`, el usuario define el "Look & Feel" (colores, mensajes). Estos valores se guardan en el `tenant_config`.
-2.  **Activación por Agente**: Un agente responderá por el widget **SOLO si** el canal `web` está seleccionado en su configuración dentro del Wizard.
+1.  **Capability Scan**: Al abrir el selector de canales del agente, el frontend escanea las credenciales activas del inquilino:
+    -   `CHATWOOT_API_TOKEN` -> Habilita canal Chatwoot.
+    -   `WHATSAPP_PHONE_NUMBER_ID` -> Habilita WhatsApp Meta.
+    -   `YCLOUD_API_KEY` -> Habilita WhatsApp YCloud.
+2.  **Filtrado de UI**: El sistema solo muestra los canales que tienen una "Vía de Comunicación" configurada, evitando errores de envío en tiempo de ejecución.
+3.  **Configuración Visual**: En `Settings > Canal Web`, el usuario define el "Look & Feel" (colores, mensajes) para el widget que siempre está disponible.
 
 ---
 

@@ -9,7 +9,7 @@ import structlog
 from typing import Any, Dict, List, Optional, Literal
 from fastapi import FastAPI, HTTPException, Header, Depends, Body
 from pydantic import BaseModel, Field, SecretStr
-from langchain.agents import AgentExecutor, create_openai_functions_agent
+from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -433,16 +433,15 @@ async def execute_agent(
     if request.agent_config and request.agent_config.temperature is not None:
         target_temp = request.agent_config.temperature
 
-    # Safety: Reasoning models (o1, o3) do NOT support temp 0.0 or any value other than 1.0 in current API versions.
-    # We use exact prefix matching to avoid false positives with models like "gpt-4o-mini"
+    # Safety: Reasoning models (o1, o3, gpt-5 family) do NOT support temp 0.0 or any value other than 1.0 in current API versions.
+    # We use exact prefix matching and include the new GPT-5 family which shares reasoning restrictions.
     model_lower = model_name.lower()
     is_reasoning_model = (
         model_lower.startswith("o1-") or 
         model_lower.startswith("o3-") or 
-        model_lower == "o1" or 
-        model_lower == "o3"
+        model_lower.startswith("gpt-5") or
+        model_lower in ["o1", "o3"]
     )
-    
     
     if is_reasoning_model:
         logger.info("reasoning_model_detected_locked_at_default_temp", model=model_name)
@@ -532,7 +531,7 @@ async def execute_agent(
     else:
         tools_list = template_tools
 
-    agent_def = create_openai_functions_agent(llm, tools_list, prompt)
+    agent_def = create_openai_tools_agent(llm, tools_list, prompt)
     executor = AgentExecutor(agent=agent_def, tools=tools_list, verbose=True)
     
     # 5. Execute with Streaming (Nexus v5.13)

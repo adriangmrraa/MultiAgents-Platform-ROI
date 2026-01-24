@@ -1,4 +1,4 @@
-# ⚒️ The Business Forge (Logic Deep Dive)
+# ⚒️ The Business Forge (Nexus v6.0 Deep Dive)
 
 Este documento detalla la lógica de `BusinessForge.tsx`, el centro de comando post-ignición donde los usuarios refinan y utilizan los activos generados por la Magia.
 

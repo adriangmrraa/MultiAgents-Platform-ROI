@@ -1,6 +1,6 @@
 # Rol: Product Manager (Gerente de Producto)
 
-**Proyecto:** Platform AI Solutions (Nexus v5)  
+**Proyecto:** Platform AI Solutions (Nexus v6.0)  
 **Enfoque Principal:** Estrategia de Mercado, Roadmap y Alineación.
 
 El Product Manager conecta el "Por qué" del Stakeholder con el "Qué" del Product Owner. Su aporte clave es entender el problema de la "fricción de contexto" a profundidad y diseñar una hoja de ruta (roadmap) que posicione a la plataforma como líder en el mercado.
@@ -8,7 +8,7 @@ El Product Manager conecta el "Por qué" del Stakeholder con el "Qué" del Produ
 ## Aportes Clave y Responsabilidades
 
 ### 1. Estrategia de Producto y Roadmap
-*   **Tarea:** Definir la evolución del producto a mediano y largo plazo (Nexus v5 -> v6).
+*   **Tarea:** Definir la evolución del producto a mediano y largo plazo (Nexus v6 -> v7).
 *   **Acción:** Planificar los lanzamientos trimestrales (Q1: Onboarding, Q2: Multicanalidad, Q3: Analytics Avanzado) asegurando que cada versión aporte valor incremental.
 
 ### 2. Investigación y Entendimiento del Usuario

@@ -6,14 +6,14 @@ Este documento analiza la vista `Credentials.tsx`, conocida arquitectónicamente
 
 ## 🏗️ Filosofía de Seguridad
 
-En Nexus v5.1, las credenciales no son parte del código (`.env` heredado). Son **Entidades de Base de Datos** gestionadas dinámicamente para lograr:
+En Nexus v6.0, las credenciales no son parte del código (`.env` heredado). Son **Entidades de Base de Datos** gestionadas dinámicamente para lograr:
 1.  **Soberanía**: Cada cliente puede traer su propia Key (`openai`, `google`).
 2.  **Aislamiento**: Las Keys de un tenant nunca tocan el contexto del otro.
 
 ### Componentes Clave
 1.  **Scope Selector**: Define si una llave es `Global` (Backend default) o `Tenant` (Específica).
 2.  **Category Parser**: UI dinámica que cambia según si es una API Key simple o una configuración compleja (SMTP).
-3.  **Integrations Dashboard (Nexus v5.99)**: Tarjetas de estado que muestran si Meta, TiendaNube y el Web Widget están operacionales.
+3.  **Integrations Dashboard (Nexus v6.0)**: Tarjetas de estado que muestran si Meta, TiendaNube y el Web Widget están operacionales.
 4.  **Web Channel Configurator**: Panel dedicado para personalizar el Widget de Chat (Colores, Botón, Mensajes).
 
 ---

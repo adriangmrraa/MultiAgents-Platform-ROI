@@ -1,4 +1,4 @@
-# 🦅 Manual de Vuelo Nexus v5.99
+# 🦅 Manual de Vuelo Nexus v6.0
 
 > **Guía de Operaciones para Administradores de Plataforma**
 > *Gestión Soberana, Monitoreo y Mantenimiento.*
@@ -7,7 +7,7 @@
 
 ## 1. Gestión de la Bóveda Soberana (Sovereign Vault)
 
-El corazón de la v5.1 es la independencia de credenciales. Ya no toques el código para cambiar una llave.
+El corazón de la v6.0 es la independencia de credenciales. Ya no toques el código para cambiar una llave.
 
 ### A. Rotación de Llaves (Key Rotation)
 1.  Ve a **Settings > Credenciales**.
@@ -26,7 +26,7 @@ Si es tu primera vez desplegando:
 
 ## 2. Protocolo de Correo (Omega Hybrid)
 
-Nexus v5.1 usa dos rutas de correo para evitar el SPAM y asegurar la entrega.
+Nexus v6.0 usa dos rutas de correo para evitar el SPAM y asegurar la entrega.
 
 ### A. System Path (Notificaciones Críticas)
 *   **Uso:** Alertas de servidor, recuperación de contraseña de admin.
@@ -48,7 +48,7 @@ La integración ahora es omnicanal y se gestiona desde **Settings > Conexiones**
 1.  Clic en **Conectar con Meta**.
 2.  El sistema sincroniza tus activos. Si es una re-autenticación, actualizará los tokens sin perder configuraciones.
 
-### B. Web Widget (Nuevo en v5.99) 🌐
+### B. Web Widget (Nuevo en v6.0) 🌐
 Si quieres un chat en tu página web:
 1.  Ve a **Settings > Canal Web**.
 2.  Configura el estilo (Colores, Radio de bordes, Mensaje de bienvenida).
@@ -66,8 +66,14 @@ Dentro del Wizard, verás la sección **"¿Dónde trabajará este agente?"**.
 *   Puedes marcar/desmarcar WhatsApp, Instagram, Facebook y Web.
 *   **Nota:** Si un canal aparece en rojo ("Desconectado"), primero debes integrarlo en Settings.
 
+### C. Galería de Modelos 2026 (SOTA)
+Nexus v6.0 ahora permite elegir el "cerebro" específico para cada agente:
+- **GPT-5 (Flagship/Mini)**: Ideal para ventas complejas y razonamiento clínico.
+- **Gemini 3 (Pro/Flash)**: El mejor para análisis multimodales y grandes volúmenes de contexto (1M tokens).
+- **Codex 2026**: Optimizado para agentes que deben realizar tareas técnicas o de "patching" de datos.
+
 ### B. Persistencia de URL y ADN
-Nexus v5.99 asegura que la **URL de tu Web** y las **Reglas de Negocio** se guarden instantáneamente. No más pérdida de datos al recargar.
+Nexus v6.0 asegura que la **URL de tu Web** y las **Reglas de Negocio** se guarden instantáneamente. No más pérdida de datos al recargar.
 
 ### C. Simulación en Tiempo Real (Fixed) 🧪
 Usa el panel derecho para chatear con el agente antes de guardarlo.

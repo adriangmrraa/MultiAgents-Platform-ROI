@@ -1,4 +1,4 @@
-# NEXUS ARCHITECTURAL BLUEPRINT (v5.4 Sovereign)
+# NEXUS ARCHITECTURAL BLUEPRINT (v6.0 Sovereign)
 
 ## 🌌 Introduction
 Nexus is a multi-tenant AI Orchestration platform built on the principle of **Total Sovereignty**. Unlike traditional SaaS where the provider controls all API keys and infrastructure, Nexus empowers the Tenant (Owner) to provide their own "fuel" (API keys, SMTP, etc.), ensuring privacy, cost transparency, and independent rate limits.
@@ -16,7 +16,7 @@ Nexus is a multi-tenant AI Orchestration platform built on the principle of **To
 ---
 
 ## 🗝️ The Sovereign Credentials System
-This is the heart of the v5.1+ upgrade. The system has moved away from `.env`-based global keys to a dynamic, tenant-specific lookup.
+This is the heart of the v6.0 upgrade. The system has moved away from `.env`-based global keys to a dynamic, tenant-specific lookup.
 
 ### Data Flow for AI Execution:
 1. **Request**: A user interacts with an AI agent (e.g., Sales Agent).
@@ -26,14 +26,14 @@ This is the heart of the v5.1+ upgrade. The system has moved away from `.env`-ba
 5. **Injection**: The decrypted key is injected into the AI model instantiation (OpenAI, Google Gemini, etc.).
 
 ### Categories Protected:
-- `openai`: GPT-4o, o1-preview, etc.
-- `google`: Gemini 2.x, Imagen 3 (Via Google AI Studio).
+- `openai`: GPT-5.2, gpt-5-mini, etc.
+- `google`: Gemini 3 Pro, Gemini 3 Flash (Via Google AI Studio).
 - `smtp`: Custom brand-specific email delivery.
 - `tiendanube`: E-commerce access tokens.
 
 ---
 
-## 🧠 AI & Agentic Logic (Nexus v5.30 Polymorphism)
+## 🧠 AI & Agentic Logic (Nexus v6.0 Polymorphism)
 Nexus has evolved from a single-agent system to a **Polymorphic Agent Service**.
 
 ### 1. The Agent Template Factory

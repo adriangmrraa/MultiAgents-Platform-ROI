@@ -1,7 +1,7 @@
 # USER_ONBOARDING_LOGIC.md (Flujo de Inicio)
 
 ## Concepto: "Agente Nativo"
-Nexus v5.30 elimina la barrera de entrada ("Cold Start Problem") mediante la creación automática de un Agente de Ventas pre-configurado apenas se detecta una tienda válida.
+Nexus v6.0 elimina la barrera de entrada ("Cold Start Problem") mediante la creación automática de un Agente de Ventas pre-configurado apenas se detecta una tienda válida.
 
 ## Lógica de Detección
 
@@ -21,7 +21,7 @@ El sistema utiliza la plantilla `SalesTemplate` para generar el agente:
 
 ## Flujo de UI (Agents.tsx)
 1.  **Banner de Activación**: Si el usuario no tiene agente de ventas activo, `Agents.tsx` muestra un banner premium "Activar Agente de Ventas".
-2.  **Actualización v5.37 (Channel Modal)**:
+2.  **Actualización v6.0 (Channel Modal)**:
     *   **One-Click Activation**: El usuario hace clic en activar.
     *   **Backend Fix**: Se llama a `get_or_create` (garantizado 200 OK, sin errores 404).
     *   **Selección de Canales (Nuevo Paso)**: Antes de ir al Wizard, se abre un Modal para vincular el agente a WhatsApp/IG inmediatamente.

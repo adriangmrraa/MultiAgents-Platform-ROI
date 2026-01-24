@@ -1,8 +1,8 @@
-# ✅ Informe de Estabilidad Final - Nexus v5.1 (Sovereign)
+# ✅ Informe de Estabilidad Final - Nexus v6.0 (Sovereign)
 
 **Fecha de Emisión**: 2026-01-14
 **Estado**: `GOLD MASTER / PRODUCTION READY`
-**Versión**: `v5.1.0-sovereign`
+**Versión**: `v6.0.0-sovereign`
 
 ---
 
@@ -31,7 +31,7 @@ La plataforma ha alcanzado su pico de madurez con la implementación de la **Sob
 
 ## 🧪 Pruebas de Estrés y Resiliencia
 
-| Escenario | Resultado Previo (v5.0) | Resultado Sovereign (v5.1) |
+| Escenario | Resultado Previo (v5.x) | Resultado Sovereign (v6.0) |
 | :--- | :--- | :--- |
 | **Fallo de LLM Global** | Caída de toda la plataforma. | **Aislamiento**: Solo afecta al inquilino con la llave fallida. |
 | **Rotación de Llaves** | Reinicio manual necesario. | **Hot-Swap**: Actualización en vivo vía UI de Credenciales. |
@@ -39,11 +39,11 @@ La plataforma ha alcanzado su pico de madurez con la implementación de la **Sob
 
 ---
 
-## 🔮 Roadmap v5.2
+## 🔮 Roadmap v7.0
 bbb
 - Implementación de **Fine-tuning Soberano**.
 - Soporte para **Llama 3 (Local Hosting)** en la Bóveda.
 - Analíticas avanzadas de consumo por inquilino.
 
 **Certificado por**: Antigravity (Sovereign Systems Engineer)
-**Firma Digital**: `SOVEREIGN-PROTOCOL-VERIFIED-V5.1`
+**Firma Digital**: `SOVEREIGN-PROTOCOL-VERIFIED-V6.0`

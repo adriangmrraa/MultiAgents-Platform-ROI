@@ -1,4 +1,4 @@
-# Nexus v5.99 Backend Technical Specification (Omnichannel Edition)
+# Nexus v6.0 Backend Technical Specification (Omnichannel Edition)
 
 > **Purpose**: This document defines the absolute contracts for the Sovereign Credentials System and Multi-Tenant architecture. It serves as the single source of truth for Frontend-Backend integration under the **Sovereign Protocol**.
 
@@ -58,6 +58,23 @@ Due to legacy schema drift (Integer Tables vs UUID Auth), the code must **NEVER*
 - **Payload**: `{"name": str, "value": str, "category": str, "scope": "global"|"tenant", "tenant_id": int}`
 - **Categories**: `openai`, `google`, `tiendanube`, `smtp`, `whatsapp_cloud`.
 
+### 🤖 Agents Management (v6.0)
+**`PUT /admin/agents/{id}`**
+- **Purpose**: Update an agent's brain, model, and tools.
+- **Root Payload**:
+  - `model_provider`: `str` (openai, google)
+  - `model_version`: `str` (see Model Registry)
+  - `enabled_tools`: `Array<str>`
+  - `template_type`: `str` (default: 'custom')
+  - `is_active`: `bool`
+- **Config JSONB**:
+  - `reasoning_effort`: `none` | `low` | `medium` | `high` (GPT-5 only)
+  - `text_verbosity`: `concise` | `detailed` | `bullet_points`
+  - `knowledge_config`: Custom RAG routing instructions.
+  - `agent_tone`: User-editable personality.
+
+---
+
 ### 💬 Chat Management
 **`GET /admin/chats`**
 - **Response**: `Array<ChatConversation>`
@@ -86,10 +103,14 @@ Due to legacy schema drift (Integer Tables vs UUID Auth), the code must **NEVER*
 ]
 ```
 
-### 🧠 AI Intelligence
+### 🧠 AI Intelligence (SOTA 2026)
 **`POST /admin/ai/improve-prompt`**
-- **Purpose**: Uses GPT-4o with tenant credentials to refine prompts.
+- **Purpose**: Uses GPT-5.2 with tenant credentials to refine prompts.
 - **Response**: `{"improved_text": "string"}`
+
+**Model Support (January 2026):**
+- **OpenAI**: `gpt-5.2` (Flagship), `gpt-5-mini` (Default), `gpt-5.2-codex`.
+- **Google**: `gemini-3-pro` (1M Context), `gemini-3-flash`.
 
 ---
 
@@ -139,7 +160,7 @@ El backend implementa una captura de errores proactiva para el servicio de corre
 
 ---
 
-## 7. Meta Uplink Protocol (v5.1)
+## 7. Meta Uplink Protocol (v6.0)
 The dedicated system for Sovereign Social Connection.
 
 ### A. The Diplomat (`meta_service`)

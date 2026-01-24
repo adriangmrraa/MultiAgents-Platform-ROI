@@ -41,45 +41,32 @@ El `NexusEngine` toma el control y ejecuta la siguiente secuencia:
 *   Recupera las credenciales de **OpenAI** y **Google** específicas del inquilino desde la Bóveda de Credenciales (`credentials` table).
 *   Si no existen, usa las del sistema (si está configurado el fallback).
 
-#### 1. Agente 0: El Explorador (Product Fetch)
-*   Intenta conectar con el microservicio `tiendanube-service` via red interna Docker.
-*   Si falla, intenta conexión directa a la API de Tienda Nube.
-*   **Resultado**: Un JSON con el catálogo de productos (Nombre, Precio, Imágenes).
+#### 1. Agente 0: El Explorador (Product Fetcher)
+*   **Acción**: Conexión multi-vía con `tiendanube-service`. Descarga productos, precios y categorías.
+*   **Fallback**: Resiliencia automática vía Proxy si el servicio interno está bajo presión.
 
-#### 2. Agente 1: Extractor de ADN (Brand Analysis)
-*   **Input**: Nombres de productos, descripción de la tienda.
-*   **Proceso**: Un LLM (GPT-4o-mini) analiza la semántica para deducir:
-    *   **Voz de Marca**: (Ej: "Sofisticada, Minimalista").
-    *   **Arquetipo**: (Ej: "El Creador").
-    *   **UVP**: Propuesta Única de Valor.
-*   **Persistencia**: Se guarda en `business_assets` (type: `branding`) y se envía al Stream UI.
+#### 2. Agente 1: Extractor de ADN (Brand DNA Analysis)
+*   **Proceso**: Un LLM analiza la semántica para definir la **Voz de Marca**, **Arquetipo** y **Propuesta Única de Valor (UVP)**.
+*   **Persistencia**: Guarda el activo tipo `branding` en la tabla `business_assets`.
 
-#### 3. Agente 2: El Bibliotecario (RAG Ingestion)
-*   **Acción**: Toma los productos descargados y los convierte en vectores (embeddings).
-*   **Almacenamiento**: ChromaDB (local/persistente).
-*   **Optimización**: Si ya existen vectores para este tenant, salta este paso para velocidad ("Smart Skip").
+#### 3. Agente 2: El Bibliotecario (RAG Vectorization)
+*   **Acción**: Indexa el catálogo en la partición correspondiente de **Supabase**.
+*   **Soberanía**: Asegura que el catálogo sea accesible solo por el `tenant_id` propietario.
 
-#### 4. Agente 3: Director Creativo (Multimodal)
-*   **Tecnología**: Google Gemini 2.5 + Imagen 3.
-*   **Proceso**:
-    1.  Toma las imágenes de los productos (Top 3).
-    2.  Lee el ADN de Marca (Paso 2).
-    3.  Genera un "Prompt de Fusión" (Producto + Estilo de Marca).
-    4.  Crea assets visuales simulados o mejorados.
+#### 4. Agente 3: Director Creativo (Multimodal Fusion)
+*   **Tecnología**: Google Gemini 3 (Multimodal Vision).
+*   **Proceso**: Analiza fotos reales de productos y genera un "Visual Style Concept" que inyecta en los futuros prompts de generación de imágenes.
 
-#### 5. Agente 4: Copywriter Maestro
-*   **Tecnología**: GPT-4o.
-*   **Frameworks**: Aplica fórmulas AIDA (Atención, Interés, Deseo, Acción) y PAS (Problema, Agitación, Solución).
-*   **Output**: Genera Scripts de ventas y mensajes de bienvenida personalizados.
+#### 5. Agente 4: Copywriter Maestro (Framework Specialist)
+*   **Output**: Genera Scripts de ventas basados en **AIDA** y **PAS**, adaptados al tono del ADN de Marca.
+*   **Persistencia**: Guarda el activo tipo `scripts`.
 
-#### 6. Agente 5 y 6: Estrategia (Growth & Social)
-*   **Paralelismo**: Se ejecutan simultáneamente.
-*   **Growth**: Calcula proyecciones de ROI basadas en precios.
-*   **Social**: Define formatos óptimos para IG/FB/WA.
+#### 6. Agente 5 y 6: Growth Architect & Social Strategist
+*   **Growth**: Proyecciones de ROI y paquetes de upselling basados en precios de catálogo.
+*   **Social**: Guía de pauta publicitaria para IG/FB Ads. Guardado como `visuals` y `roi`.
 
-#### 7. Agente 7: Guardián de la Verdad (Compliance)
-*   **Misión**: Filtro final de calidad.
-*   **Verificación**: Asegura que no se inventaron precios (alucinaciones) cruzando los datos generados contra el catálogo real.
+#### 7. Agente 7: Guardián de la Verdad (Compliance Guardian)
+*   **Inspección**: Cruza los scripts y planes generados contra la base de datos de productos real para detectar alucinaciones de precios o stock.
 *   **Señal Final**: Envía el evento `compliance` que le dice al frontend "Proceso Terminado, redirigir al Dashboard".
 
 ---

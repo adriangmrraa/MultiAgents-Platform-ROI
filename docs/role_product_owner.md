@@ -1,6 +1,6 @@
 # Rol: Product Owner (Propietario del Producto)
 
-**Proyecto:** Platform AI Solutions (Nexus v5)  
+**Proyecto:** Platform AI Solutions (Nexus v6.0)  
 **Enfoque Principal:** Ejecución, Priorización del Backlog y Calidad del Entregable.
 
 El Product Owner es la voz del cliente dentro del equipo de desarrollo. Su aporte clave es traducir la visión de la "Fábrica de Negocios Autónoma" en requerimientos técnicos ejecutables y asegurar que lo que se construye aporte valor inmediato.
@@ -25,6 +25,6 @@ El Product Owner es la voz del cliente dentro del equipo de desarrollo. Su aport
 ## Flujo de Trabajo en ClickUp
 *   **Vista:** Tablero Kanban (Sprints) y Lista de Backlog.
 *   **Interacción:**
-    *   **Creación:** Redacta los tickets/tareas con descripciones detalladas, adjuntando los documentos técnicos (`technical_deep_dive_v1.md`).
+    *   **Creación:** Redacta los tickets/tareas con descripciones detalladas, adjuntando los documentos técnicos (`TECHNICAL_DEEP_DIVE_V6_0.md`).
     *   **Estado:** Mueve tareas de "Backlog" a "To Do" y valida las que están en "Review" para pasarlas a "Done".
     *   **Comunicación:** Responde dudas de los desarrolladores en los comentarios de las tareas para clarificar requerimientos.

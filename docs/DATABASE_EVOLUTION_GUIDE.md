@@ -1,6 +1,6 @@
-# 🧬 Database Evolution Guide (Nexus v5.1 - Sovereign Saga)
+# 🧬 Database Evolution Guide (Nexus v6.0 - Sovereign Saga)
 
-Este documento define la **Filosofía de Gestión de Datos** para la plataforma. En Nexus v5.1, la base de datos no solo es la fuente de verdad, sino también el **Búnker de Soberanía**.
+Este documento define la **Filosofía de Gestión de Datos** para la plataforma. En Nexus v6.0, la base de datos no solo es la fuente de verdad, sino también el **Búnker de Soberanía**.
 
 ---
 
@@ -11,16 +11,14 @@ Protocol Omega elimina la necesidad de archivos de migración manuales externos.
 ### Ciclo de Vida del Arranque (Main.py)
 Cada vez que el orquestador inicia:
 1.  **Auditoría de Tablas**: Verifica la existencia de `tenants`, `tools`, `business_assets` y `credentials`.
-2.  **Reparación de Columnas**: Si falta algún campo crítico (ej. `category` en credentials), el sistema lo inyecta automáticamente.
+2.  **Reparación de Columnas (Robot de Mantenimiento)**: Si falta algún campo crítico (ej. `template_type` en agents), el script de inicio (`startup_event` en `main.py`) tiene la capacidad de inyectarlo mediante bloques `DO $$ BEGIN ... END $$;` con cláusulas `IF NOT EXISTS`.
 3.  **Sedimentación de Datos**: Migra variables de entorno a la tabla `credentials` si es la primera ejecución.
 
 ---
 
-## 2. El Búnker de Credenciales (Estructura Soberana)
+La tabla `credentials` es el corazón de la v6.0. Implementa **Unicidad Multi-Tenant** y soporte para UUIDs.
 
-La tabla `credentials` es el corazón de la v5.1. Implementa **Unicidad Multi-Tenant** y soporte para UUIDs.
-
-**Esquema de Credenciales (v5.1)**:
+**Esquema de Credenciales (v6.0)**:
 ```sql
 CREATE TABLE IF NOT EXISTS credentials (
     id_uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -73,7 +71,7 @@ CREATE TABLE IF NOT EXISTS chat_conversations (
 );
 ```
 
-### `agents` (Configuración de IA - v5.99)
+### `agents` (Configuración de IA - v6.0)
 ```sql
 CREATE TABLE IF NOT EXISTS agents (
     id SERIAL PRIMARY KEY,
@@ -81,13 +79,14 @@ CREATE TABLE IF NOT EXISTS agents (
     name TEXT NOT NULL,
     role TEXT DEFAULT 'sales',
     model_provider TEXT DEFAULT 'openai',
-    model_version TEXT DEFAULT 'gpt-4o',
+    model_version TEXT DEFAULT 'gpt-5-mini', -- January 2026 Standard
     temperature FLOAT DEFAULT 0.7,
     system_prompt_template TEXT NOT NULL,
     enabled_tools JSONB DEFAULT '[]',
-    channels JSONB DEFAULT '["whatsapp", "instagram", "facebook", "web"]', -- Web channel added
-    knowledge_sources JSONB DEFAULT '[]', -- Nexus v5.1+
-    config JSONB DEFAULT '{}', -- Extended attributes (URL, style, etc.)
+    channels JSONB DEFAULT '["whatsapp", "instagram", "facebook", "web"]',
+    knowledge_sources JSONB DEFAULT '[]',
+    config JSONB DEFAULT '{}', -- Extended attributes (reasoning, verbosity, etc.)
+    template_type VARCHAR(50) DEFAULT 'custom', -- Nexus v6.0 Drift Fix
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
@@ -121,7 +120,7 @@ CREATE TABLE IF NOT EXISTS tools (
 *   **`whatsapp_templates`**: Almacena HSMs (`id`, `name`, `body`, `status`, `language`).
 *   **`chat_contacts`**: Nueva columna `circle` (ENUM: `family`, `work`, `client`, `unknown`).
 *   **`chat_messages`**: Nueva columna `is_shadow_indexed` (Boolean) para controlar el worker de memoria.
-*   **ChromaDB**: Nueva colección `chats_vectors` con metadatos extendidos (`participant`, `role`, `timestamp`).
+*   **Supabase**: Nueva colección `chats_vectors` con metadatos extendidos (`participant`, `role`, `timestamp`).
 
 ### `documents` (RAG Knowledge Base - v5.48+)
 Tabla espejo de los vectores en Supabase/Chroma para gestión de integridad.
@@ -188,7 +187,7 @@ En la versión v5.55 se refactorizó `app/db.py` para eliminar importaciones cir
 
 ## 7. 🚨 The Integer/UUID Reality (Critical)
 
-**Nexus v5.99 Discovery**: A critical schema drift was identified where the code assumed Tenant IDs were UUIDs, but the database strictly uses Integers for foreign keys.
+**Nexus v6.0 Discovery**: A critical schema drift was identified where the code assumed Tenant IDs were UUIDs, but the database strictly uses Integers for foreign keys.
 
 ### The Source of Truth
 | Entity | Column | Type (SQL) | Nature |

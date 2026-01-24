@@ -39,10 +39,11 @@ interface Message {
 // ... (Interfaces unchanged)
 
 export const Chats: React.FC = () => {
-    const { fetchApi, loading, error } = useApi();
+    const { fetchApi, loading } = useApi();
     const [selectedChannel, setSelectedChannel] = useState<string>('all');
     const [chats, setChats] = useState<Chat[]>([]);
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+    const selectedChat = chats.find(c => c.id === selectedChatId);
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -278,7 +279,6 @@ export const Chats: React.FC = () => {
                 method: 'POST',
                 body: { enabled }
             });
-            // alert(`Human Override ${enabled ? 'Enabled' : 'Disabled'}`); // Silent success for better UX
         } catch (e) {
             alert('Failed to toggle handoff');
             // Revert on error
@@ -289,9 +289,9 @@ export const Chats: React.FC = () => {
     };
 
     const handleSendMessage = async () => {
-        if (!selectedChatId || !newMessage.trim()) return;
+        if (!selectedChat || !newMessage.trim()) return;
 
-        const chat = chats.find(c => c.id === selectedChatId);
+        const chat = selectedChat;
 
         try {
             await fetchApi('/admin/whatsapp/send', {
@@ -442,9 +442,9 @@ export const Chats: React.FC = () => {
                                         ←
                                     </button>
                                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center overflow-hidden border border-white/20">
-                                        {chats.find((c: Chat) => c.id === selectedChatId)?.avatar_url ? (
+                                        {selectedChat?.avatar_url ? (
                                             <img
-                                                src={chats.find((c: Chat) => c.id === selectedChatId)?.avatar_url}
+                                                src={selectedChat.avatar_url}
                                                 alt="Avatar"
                                                 className="w-full h-full object-cover"
                                             />
@@ -454,8 +454,8 @@ export const Chats: React.FC = () => {
                                     </div>
                                     <div>
                                         <h3 className="font-bold text-lg flex items-center gap-2">
-                                            {chats.find((c: Chat) => c.id === selectedChatId)?.name || 'Cliente'}
-                                            {chats.find((c: Chat) => c.id === selectedChatId)?.is_locked && (
+                                            {selectedChat?.name || 'Cliente'}
+                                            {selectedChat?.is_locked && (
                                                 <span className="text-xs bg-amber-500/20 text-amber-500 border border-amber-500/50 px-2 py-0.5 rounded-full animate-pulse">
                                                     HUMAN OVERRIDE
                                                 </span>
@@ -463,21 +463,21 @@ export const Chats: React.FC = () => {
                                         </h3>
                                         <span className="text-xs text-green-400 flex items-center gap-1">
                                             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                                            {chats.find((c: Chat) => c.id === selectedChatId)?.channel ? (
-                                                <span className="capitalize">{chats.find((c: Chat) => c.id === selectedChatId)?.channel} User</span>
+                                            {selectedChat?.channel ? (
+                                                <span className="capitalize">{selectedChat.channel} User</span>
                                             ) : 'Online'}
                                         </span>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <label className="flex items-center gap-2 cursor-pointer">
-                                        <span className={`text-sm transition-all duration-300 ${chats.find((c: any) => c.id === selectedChatId)?.is_locked ? 'text-amber-500 font-bold' : 'text-secondary'}`}>
-                                            {chats.find((c: any) => c.id === selectedChatId)?.is_locked ? 'Intervención Humana' : 'Agente Activo'}
+                                        <span className={`text-sm transition-all duration-300 ${selectedChat?.is_locked ? 'text-amber-500 font-bold' : 'text-secondary'}`}>
+                                            {selectedChat?.is_locked ? 'Intervención Humana' : 'Agente Activo'}
                                         </span>
                                         <input
                                             type="checkbox"
                                             className="toggle toggle-accent"
-                                            checked={chats.find((c: any) => c.id === selectedChatId)?.is_locked || false}
+                                            checked={selectedChat?.is_locked || false}
                                             onChange={(e) => handleToggleHandoff(e.target.checked)}
                                         />
                                     </label>
@@ -573,12 +573,12 @@ export const Chats: React.FC = () => {
                             <div className="p-4 bg-black/60 backdrop-blur-xl border-t border-white/10 sticky bottom-0 z-30">
                                 {(() => {
                                     // 24h Window Logic
-                                    const lastMsgTime = new Date(selectedChat.timestamp).getTime();
+                                    const lastMsgTime = new Date(selectedChat?.timestamp || Date.now()).getTime();
                                     const now = new Date().getTime();
                                     const hoursSinceLastMessage = (now - lastMsgTime) / (1000 * 60 * 60);
                                     const isSessionClosed = hoursSinceLastMessage > 24;
 
-                                    if (isSessionClosed && selectedChat.channel.includes('whatsapp')) {
+                                    if (isSessionClosed && selectedChat?.channel?.includes('whatsapp')) {
                                         return (
                                             <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-4">
                                                 <div className="flex items-center gap-2 text-yellow-500 mb-3">
@@ -655,7 +655,6 @@ const TemplateSelector = ({ onSend }: { onSend: (t: any, vars: string[]) => void
     const [templates, setTemplates] = useState<any[]>([]);
     const [selectedTmpl, setSelectedTmpl] = useState<any>(null);
     const [variables, setVariables] = useState<string[]>([]);
-    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         fetchApi('/api/templates/').then(data => {
@@ -708,7 +707,7 @@ const TemplateSelector = ({ onSend }: { onSend: (t: any, vars: string[]) => void
 
             <button
                 onClick={() => selectedTmpl && onSend(selectedTmpl, variables)}
-                disabled={!selectedTmpl || loading}
+                disabled={!selectedTmpl}
                 className="bg-green-600 hover:bg-green-500 text-white rounded p-2 text-sm font-bold mt-1"
             >
                 Enviar Plantilla

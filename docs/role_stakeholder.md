@@ -1,6 +1,6 @@
 # Rol: Stakeholder (Inversionista / Dirección)
 
-**Proyecto:** Platform AI Solutions (Nexus v5)  
+**Proyecto:** Platform AI Solutions (Nexus v6.0)  
 **Enfoque Principal:** Visión, ROI y Viabilidad de Mercado.
 
 El Stakeholder define el "Norte" del proyecto. Su aporte clave es asegurar que la tecnología desarrollada (Protocol Omega, Business Factory) se traduzca directamente en valor comercial y ventaja competitiva.

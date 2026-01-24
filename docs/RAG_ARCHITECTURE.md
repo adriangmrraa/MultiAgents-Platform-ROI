@@ -1,4 +1,4 @@
-# 📘 Módulo RAG & Knowledge Base: Arquitectura y Troubleshooting (v5.8x)
+# 📘 Módulo RAG & Knowledge Base: Arquitectura y Troubleshooting (v6.0)
 
 ## 1. Arquitectura de Doble Base de Datos (Hybrid DB Strategy)
 El sistema opera bajo una arquitectura de microservicios que consume dos fuentes de datos distintas. Es crucial entender esta separación para evitar errores de "Falso Negativo" en operaciones CRUD.
@@ -31,7 +31,7 @@ Para eliminar un documento correctamente, el sistema ejecuta una operación en d
 ---
 
 ## 3. "Paredes contra las que chocamos" (Troubleshooting History)
-Registro de problemas críticos resueltos y lecciones aprendidas durante la implementación de la v5.8x.
+Registro de problemas críticos resueltos y lecciones aprendidas durante la implementación de la v6.0.
 
 * **🛑 Error: "Ghost Delete" (0 rows affected)**
     * **Causa:** El código intentaba borrar vectores conectándose a la DB Local (`db.pool`) en lugar de Supabase. Al no encontrar la tabla `documents` localmente (o estar vacía), no borraba nada.

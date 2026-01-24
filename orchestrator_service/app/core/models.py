@@ -1,7 +1,8 @@
 from typing import List, Dict, Any
 
 # REGISTRO DE MODELOS OFICIAL - ENERO 2026
-# Nexus v5.99: Updated to match OpenAI GPT-5 family and Google Gemini 3 specifications
+# Actualizado vía documentación oficial (platform.openai.com / AI Studio)
+# Contexto: Nexus v5.99
 
 DEFAULT_MODEL = "gpt-5-mini"
 
@@ -12,12 +13,12 @@ MODEL_REGISTRY = {
             {
                 "id": "gpt-5.2",
                 "name": "GPT-5.2 (Flagship - Coding/Reasoning)",
-                "tier": "flagship",
                 "capabilities": ["reasoning", "coding", "multimodal"],
                 "config_params": ["reasoning_effort", "text_verbosity"],
+                "tier": "flagship",
                 "ui_metadata": {
                     "label": "Flagship (Coding/Reasoning)",
-                    "description": "Modelo principal con capacidades avanzadas de razonamiento y programación.",
+                    "description": "Mejor para coding/agentic.",
                     "color": "purple",
                     "icon": "auto_awesome"
                 }
@@ -25,12 +26,11 @@ MODEL_REGISTRY = {
             {
                 "id": "gpt-5.2-pro",
                 "name": "GPT-5.2 Pro (High Compute/Precision)",
-                "tier": "premium",
                 "capabilities": ["high_precision"],
-                "config_params": ["reasoning_effort"],
+                "tier": "premium",
                 "ui_metadata": {
                     "label": "Pro (Alta Precisión)",
-                    "description": "Versión de alto cómputo para tareas que requieren máxima precisión.",
+                    "description": "Más preciso para tareas complejas.",
                     "color": "purple",
                     "icon": "psychology"
                 }
@@ -38,12 +38,11 @@ MODEL_REGISTRY = {
             {
                 "id": "gpt-5-mini",
                 "name": "GPT-5 Mini (Fast & Efficient)",
-                "tier": "economy",
                 "capabilities": ["fast"],
-                "config_params": [],
+                "tier": "economy",
                 "ui_metadata": {
                     "label": "Mini (Rápido y Eficiente)",
-                    "description": "Ideal para chats rápidos, emails y clasificación.",
+                    "description": "Rápido/económico; ideal para escala.",
                     "color": "green",
                     "icon": "lightning"
                 }
@@ -51,12 +50,11 @@ MODEL_REGISTRY = {
             {
                 "id": "gpt-5-nano",
                 "name": "GPT-5 Nano (High Volume)",
-                "tier": "economy",
                 "capabilities": ["ultra_fast"],
-                "config_params": [],
+                "tier": "economy",
                 "ui_metadata": {
-                    "label": "Nano (Alto Volumen)",
-                    "description": "Ultra rápido para procesamiento masivo de mensajes.",
+                    "label": "Nano (Ultra Rápido)",
+                    "description": "Más rápido/barato para alto volumen.",
                     "color": "green",
                     "icon": "flash_on"
                 }
@@ -64,14 +62,25 @@ MODEL_REGISTRY = {
             {
                 "id": "gpt-5.2-codex",
                 "name": "GPT-5.2 Codex (Agentic Coding)",
-                "tier": "advanced",
                 "capabilities": ["coding", "patching"],
-                "config_params": [],
+                "tier": "advanced",
                 "ui_metadata": {
-                    "label": "Codex (Programación Agéntica)",
-                    "description": "Especializado en generación y parcheo de código.",
+                    "label": "Codex (Programación)",
+                    "description": "Especializado en generación de código.",
                     "color": "blue",
                     "icon": "code"
+                }
+            },
+            {
+                "id": "gpt-4.1",
+                "name": "GPT-4.1 (No-Reasoning Intelligent)",
+                "capabilities": ["intelligent"],
+                "tier": "advanced",
+                "ui_metadata": {
+                    "label": "GPT-4.1 (Inteligente)",
+                    "description": "Versión robusta sin latencia de razonamiento.",
+                    "color": "blue",
+                    "icon": "auto_graph"
                 }
             }
         ]
@@ -82,12 +91,11 @@ MODEL_REGISTRY = {
             {
                 "id": "gemini-3-pro",
                 "name": "Gemini 3 Pro (1M Context - Multimodal)",
-                "tier": "advanced",
                 "capabilities": ["1m_context", "video", "audio"],
-                "config_params": [],
+                "tier": "advanced",
                 "ui_metadata": {
-                    "label": "Pro (1M Contexto)",
-                    "description": "Contexto masivo con soporte multimodal (video, audio).",
+                    "label": "Gemini 3 Pro",
+                    "description": "Multimodal/complejo; 1M tokens.",
                     "color": "blue",
                     "icon": "visibility"
                 }
@@ -95,12 +103,11 @@ MODEL_REGISTRY = {
             {
                 "id": "gemini-3-flash",
                 "name": "Gemini 3 Flash (Low Latency)",
-                "tier": "economy",
                 "capabilities": ["high_throughput"],
-                "config_params": [],
+                "tier": "economy",
                 "ui_metadata": {
-                    "label": "Flash (Baja Latencia)",
-                    "description": "El modelo más rápido del mercado.",
+                    "label": "Gemini 3 Flash",
+                    "description": "Agentic/coding rápido.",
                     "color": "green",
                     "icon": "flash_on"
                 }
@@ -122,39 +129,20 @@ def get_all_models() -> List[Dict[str, Any]]:
     return all_models
 
 def validate_model(model_id: str) -> str:
-    """
-    Validates a model ID against the registry.
-    Returns the validated ID or the DEFAULT_MODEL.
-    """
+    """Validates a model ID against the registry."""
     all_models = get_all_models()
     if any(m["id"] == model_id for m in all_models):
         return model_id
     return DEFAULT_MODEL
 
 def get_model_info(model_id: str) -> Dict[str, Any]:
-    """Returns full model information including capabilities and config params."""
+    """Returns full model info."""
     all_models = get_all_models()
     for model in all_models:
         if model["id"] == model_id:
             return model
-    # Return default model info if not found
     return next((m for m in all_models if m["id"] == DEFAULT_MODEL), all_models[0])
 
 def get_fallback_model(model_id: str) -> str:
-    """
-    Returns a fallback model if the premium one fails.
-    Premium -> Advanced -> Economy.
-    """
-    model_info = get_model_info(model_id)
-    provider = model_info.get("provider", "openai")
-    
-    # Fallback logic by tier
-    if model_info["tier"] in ["premium", "flagship"]:
-        # Try to find an advanced model from same provider
-        all_models = get_all_models()
-        advanced = next((m["id"] for m in all_models if m["provider"] == provider and m["tier"] == "advanced"), None)
-        if advanced:
-            return advanced
-    
-    # Ultimate fallback
+    """Fallbacks logic (deprecated legacy logic)"""
     return DEFAULT_MODEL

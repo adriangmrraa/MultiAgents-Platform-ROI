@@ -10,8 +10,8 @@ La "Base de Conocimiento" no es un file server. Es un pipeline de **ETL (Extract
 
 ### Componentes Clave
 1.  **Ingestion API**: Endpoint multipart para recepción de archivos.
-2.  **Vector Store (ChromaDB)**: Base de datos vectorial donde vive el "conocimiento".
-3.  **Indexing Worker**: Componente asíncrono que procesa el texto en segundo plano.
+2.  **Vector Store (Cloud First)**: El sistema ha migrado de ChromaDB local a **Supabase (pgvector)** para garantizar escalabilidad y backups automáticos.
+3.  **Shadow Indexing Worker**: Nuevo componente que vectoriza chats entrantes de forma pasiva para la memoria de largo plazo.
 
 ---
 
@@ -25,10 +25,11 @@ El usuario arrastra un archivo PDF.
     -   Guarda el archivo crudo en disco (`/storage/tenants/{id}/...`).
     -   Crea registro en SQL con status `processing`.
 3.  **Backend (Fase 2 - Vectorización)**:
-    -   Extrae texto (usando `PyPDF2` o `unstructured`).
+    -   **Resiliencia de Encoding**: El sistema usa `safe_read` con fallback (UTF-8 -> ISO-8859-1 -> Windows-1252) para procesar archivos de sistemas legacy sin errores.
+    -   Extrae texto (usando `PyPDF2`, `python-docx` o `unstructured`).
     -   Divide en "chunks" de 500-1000 tokens (Token Splitter).
-    -   Llama a OpenAI (`text-embedding-3-small` o `ada-002`) para generar vectores.
-    -   Inserta vectores en ChromaDB con metadatos
+    -   Llama a OpenAI (`text-embedding-3-small`) para generar vectores.
+    -   Inserta vectores en **Supabase** con metadatos de aislamiento (`tenant_id`, `user_id`).
 
 ## 2. Protocolo de Eliminación (Dual Delete Protocol)
 La eliminación de archivos es una operación crítica que debe sincronizar dos mundos desconectados.
@@ -59,7 +60,14 @@ Este flujo asegura que no queden datos huérfanos ni en el vector store ni en el
 El sistema ahora organiza los documentos en agrupaciones lógicas (`collection`) para segmentar el conocimiento:
 
 *   **General**: Documentos técnicos, manuales y políticas generales (PDF/DOCX).
-*   **ADN Personal (Chats)**: Historiales de conversación (.txt) usados para la clonación de estilo y entrenamiento de personalidad.
+*   **ADN Personal (Identity)**: Historiales de conversación (.txt) usados para la clonación de estilo y entrenamiento de personalidad.
+*   **Shadow RAG (Memory)**: Fragmentos de chats reales vectorizados automáticamente para recordar el contexto histórico con clientes específicos.
+
+## 4. Recuperación Híbrida (v6.0)
+El `AgentService` ya no realiza una búsqueda plana. Aplica una **Fusión de Contextos**:
+1.  **ADN (Mandatorio)**: Inyecta las instrucciones de estilo del tenant.
+2.  **Shadow (Condicional)**: Si hay historial previo con el usuario, recupera los últimos 3 "momentos" clave.
+3.  **Manuales (Suplementario)**: Busca en el catálogo técnico la respuesta a la duda puntual.
 
 ## 4. El Parser de WhatsApp (Identity Engine)
 
@@ -129,5 +137,5 @@ El sistema RAG es intensivo en recursos.
 *   **Depuración**: Si los archivos quedan en `processing` eternamente:
     *   Revisar logs del pod `orchestrator`: `docker logs orchestrator`.
     *   Buscar `OpenAI Rate Limit` (error 429) o `ChromaDB Connection Error`.
-    *   El Worker de vectorización no reintenta automáticamente en v5.1.
+    *   El Worker de vectorización no reintenta automáticamente en v6.0.
 

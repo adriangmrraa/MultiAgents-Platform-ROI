@@ -37,10 +37,10 @@ Este documento recopila los errores más comunes encontrados durante el desplieg
 *   **Causa**: El contenedor del Backend ha crasheado durante el arranque o está en un bucle de reinicio.
 *   **Solución**: 
     1. Revisa los logs del servicio `orchestrator`.
-    2. Si ves errores relacionados con `init_db()` o `AttributeError: Database object has no attribute execute`, asegúrate de estar usando la versión `fix11` del código (Nexus v5.9).
+    2. Si ves errores relacionados con `init_db()` o `AttributeError: Database object has no attribute execute`, asegúrate de estar usando la versión `main` del código (Nexus v6.0).
     3. Verifica que la base de datos esté aceptando conexiones antes de que el backend intente inicializar.
 
-## 5. Errores de Arquitectura (Backend v5.5+)
+## 5. Errores de Arquitectura (Nexus v6.0)
 
 ### Error: `ImportError: cannot import name 'Base'` o `cannot import name 'get_db'`
 *   **Causa**: Dependencias circulares. `main.py` importa `models`, que importa `db`, que a su vez importaba `models` (Ciclo de la Muerte).
@@ -66,7 +66,7 @@ Este documento recopila los errores más comunes encontrados durante el desplieg
 *   **Causa**: Redis intenta serializar un objeto `uuid.UUID` crudo en el mensaje de broadcast.
 *   **Solución**: Castear explícitamente a string: `str(doc_id)` antes de enviar.
 
-## 7. Errores de Integridad de Datos (Critical v5.99)
+## 7. Errores de Integridad de Datos (Critical v6.0)
 
 ### Error: `operator does not exist: integer = uuid` 
 *   **Causa**: Intento de ejecutar un `DELETE/UPDATE` en la tabla `agents` (o cualquier tabla con `tenant_id` entero) pasando un UUID (el ID de sesión del usuario) como criterio de filtro.
@@ -80,4 +80,18 @@ Este documento recopila los errores más comunes encontrados durante el desplieg
     tenant_int = user_row['tenant_id'] # Integer
     # Ejecutar la query usando el Integer resuelto
     ```
+
+## 8. Errores de Simulación y Modelos (v6.0)
+
+### Error: `TypeError: Header value must be str or bytes, not NoneType`
+*   **Causa**: Intentar simular un agente o enviar un mensaje sin tener la API Key del proveedor (OpenAI/Google) configurada en la bóveda de credenciales del tenant (valor `None`).
+*   **Solución**: 
+    1. Asegúrate de que el inquilino tenga una clave válida en `Credentials`.
+    2. El sistema v6.0 ahora incluye un filtro de headers nulos, pero la falta de la llave impedirá la respuesta de la IA.
+
+### Error: `Model not found (gpt-5-mini)` o similar
+*   **Causa**: El `ModelRegistry` no está actualizado a los estándares de Enero 2026 o hay un error de tipeo en el campo `model_version`.
+*   **Solución**: 
+    1. Verifica que el modelo exista en `app/core/models.py`.
+    2. Reinicia el orquestador para recargar el registro oficial.
 

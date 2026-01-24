@@ -1,4 +1,4 @@
--- Nexus v5.11: The Sacred RAG Schema Script
+-- Nexus v6.0: The Sacred RAG Schema Script
 -- Run this in the Supabase SQL Editor to initialize or repair the vector store.
 
 -- 1. Enable Required Extensions
