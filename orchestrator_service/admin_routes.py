@@ -4300,28 +4300,44 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
 @router.delete("/agents/{agent_id}", dependencies=[Depends(verify_admin_token)])
 async def delete_agent(agent_id: int, current_user: User = Depends(get_current_user)):
     try:
-        # 0. Resolve Tenant Integer ID (Hybrid Schema Fix)
-        tenant_row = await db.pool.fetchrow("SELECT id FROM tenants WHERE tenant_id = $1", current_user.tenant_id)
+        # 1. Resolve Tenant Integer ID (Hybrid Schema Fix)
+        # We assume current_user.tenant_id is the UUID/String Identifier
+        # We need the Integer Primary Key 'id' from the tenants table.
+        tenant_row = await db.pool.fetchrow("SELECT id FROM tenants WHERE tenant_id = $1", str(current_user.tenant_id))
+        
         if not tenant_row:
+             # Fallback: Maybe current_user.tenant_id IS the integer?
+             # If we can cast it to int, maybe it works?
+             # Unlikely given the error "operator integer = uuid".
              raise HTTPException(404, "Tenant context not found")
+             
         tenant_int = tenant_row['id']
 
-        # Ownership check
-        existing = await db.pool.fetchrow("SELECT tenant_id FROM agents WHERE id = $1", agent_id)
+        # 2. Ownership & Template Checks
+        # Verify the agent belongs to this tenant INT
+        existing = await db.pool.fetchrow("SELECT tenant_id FROM agents WHERE id = $1", int(agent_id))
+        
         if not existing:
-             return {"status": "ok"} # Idempotent
+             return {"status": "ok"} # Idempotent - Agent unavailable
              
         if existing['tenant_id'] is None:
              if current_user.role != "SuperAdmin":
                   raise HTTPException(403, "Cannot delete system templates")
-        # Comparing Integer vs Integer
+                  
         elif existing['tenant_id'] != tenant_int and current_user.role != "SuperAdmin":
-             raise HTTPException(403, "Access denied")
-             
-        # Safe Delete using Integer
-        await db.pool.execute("DELETE FROM agents WHERE id = $1 AND tenant_id = $2", agent_id, tenant_int)
+             raise HTTPException(403, "Access denied: Agent belongs to another tenant")
+
+        # 3. Execute Delete with Explicit Types
+        # agents.id is INTEGER, agents.tenant_id is INTEGER
+        await db.pool.execute(
+            "DELETE FROM agents WHERE id = $1 AND tenant_id = $2", 
+            int(agent_id), 
+            int(tenant_int)
+        )
         return {"status": "ok"}
+        
     except Exception as e:
+        logger.error(f"Delete Agent Error: {e}")
         raise HTTPException(500, str(e))
 
 
