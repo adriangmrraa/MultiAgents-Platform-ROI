@@ -716,11 +716,12 @@ export const DynamicAgentWizard = () => {
 
         try {
             const payload = {
+                ...formData,
                 name: formData['store_name'] || "Agente de Ventas",
                 tenant_id: user?.tenant_id || 1,
                 role: 'sales',
                 system_prompt_template: formData['agent_tone'],
-                ...formData,
+
                 // Explicit Persistence Fixes
                 model_provider: formData.model_provider || 'openai',
                 model_version: formData.model_version || 'gpt-4o',
