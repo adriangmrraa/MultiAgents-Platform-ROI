@@ -329,20 +329,30 @@ export const DynamicAgentWizard = () => {
     const KnowledgeSelector = ({ selected, onChange }: { selected: string[], onChange: (cols: string[]) => void }) => {
         const { fetchApi } = useApi();
         const [collections, setCollections] = useState<string[]>([]);
-        const [loading, setLoading] = useState(true);
+        const [loadingCollections, setLoadingCollections] = useState(true);
+
+        const fetchCollections = async () => {
+            try {
+                setLoadingCollections(true);
+                console.log("🔄 Fetching RAG collections...");
+                const data = await fetchApi('/admin/knowledge/collections');
+
+                if (Array.isArray(data)) {
+                    setCollections(data);
+                    console.log("✅ Collections loaded:", data.length);
+                } else {
+                    console.warn("⚠️ Collections data is not an array:", data);
+                    setCollections([]);
+                }
+            } catch (err) {
+                console.error("❌ Error loading collections:", err);
+            } finally {
+                setLoadingCollections(false);
+            }
+        };
 
         useEffect(() => {
-            const loadCols = async () => {
-                try {
-                    const data = await fetchApi('/admin/knowledge/collections');
-                    if (Array.isArray(data)) setCollections(data);
-                } catch (e) {
-                    console.error("Failed to load collections", e);
-                } finally {
-                    setLoading(false);
-                }
-            };
-            loadCols();
+            fetchCollections();
         }, []);
 
         const toggleCollection = (col: string) => {
@@ -353,37 +363,58 @@ export const DynamicAgentWizard = () => {
             }
         };
 
-        if (loading) return <div className="animate-pulse h-10 bg-white/5 rounded-xl w-full" />;
-        if (collections.length === 0) return null;
-
         return (
             <div className="glass p-6 rounded-2xl border border-white/5 mb-6">
-                <h3 className="text-sm font-bold text-gray-300 mb-4 flex items-center gap-2">
-                    <Bot size={16} /> Base de Conocimiento (RAG)
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                    {collections.map(col => (
-                        <button
-                            key={col}
-                            type="button"
-                            onClick={() => toggleCollection(col)}
-                            className={`flex items-center gap-2 p-3 rounded-xl transition-all border text-xs text-left
-                                ${selected.includes(col)
-                                    ? 'bg-accent/20 border-accent text-white'
-                                    : 'bg-black/20 border-white/5 text-gray-400 hover:bg-white/5'}
-                            `}
-                        >
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center
-                                ${selected.includes(col) ? 'bg-accent border-accent' : 'border-white/20'}
-                            `}>
-                                {selected.includes(col) && <CheckCircle2 size={10} className="text-white" />}
-                            </div>
-                            <span className="truncate">{col}</span>
-                        </button>
-                    ))}
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
+                        <Bot size={16} /> Base de Conocimiento (RAG)
+                    </h3>
+                    <button
+                        type="button"
+                        onClick={fetchCollections}
+                        className="p-1 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"
+                        title="Recargar colecciones"
+                    >
+                        {/* Inline SVG for Refresh to avoid import issues if RefreshCw missing */}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" /></svg>
+                    </button>
                 </div>
+
+                {loadingCollections ? (
+                    <div className="flex items-center gap-2 text-xs text-gray-500 animate-pulse">
+                        <div className="w-3 h-3 bg-gray-500 rounded-full" /> Cargando colecciones...
+                    </div>
+                ) : collections.length === 0 ? (
+                    <div className="text-xs text-gray-500 bg-white/5 p-3 rounded-lg border border-white/5">
+                        No se encontraron colecciones disponibles. <br />
+                        Asegúrate de haber subido documentos en la sección "Base de Conocimiento".
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                        {collections.map(col => (
+                            <button
+                                key={col}
+                                type="button"
+                                onClick={() => toggleCollection(col)}
+                                className={`flex items-center gap-2 p-3 rounded-xl transition-all border text-xs text-left
+                                    ${selected.includes(col)
+                                        ? 'bg-accent/20 border-accent text-white'
+                                        : 'bg-black/20 border-white/5 text-gray-400 hover:bg-white/5'}
+                                `}
+                            >
+                                <div className={`w-4 h-4 rounded border flex items-center justify-center
+                                    ${selected.includes(col) ? 'bg-accent border-accent' : 'border-white/20'}
+                                `}>
+                                    {selected.includes(col) && <CheckCircle2 size={10} className="text-white" />}
+                                </div>
+                                <span className="truncate">{col}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+
                 <p className="mt-3 text-[10px] text-white/30">
-                    Selecciona las colecciones que este agente debe priorizar. Si no seleccionas ninguna, usará todo el conocimiento disponible.
+                    Selecciona las colecciones que este agente debe priorizar.
                 </p>
             </div>
         );

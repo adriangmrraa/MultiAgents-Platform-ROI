@@ -4214,52 +4214,52 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
 async def update_agent(agent_id: int, agent: AgentModel, current_user: User = Depends(get_current_user)):
     """
     Update Agent with Fork Logic for Templates.
-    Nexus v5.97: Strict UUID Resolution Fix.
+    Nexus v5.97: Robust Integer Tenant ID Resolution.
     """
     try:
-        # 1. RESOLUCIÓN DE TENANT (UUID -> INTEGER)
+        # 1. ROBUST TENANT RESOLUTION
         tenant_int_id = None
-        try:
-            tenant_row = await db.pool.fetchrow(
-                "SELECT id FROM tenants WHERE tenant_id = $1::uuid", 
-                current_user.tenant_id
-            )
-            if tenant_row:
-                tenant_int_id = tenant_row['id']
-            else:
-                logger.warning(f"Tenant UUID {current_user.tenant_id} not found in tenants table mapping.")
-        except Exception as e:
-             # Fallback if casting fails (e.g. if tenant_id is already int? Unlikely for current_user)
-             logger.warning(f"Tenant resolution failed: {e}")
-
-        # 2. Resolve target ID for query
-        # If resolution succeeded, use Int. Else try direct (Legacy/Fallback)
-        query_tenant_id = tenant_int_id if tenant_int_id else current_user.tenant_id
         
-        # 1. Fetch Existing
+        # A) Check if already Integer (Fast Path)
+        try:
+            tenant_int_id = int(str(current_user.tenant_id))
+        except ValueError:
+            pass # It is a UUID/String
+            
+        # B) Resolve from DB if not Integer
+        if tenant_int_id is None:
+            try:
+                # Assuming schemas where tenants have a UUID pointer
+                row = await db.pool.fetchrow(
+                    "SELECT id FROM tenants WHERE tenant_id = $1::uuid", 
+                    str(current_user.tenant_id)
+                )
+                if row:
+                    tenant_int_id = row['id']
+            except Exception as e:
+                logger.warning(f"Tenant resolution lookup failed: {e}")
+
+        # C) Fail-Safe
+        if tenant_int_id is None:
+             logger.error(f"Resolution Failed for Tenant: {current_user.tenant_id}")
+             raise HTTPException(400, "Could not resolve valid Tenant ID for this operation.")
+
+        # 2. Fetch Existing Agent
         existing = await db.pool.fetchrow("SELECT * FROM agents WHERE id = $1", agent_id)
         if not existing:
             raise HTTPException(404, "Agent not found")
             
-        # 2. Check Fork Logic (If editing a Template)
+        # 3. Check Fork Logic (If editing a Template)
         # Template = tenant_id is NULL
         is_template = existing['tenant_id'] is None
         
-        # Fork logic: If template and user is NOT SuperAdmin (or per strict fork requirement)
+        # Fork logic: If template and user is NOT SuperAdmin 
         if is_template and current_user.role != "SuperAdmin":
-             # FORK
              logger.info(f"Forking Agent Template {agent_id} for User {current_user.id}")
              
-             # 2026 Validation
              validated_model = validate_model(agent.model_version)
-             
-             # Brain Upgrade: Inject Knowledge Instructions during Fork
              final_prompt = _inject_knowledge_config(agent.system_prompt_template, agent.config)
              
-             # Use resolved tenant_int_id for new agent ownership
-             if not tenant_int_id:
-                 raise HTTPException(500, "Cannot fork agent: Tenant Context Resolution Failed")
-
              new_id = await db.pool.fetchval("""
                 INSERT INTO agents (
                     name, role, tenant_id, model_provider, model_version, temperature, 
@@ -4272,20 +4272,12 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
              
              return {"status": "forked", "id": new_id, "message": "Agent cloned from template."}
              
-        # 3. Normal Update (Ownership Check)
-        # If not template, check if belongs to user (or SuperAdmin)
-        # Check against resolved ID
-        if existing['tenant_id'] != query_tenant_id and current_user.role != "SuperAdmin":
-             # Double check fallback if query_tenant_id was UUID and db has Int
-             if tenant_int_id and existing['tenant_id'] == tenant_int_id:
-                 pass # Match!
-             else:
-                 raise HTTPException(403, "Cannot edit agent from another tenant")
+        # 4. Normal Update (Ownership Check)
+        if existing['tenant_id'] != tenant_int_id and current_user.role != "SuperAdmin":
+             raise HTTPException(403, "Cannot edit agent from another tenant")
              
-        # 2026 Validation
+        # 5. Validation & Update
         validated_model = validate_model(agent.model_version)
-
-        # Brain Upgrade: Inject Knowledge Instructions
         final_prompt = _inject_knowledge_config(agent.system_prompt_template, agent.config)
 
         q = """
@@ -4306,75 +4298,64 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
         try:
              await db.pool.execute("UPDATE agents SET knowledge_sources = $1 WHERE id = $2", json.dumps(agent.knowledge_sources), agent_id)
         except:
-             logger.warning("agent_kb_linking_failed_on_update", id=agent_id)
+             pass
 
         return {"status": "updated", "id": agent_id}
         
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.error(f"Error updating agent: {e}")
         raise HTTPException(500, str(e))
 
 @router.delete("/agents/{agent_id}", dependencies=[Depends(verify_admin_token)])
 async def delete_agent(agent_id: int, current_user: User = Depends(get_current_user)):
+    """
+    Elimina un agente. 
+    FIX v5.99: Resuelve explícitamente el tenant_id (UUID) a ID numérico antes de borrar.
+    """
+    logger.info(f"🗑️ DELETE request for Agent {agent_id} | User: {current_user.email} | TenantUUID: {current_user.tenant_id}")
+
     try:
-        # 1. RESOLUCIÓN DE TENANT (UUID -> INTEGER)
-        tenant_int_id = None
-        try:
-            tenant_row = await db.pool.fetchrow(
-                "SELECT id FROM tenants WHERE tenant_id = $1::uuid", 
-                current_user.tenant_id
-            )
-            if tenant_row:
-                tenant_int_id = tenant_row['id']
-            else:
-                logger.warning(f"Tenant UUID {current_user.tenant_id} not found in tenants table mapping.")
-        except Exception as e:
-             logger.warning(f"Delete Agent: Tenant resolution warning: {e}")
+        # PASO 1: Resolver el ID Numérico del Tenant (Tabla 'tenants')
+        # Buscamos el ID (int) usando el UUID de la sesión.
+        tenant_row = await db.pool.fetchrow(
+            "SELECT id FROM tenants WHERE tenant_id = $1::uuid", 
+            str(current_user.tenant_id)
+        )
 
-        # 2. Ownership Check
-        # We need to know who owns this agent to verify matches
-        existing = await db.pool.fetchrow("SELECT tenant_id FROM agents WHERE id = $1", int(agent_id))
+        if not tenant_row:
+            # Si no encontramos el tenant en la tabla maestra, abortamos. 
+            # NO intentamos borrar con UUID porque causará un crash 500.
+            logger.error(f"⛔ Tenant Resolution Failed: UUID {current_user.tenant_id} not found in DB.")
+            raise HTTPException(status_code=404, detail="Tenant context not found. Could not resolve numeric ID.")
         
-        if not existing:
-             return {"status": "ok"} # Idempotent - Agent unavailable
-             
-        if existing['tenant_id'] is None:
-             if current_user.role != "SuperAdmin":
-                  raise HTTPException(403, "Cannot delete system templates")
-        else:
-             # Verify Ownership
-             # Match against Int ID if we have it, else fallback (though fallback likely fails equality check against Int)
-             owner_id = existing['tenant_id']
-             if tenant_int_id:
-                 if owner_id != tenant_int_id and current_user.role != "SuperAdmin":
-                     raise HTTPException(403, "Access denied")
-             else:
-                 # If we couldn't resolve, strict fail for safety or allow SuperAdmin
-                 if current_user.role != "SuperAdmin":
-                      # Last ditch: compare string representation? Dangerous.
-                      raise HTTPException(403, "Access denied: Tenant context unresolved")
+        tenant_int_id = tenant_row['id']
+        logger.info(f"✅ Resolved Tenant: UUID {current_user.tenant_id} -> ID {tenant_int_id}")
 
-        # 3. Execute Delete with Explicit Types
-        # IMPORTANTE: Usamos 'tenant_int_id' (Integer) si existe
-        if tenant_int_id:
-            await db.pool.execute(
-                "DELETE FROM agents WHERE id = $1 AND tenant_id = $2", 
-                int(agent_id), 
-                int(tenant_int_id)
-            )
-        else:
-            # Fallback (User requested fallback path, though usually this will fail if column is int)
-            await db.pool.execute(
-                "DELETE FROM agents WHERE id = $1 AND tenant_id = $2", 
-                int(agent_id), 
-                current_user.tenant_id
-            )
-            
-        return {"status": "ok"}
+        # PASO 2: Ejecutar el Borrado (Usando SOLO Enteros)
+        # Forzamos el casteo int(agent_id) por seguridad extra.
+        query = "DELETE FROM agents WHERE id = $1 AND tenant_id = $2"
+        result = await db.pool.execute(query, int(agent_id), int(tenant_int_id))
+
+        # PASO 3: Verificar resultado (asyncpg devuelve string "DELETE count")
+        if result == "DELETE 0":
+            logger.warning(f"⚠️ Agent {agent_id} not found for Tenant ID {tenant_int_id}")
+            # Retornamos 404 si no se borró nada (por idempotencia o no existe)
+            # El usuario pidió status success si es idempotente? 
+            # El prompt dice: Raise 404 detail="Agent not found or access denied"
+            raise HTTPException(status_code=404, detail="Agent not found or access denied")
+
+        logger.info(f"🗑️ Agent {agent_id} successfully deleted.")
         
+        return {"status": "success", "message": f"Agent {agent_id} deleted"}
+
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        logger.error(f"Delete Agent Error: {e}")
-        raise HTTPException(500, str(e))
+        logger.error(f"💥 Critical DB Error in delete_agent: {e}")
+        # Retornamos 500 pero con detalle limpio para debugging
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 # --- Nexus v5.26: Live Preview ---
