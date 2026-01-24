@@ -11,6 +11,7 @@ import httpx
 
 from db import db, redis_client
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from app.core.database import get_db
 import smtplib
 from app.models.auth import User
@@ -4062,7 +4063,12 @@ async def list_knowledge_collections(current_user: User = Depends(get_current_us
     """
     Returns unique collections found in the Vector Database (Supabase) for the current tenant.
     Used by Agent Wizard to configure Selective Knowledge.
+    Nexus v5.99 Fix: Use real Integer ID.
     """
+    # RESOLUCIÓN DE TENANT (FUENTE DE VERDAD: TABLA USERS)
+    user_row = await db.pool.fetchrow("SELECT tenant_id FROM users WHERE id = $1", current_user.id)
+    tenant_id = user_row['tenant_id'] if user_row else current_user.tenant_id
+    
     collections = set()
     
     # Supabase REST (Truth)
@@ -4078,14 +4084,14 @@ async def list_knowledge_collections(current_user: User = Depends(get_current_us
             }
             # Fetch metadata column only, filter by tenant via metadata containment
             # Strategy: Fetch top 500 recent docs to scan for collections.
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=8.0) as client:
                 params = {
                     "select": "metadata",
                     "limit": "500",
                     "order": "id.desc" 
                 }
-                # Filter by tenant inside metadata
-                params[f"metadata->>tenant_id"] = f"eq.{current_user.tenant_id}"
+                # Filter by tenant inside metadata (Cast to string for Supabase REST filter)
+                params[f"metadata->>tenant_id"] = f"eq.{tenant_id}"
 
                 resp = await client.get(f"{supabase_url}/rest/v1/documents", headers=headers, params=params)
                 if resp.status_code == 200:
@@ -4328,26 +4334,32 @@ async def delete_agent(agent_id: int, current_user: User = Depends(get_current_u
 async def get_agent_config(agent_id: int):
     """
     Get FULL agent config for Wizard Hydration.
-    Explicitly returns knowledge_sources, enabled_tools, and model settings.
+    Nexus v5.99: Explicitly returns all columns for full state hydration.
     """
-    agent = await db.pool.fetchrow("SELECT * FROM agents WHERE id = $1", agent_id)
+    agent = await db.pool.fetchrow("""
+        SELECT id, name, role, system_prompt_template, template_type, config,
+               channels, enabled_tools, knowledge_sources,
+               model_provider, model_version, temperature
+        FROM agents WHERE id = $1
+    """, agent_id)
+    
     if not agent:
         raise HTTPException(404, "Agent not found")
     
     data = dict(agent)
     
     # Robust Parsing: Handle JSON strings if DB returns text (e.g. SQLite/Legacy PG)
-    if isinstance(data.get('knowledge_sources'), str):
-        try: data['knowledge_sources'] = json.loads(data['knowledge_sources'])
-        except: data['knowledge_sources'] = []
-    elif not data.get('knowledge_sources'):
-        data['knowledge_sources'] = [] # Ensure list if None
-        
-    if isinstance(data.get('enabled_tools'), str):
-        try: data['enabled_tools'] = json.loads(data['enabled_tools'])
-        except: data['enabled_tools'] = []
-    elif not data.get('enabled_tools'):
-        data['enabled_tools'] = []
+    for key in ['knowledge_sources', 'enabled_tools', 'channels']:
+        if isinstance(data.get(key), str):
+            try: data[key] = json.loads(data[key])
+            except: data[key] = []
+        elif not data.get(key):
+            data[key] = []
+            
+    # Ensure template_type exists (from DB column or config)
+    if not data.get('template_type'):
+        data['template_type'] = data.get('config', {}).get('template_type')
+
         
     # Ensure template_type exists (from DB column or config)
     if not data.get('template_type'):
@@ -4590,34 +4602,22 @@ async def list_agent_templates():
     """
     return AGENT_TEMPLATES
 
-@router.get("/agents/sales-config/{tenant_id}", dependencies=[Depends(verify_admin_token)])
-async def get_sales_agent_config(tenant_id: int, db: AsyncSession = Depends(get_db)):
+@router.get("/agents/sales-config/{tenant_id_ignored}", dependencies=[Depends(verify_admin_token)])
+async def get_sales_agent_config(tenant_id_ignored: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """
     Nexus v5.24 Bridge: Fetches or creates the Native Sales Agent for a store.
-    Fixed in v5.36: Injects AsyncSession.
+    Nexus v5.99 Fix: Now correctly accepts the path param (even if ignored) to avoid 422,
+    and uses the secure resolved ID from user session.
     """
+    # RESOLUCIÓN DE TENANT (FUENTE DE VERDAD: TABLA USERS)
+    user_row = await db.execute(text("SELECT tenant_id FROM users WHERE id = :id"), {"id": current_user.id})
+    tenant_row = user_row.fetchone()
+    tenant_id = tenant_row[0] if tenant_row else current_user.tenant_id
+
     agent = await get_or_create_sales_agent(tenant_id, db)
     if not agent:
         raise HTTPException(404, "Could not provision sales agent")
     return agent
-
-@router.get("/agents/{agent_id}/config", dependencies=[Depends(verify_admin_token)])
-async def get_agent_config_details(agent_id: int):
-    """
-    Nexus v5.24: Deep fetches config for Wizard pre-filling.
-    """
-    row = await db.pool.fetchrow("""
-        SELECT id, name, role, system_prompt_template, template_type, config,
-               channels, enabled_tools, knowledge_sources,
-               model_provider, model_version, temperature
-        FROM agents WHERE id = $1
-    """, agent_id)
-    if not row:
-        raise HTTPException(404, "Agent not found")
-    
-    # Simple heuristic to extract previous prompts if stored in config or parse raw?
-    # For now, we return the raw row and let frontend decide how to hydrate Wizard
-    return dict(row)
 
 # --- Webhook Management (Sovereign Integration) ---
 
@@ -4836,15 +4836,28 @@ async def receive_chatwoot_webhook(
 async def get_integration_status(current_user: User = Depends(get_current_user)):
     """
     Returns active integrations to enable/disable channels in UI.
-    Discovery Logic:
-    - WhatsApp: YCloud Key OR Meta Token (if WhatsApp Cloud)
-    - Instagram/Facebook: Meta Token OR Chatwoot (Assume Chatwoot handles social)
+    Optimized in v5.99: Batch queries to reduce latency.
     """
-    # Credential Check
-    creds = await db.pool.fetch("""
-        SELECT category, name FROM credentials 
-        WHERE tenant_id = $1
-    """, current_user.tenant_id)
+    # 0. RESOLUCIÓN DE TENANT (FUENTE DE VERDAD: TABLA USERS)
+    user_row = await db.pool.fetchrow("SELECT tenant_id FROM users WHERE id = $1", current_user.id)
+    tenant_id = user_row['tenant_id'] if user_row else current_user.tenant_id
+
+    # 1. BATCH CREDENTIALS & TRAFFIC DISCOVERY
+    # We combine creds check and traffic check in parallel tasks
+    async def fetch_creds():
+        return await db.pool.fetch("SELECT category, name FROM credentials WHERE tenant_id = $1", tenant_id)
+
+    async def fetch_traffic_summary():
+        # Subquery batch: Check all channels in one hit
+        return await db.pool.fetchrow("""
+            SELECT 
+                EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'chatwoot' AND channel = 'facebook') as cw_fb,
+                EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'chatwoot' AND channel = 'instagram') as cw_ig,
+                EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'chatwoot' AND channel = 'whatsapp') as cw_wa,
+                EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'meta_direct') as meta_direct
+        """, tenant_id)
+
+    creds, traffic = await asyncio.gather(fetch_creds(), fetch_traffic_summary())
     
     status = {
         "whatsapp": False,
@@ -4853,37 +4866,16 @@ async def get_integration_status(current_user: User = Depends(get_current_user))
         "web": True 
     }
     
-    # Traffic Analysis: Granular "Proof of Life" per Channel
-    # We check if specific channels are active via Chatwoot
-    
-    chatwoot_fb = await db.pool.fetchval("""
-        SELECT EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'chatwoot' AND channel = 'facebook')
-    """, current_user.tenant_id)
-
-    chatwoot_ig = await db.pool.fetchval("""
-        SELECT EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'chatwoot' AND channel = 'instagram')
-    """, current_user.tenant_id)
-    
-    chatwoot_wa = await db.pool.fetchval("""
-        SELECT EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'chatwoot' AND channel = 'whatsapp')
-    """, current_user.tenant_id)
-
-    has_meta_traffic = await db.pool.fetchval("""
-        SELECT EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'meta_direct')
-    """, current_user.tenant_id)
-    
-    # Apply Traffic Discovery
-    if chatwoot_fb: status['facebook'] = True
-    if chatwoot_ig: status['instagram'] = True
-    if chatwoot_wa: status['whatsapp'] = True
-    
-    # Generic Chatwoot also implies Web usually
-    if chatwoot_fb or chatwoot_ig or chatwoot_wa:
-        status['web'] = True
-
-    if has_meta_traffic:
-        status['instagram'] = True
-        status['facebook'] = True
+    # 2. Apply Traffic Discovery (Proof of Life)
+    if traffic:
+        if traffic['cw_fb']: status['facebook'] = True
+        if traffic['cw_ig']: status['instagram'] = True
+        if traffic['cw_wa']: status['whatsapp'] = True
+        if traffic['meta_direct']:
+            status['instagram'] = True
+            status['facebook'] = True
+        if traffic['cw_fb'] or traffic['cw_ig'] or traffic['cw_wa']:
+            status['web'] = True
 
     # Apply Credential Discovery (Additive)
     for c in creds:
