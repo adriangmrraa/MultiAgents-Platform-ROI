@@ -4152,20 +4152,26 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
         q = """
             INSERT INTO agents (
                 name, role, tenant_id, user_id, model_provider, model_version, temperature, 
-                system_prompt_template, enabled_tools, channels, is_active, template_type, config, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+                system_prompt_template, enabled_tools, channels, is_active, config, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
             RETURNING id
         """
         
         # 2026 Validation: Ensure model is valid, otherwise fallback
         validated_model = validate_model(agent.model_version)
         
+        # Nexus v5.99 Fix: Schema Mismatch (template_type missing in DB)
+        # We store template_type inside 'config' JSONB instead.
+        if agent.template_type:
+             if not agent.config: agent.config = {}
+             agent.config['template_type'] = agent.template_type
+
         agent_id = await db.pool.fetchval(
             q, 
             agent.name, agent.role, tenant_int, str(current_user.id),
             agent.model_provider, validated_model, agent.temperature,
             final_prompt, json.dumps(agent.enabled_tools), # Use Injected Prompt
-            json.dumps(agent.channels), agent.is_active, agent.template_type, json.dumps(agent.config or {})
+            json.dumps(agent.channels), agent.is_active, json.dumps(agent.config or {})
         )
         
         # Update knowledge_sources separately if it exists (for schema flexibility)
@@ -4215,6 +4221,7 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
              validated_model = validate_model(agent.model_version)
              final_prompt = _inject_knowledge_config(agent.system_prompt_template, agent.config)
              
+             # Also fix FORK insert to exclude template_type if missing
              new_id = await db.pool.fetchval("""
                 INSERT INTO agents (
                     name, role, tenant_id, model_provider, model_version, temperature, 
@@ -4235,18 +4242,25 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
         validated_model = validate_model(agent.model_version)
         final_prompt = _inject_knowledge_config(agent.system_prompt_template, agent.config)
 
+        # Nexus v5.99 Fix: Schema Mismatch (template_type missing)
+        # Store in config
+        if agent.template_type:
+             if not agent.config: agent.config = {}
+             agent.config['template_type'] = agent.template_type
+
+        # REMOVED template_type from UPDATE
         q = """
             UPDATE agents SET 
                 name = $1, role = $2, model_provider = $3, model_version = $4, temperature = $5,
                 system_prompt_template = $6, enabled_tools = $7, channels = $8, is_active = $9, 
-                template_type = $10, config = $11, updated_at = NOW()
-            WHERE id = $12
+                config = $10, updated_at = NOW()
+            WHERE id = $11
         """
         await db.pool.execute(
             q,
             agent.name, agent.role, agent.model_provider, validated_model, agent.temperature,
             final_prompt, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active,
-            agent.template_type, json.dumps(agent.config), agent_id
+            json.dumps(agent.config), agent_id
         )
         
         # Update knowledge_sources
