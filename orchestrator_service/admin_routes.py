@@ -3922,17 +3922,16 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str,
 @safe_db_call
 async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_current_user)):
     """
-    Nexus v5.86 - Dual DB Precision Delete (Hybrid Architecture).
-    - Local DB (Auth/App): Reads/Deletes the 'rag_documents' record.
-    - Remote DB (Vectors): Deletes vectors from 'documents' table via direct transient connection.
-    - Precision: Targets 'metadata->source_id' (UUID) for exact match.
+    Nexus v5.88 - HTTP Protocol Fallback (REST API).
+    - Remote DB (Vectors): Deletes via Supabase REST API (Port 443) to bypass SQL Port 5432 blocks.
+    - Local DB (Auth/App): Deletes metadata record.
+    - Physical: Best-effort deletion from disk.
     """
-    import asyncpg
+    import httpx
     import os
 
-    # 1. Recuperar datos locales (DB Auth/App)
-    # Usamos el pool normal de la app
-    # Nexus v5.87: Schema Fix - Removed file_path/storage_path to prevent UndefinedColumnError
+    # 1. Recuperar datos locales (Schema simplificado)
+    # Solo pedimos las columnas que existen
     doc = await db.pool.fetchrow("SELECT id, filename, tenant_id FROM rag_documents WHERE id=$1", doc_id)
     
     if not doc:
@@ -3943,42 +3942,69 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
 
     doc_uuid = str(doc['id'])
     filename = doc['filename']
-    tenant_id = str(doc['tenant_id'])
 
-    # 2. CONEXIÓN A SUPABASE (Vectores)
-    supabase_url = os.getenv("SUPABASE_DB_URL")
-    if supabase_url:
-        logger.info(f"🔌 CONNECTING to Supabase to delete vectors for ID: {doc_uuid}")
-        try:
-            conn = await asyncpg.connect(supabase_url)
-            try:
-                # BORRADO QUIRÚRGICO POR ID
-                # Buscamos coincidencias exactas en el campo 'source_id' de la metadata
-                # Opcional: añadimos 'source' (filename) como respaldo por si acaso (OR)
-                query = """
-                    DELETE FROM documents 
-                    WHERE metadata->>'source_id' = $1::text
-                    OR (metadata->>'source' = $2 AND metadata->>'tenant_id' = $3::text)
-                    RETURNING id;
-                """
-                deleted = await conn.fetch(query, doc_uuid, filename, tenant_id)
-                logger.info(f"✅ SUPABASE CLEANUP: Deleted {len(deleted)} vectors linked to ID {doc_uuid}")
-
-            finally:
-                await conn.close()
-                logger.info("🔌 DISCONNECTED form Supabase.")
-        except Exception as e:
-            logger.error(f"⚠️ SUPABASE ERROR: Failed to delete vectors. Reason: {e}")
-            # No detenemos el proceso, permitimos que se borre el registro local para no dejar 'zombies' en la UI
-    else:
-        logger.error("❌ CONFIG ERROR: SUPABASE_DB_URL is missing. Cannot delete vectors.")
+    # 2. SUPABASE REST DELETE (Vía HTTP - Firewall Friendly)
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
     
-    # 3. BORRADO LOCAL (DB Auth/App)
-    # Esto elimina el archivo de la lista visual del usuario
+    if supabase_url and supabase_key:
+        logger.info(f"🌐 HTTP DELETE: Targeting vectors for ID {doc_uuid} via REST API...")
+        
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json"
+        }
+        
+        # Sintaxis PostgREST para filtrar dentro de JSONB: col->>field=eq.value
+        # Esto reemplaza el borrado SQL directo que fallaba por timeout
+        params = {
+            "metadata->>source_id": f"eq.{doc_uuid}"
+        }
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                # Disparamos contra la tabla 'documents' expuesta via REST
+                target_endpoint = f"{supabase_url}/rest/v1/documents"
+                response = await client.delete(
+                    target_endpoint, 
+                    headers=headers, 
+                    params=params,
+                    timeout=10.0
+                )
+                
+                if response.status_code in [200, 204]:
+                    logger.info(f"✅ REST API SUCCESS: Vectors deleted via HTTP ({response.status_code}).")
+                else:
+                    logger.error(f"⚠️ REST API FAIL: {response.status_code} - {response.text}")
+            except Exception as e:
+                logger.error(f"❌ HTTP CONNECTION ERROR: {e}")
+    else:
+        logger.error("❌ CONFIG ERROR: Missing SUPABASE_URL or SUPABASE_SERVICE_KEY.")
+
+    # 3. BORRADO FÍSICO (Best Effort)
+    try:
+        # Asumimos ruta estándar ya que no tenemos la columna file_path
+        # Ajustar si la ruta base es diferente en producción
+        file_path = os.path.join(os.getcwd(), "storage", filename) 
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logger.info(f"🗑️ PHYSICAL DELETE: Removed {file_path}")
+        else:
+             # Try alternate path if needed, e.g. /app/storage
+             alt_path = os.path.join("/app/storage", filename)
+             if os.path.exists(alt_path):
+                 os.remove(alt_path)
+                 logger.info(f"🗑️ PHYSICAL DELETE: Removed {alt_path}")
+
+    except Exception as e:
+        logger.warning(f"⚠️ PHYSICAL KEEP: Could not delete file from disk: {e}")
+
+    # 4. BORRADO LOCAL (Metadata)
     await db.pool.execute("DELETE FROM rag_documents WHERE id=$1", doc_id)
     logger.info(f"🗑️ LOCAL CLEANUP: Metadata record {doc_uuid} deleted from App DB.")
     
-    return {"status": "deleted", "mode": "hybrid_precision", "id": doc_id}
+    return {"status": "deleted", "mode": "http_rest_api", "id": doc_id}
 
 # --- Agents Management (QA Phase 3) ---
 
