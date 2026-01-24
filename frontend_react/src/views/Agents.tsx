@@ -112,12 +112,17 @@ export const Agents: React.FC = () => {
     const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
     const [selectedChannels, setSelectedChannels] = useState<string[]>(['whatsapp', 'web']);
     const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+    const [channelStatus, setChannelStatus] = useState<Record<string, boolean>>({ whatsapp: false, instagram: false, facebook: false, web: true });
 
     const handleActivateSalesAgent = async () => {
         if (!user?.tenant_id) return;
         try {
-            // Nexus v5.24: Auto-provision Sales Agent
             // Nexus v5.36 flow: Activate -> Show Channel Modal -> Redirect
+
+            // 1. Fetch Integration Status (Sovereign Discovery)
+            const status = await fetchApi('/admin/integrations/status');
+            if (status) setChannelStatus(status);
+
             const res = await fetchApi(`/admin/agents/sales-config/${user.tenant_id}`);
             if (res && res.id) {
                 // Pre-fill existing channels if any
@@ -136,28 +141,6 @@ export const Agents: React.FC = () => {
     const handleChannelsSave = async () => {
         if (!activeAgentId) return;
         try {
-            await fetchApi(`/admin/agents/${activeAgentId}`, {
-                method: 'PUT',
-                body: {
-                    // We need to send minimal required fields or full object? 
-                    // The PUT endpoint in backend expects AgentModel. 
-                    // We should ideally fetch the full agent first or be careful.
-                    // IMPORTANT: Backend PUT requires full object often. 
-                    // Let's rely on the backend merging or fetch-modify pattern.
-                    // The safe bet: Just update channels using the fact that current backend PUT merges?
-                    // Checking backend code: It does an UPDATE on fields passed... wait, it replaces fields.
-                    // We need to fetch current state?
-                    // Logic hack: We already fetched 'res' in activation. We don't have it here.
-                    // Better approach: We'll assume the backend handles partial updates or we fetch-first.
-
-                    // ACTUALLY: Let's do a fetch first to be safe.
-                    // Or, since we just activated, we know it's the Sales Agent.
-                    // We will modify the flow to fetch inside save.
-                }
-            });
-            // Rethink: The PUT endpoint validates "all" fields in standard Pydantic.
-            // We cannot just send {channels: [...]}.
-
             // Workaround: We will fetch the agent, update channels, then PUT.
             const currentAgent = agents.find(a => a.id === activeAgentId) || await fetchApi(`/admin/agents/${activeAgentId}/config`);
 
@@ -457,22 +440,51 @@ export const Agents: React.FC = () => {
                     <div className="form-group">
                         <label className="mb-3 block text-sm font-semibold text-white">Canales de Atención</label>
                         <div className="grid grid-cols-1 gap-3">
-                            {['whatsapp', 'instagram', 'facebook', 'web'].map(ch => (
-                                <label key={ch} className={`
-                                    flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all
-                                    ${selectedChannels.includes(ch)
-                                        ? 'bg-accent/20 border-accent text-white'
-                                        : 'bg-white/5 border-white/10 text-secondary hover:bg-white/10'}
+                            {['whatsapp', 'instagram', 'facebook', 'web'].map(ch => {
+                                const isConnected = channelStatus[ch];
+                                return (
+                                    <label key={ch} className={`
+                                    flex items-center justify-between p-4 rounded-xl border transition-all
+                                    ${isConnected
+                                            ? selectedChannels.includes(ch) ? 'bg-accent/20 border-accent text-white cursor-pointer' : 'bg-white/5 border-white/10 text-secondary hover:bg-white/10 cursor-pointer'
+                                            : 'bg-black/40 border-white/5 text-gray-500 cursor-not-allowed opacity-60'}
                                 `}>
-                                    <div className={`
-                                        w-6 h-6 rounded-full border flex items-center justify-center
-                                        ${selectedChannels.includes(ch) ? 'bg-accent border-accent' : 'border-white/30'}
-                                    `}>
-                                        {selectedChannels.includes(ch) && <div className="w-2 h-2 rounded-full bg-white" />}
-                                    </div>
-                                    <span className="capitalize font-medium">{ch}</span>
-                                </label>
-                            ))}
+                                        <div className="flex items-center gap-4">
+                                            <div className={`
+                                            w-6 h-6 rounded-full border flex items-center justify-center
+                                            ${isConnected && selectedChannels.includes(ch) ? 'bg-accent border-accent' : 'border-white/30'}
+                                        `}>
+                                                {isConnected && selectedChannels.includes(ch) && <div className="w-2 h-2 rounded-full bg-white" />}
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="capitalize font-medium">{ch}</span>
+                                                {!isConnected && <span className="text-[10px] text-red-400">Desconectado</span>}
+                                            </div>
+                                        </div>
+
+                                        {isConnected ? (
+                                            <input
+                                                type="checkbox"
+                                                className="hidden"
+                                                disabled={!isConnected}
+                                                checked={selectedChannels.includes(ch)}
+                                                onChange={() => {
+                                                    if (selectedChannels.includes(ch)) setSelectedChannels(prev => prev.filter(c => c !== ch));
+                                                    else setSelectedChannels(prev => [...prev, ch]);
+                                                }}
+                                            />
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.preventDefault(); navigate('/settings/integrations'); }}
+                                                className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-1 rounded text-white"
+                                            >
+                                                Conectar
+                                            </button>
+                                        )}
+                                    </label>
+                                );
+                            })}
                         </div>
                     </div>
 

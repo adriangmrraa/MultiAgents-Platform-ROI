@@ -4787,6 +4787,44 @@ async def receive_chatwoot_webhook(
         logger.error(f"Redis Publish Fail: {e}")
     
     return {"status": "synced", "id": msg_id}
+
+# Nexus v5.99: Sovereign Channel Discovery
+@router.get("/integrations/status", dependencies=[Depends(verify_admin_token)])
+async def get_integration_status(current_user: User = Depends(get_current_user)):
+    """
+    Returns active integrations to enable/disable channels in UI.
+    Discovery Logic:
+    - WhatsApp: YCloud Key OR Meta Token (if WhatsApp Cloud)
+    - Instagram/Facebook: Meta Token OR Chatwoot (Assume Chatwoot handles social)
+    """
+    creds = await db.pool.fetch("""
+        SELECT category, name FROM credentials 
+        WHERE tenant_id = $1
+    """, current_user.tenant_id)
+    
+    status = {
+        "whatsapp": False,
+        "instagram": False, 
+        "facebook": False,
+        "web": True # Web widget always available via script
+    }
+    
+    for c in creds:
+        cat = c['category'].lower()
+        if cat == 'ycloud' or cat == 'whatsapp':
+            status['whatsapp'] = True
+        if cat == 'meta':
+            status['instagram'] = True
+            status['facebook'] = True
+            status['whatsapp'] = True # Meta handles WhatsApp Cloud too
+        if cat == 'chatwoot':
+            # Chatwoot aggregator often implies social channels are ready
+            status['instagram'] = True
+            status['facebook'] = True
+            status['web'] = True
+
+    return status
+
 @router.post("/meta/connect", dependencies=[Depends(verify_admin_token)])
 async def connect_meta_account(request: Request, current_user: User = Depends(get_current_user)):
     """

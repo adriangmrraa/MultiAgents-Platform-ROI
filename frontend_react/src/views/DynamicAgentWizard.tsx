@@ -667,6 +667,16 @@ export const DynamicAgentWizard = () => {
 
         try {
             // Nexus v5.99 Fix: Full Brain Config Payload
+            // Data Type Check: Ensure arrays are native arrays, not strings.
+            let channels: string[] = ['whatsapp'];
+            try {
+                if (formData['channels'] && typeof formData['channels'] === 'string') {
+                    channels = JSON.parse(formData['channels']);
+                } else if (Array.isArray(formData['channels'])) {
+                    channels = formData['channels'];
+                }
+            } catch { }
+
             const payload = {
                 name: formData['store_name'] || "Agente de Ventas",
                 tenant_id: 1,
@@ -680,6 +690,7 @@ export const DynamicAgentWizard = () => {
                 template_type: selectedTemplate || formData.template_type, // Fallback to existing if not re-selected
                 enabled_tools: selectedTools, // CRITICAL: Persist Tools
                 knowledge_sources: knowledgeCollections, // CRITICAL: Persist RAG Collections
+                channels: channels, // Fix: Send as Array, not String
 
                 // Config JSONB (Metadata)
                 config: {
@@ -690,6 +701,9 @@ export const DynamicAgentWizard = () => {
                     ...formData // Pass other wizard fields as config too
                 }
             };
+
+            // Remove legacy stringified fields from root if spreading formData caused duplication
+            // (Optional clean up, but spread overrides are handled above)
 
             await fetchApi(agentId ? `/admin/agents/${agentId}` : '/admin/agents', {
                 method: agentId ? 'PUT' : 'POST',
