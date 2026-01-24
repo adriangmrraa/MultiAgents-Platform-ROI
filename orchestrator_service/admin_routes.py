@@ -4866,6 +4866,52 @@ async def get_integration_status(current_user: User = Depends(get_current_user))
 
     return status
 
+@router.get("/integrations/web/config", dependencies=[Depends(verify_admin_token)])
+async def get_web_widget_config(current_user: User = Depends(get_current_user)):
+    """
+    Get Web Widget preferences (Color, Welcome Message, Token).
+    Stored in credentials table as a JSON blob for simplicity or multiple rows.
+    We'll use a single row: category='web_widget', name='config'
+    """
+    row = await db.pool.fetchrow("""
+        SELECT value FROM credentials 
+        WHERE tenant_id = $1 AND category = 'web_widget' AND name = 'config'
+    """, current_user.tenant_id)
+    
+    if row:
+        try:
+            return json.loads(row['value'])
+        except:
+            pass
+            
+    return {} # Return empty to let frontend use defaults
+
+@router.post("/integrations/web/config", dependencies=[Depends(verify_admin_token)])
+async def save_web_widget_config(config: dict, current_user: User = Depends(get_current_user)):
+    """
+    Save Web Widget preferences.
+    """
+    value_json = json.dumps(config)
+    
+    # Upsert logic
+    exists = await db.pool.fetchval("""
+        SELECT id FROM credentials 
+        WHERE tenant_id = $1 AND category = 'web_widget' AND name = 'config'
+    """, current_user.tenant_id)
+    
+    if exists:
+        await db.pool.execute("""
+            UPDATE credentials SET value = $1, updated_at = NOW()
+            WHERE id = $2
+        """, value_json, exists)
+    else:
+        await db.pool.execute("""
+            INSERT INTO credentials (tenant_id, category, name, value, created_at, updated_at)
+            VALUES ($1, 'web_widget', 'config', $2, NOW(), NOW())
+        """, current_user.tenant_id, value_json)
+        
+    return {"status": "saved"}
+
 @router.post("/meta/connect", dependencies=[Depends(verify_admin_token)])
 async def connect_meta_account(request: Request, current_user: User = Depends(get_current_user)):
     """
