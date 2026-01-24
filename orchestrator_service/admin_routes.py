@@ -4214,18 +4214,27 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
 async def update_agent(agent_id: int, agent: AgentModel, current_user: User = Depends(get_current_user)):
     """
     Update Agent with Fork Logic for Templates.
-    Nexus v5.90: Fixes UUID vs Integer Tenant ID mismatch.
-    Nexus v5.91: Knowledge Injection.
+    Nexus v5.97: Strict UUID Resolution Fix.
     """
     try:
-        # 0. Resolve Tenant Integer ID (Hybrid Schema Fix)
-        # The 'tenants' table uses UUID in 'tenant_id' column, but 'agents' uses Integer FK.
-        tenant_row = await db.pool.fetchrow("SELECT id FROM tenants WHERE tenant_id = $1", current_user.tenant_id)
-        if not tenant_row:
-             # Should not happen for valid logged in user, but safe fallback
-             raise HTTPException(404, f"Tenant context not found for UUID {current_user.tenant_id}")
-        
-        tenant_int = tenant_row['id']
+        # 1. RESOLUCIÓN DE TENANT (UUID -> INTEGER)
+        tenant_int_id = None
+        try:
+            tenant_row = await db.pool.fetchrow(
+                "SELECT id FROM tenants WHERE tenant_id = $1::uuid", 
+                current_user.tenant_id
+            )
+            if tenant_row:
+                tenant_int_id = tenant_row['id']
+            else:
+                logger.warning(f"Tenant UUID {current_user.tenant_id} not found in tenants table mapping.")
+        except Exception as e:
+             # Fallback if casting fails (e.g. if tenant_id is already int? Unlikely for current_user)
+             logger.warning(f"Tenant resolution failed: {e}")
+
+        # 2. Resolve target ID for query
+        # If resolution succeeded, use Int. Else try direct (Legacy/Fallback)
+        query_tenant_id = tenant_int_id if tenant_int_id else current_user.tenant_id
         
         # 1. Fetch Existing
         existing = await db.pool.fetchrow("SELECT * FROM agents WHERE id = $1", agent_id)
@@ -4247,6 +4256,10 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
              # Brain Upgrade: Inject Knowledge Instructions during Fork
              final_prompt = _inject_knowledge_config(agent.system_prompt_template, agent.config)
              
+             # Use resolved tenant_int_id for new agent ownership
+             if not tenant_int_id:
+                 raise HTTPException(500, "Cannot fork agent: Tenant Context Resolution Failed")
+
              new_id = await db.pool.fetchval("""
                 INSERT INTO agents (
                     name, role, tenant_id, model_provider, model_version, temperature, 
@@ -4254,16 +4267,20 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
                 RETURNING id
              """, 
-             agent.name, agent.role, tenant_int, agent.model_provider, validated_model, agent.temperature,
+             agent.name, agent.role, tenant_int_id, agent.model_provider, validated_model, agent.temperature,
              final_prompt, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active)
              
              return {"status": "forked", "id": new_id, "message": "Agent cloned from template."}
              
         # 3. Normal Update (Ownership Check)
         # If not template, check if belongs to user (or SuperAdmin)
-        # Comparing Integer vs Integer now
-        if existing['tenant_id'] != tenant_int and current_user.role != "SuperAdmin":
-             raise HTTPException(403, "Cannot edit agent from another tenant")
+        # Check against resolved ID
+        if existing['tenant_id'] != query_tenant_id and current_user.role != "SuperAdmin":
+             # Double check fallback if query_tenant_id was UUID and db has Int
+             if tenant_int_id and existing['tenant_id'] == tenant_int_id:
+                 pass # Match!
+             else:
+                 raise HTTPException(403, "Cannot edit agent from another tenant")
              
         # 2026 Validation
         validated_model = validate_model(agent.model_version)
@@ -4300,21 +4317,22 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
 @router.delete("/agents/{agent_id}", dependencies=[Depends(verify_admin_token)])
 async def delete_agent(agent_id: int, current_user: User = Depends(get_current_user)):
     try:
-        # 1. Resolve Tenant Integer ID (Hybrid Schema Fix)
-        # We assume current_user.tenant_id is the UUID/String Identifier
-        # We need the Integer Primary Key 'id' from the tenants table.
-        tenant_row = await db.pool.fetchrow("SELECT id FROM tenants WHERE tenant_id = $1", str(current_user.tenant_id))
-        
-        if not tenant_row:
-             # Fallback: Maybe current_user.tenant_id IS the integer?
-             # If we can cast it to int, maybe it works?
-             # Unlikely given the error "operator integer = uuid".
-             raise HTTPException(404, "Tenant context not found")
-             
-        tenant_int = tenant_row['id']
+        # 1. RESOLUCIÓN DE TENANT (UUID -> INTEGER)
+        tenant_int_id = None
+        try:
+            tenant_row = await db.pool.fetchrow(
+                "SELECT id FROM tenants WHERE tenant_id = $1::uuid", 
+                current_user.tenant_id
+            )
+            if tenant_row:
+                tenant_int_id = tenant_row['id']
+            else:
+                logger.warning(f"Tenant UUID {current_user.tenant_id} not found in tenants table mapping.")
+        except Exception as e:
+             logger.warning(f"Delete Agent: Tenant resolution warning: {e}")
 
-        # 2. Ownership & Template Checks
-        # Verify the agent belongs to this tenant INT
+        # 2. Ownership Check
+        # We need to know who owns this agent to verify matches
         existing = await db.pool.fetchrow("SELECT tenant_id FROM agents WHERE id = $1", int(agent_id))
         
         if not existing:
@@ -4323,17 +4341,35 @@ async def delete_agent(agent_id: int, current_user: User = Depends(get_current_u
         if existing['tenant_id'] is None:
              if current_user.role != "SuperAdmin":
                   raise HTTPException(403, "Cannot delete system templates")
-                  
-        elif existing['tenant_id'] != tenant_int and current_user.role != "SuperAdmin":
-             raise HTTPException(403, "Access denied: Agent belongs to another tenant")
+        else:
+             # Verify Ownership
+             # Match against Int ID if we have it, else fallback (though fallback likely fails equality check against Int)
+             owner_id = existing['tenant_id']
+             if tenant_int_id:
+                 if owner_id != tenant_int_id and current_user.role != "SuperAdmin":
+                     raise HTTPException(403, "Access denied")
+             else:
+                 # If we couldn't resolve, strict fail for safety or allow SuperAdmin
+                 if current_user.role != "SuperAdmin":
+                      # Last ditch: compare string representation? Dangerous.
+                      raise HTTPException(403, "Access denied: Tenant context unresolved")
 
         # 3. Execute Delete with Explicit Types
-        # agents.id is INTEGER, agents.tenant_id is INTEGER
-        await db.pool.execute(
-            "DELETE FROM agents WHERE id = $1 AND tenant_id = $2", 
-            int(agent_id), 
-            int(tenant_int)
-        )
+        # IMPORTANTE: Usamos 'tenant_int_id' (Integer) si existe
+        if tenant_int_id:
+            await db.pool.execute(
+                "DELETE FROM agents WHERE id = $1 AND tenant_id = $2", 
+                int(agent_id), 
+                int(tenant_int_id)
+            )
+        else:
+            # Fallback (User requested fallback path, though usually this will fail if column is int)
+            await db.pool.execute(
+                "DELETE FROM agents WHERE id = $1 AND tenant_id = $2", 
+                int(agent_id), 
+                current_user.tenant_id
+            )
+            
         return {"status": "ok"}
         
     except Exception as e:
