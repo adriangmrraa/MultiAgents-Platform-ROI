@@ -248,6 +248,15 @@ migration_steps = [
         updated_at TIMESTAMP DEFAULT NOW()
     );
     """,
+    # Nexus v5.99: Data Integrity (Agents Schema)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE agents ADD COLUMN IF NOT EXISTS template_type VARCHAR(50) DEFAULT 'custom';
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Schema repair failed for agents template_type';
+    END $$;
+    """
     # 2. Credentials Table (Nexus v3.1: UUID Migration)
     """
     CREATE TABLE IF NOT EXISTS credentials (
