@@ -4592,7 +4592,12 @@ async def get_agent_config_details(agent_id: int):
     """
     Nexus v5.24: Deep fetches config for Wizard pre-filling.
     """
-    row = await db.pool.fetchrow("SELECT id, name, role, system_prompt_template, template_type, config FROM agents WHERE id = $1", agent_id)
+    row = await db.pool.fetchrow("""
+        SELECT id, name, role, system_prompt_template, template_type, config,
+               channels, enabled_tools, knowledge_sources,
+               model_provider, model_version, temperature
+        FROM agents WHERE id = $1
+    """, agent_id)
     if not row:
         raise HTTPException(404, "Agent not found")
     

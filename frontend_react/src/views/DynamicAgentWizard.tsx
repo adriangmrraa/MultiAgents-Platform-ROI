@@ -301,24 +301,30 @@ export const DynamicAgentWizard = () => {
                             template_type: cfg.template_type || agent.template_type
                         });
 
+                        const parseArray = (data: any) => {
+                            if (!data) return [];
+                            if (Array.isArray(data)) return data;
+                            if (typeof data === 'string') {
+                                try { return JSON.parse(data); } catch { return []; }
+                            }
+                            return [];
+                        };
+
                         // 2. Tools
-                        if (Array.isArray(agent.enabled_tools)) {
-                            setSelectedTools(agent.enabled_tools);
-                        }
+                        setSelectedTools(parseArray(agent.enabled_tools));
 
                         // 3. Channels (Persistence Fix)
-                        if (Array.isArray(agent.channels)) {
-                            setSelectedChannels(agent.channels);
+                        const loadedChannels = parseArray(agent.channels);
+                        if (loadedChannels.length > 0) {
+                            setSelectedChannels(loadedChannels);
                         }
 
                         // 4. Knowledge
-                        let loadedCollections: string[] = [];
-                        if (Array.isArray(agent.knowledge_sources)) {
-                            loadedCollections = agent.knowledge_sources;
-                        } else if (agent.config?.knowledge_config?.collections) {
-                            loadedCollections = agent.config.knowledge_config.collections;
+                        let loadedCols = parseArray(agent.knowledge_sources);
+                        if (loadedCols.length === 0 && agent.config?.knowledge_config?.collections) {
+                            loadedCols = agent.config.knowledge_config.collections;
                         }
-                        if (loadedCollections.length > 0) setKnowledgeCollections(loadedCollections);
+                        setKnowledgeCollections(loadedCols);
                     }
                 } catch (err) {
                     console.error("Failed to load agent data", err);
