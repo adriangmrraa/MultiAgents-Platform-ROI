@@ -9,6 +9,23 @@ Isolation is enforced by the `match_documents` SQL function.
 - **Mechanism**: Use of the `@>` operator to filter JSONB metadata.
 - **Rule**: The function ignores any document fragment whose metadata does not contain the key-value pair provided in the search filter.
 
+### Script de Blindaje (RLS Setup)
+Ejecutar esto en el Editor SQL de Supabase para cerrar el acceso público y permitir solo al Backend (Service Role).
+
+```sql
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+
+-- Revocar acceso público/frontend
+REVOKE ALL ON TABLE documents FROM anon, authenticated;
+
+-- Garantizar acceso al Backend (Service Role)
+GRANT ALL ON TABLE documents TO service_role;
+GRANT ALL ON TABLE documents TO postgres;
+
+-- Limpieza
+DROP POLICY IF EXISTS "Permitir acceso total" ON documents;
+```
+
 ## 2. Application Level (Orchestrator & Agent)
 
 The backend code is strictly bound by two "Mandamientos":

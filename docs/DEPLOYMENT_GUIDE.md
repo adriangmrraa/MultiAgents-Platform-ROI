@@ -7,19 +7,19 @@ This guide details the definitive environment configuration for the Nexus RAG sy
 The connection to the Supabase vector database requires a specific configuration to avoid resolution issues within a private network.
 
 - **Variable**: `SUPABASE_DB_URL`
+- **Use**: Direct SQL Access (Debugging/Maintenance).
 - **Critical Configuration**: 
   - **DO NOT** use the container hostnames (e.g., `db`, `supabase`).
   - You **MUST** use the internal IP of the `db` container.
-  - To find the IP, run the following command in the Supabase terminal:
-    ```bash
-    hostname -i
-    ```
 - **Format**:
   ```text
   postgresql://postgres:REAL_PASSWORD@INTERNAL_IP:5432/postgres?sslmode=disable
   ```
-> [!WARNING]
-> If Supabase restarts, the internal IP might change. Ensure this variable is updated if connection fails after a reboot.
+
+### 1.1 HTTP REST API (Active Operations)
+The system primarily uses the **HTTPS Interface** for Vector Ingestion and Deletion to bypass port blocks.
+- **Variable**: `SUPABASE_URL` (e.g., `https://supabase.your-domain.com`)
+- **Variable**: `SUPABASE_SERVICE_KEY` (The `service_role` key, bypasses RLS).
 
 ## 2. Main Application Database (Users & Metadata)
 

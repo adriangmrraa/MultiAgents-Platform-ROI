@@ -28,15 +28,28 @@ El usuario arrastra un archivo PDF.
     -   Extrae texto (usando `PyPDF2` o `unstructured`).
     -   Divide en "chunks" de 500-1000 tokens (Token Splitter).
     -   Llama a OpenAI (`text-embedding-3-small` o `ada-002`) para generar vectores.
-    -   Inserta vectores en ChromaDB con metadatos `{ source: filename, tenant_id: 123 }`.
-4.  **Completion**: Actualiza el status SQL a `active`.
+    -   Inserta vectores en ChromaDB con metadatos
 
-### 2. Eliminación (Olvido - Hard Delete)
-Cuando el usuario borra un archivo, se ejecuta un proceso atómico de 3 pasos (Hard Delete Sincronizado):
-1.  **Supabase Vector Delete**: Se eliminan los vectores filtrando por `metadata={'source': filename}`. Esto es crítico para evitar "Zombie Knowledge".
-2.  **File System Purge**: Se borra el archivo físico del disco.
-3.  **SQL Delete**: Solo si los pasos anteriores tienen éxito, se elimina el registro de la base de datos PostgreSQL.
+## 2. Protocolo de Eliminación (Dual Delete Protocol)
+La eliminación de archivos es una operación crítica que debe sincronizar dos mundos desconectados.
 
+### Paso 1: "Surgical Strike" (Remoto)
+El orquestador envía una orden de borrado a Supabase vía **HTTP REST**:
+*   **Método:** `DELETE`
+*   **Endpoint:** `/rest/v1/documents`
+*   **Autenticación:** Service Key (Bypasses RLS)
+*   **Filtro:** `metadata->>source_id = eq.{UUID}`
+*   **Objetivo:** Garantizar que los vectores desaparezcan del motor de búsqueda.
+
+### Paso 2: "Metadata Cleanup" (Local)
+El orquestador elimina el registro de seguimiento en la base de datos local:
+*   **Método:** SQL (`asyncpg`)
+*   **Query:** `DELETE FROM rag_documents WHERE id = $1`
+*   **Objetivo:** Actualizar la UI del usuario y eliminar la referencia.
+
+### Paso 3: "Physical Sweep" (Disco)
+Intento *best-effort* de borrar el archivo físico en `/app/storage`. Si falla (e.g., path desconocido), se loguea un warning pero no detiene el proceso principal.
+Esto es crítico para evitar "Zombie Knowledge".
 Este flujo asegura que no queden datos huérfanos ni en el vector store ni en el disco.
 
 ---

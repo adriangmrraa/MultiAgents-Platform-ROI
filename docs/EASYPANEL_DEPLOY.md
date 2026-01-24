@@ -11,9 +11,11 @@ Debes configurar estas dos variables en el servicio `orchestrator`:
 
 1.  **`POSTGRES_DSN`**: Utilizada para la base de datos principal de la aplicación (Usuarios, Sesiones, Login). 
     *   *Formato*: `postgresql+asyncpg://postgres:[PASSWORD]@[IP_INTERNA]:5432/postgres`
-2.  **`SUPABASE_DB_URL`**: Utilizada para el motor de vectores (RAG). **Es crítica para que la búsqueda de documentos funcione.**
+2.  **`SUPABASE_DB_URL`**: Conexión SQL directa (Opcional/Legacy).
     *   *Formato*: `postgresql://postgres:[PASSWORD]@[IP_INTERNA]:5432/postgres?sslmode=disable`
-    *   **IMPORTANTE**: Usa la contraseña definida en `POSTGRES_PASSWORD` de tu servicio de DB en EasyPanel, NO la del dashboard externo de Supabase (si usas uno autohospedado).
+3.  **Credenciales HTTP (CRÍTICAS)**: El motor de borrado e ingesta (RAG) opera vía **REST API** (Puerto 443) para evitar bloqueos.
+    *   **`SUPABASE_URL`**: Endpoint HTTPS.
+    *   **`SUPABASE_SERVICE_KEY`**: Llave maestra (`service_role`).
 
 ### B. El Problema de la Red (IP vs Hostname)
 En entornos EasyPanel, los nombres de host como `db` o `supabase-db` a veces no se resuelven correctamente desde el inicio.

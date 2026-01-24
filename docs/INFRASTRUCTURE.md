@@ -18,6 +18,7 @@ graph TD
     OR --> TN[TiendaNube Service Port 8003]
     OR --> WA[WhatsApp Service Port 8002]
     OR --> MT[Meta Service (Diplomat) Port 8004/8000]
+    OR --> SP[Supabase Vectors (HTTPS 443)]
 ```
 
 ### Puertos y Accesos

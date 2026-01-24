@@ -4004,6 +4004,20 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
     await db.pool.execute("DELETE FROM rag_documents WHERE id=$1", doc_id)
     logger.info(f"🗑️ LOCAL CLEANUP: Metadata record {doc_uuid} deleted from App DB.")
     
+    # Nexus v5.89: Redis Broadcast (Fixing UUID Serialization)
+    # Notify Frontend about the deletion
+    try:
+        # doc_uuid and tenant_id are already cast to strings above
+        message = {
+            "type": "file_deleted", 
+            "id": doc_uuid, 
+            "tenant_id": str(tenant_id) # Redundant safety cast
+        }
+        await redis_client.publish("knowledge_updates", json.dumps(message))
+        logger.info(f"📡 REDIS BROADCAST: Notified deletion of {doc_uuid}")
+    except Exception as e:
+        logger.warning(f"⚠️ REDIS ERROR: Could not broadcast deletion: {e}")
+
     return {"status": "deleted", "mode": "http_rest_api", "id": doc_id}
 
 # --- Agents Management (QA Phase 3) ---

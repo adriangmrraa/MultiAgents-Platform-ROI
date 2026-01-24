@@ -48,3 +48,20 @@ Este documento recopila los errores más comunes encontrados durante el desplieg
     1. **Arquitectura Limpia**: `db.py` debe ser "puro" (solo define engine, session, Base). **NUNCA** debe importar modelos.
     2. **Inyección Inversa**: Los modelos deben importar `Base` desde `db.py`.
     3. **Router Deps**: Asegúrate de que `app/api/deps.py` exporte correctamente las funciones que `app/api/templates.py` intenta importar.
+6. Errores de Base de Datos Híbrida (RAG)
+
+### Error: "Ghost Delete" (0 rows affected)
+*   **Causa**: El código intenta borrar vectores conectándose a la DB Local (`db.pool`) donde no existe la tabla `documents`.
+*   **Solución**: El sistema debe usar una **Conexión Dual**. HTTP/REST para Supabase (Vectores) y SQL Local para Metadatos.
+
+### Error: `asyncpg.exceptions.ConnectionTimeoutError` (60s)
+*   **Causa**: El firewall de EasyPanel/Docker bloquea el tráfico saliente por el puerto 5432 hacia Supabase.
+*   **Solución**: Cambiar el protocolo de borrado a **HTTP REST API** (`httpx`) por el puerto 443.
+
+### Error: `UndefinedColumnError: column "file_path" does not exist`
+*   **Causa**: Schema Drift. La tabla `rag_documents` ha evolucionado y ya no tiene rutas físicas en algunas versiones.
+*   **Solución**: Simplificar la query de selección `DELETE` para pedir solo `id` y `filename`.
+
+### Error: `TypeError: Object of type UUID is not JSON serializable`
+*   **Causa**: Redis intenta serializar un objeto `uuid.UUID` crudo en el mensaje de broadcast.
+*   **Solución**: Castear explícitamente a string: `str(doc_id)` antes de enviar.
