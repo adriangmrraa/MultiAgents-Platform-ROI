@@ -65,3 +65,19 @@ Este documento recopila los errores más comunes encontrados durante el desplieg
 ### Error: `TypeError: Object of type UUID is not JSON serializable`
 *   **Causa**: Redis intenta serializar un objeto `uuid.UUID` crudo en el mensaje de broadcast.
 *   **Solución**: Castear explícitamente a string: `str(doc_id)` antes de enviar.
+
+## 7. Errores de Integridad de Datos (Critical v5.99)
+
+### Error: `operator does not exist: integer = uuid` 
+*   **Causa**: Intento de ejecutar un `DELETE/UPDATE` en la tabla `agents` (o cualquier tabla con `tenant_id` entero) pasando un UUID (el ID de sesión del usuario) como criterio de filtro.
+*   **Diagnóstico**: El código asume erróneamente que `current_user.tenant_id` es un UUID válido para la columna de la DB, cuando en realidad es un Integer.
+*   **Solución Incorrecta**: Intentar castear el UUID a Int (`int(uuid_str)`) causará `ValueError`.
+*   **Solución Correcta (Protocolo Estricto)**: 
+    Debes resolver el ID numérico consultando la tabla `users` (Fuente de la Verdad):
+    ```python
+    # Lookup seguro usando el UUID del usuario (que sí es UUID en la DB)
+    user_row = await db.pool.fetchrow("SELECT tenant_id FROM users WHERE id = $1", current_user.id)
+    tenant_int = user_row['tenant_id'] # Integer
+    # Ejecutar la query usando el Integer resuelto
+    ```
+

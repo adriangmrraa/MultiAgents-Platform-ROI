@@ -19,6 +19,20 @@ The system follows a "Tenant-First" lookup strategy for sensitive keys.
 3.  **Fallback**: Checks for platform-wide keys if scope is 'global'.
 4.  **Decryption**: Values decrypted on-the-fly using `Fernet` (AES-256).
 
+### C. Protocolo de Resolución de Tenant (Integral Strict Mode)
+Due to legacy schema drift (Integer Tables vs UUID Auth), the code must **NEVER** trust `current_user.tenant_id` for SQL write operations.
+
+**Mandatory Pattern for CRUD:**
+1.  **Anchor**: Use `current_user.id` (UUID) which is the cryptographic source of truth.
+2.  **Lookup**: Query the `users` table to get the REAL `tenant_id` (Integer).
+    ```python
+    # Source of Truth Lookup
+    user_row = await db.pool.fetchrow("SELECT tenant_id FROM users WHERE id = $1", current_user.id)
+    real_tenant_int = user_row['tenant_id']
+    ```
+3.  **Execute**: Use `real_tenant_int` for filtering `agents` or other integer-keyed tables.
+
+
 ---
 
 ## 2. Core API Endpoints (Admin)

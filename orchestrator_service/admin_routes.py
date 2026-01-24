@@ -3150,38 +3150,7 @@ async def list_agents():
         results.append(r)
     return results
 
-@router.put("/agents/{agent_id}", dependencies=[Depends(verify_admin_token)])
-@require_role('SuperAdmin')
-async def update_agent(agent_id: str, agent: AgentModel):
-    try:
-        # Convert string ID to UUID for the query if necessary, implies ID is passed as string in path
-        q = """
-        UPDATE agents SET 
-            name=$1, role=$2, tenant_id=$3, whatsapp_number=$4, model_provider=$5, 
-            model_version=$6, temperature=$7, system_prompt_template=$8, enabled_tools=$9::jsonb, 
-            channels=$10::jsonb, config=$11::jsonb, is_active=$12, updated_at=NOW()
-        WHERE id=$13::uuid
-        RETURNING id
-        """
-        row = await db.pool.fetchrow(q, agent.name, agent.role, agent.tenant_id, agent.whatsapp_number, agent.model_provider, agent.model_version, agent.temperature, agent.system_prompt_template, json.dumps(agent.enabled_tools), json.dumps(agent.channels), json.dumps(agent.config), agent.is_active, agent_id)
-        if not row:
-            raise HTTPException(404, "Agent not found")
-        return {"status": "ok", "id": str(row['id'])}
-    except Exception as e:
-        logger.error(f"Error updating agent: {e}")
-        raise HTTPException(500, f"Error updating agent: {e}")
 
-@router.delete("/agents/{agent_id}", dependencies=[Depends(verify_admin_token)])
-@require_role('SuperAdmin')
-async def delete_agent(agent_id: str):
-    try:
-        row = await db.pool.fetchrow("DELETE FROM agents WHERE id = $1::uuid RETURNING id", agent_id)
-        if not row:
-            raise HTTPException(404, "Agent not found")
-        return {"status": "ok", "deleted": str(row['id'])}
-    except Exception as e:
-        logger.error(f"Error deleting agent: {e}")
-        raise HTTPException(500, f"Error deleting agent: {e}")
 
 
         

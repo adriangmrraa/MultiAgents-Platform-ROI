@@ -176,4 +176,31 @@ En la versión v5.55 se refactorizó `app/db.py` para eliminar importaciones cir
 *   **Modelos**: Importan `Base` desde `db.py` (o `app.models.base`).
 *   **Main**: Importa los modelos después de la inicialización de la DB.
 
+---
+
+## 7. 🚨 The Integer/UUID Reality (Critical)
+
+**Nexus v5.99 Discovery**: A critical schema drift was identified where the code assumed Tenant IDs were UUIDs, but the database strictly uses Integers for foreign keys.
+
+### The Source of Truth
+| Entity | Column | Type (SQL) | Nature |
+| :--- | :--- | :--- | :--- |
+| **Tenant** | `id` | `INTEGER` | **Primary Key** (Legacy Sequence) |
+| **Agent** | `tenant_id` | `INTEGER` | Foreign Key -> `tenants.id` |
+| **User** | `id` | `UUID` | **Primary Key** (Modern Auth) |
+| **User** | `tenant_id` | `INTEGER` | Foreign Key -> `tenants.id` |
+
+### Golden Rule
+> **NEVER assume `current_user.tenant_id` is a UUID.**
+> In memory, it might appear as a UUID token claim, but for **Database Interactions**, the Tenant ID is **ALWAYS AN INTEGER**.
+
+### Resolution Protocol
+Do not attempt to cast UUIDs to Integers. Instead, use the **User Table Lookup**:
+```sql
+-- Valid
+SELECT tenant_id FROM users WHERE id = 'user-uuid-here';
+-- Invalid
+DELETE FROM agents WHERE tenant_id = 'user-uuid-here'; -- CRASH
+```
+
 **© 2026 Platform AI Solutions - Sovereign Data Engineering**
