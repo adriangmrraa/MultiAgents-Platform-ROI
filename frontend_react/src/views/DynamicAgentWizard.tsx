@@ -241,6 +241,7 @@ export const DynamicAgentWizard = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const [resetFeedback, setResetFeedback] = useState<string | null>(null);
     const [improvingFields, setImprovingFields] = useState<Record<string, boolean>>({});
     const [improveError, setImproveError] = useState<string | null>(null);
     const [knowledgeCollections, setKnowledgeCollections] = useState<string[]>([]);
