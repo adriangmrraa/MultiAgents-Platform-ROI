@@ -299,8 +299,19 @@ export const DynamicAgentWizard = () => {
                         }
 
                         // Hydrate Knowledge
-                        if (agent.config && agent.config.knowledge_config && Array.isArray(agent.config.knowledge_config.collections)) {
-                            setKnowledgeCollections(agent.config.knowledge_config.collections);
+                        // Priority: Root Column > Config JSON > Empty
+                        let loadedCollections: string[] = [];
+
+                        if (Array.isArray(agent.knowledge_sources)) {
+                            loadedCollections = agent.knowledge_sources;
+                        } else if (typeof agent.knowledge_sources === 'string') {
+                            try { loadedCollections = JSON.parse(agent.knowledge_sources); } catch { }
+                        } else if (agent.config && agent.config.knowledge_config && Array.isArray(agent.config.knowledge_config.collections)) {
+                            loadedCollections = agent.config.knowledge_config.collections;
+                        }
+
+                        if (loadedCollections.length > 0) {
+                            setKnowledgeCollections(loadedCollections);
                         }
                     }
                 } catch (err) {
@@ -651,15 +662,20 @@ export const DynamicAgentWizard = () => {
                 role: 'sales',
                 system_prompt_template: formData['agent_tone'],
                 ...formData,
-                // Explicit Brain Config
+                // Explicit Brain Config (Root Level for DB Columns)
                 model_provider: formData.model_provider || 'openai',
                 model_version: formData.model_version || 'gpt-4o',
                 temperature: parseFloat(formData.temperature) || 0.7,
-                template_type: selectedTemplate,
+                template_type: selectedTemplate || formData.template_type, // Fallback to existing if not re-selected
+                enabled_tools: selectedTools, // CRITICAL: Persist Tools
+                knowledge_sources: knowledgeCollections, // CRITICAL: Persist RAG Collections
+
+                // Config JSONB (Metadata)
                 config: {
                     knowledge_config: {
                         collections: knowledgeCollections
                     },
+                    template_type: selectedTemplate || formData.template_type,
                     ...formData // Pass other wizard fields as config too
                 }
             };
