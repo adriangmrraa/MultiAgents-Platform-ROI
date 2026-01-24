@@ -148,7 +148,7 @@ const LivePreviewPanel = ({ formData, tenantId = 1, knowledgeCollections = [] }:
     };
 
     return (
-        <div className="flex flex-col h-full bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+        <div className="flex flex-col h-[600px] bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
             {/* Header */}
             <div className="p-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -695,6 +695,35 @@ export const DynamicAgentWizard = () => {
                         </p>
                     </div>
                 </div>
+
+                {/* Reasoning Effort Slider (GPT-5.2 only) - Nexus v5.99 */}
+                {(formData.model_version === 'gpt-5.2' || formData.model_version === 'gpt-5.2-pro') && (
+                    <div className="bg-purple-900/20 rounded-xl p-4 border border-purple-500/20">
+                        <div className="flex justify-between items-center mb-4">
+                            <label className="text-xs font-bold text-purple-300">Esfuerzo de Razonamiento (GPT-5.2)</label>
+                            <span className="text-xs font-mono bg-purple-500/20 px-2 py-1 rounded text-purple-200">
+                                {formData.reasoning_effort || "medium"}
+                            </span>
+                        </div>
+
+                        <select
+                            value={formData.reasoning_effort || "medium"}
+                            onChange={(e) => handleChange('reasoning_effort', e.target.value)}
+                            className="w-full bg-black/40 border border-purple-500/30 rounded-xl px-4 py-3 text-sm text-white appearance-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all cursor-pointer"
+                        >
+                            <option value="none">Ninguno (Más Rápido)</option>
+                            <option value="low">Bajo</option>
+                            <option value="medium">Medio (Recomendado)</option>
+                            <option value="high">Alto</option>
+                            <option value="xhigh">Muy Alto (Máxima Precisión)</option>
+                        </select>
+
+                        <p className="mt-3 text-[10px] text-purple-300/60 leading-relaxed border-t border-purple-500/10 pt-3">
+                            <Info size={10} className="inline mr-1 mb-0.5" />
+                            Controla cuánto "piensa" el modelo antes de responder. Valores altos mejoran la precisión en tareas complejas pero aumentan el tiempo de respuesta.
+                        </p>
+                    </div>
+                )}
             </div>
         );
     };

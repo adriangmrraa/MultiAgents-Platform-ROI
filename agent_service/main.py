@@ -68,6 +68,7 @@ class AgentConfig(BaseModel):
     template_type: Optional[str] = "sales" # Nexus v5.27
     wizard_overrides: Optional[Dict[str, Any]] = {} # Nexus v5.27: Stores "tone", "business_rules", etc.
     temperature: Optional[float] = None # Nexus v5.99: Dynamic creativity control
+    reasoning_effort: Optional[str] = None # Nexus v5.99: GPT-5.2 advanced param (none/low/medium/high/xhigh)
     shadow_rag_enabled: Optional[bool] = False # Nexus v5.34
 
 class AgentThinkRequest(BaseModel):
@@ -442,9 +443,19 @@ async def execute_agent(
         model_lower == "o3"
     )
     
+    
     if is_reasoning_model:
         logger.info("reasoning_model_detected_locked_at_default_temp", model=model_name)
         target_temp = 1.0 # Force protocol default for reasoning models
+    
+    # 4.2 Resolve reasoning_effort for GPT-5.2 models (Nexus v5.99)
+    reasoning_effort = None
+    if model_name in ["gpt-5.2", "gpt-5.2-pro"]:
+        if request.agent_config and request.agent_config.reasoning_effort:
+            reasoning_effort = request.agent_config.reasoning_effort
+        else:
+            reasoning_effort = "medium"  # Default for GPT-5.2
+        logger.info("gpt52_reasoning_effort_set", model=model_name, effort=reasoning_effort)
     
     if provider == "google":
         llm = ChatGoogleGenerativeAI(
@@ -455,13 +466,20 @@ async def execute_agent(
             streaming=True
         )
     else:
-        llm = ChatOpenAI(
-            model=model_name,
-            api_key=resolved_api_key,
-            temperature=target_temp,
-            timeout=llm_timeout,
-            streaming=True
-        )
+        # Build ChatOpenAI kwargs dynamically
+        llm_kwargs = {
+            "model": model_name,
+            "api_key": resolved_api_key,
+            "temperature": target_temp,
+            "timeout": llm_timeout,
+            "streaming": True
+        }
+        
+        # Add reasoning_effort if applicable
+        if reasoning_effort:
+            llm_kwargs["model_kwargs"] = {"reasoning_effort": reasoning_effort}
+        
+        llm = ChatOpenAI(**llm_kwargs)
     
     
     # 5. Polymorphic Agent Construction (Nexus v5.27)

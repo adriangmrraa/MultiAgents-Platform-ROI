@@ -2549,6 +2549,17 @@ async def list_tools():
         {"name": "derivhumano", "type": "internal", "service_url": "orchestrator"}
     ]
 
+# --- Model Registry API (Nexus v5.99) ---
+
+@router.get("/models", dependencies=[Depends(verify_admin_token)])
+async def list_available_models():
+    """
+    Returns the complete model registry for UI rendering.
+    Nexus v5.99: Updated for Jan 2026 GPT-5 and Gemini 3 models.
+    """
+    from app.core.models import get_all_models
+    return get_all_models()
+
 # --- Analytics / Telemetry ---
 
 @router.get("/stats", dependencies=[Depends(get_current_user)])
@@ -4455,9 +4466,10 @@ async def simulate_agent(req: AgentSimulation):
                 **agent_config,
                 "model": {
                     "provider": req.formData.get("model_provider", "openai"),
-                    "name": req.formData.get("model_version", "gpt-4o")
+                    "name": req.formData.get("model_version", "gpt-5-mini")  # Updated default to Jan 2026
                 },
-                "temperature": float(req.formData.get("temperature", 0.3))
+                "temperature": float(req.formData.get("temperature", 0.3)),
+                "reasoning_effort": req.formData.get("reasoning_effort")  # Nexus v5.99: GPT-5.2 advanced param
             },
             "credentials": {
                 "openai_api_key": final_openai_key,
