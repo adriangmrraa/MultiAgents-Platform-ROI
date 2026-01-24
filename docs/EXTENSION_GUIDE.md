@@ -46,15 +46,32 @@ Nexus guarda todo automáticamente en el campo `config` (JSONB). No necesitas ca
 ---
 
 ## 3. Cómo crear una nueva Plantilla (Base Template)
-Si quieres un agente que no sea de Ventas (ej: "Agente de Recursos Humanos").
+Para que un nuevo tipo de agente sea funcional, requiere una configuración en tres puntos (Triple-Point Touch):
 
-**Paso 1: Editar `agent_service/app/core/agent_templates.py`** (o donde esté la Factory).
-- Crea una nueva clase que herede de `BaseTemplate`.
-- Define su `system_prompt` base.
-- Filtra qué herramientas tiene permitidas esa plantilla.
+**Paso 1: Backend de Inteligencia (`agent_service/app/core/agent_templates.py`)**
+- Crea una nueva clase (ej: `SupportTemplate`) que herede de `BaseAgentTemplate`.
+- Implementa `get_system_role()` y `get_core_instructions()`.
+- Registra la clave en `AgentTemplateFactory`.
 
-**Paso 2: Registrar en el frontend**
-En `DynamicAgentWizard.tsx`, agrega la clave de tu plantilla al objeto `templates`.
+**Paso 2: Backend de Orquestación (`orchestrator_service/app/api/agents.py`)**
+- Agrega la misma clave al diccionario `AGENT_TEMPLATES`.
+- Define los `fields` por defecto (Tone, Rules) para que el Wizard se rellene solo al elegirla.
+
+**Paso 3: Frontend (`DynamicAgentWizard.tsx`)**
+- Agrega la clave al componente `getIconForTemplate` para que tenga un icono visual.
+
+---
+
+## 4. Reglas de Persistencia (Wizard Logic)
+> [!CAUTION]
+> **El Error del Bucle (The Persistence Trap):**
+> Al editar la función `handleSubmit` en el Wizard, **NUNCA** pongas el `...formData` al final del objeto de carga (`payload`).
+> **Correcto:** `const payload = { ...formData, system_prompt_template: 'NUEVO', ... }`
+> Si el spread va al final, los datos viejos que vienen de la base de datos "pisarán" las ediciones que el usuario hizo en ese instante.
+
+### Cómo agregar nuevos campos sin Migraciones SQL
+Nexus utiliza una columna de tipo `JSONB` llamada `config` en la tabla `agents`.
+Cualquier campo nuevo que agregues a `AGENT_CONFIG_SCHEMA` en el frontend se guardará automáticamente dentro de ese JSON. No necesitas tocar la base de datos para agregar preferencias, links o políticas nuevas.
 
 ---
 
@@ -72,7 +89,23 @@ El sistema lo mostrará automáticamente en el dropdown de "Modelo de Inteligenc
 
 ---
 
-## 5. Clonación y Re-instalación
+## 5. Resolución de Identidad (Sovereign Security)
+> [!IMPORTANT]
+> **La Regla de Oro del Tenant ID:**
+> En el backend, **NUNCA** confíes en el `tenant_id` que viene en la memoria del objeto `current_user`. Debido a la evolución del sistema, ese campo puede contener un UUID (string), pero la base de datos (tablas `agents`, `tenants`) usa **INTEGERS**.
+> 
+> **Cómo hacerlo bien:**
+> Siempre busca el ID real en la tabla `users` antes de cualquier consulta SQL:
+> ```python
+> user_row = await db.pool.fetchrow("SELECT tenant_id FROM users WHERE id = $1", current_user.id)
+> tenant_id = user_row['tenant_id']
+> # Ahora usa tenant_id (Integer) en tu query
+> ```
+> Omitir este paso hará que los agentes o datos del usuario "desaparezcan" de la interfaz.
+
+---
+
+## 6. Clonación y Re-instalación
 Si quieres instalar Nexus en un servidor nuevo:
 1.  **Repo**: Clona el código.
 2.  **Environment**: Copia el `.env.example` a `.env` y configura el `POSTGRES_DSN` (Supabase).

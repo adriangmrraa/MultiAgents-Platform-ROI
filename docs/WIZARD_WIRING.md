@@ -9,7 +9,8 @@ El formulario se genera a partir de `AGENT_CONFIG_SCHEMA` en `DynamicAgentWizard
 ### Flujo de Datos
 1.  **Input**: Usuario edita "Reglas de Negocio" en el textarea.
 2.  **Mapping**: El frontend mapea este campo a `formData.business_rules`.
-3.  **Submit**: Al guardar, se envía a `POST /admin/agents` (o PUT).
+3.  **Submit**: Al guardar, se envía a `POST /admin/agents` (o PUT). 
+    *   **IMPORTANTE**: El `payload` debe hacer spread de `...formData` **AL PRINCIPIO** para que las ediciones explícitas manden sobre los datos cacheados.
 4.  **Persistencia**: El backend guarda un JSON en la columna `agents.config`:
     ```json
     {

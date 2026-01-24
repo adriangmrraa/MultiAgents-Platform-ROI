@@ -4016,8 +4016,14 @@ class AgentModel(BaseModel):
 async def list_agents(current_user: User = Depends(get_current_user)):
     """
     Hybrid Visualization: Templates (Global) + My Agents (Private).
+    Nexus v5.99 Fix: Use real Integer ID from users table.
     """
-    tenant_id = current_user.tenant_id
+    # RESOLUCIÓN DE TENANT (FUENTE DE VERDAD: TABLA USERS)
+    user_row = await db.pool.fetchrow("SELECT tenant_id FROM users WHERE id = $1", current_user.id)
+    if not user_row:
+        tenant_id = current_user.tenant_id # Fallback
+    else:
+        tenant_id = user_row['tenant_id']
     
     # 1. Fetch Agents
     # Query: tenant_id matches OR is NULL (Template)
