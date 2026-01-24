@@ -250,12 +250,12 @@ export const DynamicAgentWizard = () => {
     const [availableTools, setAvailableTools] = useState<any[]>([]);
     const [availableModels, setAvailableModels] = useState<any[]>([]);
     const [selectedTools, setSelectedTools] = useState<string[]>(['search_specific_products', 'orders', 'derivhumano']); // Defaults
+    const [selectedChannels, setSelectedChannels] = useState<string[]>(['whatsapp', 'web']); // Defaults
 
     useEffect(() => {
         // Load Templates & Tools
         const initData = async () => {
             try {
-                // Parallel Fetch
                 const [tpls, tools, models] = await Promise.all([
                     fetchApi('/admin/agent-templates'),
                     fetchApi('/admin/tools'),
@@ -271,59 +271,49 @@ export const DynamicAgentWizard = () => {
         };
         initData();
 
-        // Load Agent Data if ID provided (Edit Mode / Sales Config)
         if (agentId) {
             const loadAgent = async () => {
                 try {
                     const agent = await fetchApi(`/admin/agents/${agentId}/config`);
                     if (agent) {
-                        // Hydrate Form
                         const cfg = agent.config || {};
                         const getDef = (k: string) => AGENT_CONFIG_SCHEMA.find(f => f.key === k)?.defaultValue || '';
 
+                        // 1. Core Metadata
                         setFormData({
                             ...agent,
-                            ...cfg, // Restore stored wizard fields
-
-                            // Ensure numeric temperature
+                            ...cfg,
                             temperature: agent.temperature?.toString() || '0.7',
-
-                            // Restore core fields with Defaults fallback
                             store_name: agent.name || getDef('store_name'),
-                            agent_tone: cfg.agent_tone || getDef('agent_tone'),
+                            agent_tone: cfg.agent_tone || agent.system_prompt_template || getDef('agent_tone'),
                             business_rules: cfg.business_rules || getDef('business_rules'),
                             synonym_dictionary: cfg.synonym_dictionary || getDef('synonym_dictionary'),
                             store_description: cfg.store_description || getDef('store_description'),
                             catalog_summary: cfg.catalog_summary || getDef('catalog_summary'),
-
-                            // Ensure model fields even if legacy
+                            store_website: cfg.store_website || agent.store_website || getDef('store_website'),
                             model_provider: agent.model_provider || 'openai',
                             model_version: agent.model_version || 'gpt-4o',
                             template_type: cfg.template_type || agent.template_type
                         });
 
-                        // Hydrate Tools
+                        // 2. Tools
                         if (Array.isArray(agent.enabled_tools)) {
                             setSelectedTools(agent.enabled_tools);
-                        } else if (typeof agent.enabled_tools === 'string') {
-                            try { setSelectedTools(JSON.parse(agent.enabled_tools)); } catch { }
                         }
 
-                        // Hydrate Knowledge
-                        // Priority: Root Column > Config JSON > Empty
-                        let loadedCollections: string[] = [];
+                        // 3. Channels (Persistence Fix)
+                        if (Array.isArray(agent.channels)) {
+                            setSelectedChannels(agent.channels);
+                        }
 
+                        // 4. Knowledge
+                        let loadedCollections: string[] = [];
                         if (Array.isArray(agent.knowledge_sources)) {
                             loadedCollections = agent.knowledge_sources;
-                        } else if (typeof agent.knowledge_sources === 'string') {
-                            try { loadedCollections = JSON.parse(agent.knowledge_sources); } catch { }
-                        } else if (agent.config && agent.config.knowledge_config && Array.isArray(agent.config.knowledge_config.collections)) {
+                        } else if (agent.config?.knowledge_config?.collections) {
                             loadedCollections = agent.config.knowledge_config.collections;
                         }
-
-                        if (loadedCollections.length > 0) {
-                            setKnowledgeCollections(loadedCollections);
-                        }
+                        if (loadedCollections.length > 0) setKnowledgeCollections(loadedCollections);
                     }
                 } catch (err) {
                     console.error("Failed to load agent data", err);
@@ -666,44 +656,32 @@ export const DynamicAgentWizard = () => {
         }
 
         try {
-            // Nexus v5.99 Fix: Full Brain Config Payload
-            // Data Type Check: Ensure arrays are native arrays, not strings.
-            let channels: string[] = ['whatsapp'];
-            try {
-                if (formData['channels'] && typeof formData['channels'] === 'string') {
-                    channels = JSON.parse(formData['channels']);
-                } else if (Array.isArray(formData['channels'])) {
-                    channels = formData['channels'];
-                }
-            } catch { }
-
             const payload = {
                 name: formData['store_name'] || "Agente de Ventas",
                 tenant_id: 1,
                 role: 'sales',
                 system_prompt_template: formData['agent_tone'],
                 ...formData,
-                // Explicit Brain Config (Root Level for DB Columns)
+                // Explicit Persistence Fixes
                 model_provider: formData.model_provider || 'openai',
                 model_version: formData.model_version || 'gpt-4o',
                 temperature: parseFloat(formData.temperature) || 0.7,
-                template_type: selectedTemplate || formData.template_type, // Fallback to existing if not re-selected
-                enabled_tools: selectedTools, // CRITICAL: Persist Tools
-                knowledge_sources: knowledgeCollections, // CRITICAL: Persist RAG Collections
-                channels: channels, // Fix: Send as Array, not String
+                template_type: selectedTemplate || formData.template_type,
+                enabled_tools: selectedTools,
+                knowledge_sources: knowledgeCollections,
+                channels: selectedChannels, // Using the new state
+                store_website: formData.store_website, // Explicit URL Persistence
 
                 // Config JSONB (Metadata)
                 config: {
+                    ...formData,
                     knowledge_config: {
                         collections: knowledgeCollections
                     },
                     template_type: selectedTemplate || formData.template_type,
-                    ...formData // Pass other wizard fields as config too
+                    store_website: formData.store_website // Sync inside JSON too
                 }
             };
-
-            // Remove legacy stringified fields from root if spreading formData caused duplication
-            // (Optional clean up, but spread overrides are handled above)
 
             await fetchApi(agentId ? `/admin/agents/${agentId}` : '/admin/agents', {
                 method: agentId ? 'PUT' : 'POST',
