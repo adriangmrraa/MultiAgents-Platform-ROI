@@ -279,16 +279,23 @@ export const DynamicAgentWizard = () => {
                     if (agent) {
                         // Hydrate Form
                         const cfg = agent.config || {};
+                        const getDef = (k: string) => AGENT_CONFIG_SCHEMA.find(f => f.key === k)?.defaultValue || '';
+
                         setFormData({
                             ...agent,
                             ...cfg, // Restore stored wizard fields
+
                             // Ensure numeric temperature
                             temperature: agent.temperature?.toString() || '0.7',
-                            // Restore core fields
-                            store_name: agent.name,
-                            agent_tone: cfg.agent_tone || agent.system_prompt_template || '',
-                            business_rules: cfg.business_rules || '',
-                            synonym_dictionary: cfg.synonym_dictionary || '',
+
+                            // Restore core fields with Defaults fallback
+                            store_name: agent.name || getDef('store_name'),
+                            agent_tone: cfg.agent_tone || getDef('agent_tone'),
+                            business_rules: cfg.business_rules || getDef('business_rules'),
+                            synonym_dictionary: cfg.synonym_dictionary || getDef('synonym_dictionary'),
+                            store_description: cfg.store_description || getDef('store_description'),
+                            catalog_summary: cfg.catalog_summary || getDef('catalog_summary'),
+
                             // Ensure model fields even if legacy
                             model_provider: agent.model_provider || 'openai',
                             model_version: agent.model_version || 'gpt-4o',

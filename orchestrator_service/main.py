@@ -253,10 +253,11 @@ migration_steps = [
     DO $$
     BEGIN
         ALTER TABLE agents ADD COLUMN IF NOT EXISTS template_type VARCHAR(50) DEFAULT 'custom';
+        ALTER TABLE agents ADD COLUMN IF NOT EXISTS knowledge_sources JSONB DEFAULT '[]';
     EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'Schema repair failed for agents template_type';
+        RAISE NOTICE 'Schema repair failed for agents schema extension';
     END $$;
-    """
+    """,
     # 2. Credentials Table (Nexus v3.1: UUID Migration)
     """
     CREATE TABLE IF NOT EXISTS credentials (

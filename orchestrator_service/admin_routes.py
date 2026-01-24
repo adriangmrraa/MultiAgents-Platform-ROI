@@ -4249,11 +4249,12 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
             agent.template_type, json.dumps(agent.config), agent_id
         )
         
-        # Update knowledge_sources
-        try:
-             await db.pool.execute("UPDATE agents SET knowledge_sources = $1 WHERE id = $2", json.dumps(agent.knowledge_sources), agent_id)
-        except:
-             pass
+        # Update knowledge_sources (CRITICAL: Do not suppress errors)
+        await db.pool.execute(
+            "UPDATE agents SET knowledge_sources = $1 WHERE id = $2", 
+            json.dumps(agent.knowledge_sources), 
+            agent_id
+        )
 
         return {"status": "updated", "id": agent_id}
         
@@ -4325,12 +4326,17 @@ async def get_agent_config(agent_id: int):
     
     data = dict(agent)
     
-    # Enrich with parsed JSON if needed (though FastAPI handles dicts)
-    # Ensure keys exist for frontend
-    if not data.get('knowledge_sources'):
-        data['knowledge_sources'] = []
-    
-    if not data.get('enabled_tools'):
+    # Robust Parsing: Handle JSON strings if DB returns text (e.g. SQLite/Legacy PG)
+    if isinstance(data.get('knowledge_sources'), str):
+        try: data['knowledge_sources'] = json.loads(data['knowledge_sources'])
+        except: data['knowledge_sources'] = []
+    elif not data.get('knowledge_sources'):
+        data['knowledge_sources'] = [] # Ensure list if None
+        
+    if isinstance(data.get('enabled_tools'), str):
+        try: data['enabled_tools'] = json.loads(data['enabled_tools'])
+        except: data['enabled_tools'] = []
+    elif not data.get('enabled_tools'):
         data['enabled_tools'] = []
         
     # Ensure template_type exists (from DB column or config)
