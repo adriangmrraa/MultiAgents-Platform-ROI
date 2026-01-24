@@ -432,12 +432,20 @@ async def execute_agent(
     if request.agent_config and request.agent_config.temperature is not None:
         target_temp = request.agent_config.temperature
 
-    # Safety: Reasoning models do NOT support temp 0.
-    is_reasoning_model = any(keyword in model_name.lower() for keyword in ["o1-", "o3-"])
+    # Safety: Reasoning models (o1, o3) do NOT support temp 0.0 or any value other than 1.0 in current API versions.
+    # We use exact prefix matching to avoid false positives with models like "gpt-4o-mini"
+    model_lower = model_name.lower()
+    is_reasoning_model = (
+        model_lower.startswith("o1-") or 
+        model_lower.startswith("o3-") or 
+        model_lower == "o1" or 
+        model_lower == "o3"
+    )
+    
     if is_reasoning_model:
-        logger.info("reasoning_model_detected_forcing_stable_temp", model=model_name)
-        target_temp = 1.0 # Compatible default for reasoning tokens
-        
+        logger.info("reasoning_model_detected_locked_at_default_temp", model=model_name)
+        target_temp = 1.0 # Force protocol default for reasoning models
+    
     if provider == "google":
         llm = ChatGoogleGenerativeAI(
             model=model_name,
