@@ -4309,10 +4309,39 @@ async def delete_agent(agent_id: int, current_user: User = Depends(get_current_u
     except HTTPException as he:
         raise he
     except Exception as e:
-        logger.error(f"💥 Critical DB Error in delete_agent: {e}")
-        # Retornamos 500 pero con detalle limpio para debugging
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
+
+# Nexus v5.99: Configuration Hydration Endpoint (Fix Persistence)
+@router.get("/agents/{agent_id}/config", dependencies=[Depends(verify_admin_token)])
+async def get_agent_config(agent_id: int):
+    """
+    Get FULL agent config for Wizard Hydration.
+    Explicitly returns knowledge_sources, enabled_tools, and model settings.
+    """
+    agent = await db.pool.fetchrow("SELECT * FROM agents WHERE id = $1", agent_id)
+    if not agent:
+        raise HTTPException(404, "Agent not found")
+    
+    data = dict(agent)
+    
+    # Enrich with parsed JSON if needed (though FastAPI handles dicts)
+    # Ensure keys exist for frontend
+    if not data.get('knowledge_sources'):
+        data['knowledge_sources'] = []
+    
+    if not data.get('enabled_tools'):
+        data['enabled_tools'] = []
+        
+    # Ensure template_type exists (from DB column or config)
+    if not data.get('template_type'):
+        data['template_type'] = data.get('config', {}).get('template_type')
+
+    # Ensure model defaults
+    if not data.get('model_provider'): data['model_provider'] = 'openai'
+    if not data.get('model_version'): data['model_version'] = 'gpt-4o'
+
+    return data
 
 # --- Nexus v5.26: Live Preview ---
 class AgentSimulation(BaseModel):

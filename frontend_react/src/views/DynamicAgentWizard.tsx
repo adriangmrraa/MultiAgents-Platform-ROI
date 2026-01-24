@@ -278,17 +278,21 @@ export const DynamicAgentWizard = () => {
                     const agent = await fetchApi(`/admin/agents/${agentId}/config`);
                     if (agent) {
                         // Hydrate Form
+                        const cfg = agent.config || {};
                         setFormData({
                             ...agent,
+                            ...cfg, // Restore stored wizard fields
                             // Ensure numeric temperature
                             temperature: agent.temperature?.toString() || '0.7',
                             // Restore core fields
                             store_name: agent.name,
-                            agent_tone: agent.system_prompt_template,
+                            agent_tone: cfg.agent_tone || agent.system_prompt_template || '',
+                            business_rules: cfg.business_rules || '',
+                            synonym_dictionary: cfg.synonym_dictionary || '',
                             // Ensure model fields even if legacy
                             model_provider: agent.model_provider || 'openai',
                             model_version: agent.model_version || 'gpt-4o',
-                            template_type: agent.config?.template_type || agent.template_type
+                            template_type: cfg.template_type || agent.template_type
                         });
 
                         // Hydrate Tools
