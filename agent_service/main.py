@@ -48,6 +48,10 @@ class OrchestratorResponse(BaseModel):
 class AgentContext(BaseModel):
     store_name: str
     system_prompt: str
+    current_channel: Optional[str] = "unknown"
+    
+    class Config:
+        extra = "allow" # Robustness: Allow extra metadata from orchestrator
 
 class AgentCredentials(BaseModel):
     openai_api_key: Optional[str] = None

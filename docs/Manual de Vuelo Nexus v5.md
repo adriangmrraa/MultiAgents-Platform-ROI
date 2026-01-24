@@ -1,4 +1,4 @@
-# 🦅 Manual de Vuelo Nexus v5.1
+# 🦅 Manual de Vuelo Nexus v5.99
 
 > **Guía de Operaciones para Administradores de Plataforma**
 > *Gestión Soberana, Monitoreo y Mantenimiento.*
@@ -40,25 +40,43 @@ Nexus v5.1 usa dos rutas de correo para evitar el SPAM y asegurar la entrega.
 
 ---
 
-## 3. Meta Uplink (Conexión WhatsApp/FB/IG)
+## 3. Meta & Web Uplink (Conexión Multicanal)
 
-La integración con Meta ahora es visual y segura.
+La integración ahora es omnicanal y se gestiona desde **Settings > Conexiones**.
 
-### A. Wizard de Onboarding
+### A. WhatsApp, FB e Instagram
 1.  Clic en **Conectar con Meta**.
-2.  Completa el flujo en el popup de Facebook (usa "Embedded Signup" para crear WABAs nuevos si lo necesitas).
-3.  Al cerrar, se abrirá el **Wizard de Selección**.
-4.  Marca las casillas de las Páginas, Cuentas de IG y Números de WhatsApp que quieres activar.
-5.  **Confirmar:** Solo los activos seleccionados serán escuchados por el bot.
+2.  El sistema sincroniza tus activos. Si es una re-autenticación, actualizará los tokens sin perder configuraciones.
 
-### B. Regeneración de Tokens
-Si Meta invalida tu token (pasa cada 60 días o por seguridad):
-1.  Solo haz clic en "Conectar con Meta" nuevamente.
-2.  El sistema detectará que es una re-autenticación y actualizará la credencial en la bóveda sin duplicar activos.
+### B. Web Widget (Nuevo en v5.99) 🌐
+Si quieres un chat en tu página web:
+1.  Ve a **Settings > Canal Web**.
+2.  Configura el estilo (Colores, Radio de bordes, Mensaje de bienvenida).
+3.  Copia el **Script de Instalación** y pégalo en el `<head>` de tu sitio.
+4.  **Activación:** El widget aparecerá solo si el agente asignado tiene el canal "Web" encendido en el Wizard.
 
 ---
 
-## 4. Monitoreo y Salubridad
+## 4. El Nuevo Wizard del Agente (Cerebro 2.0)
+
+El Wizard es ahora el punto de control absoluto de cada "empleado digital".
+
+### A. Selección de Canales
+Dentro del Wizard, verás la sección **"¿Dónde trabajará este agente?"**.
+*   Puedes marcar/desmarcar WhatsApp, Instagram, Facebook y Web.
+*   **Nota:** Si un canal aparece en rojo ("Desconectado"), primero debes integrarlo en Settings.
+
+### B. Persistencia de URL y ADN
+Nexus v5.99 asegura que la **URL de tu Web** y las **Reglas de Negocio** se guarden instantáneamente. No más pérdida de datos al recargar.
+
+### C. Simulación en Tiempo Real (Fixed) 🧪
+Usa el panel derecho para chatear con el agente antes de guardarlo.
+*   Ahora el chat es fluido (Streaming) y detecta errores de esquema automáticamente.
+*   Usa el contexto real de tu tienda para dar respuestas precisas.
+
+---
+
+## 5. Monitoreo y Salubridad
 
 ### Tablero de Control
 *   **RAG Status:** Verde = Base de conocimiento vectorizada y lista. Amarillo = Indexando.

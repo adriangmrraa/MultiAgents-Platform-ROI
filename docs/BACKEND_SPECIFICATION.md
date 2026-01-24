@@ -1,4 +1,4 @@
-# Nexus v5.1 Backend Technical Specification (Sovereign Edition)
+# Nexus v5.99 Backend Technical Specification (Omnichannel Edition)
 
 > **Purpose**: This document defines the absolute contracts for the Sovereign Credentials System and Multi-Tenant architecture. It serves as the single source of truth for Frontend-Backend integration under the **Sovereign Protocol**.
 

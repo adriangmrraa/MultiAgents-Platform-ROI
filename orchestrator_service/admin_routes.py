@@ -4411,12 +4411,19 @@ async def simulate_agent(req: AgentSimulation):
 
 
         # 5. Fetch Credentials
-        openai_key = await get_tenant_credential(req.tenant_id, "openai", "%api_key%")
-        google_key = await get_tenant_credential(req.tenant_id, "google", "%api_key%")
-        tn_token = await get_tenant_credential(req.tenant_id, "tiendanube", "%access_token%")
+        openai_key = await get_tenant_credential(req.tenant_id, "openai")
+        google_key = await get_tenant_credential(req.tenant_id, "google")
+        tn_token = await get_tenant_credential(req.tenant_id, "tiendanube")
         
         # 6. Build Request
         # Note: Do NOT add "version" to root. AgentThinkRequest doesn't have it.
+        
+        final_openai_key = openai_key or os.getenv("OPENAI_API_KEY")
+        if final_openai_key:
+            logger.info(f"Using OpenAI key: {final_openai_key[:6]}...{final_openai_key[-4:]} (Source: {'Tenant DB' if openai_key else 'Global Env'})")
+        else:
+            logger.warning("No OpenAI API key found for simulation!")
+
         agent_request = {
             "tenant_id": req.tenant_id,
             "message": req.message,
@@ -4430,11 +4437,11 @@ async def simulate_agent(req: AgentSimulation):
                 **agent_config,
                 "model": {
                     "provider": req.formData.get("model_provider", "openai"),
-                    "version": req.formData.get("model_version", "gpt-4o")
+                    "name": req.formData.get("model_version", "gpt-4o")
                 }
             },
             "credentials": {
-                "openai_api_key": openai_key or os.getenv("OPENAI_API_KEY"),
+                "openai_api_key": final_openai_key,
                 "google_api_key": google_key or os.getenv("GOOGLE_API_KEY"),
                 "tiendanube_store_id": tenant['tiendanube_store_id'],
                 "tiendanube_access_token": tn_token,
@@ -4475,7 +4482,7 @@ async def simulate_agent(req: AgentSimulation):
                             full_response += evt.get("content", "")
                         elif etype == "error":
                             logger.error(f"Agent stream error: {evt}")
-                            return {"status": "error", "response": f"Error del Agente: {evt.get('message', 'Unknown error')}"}
+                            return {"status": "error", "response": f"Error del Agente: {evt.get('content', 'Unknown error')}"}
                     except json.JSONDecodeError:
                         # Maybe it's a raw token or mixed content
                         # For now, we skip but could log for debugging

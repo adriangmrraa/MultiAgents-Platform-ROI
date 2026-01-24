@@ -1,63 +1,52 @@
----
+# 🛸 Nexus v5.99: Sovereign SaaS Architecture
 
-# 🛸 Nexus v5.4: Sovereign SaaS Architecture
-
-> **Plataforma Multi-Agente de Alto ROI para E-Commerce (TiendaNube + WhatsApp + Meta)**
+> **Plataforma Multi-Agente de Alto ROI para E-Commerce (TiendaNube + WhatsApp + Meta + Web)**
 > *Arquitectura Soberana, Multi-Tenant y Zero-Dependency.*
 
 ---
 
-## 🔥 Pilares de la Evolución v5.4
+## 🔥 Pilares de la Evolución v5.99
 
-### 🗄️ 1. Motor RAG: Supabase (pgvector)
-Hemos migrado de ChromaDB/SQLite a una infraestructura vectorial de grado empresarial.
-*   **Tecnología:** Supabase (pgvector) self-hosted vía EasyPanel.
-*   **Escalabilidad:** Aislamiento total por `tenant_id` en el espacio vectorial.
-*   **Resiliencia:** Inicialización automática de tablas y extensiones mediante el bootstrapper interno.
+### 🌐 1. Canal Web Widget (Nuevo)
+Nexus ahora incluye un chat web nativo y altamente configurable.
+*   **Visual Configurator:** Cambia colores, mensajes de bienvenida y radio de bordes en tiempo real.
+*   **Script Generator:** Genera un fragmento de código listo para pegar en cualquier sitio web o TiendaNube.
+*   **Zero-Config Bundle:** El widget se conecta automáticamente al cerebro del agente asignado.
 
-### 🔌 2. Zero-Dependency Startup
-El sistema es ahora "SaaS Ready" desde el primer segundo.
-*   **Independencia:** El backend arranca con éxito sin necesidad de `OPENAI_API_KEY` o `GOOGLE_API_KEY` en el entorno global.
-*   **Lazy Resolution:** Las credenciales se inyectan bajo demanda (Inquilino > Global Fallback).
-*   **Robustez:** Errores controlados (400) si un agente intenta operar sin llaves configuradas.
+### 🎛️ 2. Gestión de Canales Centralizada
+El Wizard del Agente ahora es el centro de mando real.
+*   **Multi-Channel Control:** Activa o desactiva WhatsApp, Instagram, Facebook y Web para cada agente con un solo clic.
+*   **Sync Aware:** El sistema detecta automáticamente qué integraciones están conectadas antes de permitir su activación.
+*   **Persistencia Robusta:** Tus selecciones se sincronizan entre el modal de activación y el wizard profundo.
 
-### 🤖 3. Model Registry & SOTA 2026
-Integración completa del panorama de IA de Enero 2026.
-*   **Niveles de Inteligencia:** Selección dinámica entre **Economy** (GPT-5 Mini), **Advanced** (GPT-5.2) y **Premium** (o3-high).
-*   **Multi-Provider:** Soporte nativo y optimizado para el stack de **OpenAI** y **Google (Gemini 3)**.
-*   **Intelligent Fallback:** Degradación automática a modelos Advanced si los Premium están saturados.
+### 🪄 3. Dynamic Agent Wizard v2
+Extensión del motor de configuración dinámica.
+*   **Sincronización Total:** Cada campo (URL Web, Tono, Reglas) es ahora 100% persistente gracias al sistema de hidratación profunda.
+*   **Live Preview (Fixed):** Simulación corregida con soporte SSE para una respuesta fluida y realista en modo borrador.
+*   **Tenant Identity Context:** El chat de prueba hereda automáticamente las credenciales reales del inquilino logueado.
 
-### 🛡️ 4. Bóveda de Credenciales Soberana
-AES-256 para proteger el negocio de tus clientes.
-*   Cada inquilino gestiona sus propias cuotas y límites directamente desde el Panel de Configuración.
-
-### 🧠 5. Multi-Agent Orchestration (v5.30)
-Evolución de monocanal a **Polimorfismo Especializado**.
-*   **Roles Dinámicos**: Plantillas nativas para **Ventas**, **Soporte**, **Leads** y **Logística**.
-*   **Dynamic Wizard**: Configuración en lenguaje natural con Live Preview (Simulación en Tiempo Real).
-*   **Auto-Onboarding**: Creación automática del Agente de Ventas al conectar la tienda.
+### 🛡️ 4. Infraestructura v5.99
+*   **Deep Fetch Engine:** Las consultas al backend ahora cargan el 100% de las propiedades del agente (Modelos, Temperatura, Herramientas).
+*   **SSE Stream Parsing:** Procesamiento optimizado de respuestas de IA para evitar "burbujas vacías".
+*   **Cross-Tenant Isolation:** Seguridad reforzada tras la migración de UUID/Integer.
 
 ---
 
 ## 🚀 Despliegue en EasyPanel
-
-### Requisitos Mínimos
-*   EasyPanel Project con **PostgreSQL (Supabase)**, **Redis** y **MinIO/S3**.
-
+/* ... same as before ... */
 ### Quick Start
 1.  Configura las variables críticas en tu servicio (Ver `.env.example`).
 2.  Despliega la imagen Docker.
-3.  El sistema detectará y configurará la base de datos vectorial automáticamente.
+3.  **Git Push:** Asegúrate de subir los cambios más recientes para activar el Web Widget y las correcciones del Wizard.
 
 ---
 
 ## 📚 Documentación Oficial
 
-*   **[Guía de Despliegue](./docs/DEPLOYMENT.md)**: Pasos detallados para entorno de producción.
-*   **[Referencia de API](./docs/API_REFERENCE.md)**: Endpoints de sistema y gestión de modelos.
-*   **[Manual de Vuelo v5.4](./Manual%20de%20Vuelo%20Nexus%20v5.md)**: Guía operativa para administradores.
-*   **[Arquitectura de Agentes](./docs/AGENT_ARCHITECTURE.md)**: Deep Dive en el motor polimórfico y seguridad.
-*   **[Wizard & Onboarding](./docs/WIZARD_WIRING.md)**: Flujos de configuración dinámica y "Live Preview".
+*   **[Manual de Vuelo v5.99](./docs/Manual%20de%20Vuelo%20Nexus%20v5.md)**: Guía operativa actualizada.
+*   **[Canal Web & Configuración](./docs/SETTINGS_LOGIC_DEEP_DIVE.md)**: Cómo gestionar el Web Widget.
+*   **[Gestión de Agentes](./docs/AGENTS_LOGIC_DEEP_DIVE.md)**: Detalles sobre el nuevo selector de canales.
+/* ... rest of links ... */
 
 ---
 

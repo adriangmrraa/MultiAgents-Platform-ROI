@@ -1,6 +1,6 @@
 # 📚 Nexus Platform Documentation Hub
 
-Welcome to the documentation center for Nexus v5.1 "Sovereign".
+Welcome to the documentation center for Nexus v5.99 "Omnichannel Evolution".
 
 ## 🚀 Architecture & Vision
 Start here to understand the high-level design.
@@ -8,11 +8,13 @@ Start here to understand the high-level design.
 *   [**TECHNICAL_DEEP_DIVE_V5_1.md**](TECHNICAL_DEEP_DIVE_V5_1.md) - Detailed breakdown of the Vault, Meta Uplink, and Hybrid SMTP.
 *   [**NEXUS_BUSINESS_STRATEGY_VISION.md**](NEXUS_BUSINESS_STRATEGY_VISION.md) - The "Why" behind the "Business Factory" concept.
 
-## 🦅 Operational Guides
-For Administrators and DevOps.
+## 🦅 Operational & Developer Guides
+For Administrators, DevOps and Developers.
 *   [**Manual de Vuelo Nexus v5.md**](Manual%20de%20Vuelo%20Nexus%20v5.md) - **(Start Here)** Daily Operations Manual.
-*   [**WORKFLOW_GUIDE.md**](WORKFLOW_GUIDE.md) - How to run standard procedures.
+*   [**SYSTEM_WIRING_MAP.md**](SYSTEM_WIRING_MAP.md) - **(New)** Full UI-to-Backend interaction map.
+*   [**EXTENSION_GUIDE.md**](EXTENSION_GUIDE.md) - **(New)** How to add tools, fields and templates.
 *   [**DATABASE_EVOLUTION_GUIDE.md**](DATABASE_EVOLUTION_GUIDE.md) - Schema migration and history.
+*   [**WORKFLOW_GUIDE.md**](WORKFLOW_GUIDE.md) - How to run standard procedures.
 
 ## 🔬 Technical Logic Deep Dives
 Atomic documentation for specific modules. (References for Developers)

@@ -57,7 +57,28 @@ Al pie de página, el componente `GlobalStreamLog` se conecta vía WebSocket/SSE
 
 ---
 
+## 🚀 Evolución Nexus v5.99
+
+### 1. Gestión de Canales Omnicanal
+Se ha introducido el componente `ChannelSelector` directamente en el Wizard.
+-   **Propósito**: Permitir al usuario decidir en tiempo real si un agente atiende en WhatsApp, Instagram, Facebook o el Web Widget.
+-   **Sincronización**: El Wizard consulta `/admin/integrations/status` para deshabilitar canales que no tengan una conexión activa en Meta o TiendaNube.
+-   **Persistencia**: Las selecciones se guardan en la columna `channels` (JSONB) y se mantienen sincronizadas entre el modal de pre-activación y el Wizard profundo.
+
+### 2. Live Preview & Simulation (Fixed)
+La simulación de chat ha sido re-diseñada para mayor robustez.
+-   **SSE Handling**: El backend ahora decodifica correctamente el flujo de tokens (Server-Sent Events) evitando burbujas vacías.
+-   **Schema v1/v2 Sync**: Se ha unificado la versión del esquema entre el Orquestador y el Agent Service para evitar errores de incompatibilidad con LangChain.
+-   **Contexto de Identidad**: La simulación hereda el `tenant_id` real del administrador para usar sus propias API Keys.
+
+### 3. Persistencia de URL Web
+-   **Campo `store_website`**: Ahora se guarda explícitamente tanto en la columna de base de datos como en el JSON de configuración (`config.store_website`).
+-   **Hidratación**: Al cargar el Wizard, el sistema realiza una "búsqueda profunda" para recuperar la URL guardada, evitando que el campo se vacíe al editar otros parámetros.
+
+---
+
 ## 🔬 Especificaciones Técnicas (Debugging Guide)
+/* ... same as before ... */
 
 ### 1. Estados Críticos
 | Estado | Tipo | Descripción | Error Común |

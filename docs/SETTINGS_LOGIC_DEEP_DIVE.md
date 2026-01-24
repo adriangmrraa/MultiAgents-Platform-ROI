@@ -13,7 +13,8 @@ En Nexus v5.1, las credenciales no son parte del código (`.env` heredado). Son 
 ### Componentes Clave
 1.  **Scope Selector**: Define si una llave es `Global` (Backend default) o `Tenant` (Específica).
 2.  **Category Parser**: UI dinámica que cambia según si es una API Key simple o una configuración compleja (SMTP).
-3.  **Masking Layer**: Capa de visualización que oculta secretos en la lista principal.
+3.  **Integrations Dashboard (Nexus v5.99)**: Tarjetas de estado que muestran si Meta, TiendaNube y el Web Widget están operacionales.
+4.  **Web Channel Configurator**: Panel dedicado para personalizar el Widget de Chat (Colores, Botón, Mensajes).
 
 ---
 

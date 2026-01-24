@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS chat_conversations (
 );
 ```
 
-### `agents` (Configuración de IA)
+### `agents` (Configuración de IA - v5.99)
 ```sql
 CREATE TABLE IF NOT EXISTS agents (
     id SERIAL PRIMARY KEY,
@@ -82,14 +82,22 @@ CREATE TABLE IF NOT EXISTS agents (
     role TEXT DEFAULT 'sales',
     model_provider TEXT DEFAULT 'openai',
     model_version TEXT DEFAULT 'gpt-4o',
-    temperature FLOAT DEFAULT 0.3,
+    temperature FLOAT DEFAULT 0.7,
     system_prompt_template TEXT NOT NULL,
     enabled_tools JSONB DEFAULT '[]',
-    channels JSONB DEFAULT '["whatsapp", "instagram", "facebook"]',
+    channels JSONB DEFAULT '["whatsapp", "instagram", "facebook", "web"]', -- Web channel added
+    knowledge_sources JSONB DEFAULT '[]', -- Nexus v5.1+
+    config JSONB DEFAULT '{}', -- Extended attributes (URL, style, etc.)
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT now()
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
 );
 ```
+
+### `tenants` (Branding & Web Widget)
+El canal Web utiliza las siguientes columnas para su inicialización:
+*   `store_website`: URL base para el Call-To-Action y habilitación del widget.
+*   `tool_config`: Almacena el estilo visual del widget de chat.
 
 ### `tools` (Armería Táctica)
 ```sql

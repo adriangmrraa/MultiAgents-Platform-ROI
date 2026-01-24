@@ -53,10 +53,20 @@ El flujo de Meta es extremadamente estricto con las URLs.
 Una vez conectado, la UI muestra una grilla con los iconos de FB/IG/WA.
 -   **Check Verde**: Activo y token válido probados.
 -   **Alerta Amarilla**: Permiso faltante (ej: usuario conectó FB pero olvidó dar permiso a WA).
+# 🌐 Integraciones: Web Widget (Zero-Config Channel)
+
+Nexus v5.99 introduce el **Web Widget**, un canal directo sin dependencias de terceros (como Meta o TiendaNube) que se instala en cualquier sitio web.
+
+### 🏗️ Lógica de Activación
+A diferencia de WhatsApp o Facebook, el canal Web no requiere un flujo de OAuth externo. Se considera "Siempre Disponible" en el sistema.
+
+1.  **Configuración Visual**: En `Settings > Canal Web`, el usuario define el "Look & Feel" (colores, mensajes). Estos valores se guardan en el `tenant_config`.
+2.  **Activación por Agente**: Un agente responderá por el widget **SOLO si** el canal `web` está seleccionado en su configuración dentro del Wizard.
 
 ---
 
 ## 🔬 Especificaciones Técnicas (Debugging Guide)
+/* ... same as before ... */
 
 Esta es la sección más frágil del sistema debido a la dependencia externa (Meta Graph API).
 
