@@ -232,6 +232,10 @@ export const DynamicAgentWizard = () => {
     const [formData, setFormData] = useState<Record<string, string>>(() => {
         const initial: Record<string, string> = {};
         AGENT_CONFIG_SCHEMA.forEach(f => initial[f.key] = f.defaultValue);
+        // Nexus v5.99: Brain Defaults
+        initial['model_provider'] = 'openai';
+        initial['model_version'] = 'gpt-4o';
+        initial['temperature'] = '0.7';
         return initial;
     });
     const [isSaving, setIsSaving] = useState(false);
@@ -420,6 +424,115 @@ export const DynamicAgentWizard = () => {
         );
     };
 
+
+    // --- Nexus v5.99: AI Brain Configuration ---
+    const BrainConfigPanel = () => {
+        const AI_MODELS = {
+            openai: [
+                { value: 'gpt-4o', label: 'GPT-4o (Recomendado - Multimodal)' },
+                { value: 'gpt-4-turbo', label: 'GPT-4 Turbo (Estándar)' },
+                { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (Rápido/Económico)' }
+            ],
+            google: [
+                { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Ultra Rápido)' },
+                { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Razonamiento)' }
+            ]
+        };
+
+        const currentProvider = formData.model_provider || 'openai';
+        const currentModels = AI_MODELS[currentProvider as keyof typeof AI_MODELS] || AI_MODELS['openai'];
+
+        const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+            const newProvider = e.target.value;
+            // Auto-select first model of new provider
+            const firstModel = AI_MODELS[newProvider as keyof typeof AI_MODELS][0].value;
+
+            setFormData(prev => ({
+                ...prev,
+                model_provider: newProvider,
+                model_version: firstModel
+            }));
+        };
+
+        return (
+            <div className="glass p-6 rounded-2xl border border-white/5 mb-6 bg-gradient-to-br from-indigo-500/10 to-purple-500/10">
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-white/10 rounded-lg">
+                        <Sparkles size={18} className="text-purple-300" />
+                    </div>
+                    <h3 className="text-sm font-bold text-white">Configuración del Cerebro (IA)</h3>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                    {/* Provider & Model */}
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 mb-2">Proveedor de Inteligencia</label>
+                            <div className="relative">
+                                <select
+                                    value={formData.model_provider || 'openai'}
+                                    onChange={handleProviderChange}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white appearance-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all cursor-pointer"
+                                >
+                                    <option value="openai">OpenAI (GPT)</option>
+                                    <option value="google">Google (Gemini)</option>
+                                </select>
+                                <div className="absolute right-4 top-3.5 pointer-events-none text-white/40">▼</div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 mb-2">Modelo Neural</label>
+                            <div className="relative">
+                                <select
+                                    value={formData.model_version || ''}
+                                    onChange={(e) => handleChange('model_version', e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white appearance-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all cursor-pointer"
+                                >
+                                    {currentModels.map(m => (
+                                        <option key={m.value} value={m.value}>{m.label}</option>
+                                    ))}
+                                </select>
+                                <div className="absolute right-4 top-3.5 pointer-events-none text-white/40">▼</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Temperature Slider */}
+                    <div className="bg-black/20 rounded-xl p-4 border border-white/5">
+                        <div className="flex justify-between items-center mb-4">
+                            <label className="text-xs font-bold text-gray-400">Creatividad (Temperatura)</label>
+                            <span className="text-xs font-mono bg-white/10 px-2 py-1 rounded text-purple-300">
+                                {formData.temperature || "0.7"}
+                            </span>
+                        </div>
+
+                        <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.1"
+                            value={formData.temperature || "0.7"}
+                            onChange={(e) => handleChange('temperature', e.target.value)}
+                            className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                        />
+
+                        <div className="flex justify-between mt-2 text-[10px] text-gray-500">
+                            <span>Preciso (0.0)</span>
+                            <span>Equilibrado (0.5)</span>
+                            <span>Creativo (1.0)</span>
+                        </div>
+
+                        <p className="mt-3 text-[10px] text-gray-400 leading-relaxed border-t border-white/5 pt-3">
+                            <Info size={10} className="inline mr-1 mb-0.5" />
+                            Valores bajos (0-0.3) son ideales para soporte técnico y datos exactos. Valores altos (0.7-1.0) funcionan mejor para ventas y conversación natural.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSaving(true);
@@ -436,16 +549,18 @@ export const DynamicAgentWizard = () => {
         }
 
         try {
-            // Nexus v5.58 Fix: Construct Valid Payload for Pydantic Schema
+            // Nexus v5.99 Fix: Full Brain Config Payload
             const payload = {
                 name: formData['store_name'] || "Agente de Ventas",
-                tenant_id: 1, // Fallback default, ideally from useApi/Context
+                tenant_id: 1,
                 role: 'sales',
-                model_version: 'gpt-4o',
-                system_prompt_template: formData['agent_tone'], // Simplified mapping
-                ...formData, // Flatten config fields
+                system_prompt_template: formData['agent_tone'],
+                ...formData,
+                // Explicit Brain Config
+                model_provider: formData.model_provider || 'openai',
+                model_version: formData.model_version || 'gpt-4o',
+                temperature: parseFloat(formData.temperature) || 0.7,
                 template_type: selectedTemplate,
-                // Nested Config for Brain Upgrade
                 config: {
                     knowledge_config: {
                         collections: knowledgeCollections
@@ -550,8 +665,12 @@ export const DynamicAgentWizard = () => {
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-8">
+                        {/* Nexus v5.99: Brain Configuration */}
+                        <BrainConfigPanel />
+
                         {/* Nexus v5.91: Knowledge Base Config */}
                         <KnowledgeSelector selected={knowledgeCollections} onChange={setKnowledgeCollections} />
+
 
                         <div className="grid gap-6">
                             {schema.map((field) => (
