@@ -4076,10 +4076,8 @@ async def list_agents(current_user: User = Depends(get_current_user)):
         
     return results
 
-@router.post("/agents", dependencies=[Depends(verify_admin_token)])
-async def create_agent(agent: AgentModel, current_user: User = Depends(get_current_user)):
-    if not current_user.is_verified:
 # --- Nexus v5.91: Knowledge Collections ---
+
 @router.get("/knowledge/collections", dependencies=[Depends(verify_admin_token)])
 async def list_knowledge_collections(current_user: User = Depends(get_current_user)):
     """
