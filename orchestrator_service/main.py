@@ -1314,6 +1314,32 @@ async def sendemail(subject: str, text: str):
     """Send an email to support or customer via n8n MCP."""
     return await call_mcp_tool("sendemail", {"Subject": subject, "Text": text})
 
+from app.core.rag import RAGCore # Nexus v5.93
+
+@tool
+async def search_knowledge_base(query: str, collection_filter: Optional[str] = None):
+    """
+    Search for information in the database. 
+    Use 'query' for the question.
+    Use 'collection_filter' ONLY if the user's question clearly pertains to one of the available topics listed in [VALID KNOWLEDGE COLLECTIONS]. 
+    Otherwise, leave null to search all.
+    """
+    # Resolve Tenant
+    tid = current_tenant_id.get()
+    if not tid: return "Error: No tenant context."
+    
+    # Init RAG
+    # Note: RAGCore expects str tenant_id
+    rag = RAGCore(tenant_id=str(tid), provider="openai")
+    
+    # Build Filter
+    rag_filter = {}
+    if collection_filter:
+        rag_filter["collection"] = collection_filter
+        
+    # Execute
+    return rag.search(query, filter=rag_filter)
+
 @tool
 async def derivhumano(reason: str, contact_name: Optional[str] = None, contact_phone: Optional[str] = None, summary: Optional[str] = None, action_required: Optional[str] = None):
     """EQUIPO/HUMANO: Use this tool to derive the conversation to a human operator via email and lock the AI. 
@@ -1445,7 +1471,7 @@ response_guides = {
     "derivhumano": "GUÍA DE RESPUESTA: Confirma al usuario que un humano revisará el caso y que el chat quedará pausado por 24h."
 }
 
-tools = [search_specific_products, search_by_category, browse_general_storefront, cupones_list, orders, sendemail, derivhumano]
+tools = [search_specific_products, search_by_category, browse_general_storefront, search_knowledge_base, cupones_list, orders, sendemail, derivhumano]
 
 # Register tools for Code Reflection (Nexus v3)
 from admin_routes import register_tools, SYSTEM_TOOL_INJECTIONS, SYSTEM_TOOL_RESPONSE_GUIDES

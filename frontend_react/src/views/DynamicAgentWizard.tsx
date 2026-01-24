@@ -87,7 +87,7 @@ const AGENT_CONFIG_SCHEMA: FieldConfig[] = [
 ];
 
 // --- Nexus v5.26: Live Preview Panel ---
-const LivePreviewPanel = ({ formData, tenantId = 1 }: { formData: Record<string, any>, tenantId?: number }) => {
+const LivePreviewPanel = ({ formData, tenantId = 1, knowledgeCollections = [] }: { formData: Record<string, any>, tenantId?: number, knowledgeCollections?: string[] }) => {
     const { fetchApi } = useApi();
     const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant', content: string }>>([
         { role: 'assistant', content: 'Hola, soy tu agente en modo prueba. Edita las reglas a la izquierda y probame en tiempo real.' }
@@ -116,14 +116,15 @@ const LivePreviewPanel = ({ formData, tenantId = 1 }: { formData: Record<string,
                 tenant_id: tenantId || 1,
                 message: text,
                 history: messages.slice(-6), // Keep context tight
-                // Transient Agent Config
-                agent_config: {
-                    name: formData['store_name'] || "Agente Simulado",
-                    tenant_id: tenantId || 1,
-                    role: 'sales',
-                    model_version: 'gpt-4o',
+                // Transient Agent Config - Must match backend expectation
+                formData: {
                     ...formData,
-                    template_type: formData['template_type']
+                    // Nested config for injection
+                    config: {
+                        knowledge_config: {
+                            collections: knowledgeCollections
+                        }
+                    }
                 }
             };
 
@@ -239,6 +240,7 @@ export const DynamicAgentWizard = () => {
     const [resetFeedback, setResetFeedback] = useState<string | null>(null);
     const [improvingFields, setImprovingFields] = useState<Record<string, boolean>>({});
     const [improveError, setImproveError] = useState<string | null>(null);
+    const [knowledgeCollections, setKnowledgeCollections] = useState<string[]>([]);
 
     useEffect(() => {
         // Load Templates
@@ -323,6 +325,70 @@ export const DynamicAgentWizard = () => {
         }
     };
 
+    // --- Knowledge Selector Component ---
+    const KnowledgeSelector = ({ selected, onChange }: { selected: string[], onChange: (cols: string[]) => void }) => {
+        const { fetchApi } = useApi();
+        const [collections, setCollections] = useState<string[]>([]);
+        const [loading, setLoading] = useState(true);
+
+        useEffect(() => {
+            const loadCols = async () => {
+                try {
+                    const data = await fetchApi('/admin/knowledge/collections');
+                    if (Array.isArray(data)) setCollections(data);
+                } catch (e) {
+                    console.error("Failed to load collections", e);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            loadCols();
+        }, []);
+
+        const toggleCollection = (col: string) => {
+            if (selected.includes(col)) {
+                onChange(selected.filter(c => c !== col));
+            } else {
+                onChange([...selected, col]);
+            }
+        };
+
+        if (loading) return <div className="animate-pulse h-10 bg-white/5 rounded-xl w-full" />;
+        if (collections.length === 0) return null;
+
+        return (
+            <div className="glass p-6 rounded-2xl border border-white/5 mb-6">
+                <h3 className="text-sm font-bold text-gray-300 mb-4 flex items-center gap-2">
+                    <Bot size={16} /> Base de Conocimiento (RAG)
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                    {collections.map(col => (
+                        <button
+                            key={col}
+                            type="button"
+                            onClick={() => toggleCollection(col)}
+                            className={`flex items-center gap-2 p-3 rounded-xl transition-all border text-xs text-left
+                                ${selected.includes(col)
+                                    ? 'bg-accent/20 border-accent text-white'
+                                    : 'bg-black/20 border-white/5 text-gray-400 hover:bg-white/5'}
+                            `}
+                        >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center
+                                ${selected.includes(col) ? 'bg-accent border-accent' : 'border-white/20'}
+                            `}>
+                                {selected.includes(col) && <CheckCircle2 size={10} className="text-white" />}
+                            </div>
+                            <span className="truncate">{col}</span>
+                        </button>
+                    ))}
+                </div>
+                <p className="mt-3 text-[10px] text-white/30">
+                    Selecciona las colecciones que este agente debe priorizar. Si no seleccionas ninguna, usará todo el conocimiento disponible.
+                </p>
+            </div>
+        );
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSaving(true);
@@ -340,21 +406,21 @@ export const DynamicAgentWizard = () => {
 
         try {
             // Nexus v5.58 Fix: Construct Valid Payload for Pydantic Schema
-            // The backend expects 'name', 'tenant_id' at root level. 
-            // We assume editing the first agent or a specific one.
-            // For now, we hardcode defaults or fetch from context if available.
-            // Warning: logic assumes we are updating the current active agent or creating one.
-
-            // To create/update properly, we need the agent identity. 
-            // If creating, we provide defaults. If editing, we should ideally have the agent object.
-            // Since we don't have full agent state here, we infer.
             const payload = {
                 name: formData['store_name'] || "Agente de Ventas",
                 tenant_id: 1, // Fallback default, ideally from useApi/Context
                 role: 'sales',
                 model_version: 'gpt-4o',
+                system_prompt_template: formData['agent_tone'], // Simplified mapping
                 ...formData, // Flatten config fields
-                template_type: selectedTemplate
+                template_type: selectedTemplate,
+                // Nested Config for Brain Upgrade
+                config: {
+                    knowledge_config: {
+                        collections: knowledgeCollections
+                    },
+                    ...formData // Pass other wizard fields as config too
+                }
             };
 
             await fetchApi(agentId ? `/admin/agents/${agentId}` : '/admin/agents', {
@@ -453,6 +519,9 @@ export const DynamicAgentWizard = () => {
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-8">
+                        {/* Nexus v5.91: Knowledge Base Config */}
+                        <KnowledgeSelector selected={knowledgeCollections} onChange={setKnowledgeCollections} />
+
                         <div className="grid gap-6">
                             {schema.map((field) => (
                                 <div key={field.key} className="glass p-6 rounded-2xl border border-white/5 hover:border-white/10 transition-all group relative">
@@ -579,7 +648,7 @@ export const DynamicAgentWizard = () => {
 
                 {/* Right Column: Live Preview (Desktop) */}
                 <div className="hidden lg:flex lg:col-span-2 h-full flex-col sticky top-8">
-                    <LivePreviewPanel formData={formData} />
+                    <LivePreviewPanel formData={formData} knowledgeCollections={knowledgeCollections} />
                 </div>
             </div>
 
