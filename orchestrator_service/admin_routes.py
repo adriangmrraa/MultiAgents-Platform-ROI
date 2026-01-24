@@ -4424,7 +4424,67 @@ async def simulate_agent(req: AgentSimulation):
         logger.error("simulation_failed", error=str(e))
         raise HTTPException(500, f"Simulation Error: {str(e)}")
 
+# --- Nexus v5.99: Tool Discovery ---
+
+@router.get("/tools", dependencies=[Depends(verify_admin_token)])
+async def list_available_tools():
+    """
+    Returns the comprehensive arsenal of tools available to agents.
+    Nexus v5.99: Hybrid System (Hardcoded Core + DB Custom).
+    """
+    # 1. Core System Tools (Hardcoded Integrity)
+    system_tools = [
+        {
+            "name": "search_specific_products",
+            "label": "Buscador de Productos", 
+            "description": "Permite al agente buscar productos por nombre, categoría o características en tu catálogo.",
+            "icon": "Search",
+            "category": "sales"
+        },
+        {
+            "name": "orders",
+            "label": "Estado de Pedidos",
+            "description": "Permite consultar el estado de un pedido (en camino, entregado) usando el ID de orden.",
+            "icon": "Package",
+            "category": "support"
+        },
+        {
+            "name": "check_stock",
+            "label": "Verificador de Stock",
+            "description": "Consulta disponibilidad de talles y colores en tiempo real.",
+            "icon": "Box",
+            "category": "sales"
+        },
+        {
+            "name": "derivhumano", 
+            "label": "Derivación a Humano",
+            "description": "CRÍTICO: Permite escalar la conversación a un agente humano si el usuario lo pide o está furioso.",
+            "icon": "UserCheck", 
+            "category": "system"
+        },
+        {
+            "name": "create_order",
+            "label": "Crear Orden (Checkout)",
+            "description": "Genera un link de pago/carrito para cerrar la venta.",
+            "icon": "ShoppingCart",
+            "category": "sales"
+        },
+        {
+            "name": "search_knowledge_base",
+            "label": "Consultar Base de Conocimiento",
+            "description": "Lee tus PDFs y documentos subidos para responder preguntas específicas (Políticas, Manuales).",
+            "icon": "BookOpen",
+            "category": "knowledge"
+        }
+    ]
+    
+    # 2. Custom Tools (DB) - Placeholder for future expansion
+    # custom_tools = await db.pool.fetch("SELECT name, description, ... FROM tools ...")
+    
+    return system_tools
+
 # --- Nexus v5.24 - v5.25: Native Sales Agent & Templates ---
+
 
 @router.get("/agent-templates", dependencies=[Depends(verify_admin_token)])
 async def list_agent_templates():

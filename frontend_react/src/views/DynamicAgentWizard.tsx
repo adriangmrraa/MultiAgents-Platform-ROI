@@ -241,22 +241,33 @@ export const DynamicAgentWizard = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
-    const [resetFeedback, setResetFeedback] = useState<string | null>(null);
     const [improvingFields, setImprovingFields] = useState<Record<string, boolean>>({});
     const [improveError, setImproveError] = useState<string | null>(null);
     const [knowledgeCollections, setKnowledgeCollections] = useState<string[]>([]);
 
+    // Nexus v5.99: Tools Management
+    const [availableTools, setAvailableTools] = useState<any[]>([]);
+    const [selectedTools, setSelectedTools] = useState<string[]>(['search_specific_products', 'orders', 'derivhumano']); // Defaults
+
     useEffect(() => {
-        // Load Templates
-        const loadTemplates = async () => {
+        // Load Templates & Tools
+        const initData = async () => {
             try {
-                const tpls = await fetchApi('/admin/agent-templates');
+                // Parallel Fetch
+                const [tpls, tools] = await Promise.all([
+                    fetchApi('/admin/agent-templates'),
+                    fetchApi('/admin/tools')
+                ]);
+
                 setTemplates(tpls);
+                if (Array.isArray(tools)) {
+                    setAvailableTools(tools);
+                }
             } catch (err) {
-                console.error("Failed to load templates", err);
+                console.error("Failed to load init data", err);
             }
         };
-        loadTemplates();
+        initData();
 
         // Load Agent Data if ID provided (Edit Mode / Sales Config)
         if (agentId) {
@@ -424,6 +435,61 @@ export const DynamicAgentWizard = () => {
         );
     };
 
+
+
+    // --- Nexus v5.99: Tool Selection Utility ---
+    const ToolSelector = () => {
+        const toggleTool = (toolName: string) => {
+            if (selectedTools.includes(toolName)) {
+                setSelectedTools(prev => prev.filter(t => t !== toolName));
+            } else {
+                setSelectedTools(prev => [...prev, toolName]);
+            }
+        };
+
+        if (availableTools.length === 0) return null;
+
+        return (
+            <div className="glass p-6 rounded-2xl border border-white/5 mb-6">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-white/10 rounded-lg">
+                        <Bot size={18} className="text-green-300" />
+                    </div>
+                    <h3 className="text-sm font-bold text-white">Capacidades / Herramientas</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {availableTools.map((tool) => (
+                        <button
+                            key={tool.name}
+                            type="button"
+                            onClick={() => toggleTool(tool.name)}
+                            className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all group
+                                ${selectedTools.includes(tool.name)
+                                    ? 'bg-green-500/10 border-green-500/50 hover:bg-green-500/20'
+                                    : 'bg-black/20 border-white/5 hover:bg-white/5'}
+                            `}
+                        >
+                            <div className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center border shrink-0 transition-colors
+                                ${selectedTools.includes(tool.name) ? 'bg-green-500 border-green-500' : 'border-white/20'}
+                            `}>
+                                {selectedTools.includes(tool.name) && <CheckCircle2 size={12} className="text-black" />}
+                            </div>
+                            <div>
+                                <div className="text-xs font-bold text-white mb-0.5 flex items-center gap-2">
+                                    {tool.label || tool.name}
+                                    {tool.category === 'system' && <span className="px-1.5 py-0.5 rounded text-[9px] bg-red-500/20 text-red-300">Sistema</span>}
+                                </div>
+                                <div className="text-[10px] text-white/50 leading-tight">
+                                    {tool.description}
+                                </div>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        );
+    };
 
     // --- Nexus v5.99: AI Brain Configuration ---
     const BrainConfigPanel = () => {
@@ -665,8 +731,12 @@ export const DynamicAgentWizard = () => {
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-8">
+                        {/* Nexus v5.99: Tool Selection */}
+                        <ToolSelector />
+
                         {/* Nexus v5.99: Brain Configuration */}
                         <BrainConfigPanel />
+
 
                         {/* Nexus v5.91: Knowledge Base Config */}
                         <KnowledgeSelector selected={knowledgeCollections} onChange={setKnowledgeCollections} />
