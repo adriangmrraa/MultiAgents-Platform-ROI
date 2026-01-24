@@ -108,7 +108,42 @@ async def init_db(session: AsyncSession) -> None:
             VALUES (gen_random_uuid(), :name, :value, :category, :scope, :tenant_id, :description)
         """), c)
 
-    # 4. Create Handoff Config (Default Disabled)
+    # 4. Create Default Agent (Pointe Coach Clone)
+    # Nexus v5.99: Bootstrap with "Source Code" config for Wizard
+    result = await session.execute(select(func.count()).select_from(text("agents")).where(text("tenant_id = :tid")).params(tid=tenant.id))
+    agent_count = result.scalar()
+    
+    if agent_count == 0:
+        logger.info("seeding_default_agent", tenant=tenant.id)
+        
+        # Pointe Coach Defaults (Source: DynamicAgentWizard.tsx)
+        default_config = {
+            "store_name": store_name,
+            "agent_tone": "## TONO Y PERSONALIDAD (ARGENTINA 'BUENA ONDA')\n\n* **Estilo:** Hablá como una compañera de danza experta. Usá 'vos', sé cálida y empática.\n* **Puntuación (ESTRICTO):** Usá solo el signo de pregunta al final (?), nunca el de apertura (¿). Evitá el exceso de signos de admiración; si los usás, solo al final (!) y de forma muy medida.\n* **Prohibido:** No uses 'usted', 'su', 'has', 'podéis'. No uses frases de telemarketing.\n* **Naturalidad:** Usá frases puente como 'Mirá', 'Te cuento', 'Fijate', 'Dale'.\n* **Empatía:** Si el usuario te pregunta '¿Cómo estás?', respondé con calidez y preguntale a él también antes de avanzar. Si el usuario tiene dudas o problemas (talle, dolor), validá su sentimiento y ofrecé ayuda.",
+            "business_rules": "## REGLAS UNIVERSALES DE SEGURIDAD (NO BORRAR):\n1. VERACIDAD ABSOLUTA: Está PROHIBIDO inventar precios, stock, variantes o fechas de entrega. Si la herramienta no te da el dato, decí \"No tengo esa información en este momento\" y derivá a un humano.\n2. ALCANCE: Solo respondé preguntas relacionadas con la tienda, los productos y el proceso de compra. Si te preguntan de política, religión o competencia, respondé amablemente que solo podés ayudar con productos de la tienda.\n3. DERIVACIÓN INTELIGENTE: Usá la tool `derivhumano` inmediatamente si: (A) El cliente está enojado o frustrado. (B) Hay un problema con un pago o envío demorado. (C) Piden hablar con una persona.\n4. PROMOCIONES: Solo mencioná descuentos o cupones si aparecen explícitamente en la tool `cupones_list`. No asumas que hay envíos gratis a menos que sea una regla confirmada.\n5. ANTI-REPETICIÓN: Si ya mostraste un producto y el usuario pide \"más opciones\" pero no hay más, decí la verdad. No repitas los mismos productos como si fueran nuevos.\n\n## REGLAS ESPECÍFICAS DE ESTE NEGOCIO (EJEMPLO - MODIFICAR):\n6. FITTING (EJEMPLO): Ofrecelo exclusivamente para zapatillas de punta. Si acepta, derivar a humano.\n7. ENVÍOS (EJEMPLO): Trabajamos con Andreani. El costo se calcula en el checkout.",
+            "synonym_dictionary": "## DICCIONARIO DE SINÓNIMOS\n\n* **ZAPATILLAS DE PUNTA:** puntas, zapatillas de punta, pointe, pointe shoes, calzado de punta, etc.\n* **MEDIA PUNTA:** media punta, medias puntas, zapatillas de media punta, zapatillas de ensayo, zapatillas de tela, slippers de ballet.\n* **MEDIAS:** medias, medias de ballet, medias de danza, medias convertibles, convertible socks, panty, pantymedia.\n* **BOLSOS:** bolso, bolso de danza, bolso de ballet, mochila de danza, mochila para ballet, bag de danza.\n* **LEOTARDOS:** malla, mallas, leotardo, leotard, maillot, body, malla de ballet, body de danza, enterito, enteriza, malla entera.\n* **PUNTERAS:** punteras, punteras de gel, almohadillas para puntas, protectores de dedos, pads de punteras.\n* **PROTECTORES DE PUNTAS:** protectores de puntas, toppers de puntas, protectores de punta de gel.\n* **METATARSIANAS:** metatarsianas, almohadillas metatarsianas, pads metatarsianas, gel metatarsianas.\n* **CINTAS:** cintas, cintas de satén, cintas elásticas, satén ballet ribbons.",
+            "catalog_summary": "- Zapatillas: Puntas, Media punta.\n- Medias: Convertibles, Socks, Contemporáneo, Poliamida, Patín.\n- Accesorios: Metatarsianas, Bolsa de red, Elásticos, Cintas, Endurecedor de puntas, Punteras, Protectores.\n- Otros: Bolsos, Leotardos.",
+            "template_type": "sales"
+        }
+        
+        # Clean System Prompt (Runtime will compile it)
+        base_prompt = "Eres un asistente de ventas virtual. Usarás las instrucciones provistas en tiempo de ejecución."
+        
+        import json
+        await session.execute(text("""
+            INSERT INTO agents (name, role, tenant_id, model_provider, model_version, temperature, 
+                                system_prompt_template, enabled_tools, knowledge_sources, config, is_active, created_at, updated_at)
+            VALUES (:name, 'sales', :tid, 'openai', 'gpt-4o', 0.7, 
+                    :prompt, :tools, '[]', :config, TRUE, NOW(), NOW())
+        """), {
+            "name": store_name,
+            "tid": tenant.id,
+            "prompt": base_prompt,
+            "tools": json.dumps(["search_specific_products"]),
+            "config": json.dumps(default_config)
+        })
+
+    # 5. Create Handoff Config (Default Disabled)
     handoff = TenantHumanHandoffConfig(
         tenant_id=tenant.id,
         enabled=False,
