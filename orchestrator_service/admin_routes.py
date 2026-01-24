@@ -4355,97 +4355,32 @@ async def simulate_agent(req: AgentSimulation):
         
         # --- Nexus v5.92: Knowledge Injection for Simulation ---
         # We inject the restrictions into 'business_rules' override so the AgentFactory includes it.
-        # Check if config has knowledge_config (structure from frontend)
         config_dict = req.formData.get("config", {})
-        # Flattened fallback: If frontend sent flattened keys? Current frontend sends nested 'config' inside 'formData' only if we coded it that way?
-        # Re-reading Frontend Plan: "Payload: ... 'config': {'knowledge_config': ...}"
-        # But 'AgentSimulation' model has 'formData: Dict'. Frontend calls: body: payload.
-        # If payload has 'config', it is inside 'formData' because Simulation model IS payload?
-        # NO. 'AgentSimulation' define 'req.formData'.
-        # The frontend snippet:
-        # const payload = { tenant_id, message, ... agent_config: { ...formData, config: { knowledge_config... } } };
-        # Wait, the Frontend call to simulate is:
-        # const payload = { tenant_id, message, history, agent_config: {...} }
-        # Backend `AgentSimulation` model expects: { tenant_id, message, formData, history }
-        # So Frontend sends `formData`?
-        # Let's check `DynamicAgentWizard.tsx` line 120 (LivePreviewPanel logic).
-        # It sends: 
-        # payload = { tenant_id, message, history, agent_config: { ... } }
-        # BUT Backend `AgentSimulation` expects `formData`.
-        # Mismatch detected.
-        # However, looking at the code I read in Step 5276 (lines 4229+):
-        # class AgentSimulation(BaseModel): tenant_id, message, formData, history
-        # So Frontend MUST send `formData`.
-        # BUT Frontend `LivePreviewPanel` sends `agent_config` instead of `formData`?
-        # Wait, line 115 in Wizard:
-        # const payload = { tenant_id, message, history, agent_config: {...} }
-        # Backend line 4229: class AgentSimulation...
-        # If backend expects `formData`, simulation will fail validation 422.
-        # Actually, let's fix backend to match frontend or vice-versa.
-        # `simulate_agent` logic uses `req.formData` manually.
-        # IF I look at existing backend:
-        # `wizard_overrides = { "tone": req.formData.get("agent_tone")... }`
-        # So backend EXPECTS `formData`.
-        # Frontend `LivePreviewPanel` (previous version) was sending `config`?
-        # Step 5236 view shows `LivePreviewPanel` sending `agent_config` KEY.
-        # This implies `AgentSimulation` model MIGHT have `agent_config` key instead of `formData` in the version I viewed?
-        # Let's re-read the Model definition in 5276 (Lines 4229-4233).
-        # Model: `formData: Dict[str, Any]`
-        # Frontend: `agent_config: { ... }`
-        # This is a BUG if they don't match.
-        # BUT wait, maybe `LivePreviewPanel` logic constructs `formData`?
-        # Lines 111-130 in Wizard:
-        # const payload = { tenant_id, message, history, agent_config: ... }
-        # This looks like it sends `agent_config`.
-        # Unless `AgentSimulation` model was changed recently or I misread it.
-        # Let's look at `admin_routes.py` lines 4229 again.
-        # It says `formData: Dict`.
-        # So the Frontend is sending `agent_config` but backend expects `formData`.
-        # Simulation probably fails right now? Or maybe `agent_config` is aliased?
-        # I will FIX the backend model to accept `agent_config` OR `formData`.
-        # Actually, standardizing on valid Agent data is better.
-        # Let's assume the frontend sends `formData` which mimics the Wizard keys.
-        # I'll update `simulate_agent` to look for keys in `req.formData` or `req.agent_config` (if I add it).
-        # Let's add `agent_config: Optional[Dict] = {}` to `AgentSimulation` and prioritize it.
+        if "knowledge_config" in config_dict:
+             # _inject_knowledge_config returns (prompt + instruction). 
+             # We pass empty prompt to get just the instruction block.
+             k_inst = _inject_knowledge_config("", config_dict)
+             
+             # Append to business rules if we got an instruction back
+             if k_inst:
+                 if wizard_overrides["business_rules"]:
+                     # Ensure spacing
+                     wizard_overrides["business_rules"] += "\n" + k_inst
+                 else:
+                     wizard_overrides["business_rules"] = k_inst
+
+        # 3. Determine Template Type
+        # formData should have 'template_type', else fallback to 'sales'
+        template_type = req.formData.get("template_type", "sales")
         
-        # Knowledge Injection logic remains valid: Extract knowledge_config from the input dict.
-        
-        # New Logic:
-        # 1. Support `agent_config` input.
-        # 2. Extract overrides from it.
-        # 3. Inject Knowledge config.
-        
-        pass 
-        
-    # --- Backend Code ---
-    # We will stick to the existing signature if possible, but the mismatch is real.
-    # I'll update the Model to include `agent_config` as an alias or optional field.
-    # And implementation uses it.
-    
-    # Wait, if I change the Model validation, the requests effectively change API contract.
-    # I'll modify the backend to accept `formData` AND `agent_config`?
-    # Or just fix the logic to read from `req.formData` (which Frontend should populate).
-    
-    # Frontend fix is also needed.
-    
-    # Let's focus on the `knowledge_config` injection first.
-    # Assuming we receive the data in `req.formData` (or we fix frontend to send it there).
-    # I'll write the injection logic assuming `formData` has the config.
-    
-    # Logic:
-    config_dict = req.formData.get("config", {})
-    if "knowledge_config" in config_dict:
-         k_inst = _inject_knowledge_config("", config_dict)
-         if "## KNOWLEDGE BASE ACCESS" in k_inst:
-             instruction = k_inst.replace("", "")
-             if wizard_overrides["business_rules"]:
-                 wizard_overrides["business_rules"] += "\n" + instruction
-             else:
-                 wizard_overrides["business_rules"] = instruction
-                 
-    # Also I will update the AgentSimulation model to be safe.
-    
-    return # ...
+        # 4. Construct Agent Config (Transient)
+        agent_config = {
+            "template_type": template_type,
+            "wizard_overrides": wizard_overrides,
+            "tools": ["search_specific_products", "browse_general_storefront", "orders", "search_knowledge_base"], 
+            "model": {"provider": "openai", "version": "gpt-4o-mini"}
+        }
+
 
         # 5. Fetch Credentials
         openai_key = await get_tenant_credential(req.tenant_id, "openai", "%api_key%")
