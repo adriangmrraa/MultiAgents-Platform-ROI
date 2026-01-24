@@ -248,6 +248,7 @@ export const DynamicAgentWizard = () => {
 
     // Nexus v5.99: Tools Management
     const [availableTools, setAvailableTools] = useState<any[]>([]);
+    const [availableModels, setAvailableModels] = useState<any[]>([]);
     const [selectedTools, setSelectedTools] = useState<string[]>(['search_specific_products', 'orders', 'derivhumano']); // Defaults
 
     useEffect(() => {
@@ -255,15 +256,15 @@ export const DynamicAgentWizard = () => {
         const initData = async () => {
             try {
                 // Parallel Fetch
-                const [tpls, tools] = await Promise.all([
+                const [tpls, tools, models] = await Promise.all([
                     fetchApi('/admin/agent-templates'),
-                    fetchApi('/admin/tools')
+                    fetchApi('/admin/tools'),
+                    fetchApi('/admin/models')
                 ]);
 
                 setTemplates(tpls);
-                if (Array.isArray(tools)) {
-                    setAvailableTools(tools);
-                }
+                if (Array.isArray(tools)) setAvailableTools(tools);
+                if (Array.isArray(models)) setAvailableModels(models);
             } catch (err) {
                 console.error("Failed to load init data", err);
             }
@@ -272,7 +273,42 @@ export const DynamicAgentWizard = () => {
 
         // Load Agent Data if ID provided (Edit Mode / Sales Config)
         if (agentId) {
-            // TODO: Implement load logic for specific agent
+            const loadAgent = async () => {
+                try {
+                    const agent = await fetchApi(`/admin/agents/${agentId}/config`);
+                    if (agent) {
+                        // Hydrate Form
+                        setFormData({
+                            ...agent,
+                            // Ensure numeric temperature
+                            temperature: agent.temperature?.toString() || '0.7',
+                            // Restore core fields
+                            store_name: agent.name,
+                            agent_tone: agent.system_prompt_template,
+                            // Ensure model fields even if legacy
+                            model_provider: agent.model_provider || 'openai',
+                            model_version: agent.model_version || 'gpt-4o',
+                            template_type: agent.config?.template_type || agent.template_type
+                        });
+
+                        // Hydrate Tools
+                        if (Array.isArray(agent.enabled_tools)) {
+                            setSelectedTools(agent.enabled_tools);
+                        } else if (typeof agent.enabled_tools === 'string') {
+                            try { setSelectedTools(JSON.parse(agent.enabled_tools)); } catch { }
+                        }
+
+                        // Hydrate Knowledge
+                        if (agent.config && agent.config.knowledge_config && Array.isArray(agent.config.knowledge_config.collections)) {
+                            setKnowledgeCollections(agent.config.knowledge_config.collections);
+                        }
+                    }
+                } catch (err) {
+                    console.error("Failed to load agent data", err);
+                    setError("No se pudo cargar la configuración del agente.");
+                }
+            };
+            loadAgent();
         }
     }, [agentId, fetchApi]);
 
@@ -494,30 +530,19 @@ export const DynamicAgentWizard = () => {
 
     // --- Nexus v5.99: AI Brain Configuration ---
     const BrainConfigPanel = () => {
-        const AI_MODELS = {
-            openai: [
-                { value: 'gpt-4o', label: 'GPT-4o (Recomendado - Multimodal)' },
-                { value: 'gpt-4-turbo', label: 'GPT-4 Turbo (Estándar)' },
-                { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (Rápido/Económico)' }
-            ],
-            google: [
-                { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Ultra Rápido)' },
-                { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Razonamiento)' }
-            ]
-        };
-
+        // Dynamic Model Filtering
         const currentProvider = formData.model_provider || 'openai';
-        const currentModels = AI_MODELS[currentProvider as keyof typeof AI_MODELS] || AI_MODELS['openai'];
+        const filteredModels = availableModels.filter(m => m.provider === currentProvider);
 
         const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
             const newProvider = e.target.value;
-            // Auto-select first model of new provider
-            const firstModel = AI_MODELS[newProvider as keyof typeof AI_MODELS][0].value;
+            // Auto-select first model of new provider to avoid invalid state
+            const firstModel = availableModels.find(m => m.provider === newProvider);
 
             setFormData(prev => ({
                 ...prev,
                 model_provider: newProvider,
-                model_version: firstModel
+                model_version: firstModel ? firstModel.id : ''
             }));
         };
 
@@ -556,9 +581,12 @@ export const DynamicAgentWizard = () => {
                                     onChange={(e) => handleChange('model_version', e.target.value)}
                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white appearance-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all cursor-pointer"
                                 >
-                                    {currentModels.map(m => (
-                                        <option key={m.value} value={m.value}>{m.label}</option>
+                                    {filteredModels.map(m => (
+                                        <option key={m.id} value={m.id}>
+                                            {m.name || m.id} {m.ui_metadata?.label ? `(${m.ui_metadata.label})` : ''}
+                                        </option>
                                     ))}
+                                    {filteredModels.length === 0 && <option value="">Cargando modelos...</option>}
                                 </select>
                                 <div className="absolute right-4 top-3.5 pointer-events-none text-white/40">▼</div>
                             </div>

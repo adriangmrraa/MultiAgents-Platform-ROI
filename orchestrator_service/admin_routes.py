@@ -4436,7 +4436,19 @@ async def simulate_agent(req: AgentSimulation):
         raise HTTPException(500, f"Simulation Error: {str(e)}")
 
 
+# --- Nexus v5.99: Model Discovery (Source of Truth) ---
+
+@router.get("/models", dependencies=[Depends(verify_admin_token)])
+async def list_available_models():
+    """
+    Returns the authoritative list of AI models supported by the Nexus Engine.
+    Used by the Wizard to prevent 'Zombie Models'.
+    """
+    from app.core.models import MODEL_REGISTRY
+    return MODEL_REGISTRY
+
 # --- Nexus v5.99: Tool Discovery ---
+
 
 @router.get("/tools", dependencies=[Depends(verify_admin_token)])
 async def list_available_tools():
