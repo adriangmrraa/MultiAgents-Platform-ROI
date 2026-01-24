@@ -501,7 +501,7 @@ async def execute_agent(
             async for event in executor.astream_events({
                 "input": request.message,
                 "chat_history": history
-            }, version="v2"):
+            }, version="v1"):
                 kind = event["event"]
                 
                 # Filter useful events for the Orchestrator/SSE
