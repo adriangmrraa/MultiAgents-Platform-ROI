@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react'; // Nexus v5.26 Fix
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
+import { useAuth } from '../contexts/AuthContext';
 import { Save, Info, Sparkles, ArrowRight, CheckCircle2, RotateCcw, ShieldCheck, AlertCircle, Store, LifeBuoy, Truck, Calendar, MessageSquare, Send, Bot, User, Trash2, Facebook, Globe } from 'lucide-react';
 
 interface FieldConfig {
@@ -134,9 +135,9 @@ const LivePreviewPanel = ({ formData, tenantId = 1, knowledgeCollections = [] }:
             });
 
             if (res.status === 'success') {
-                setMessages(prev => [...prev, { role: 'assistant', content: res.response }]);
+                setMessages(prev => [...prev, { role: 'assistant', content: res.response || '⚠️ Sin respuesta.' }]);
             } else {
-                setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Error simulando respuesta.' }]);
+                setMessages(prev => [...prev, { role: 'assistant', content: res.response || '⚠️ Error simulando respuesta.' }]);
             }
         } catch (e) {
             console.error(e);
@@ -224,6 +225,7 @@ const LivePreviewPanel = ({ formData, tenantId = 1, knowledgeCollections = [] }:
 
 export const DynamicAgentWizard = () => {
     const { fetchApi, loading } = useApi();
+    const { user } = useAuth();
     const navigate = useNavigate();
     const { agentId } = useParams(); // Start editing logic support
     const [schema] = useState<FieldConfig[]>(AGENT_CONFIG_SCHEMA);
@@ -709,7 +711,7 @@ export const DynamicAgentWizard = () => {
         try {
             const payload = {
                 name: formData['store_name'] || "Agente de Ventas",
-                tenant_id: 1,
+                tenant_id: user?.tenant_id || 1,
                 role: 'sales',
                 system_prompt_template: formData['agent_tone'],
                 ...formData,
@@ -970,7 +972,11 @@ export const DynamicAgentWizard = () => {
 
                 {/* Right Column: Live Preview (Desktop) */}
                 <div className="hidden lg:flex lg:col-span-2 h-full flex-col sticky top-8">
-                    <LivePreviewPanel formData={formData} knowledgeCollections={knowledgeCollections} />
+                    <LivePreviewPanel
+                        formData={formData}
+                        tenantId={user?.tenant_id}
+                        knowledgeCollections={knowledgeCollections}
+                    />
                 </div>
             </div>
 

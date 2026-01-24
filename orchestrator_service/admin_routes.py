@@ -4459,14 +4459,34 @@ async def simulate_agent(req: AgentSimulation):
                     return {"status": "error", "response": f"Error del Agente: {err_text.decode()}"}
                 
                 async for chunk in resp.aiter_lines():
-                    if chunk:
-                        try:
-                            # Stream format: json lines
-                            evt = json.loads(chunk)
-                            if evt.get("type") == "token":
-                                full_response += evt.get("content", "")
-                        except: pass
+                    chunk = chunk.strip()
+                    if not chunk: continue
+                    
+                    # Handle SSE format: data: {"type": "...", ...}
+                    if chunk.startswith("data: "):
+                        chunk = chunk[6:]
                         
+                    try:
+                        evt = json.loads(chunk)
+                        etype = evt.get("type")
+                        
+                        if etype == "token":
+                            full_response += evt.get("content", "")
+                        elif etype == "error":
+                            logger.error(f"Agent stream error: {evt}")
+                            return {"status": "error", "response": f"Error del Agente: {evt.get('message', 'Unknown error')}"}
+                    except json.JSONDecodeError:
+                        # Maybe it's a raw token or mixed content
+                        # For now, we skip but could log for debugging
+                        continue
+                    except Exception as e:
+                        logger.warning(f"Error parsing simulation chunk: {e}")
+                        continue
+                        
+        if not full_response:
+             logger.warning("Simulation finished with empty response")
+             return {"status": "success", "response": "⚠️ El agente no generó ninguna respuesta. Revisa tu configuración o el catálogo."}
+             
         return {"status": "success", "response": full_response}
 
     except Exception as e:
