@@ -4456,7 +4456,8 @@ async def simulate_agent(req: AgentSimulation):
                 "model": {
                     "provider": req.formData.get("model_provider", "openai"),
                     "name": req.formData.get("model_version", "gpt-4o")
-                }
+                },
+                "temperature": float(req.formData.get("temperature", 0.3))
             },
             "credentials": {
                 "openai_api_key": final_openai_key,

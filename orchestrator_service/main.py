@@ -2115,10 +2115,11 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             knowledge_sources = agent_row['knowledge_sources'] if 'knowledge_sources' in agent_row and agent_row['knowledge_sources'] else []
             model_config = {
                 "provider": agent_row['model_provider'],
-                "version": agent_row['model_version'],
-                "temperature": agent_row['temperature'],
+                "name": agent_row['model_version'], # Mapping Fix: Agent Service expects 'name'
                 "config": json.loads(agent_row['config']) if agent_row['config'] else {}
             }
+            temp_value = agent_row['temperature'] # Extract to root level
+
             # Nexus v5.27: Extract wizard overrides for Polymorphism
             wizard_overrides = {}
             if agent_row['config']:
@@ -2135,7 +2136,9 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             raw_prompt = tenant_row.get("system_prompt_template") or GLOBAL_SYSTEM_PROMPT or "Eres un asistente virtual amable."
             enabled_tools = ["search_specific_products"] # Default set
             knowledge_sources = []
-            model_config = {"provider": "openai", "version": "gpt-4o"}
+            model_config = {"provider": "openai", "name": "gpt-4o"}
+            temp_value = 0.3 # Safe fallback
+
 
         # Variable Injection
         sys_template = raw_prompt
@@ -2167,14 +2170,15 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             "message": content,
             "history": remote_history,
             "context": {"store_name": tenant_row['store_name'], "system_prompt": sys_template, "current_channel": channel_source},
-            "context": {"store_name": tenant_row['store_name'], "system_prompt": sys_template, "current_channel": channel_source},
+
             "agent_config": {
                 "tools": enabled_tools, 
                 "tool_instructions": tool_instructions_list, 
                 "knowledge_sources": knowledge_sources, 
                 "model": model_config,
-                "template_type": agent_row['template_type'] if agent_row else "sales", # Nexus v5.27
-                "wizard_overrides": wizard_overrides if agent_row else {} # Nexus v5.27
+                "temperature": temp_value, # Root-level Propagation
+                "template_type": agent_row['template_type'] if agent_row else "sales",
+                "wizard_overrides": wizard_overrides if agent_row else {}
             },
             "credentials": {"openai_api_key": openai_key or OPENAI_API_KEY, "tiendanube_store_id": tenant_row['tiendanube_store_id'], "tiendanube_access_token": tn_token or tenant_row.get('tiendanube_access_token'), "tiendanube_service_url": TIENDANUBE_SERVICE_URL}
         }

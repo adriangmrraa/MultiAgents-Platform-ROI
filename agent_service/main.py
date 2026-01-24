@@ -67,6 +67,7 @@ class AgentConfig(BaseModel):
     model: Optional[Dict[str, Any]] = None
     template_type: Optional[str] = "sales" # Nexus v5.27
     wizard_overrides: Optional[Dict[str, Any]] = {} # Nexus v5.27: Stores "tone", "business_rules", etc.
+    temperature: Optional[float] = None # Nexus v5.99: Dynamic creativity control
     shadow_rag_enabled: Optional[bool] = False # Nexus v5.34
 
 class AgentThinkRequest(BaseModel):
@@ -426,11 +427,22 @@ async def execute_agent(
     if model_name in ["o3-high", "gemini-3-deep-think"]:
         llm_timeout = 180 # Extended for Reasoning
         
+    # 4.1 Resolve Temperature (Nexus v5.99: Anti-Crash Logic)
+    target_temp = 0.0
+    if request.agent_config and request.agent_config.temperature is not None:
+        target_temp = request.agent_config.temperature
+
+    # Safety: Reasoning models do NOT support temp 0.
+    is_reasoning_model = any(keyword in model_name.lower() for keyword in ["o1-", "o3-"])
+    if is_reasoning_model:
+        logger.info("reasoning_model_detected_forcing_stable_temp", model=model_name)
+        target_temp = 1.0 # Compatible default for reasoning tokens
+        
     if provider == "google":
         llm = ChatGoogleGenerativeAI(
             model=model_name,
             google_api_key=resolved_api_key,
-            temperature=0,
+            temperature=target_temp,
             timeout=llm_timeout,
             streaming=True
         )
@@ -438,7 +450,7 @@ async def execute_agent(
         llm = ChatOpenAI(
             model=model_name,
             api_key=resolved_api_key,
-            temperature=0,
+            temperature=target_temp,
             timeout=llm_timeout,
             streaming=True
         )
