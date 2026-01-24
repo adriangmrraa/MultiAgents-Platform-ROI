@@ -1,4 +1,6 @@
-import React, { ReactNode } from 'react';
+import React, { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -10,7 +12,20 @@ interface ModalProps {
 }
 
 export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'lg' }) => {
-    if (!isOpen) return null;
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+        // Prevent background scrolling when modal is open
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        return () => { document.body.style.overflow = 'unset'; };
+    }, [isOpen]);
+
+    if (!isOpen || !mounted) return null;
 
     const sizeClasses = {
         md: 'max-w-md',
@@ -18,9 +33,9 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
         xl: 'max-w-4xl'
     };
 
-    return (
+    return createPortal(
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
             onClick={(e) => {
                 if (e.target === e.currentTarget) onClose();
             }}
@@ -42,6 +57,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
                     {children}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

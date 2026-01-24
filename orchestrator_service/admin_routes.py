@@ -4797,6 +4797,7 @@ async def get_integration_status(current_user: User = Depends(get_current_user))
     - WhatsApp: YCloud Key OR Meta Token (if WhatsApp Cloud)
     - Instagram/Facebook: Meta Token OR Chatwoot (Assume Chatwoot handles social)
     """
+    # Credential Check
     creds = await db.pool.fetch("""
         SELECT category, name FROM credentials 
         WHERE tenant_id = $1
@@ -4806,9 +4807,42 @@ async def get_integration_status(current_user: User = Depends(get_current_user))
         "whatsapp": False,
         "instagram": False, 
         "facebook": False,
-        "web": True # Web widget always available via script
+        "web": True 
     }
     
+    # Traffic Analysis: Granular "Proof of Life" per Channel
+    # We check if specific channels are active via Chatwoot
+    
+    chatwoot_fb = await db.pool.fetchval("""
+        SELECT EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'chatwoot' AND channel = 'facebook')
+    """, current_user.tenant_id)
+
+    chatwoot_ig = await db.pool.fetchval("""
+        SELECT EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'chatwoot' AND channel = 'instagram')
+    """, current_user.tenant_id)
+    
+    chatwoot_wa = await db.pool.fetchval("""
+        SELECT EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'chatwoot' AND channel = 'whatsapp')
+    """, current_user.tenant_id)
+
+    has_meta_traffic = await db.pool.fetchval("""
+        SELECT EXISTS(SELECT 1 FROM chat_conversations WHERE tenant_id = $1 AND provider = 'meta_direct')
+    """, current_user.tenant_id)
+    
+    # Apply Traffic Discovery
+    if chatwoot_fb: status['facebook'] = True
+    if chatwoot_ig: status['instagram'] = True
+    if chatwoot_wa: status['whatsapp'] = True
+    
+    # Generic Chatwoot also implies Web usually
+    if chatwoot_fb or chatwoot_ig or chatwoot_wa:
+        status['web'] = True
+
+    if has_meta_traffic:
+        status['instagram'] = True
+        status['facebook'] = True
+
+    # Apply Credential Discovery (Additive)
     for c in creds:
         cat = c['category'].lower()
         if cat == 'ycloud' or cat == 'whatsapp':
@@ -4816,12 +4850,19 @@ async def get_integration_status(current_user: User = Depends(get_current_user))
         if cat == 'meta':
             status['instagram'] = True
             status['facebook'] = True
-            status['whatsapp'] = True # Meta handles WhatsApp Cloud too
+            status['whatsapp'] = True 
         if cat == 'chatwoot':
-            # Chatwoot aggregator often implies social channels are ready
-            status['instagram'] = True
-            status['facebook'] = True
+            # Credential alone enables generic web/social possibility, 
+            # but usually we trust traffic more. However, we'll leave it additive to not block new setups.
             status['web'] = True
+            # We don't blind-enable FB/IG here if granular toggle is preferred, 
+            # but for safety/UX we can leave them off unless traffic exists OR explicitly mapped?
+            # User request: "Quizas alguien solo active facebook".
+            # If we enable ALL on 'chatwoot' credential, we violate that.
+            # So for Chatwoot Credential, we ONLY enable Web safely, OR requiring traffic for specific socials.
+            # Let's be strict: Chatwoot Credential = Web. 
+            # Socials = Require Traffic OR specific Meta/YCloud keys.
+            status['web'] = True 
 
     return status
 
