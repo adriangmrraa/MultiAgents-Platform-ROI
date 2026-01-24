@@ -4401,7 +4401,9 @@ async def simulate_agent(req: AgentSimulation):
         
         full_response = ""
         agent_url = os.getenv("AGENT_SERVICE_URL", "http://agent_service:8001")
-        secrets = {"X-Internal-Secret": os.getenv("INTERNAL_API_TOKEN")}
+        # Fix: Ensure headers are strings (httpx crashes on None)
+        internal_token = os.getenv("INTERNAL_API_TOKEN") or ""
+        secrets = {"X-Internal-Secret": internal_token}
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             async with client.stream("POST", f"{agent_url}/v1/agent/execute", json=agent_request, headers=secrets) as resp:
@@ -4421,8 +4423,10 @@ async def simulate_agent(req: AgentSimulation):
         return {"status": "success", "response": full_response}
 
     except Exception as e:
-        logger.error("simulation_failed", error=str(e))
+        # Fix: Logger syntax for standard logging
+        logger.error(f"simulation_failed: {e}")
         raise HTTPException(500, f"Simulation Error: {str(e)}")
+
 
 # --- Nexus v5.99: Tool Discovery ---
 
