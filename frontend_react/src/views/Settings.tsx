@@ -13,7 +13,120 @@ interface SettingsProps {
 export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' }) => {
     const { t, language, setLanguage } = useLanguage();
     const [activeTab, setActiveTab] = useState<'integrations' | 'ycloud' | 'meta' | 'web'>(initialTab);
-    // ...
+    const [copied, setCopied] = useState(false);
+    const { fetchApi } = useApi();
+    const [webhookConfig, setWebhookConfig] = useState<{ webhook_path: string, access_token: string, api_base?: string } | null>(null);
+    const [connections, setConnections] = useState<any>(null);
+
+    // Fetch Webhook Config & Connection Status
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const [webhookData, detailsData] = await Promise.all([
+                    fetchApi('/admin/integrations/chatwoot/config'),
+                    fetchApi(`/admin/tenants/${import.meta.env.VITE_DEFAULT_TENANT_ID || 1}/details`)
+                ]);
+                setWebhookConfig(webhookData);
+                setConnections(detailsData?.connections);
+            } catch (err) {
+                console.error("Settings data fetch error:", err);
+            }
+        };
+
+        if (activeTab === 'integrations' && (!webhookConfig || !connections)) {
+            loadData();
+        }
+    }, [activeTab, fetchApi, webhookConfig, connections]);
+
+    // Construct Webhook URL for Chatwoot
+    const getDisplayUrl = () => {
+        if (!webhookConfig) return t('common.loading');
+
+        if (webhookConfig.api_base) {
+            return `${webhookConfig.api_base}${webhookConfig.webhook_path}?access_token=${webhookConfig.access_token}`;
+        }
+
+        const envBase = import.meta.env.VITE_API_BASE_URL;
+        if (envBase) {
+            return `${envBase}${webhookConfig.webhook_path}?access_token=${webhookConfig.access_token}`;
+        }
+
+        return `${window.location.origin}/api${webhookConfig.webhook_path}?access_token=${webhookConfig.access_token}`;
+    };
+
+    const webhookUrl = getDisplayUrl();
+
+    const handleCopy = () => {
+        if (!webhookUrl || webhookUrl === t('common.loading')) return;
+        navigator.clipboard.writeText(webhookUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const connectTiendaNube = () => {
+        const width = 600;
+        const height = 700;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        const tenantId = import.meta.env.VITE_DEFAULT_TENANT_ID || 1;
+
+        // Tienda Nube Service URL (Sovereign Service)
+        // Default to Prod URL provided by user if Env Var is missing
+        let serviceUrl = import.meta.env.VITE_TIENDANUBE_SERVICE_URL || "https://multiagents-tiendanube-service.yn8wow.easypanel.host";
+
+        // Remove trailing slash if present to avoid double slashes
+        serviceUrl = serviceUrl.replace(/\/$/, '');
+
+        // Auth Path: /auth/login (Matching the /auth/callback structure)
+        const url = `${serviceUrl}/auth/login?tenant_id=${tenantId}`;
+
+        console.log("Launching Tienda Nube Auth:", url);
+        window.open(url, "TiendaNubeLogin", `width=${width},height=${height},top=${top},left=${left}`);
+
+        const handleMessage = (event: MessageEvent) => {
+            if (event.data?.type === 'TIENDANUBE_SUCCESS') {
+                console.log("Tienda Nube Connected!");
+                // Refresh connections data to show "Connected" status
+                window.location.reload();
+                window.removeEventListener('message', handleMessage);
+            }
+        };
+        window.addEventListener("message", handleMessage);
+    };
+
+    const [showManualTn, setShowManualTn] = useState(false);
+
+    const handleManualConnect = async () => {
+        const token = (document.getElementById('tn_manual_token') as HTMLInputElement).value;
+        const id = (document.getElementById('tn_manual_id') as HTMLInputElement).value;
+
+        if (!token || !id) return alert("Completa ambos campos");
+
+        try {
+            await fetchApi('/admin/credentials', {
+                method: 'POST',
+                body: {
+                    tenant_id: import.meta.env.VITE_DEFAULT_TENANT_ID || 1,
+                    category: 'tiendanube',
+                    name: 'TIENDANUBE_ACCESS_TOKEN',
+                    value: token
+                }
+            });
+            await fetchApi('/admin/credentials', {
+                method: 'POST',
+                body: {
+                    tenant_id: import.meta.env.VITE_DEFAULT_TENANT_ID || 1,
+                    category: 'tiendanube',
+                    name: 'TIENDANUBE_USER_ID',
+                    value: id
+                }
+            });
+            window.location.reload();
+        } catch (e) {
+            console.error(e);
+            alert("Error guardando credenciales");
+        }
+    };
 
     return (
         <div className="view active flex flex-col h-full">
@@ -68,8 +181,8 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
                                 </div>
                                 <p className="text-xs text-slate-400 mb-6">Chat flotante para tu sitio web.</p>
                                 <div className="flex items-center justify-between mt-auto">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-green-400">
-                                        Disponible
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${connections?.web_widget?.configured ? 'text-green-400' : 'text-slate-400'}`}>
+                                        {connections?.web_widget?.configured ? 'Activo' : 'Disponible'}
                                     </span>
                                     <button
                                         onClick={() => setActiveTab('web')}

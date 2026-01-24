@@ -2277,6 +2277,10 @@ async def get_tenant_details(id: int):
     tn_configured = tn_token_exists and tn_id_exists
         
     resp["connections"]["tiendanube"] = {"configured": tn_configured}
+
+    # Web Widget Status
+    has_web_config = any(c['category'] == 'web_widget' for c in resp["credentials"]["tenant_specific"])
+    resp["connections"]["web_widget"] = {"configured": has_web_config}
             
     return resp
 
