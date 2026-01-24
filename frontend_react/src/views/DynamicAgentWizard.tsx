@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react'; // Nexus v5.26 Fix
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
-import { Save, Info, Sparkles, ArrowRight, CheckCircle2, RotateCcw, ShieldCheck, AlertCircle, Store, LifeBuoy, Truck, Calendar, MessageSquare, Send, Bot, User, Trash2 } from 'lucide-react';
+import { Save, Info, Sparkles, ArrowRight, CheckCircle2, RotateCcw, ShieldCheck, AlertCircle, Store, LifeBuoy, Truck, Calendar, MessageSquare, Send, Bot, User, Trash2, Facebook, Globe } from 'lucide-react';
 
 interface FieldConfig {
     key: string;
@@ -251,20 +251,23 @@ export const DynamicAgentWizard = () => {
     const [availableModels, setAvailableModels] = useState<any[]>([]);
     const [selectedTools, setSelectedTools] = useState<string[]>(['search_specific_products', 'orders', 'derivhumano']); // Defaults
     const [selectedChannels, setSelectedChannels] = useState<string[]>(['whatsapp', 'web']); // Defaults
+    const [channelStatus, setChannelStatus] = useState<Record<string, boolean>>({ whatsapp: false, instagram: false, facebook: false, web: true });
 
     useEffect(() => {
-        // Load Templates & Tools
+        // Load Templates, Tools & Integration Status
         const initData = async () => {
             try {
-                const [tpls, tools, models] = await Promise.all([
+                const [tpls, tools, models, status] = await Promise.all([
                     fetchApi('/admin/agent-templates'),
                     fetchApi('/admin/tools'),
-                    fetchApi('/admin/models')
+                    fetchApi('/admin/models'),
+                    fetchApi('/admin/integrations/status')
                 ]);
 
                 setTemplates(tpls);
                 if (Array.isArray(tools)) setAvailableTools(tools);
                 if (Array.isArray(models)) setAvailableModels(models);
+                if (status) setChannelStatus(status);
             } catch (err) {
                 console.error("Failed to load init data", err);
             }
@@ -485,6 +488,54 @@ export const DynamicAgentWizard = () => {
     };
 
 
+
+    // --- Nexus v5.99: Channel Selection Utility ---
+    const ChannelSelector = () => {
+        const channels = [
+            { id: 'whatsapp', label: 'WhatsApp', icon: <MessageSquare size={16} /> },
+            { id: 'instagram', label: 'Instagram', icon: <Info size={16} /> },
+            { id: 'facebook', label: 'Facebook', icon: <Facebook size={16} /> },
+            { id: 'web', label: 'Web Widget', icon: <Globe size={16} /> }
+        ];
+
+        const toggleChannel = (id: string) => {
+            if (!channelStatus[id]) return; // Block if not connected
+            setSelectedChannels(prev =>
+                prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+            );
+        };
+
+        return (
+            <div className="glass p-6 rounded-2xl border border-white/5 mb-6">
+                <h3 className="text-sm font-bold text-white mb-4">¿Dónde trabajará este agente?</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {channels.map((ch) => {
+                        const isConnected = channelStatus[ch.id];
+                        const isActive = selectedChannels.includes(ch.id);
+
+                        return (
+                            <button
+                                key={ch.id}
+                                type="button"
+                                onClick={() => toggleChannel(ch.id)}
+                                className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all
+                                    ${isConnected
+                                        ? isActive ? 'bg-accent/20 border-accent text-white' : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'
+                                        : 'bg-black/40 border-white/5 text-gray-500 cursor-not-allowed opacity-50'}
+                                `}
+                            >
+                                <div className={`p-2 rounded-lg ${isActive ? 'bg-accent text-white' : 'bg-white/10'}`}>
+                                    {ch.icon}
+                                </div>
+                                <span className="text-[10px] font-bold uppercase">{ch.label}</span>
+                                {!isConnected && <span className="text-[9px] text-red-400 font-medium">Desconectado</span>}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
 
     // --- Nexus v5.99: Tool Selection Utility ---
     const ToolSelector = () => {
@@ -779,6 +830,9 @@ export const DynamicAgentWizard = () => {
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-8">
+                        {/* Nexus v5.99: Channel Selection */}
+                        <ChannelSelector />
+
                         {/* Nexus v5.99: Tool Selection */}
                         <ToolSelector />
 
