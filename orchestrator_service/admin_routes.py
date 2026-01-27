@@ -2507,38 +2507,44 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
     conv_data = await db.pool.fetchrow("SELECT provider, meta, external_chatwoot_id, external_account_id FROM chat_conversations WHERE id = $1", conv_id)
     
     db_provider = conv_data['provider'] if conv_data else None
+    cw_id = conv_data['external_chatwoot_id'] if conv_data else None
     
-    # Priority Resolution (v6.1 Sovereign Architecture)
-    if db_provider:
-        provider = db_provider
-    elif conv_data and conv_data['external_chatwoot_id']:
+    # Priority Resolution (v6.2.2 Sovereign Architecture)
+    if cw_id:
         # If we have a Chatwoot ID, we MUST stay in Chatwoot for continuity
         provider = 'chatwoot'
+    elif db_provider:
+        provider = db_provider
     elif channel in ['instagram', 'facebook']:
-        # If social, prioritize Meta Direct if configured, else fallback to CW
-        has_meta = await db.pool.fetchval("SELECT 1 FROM credentials WHERE tenant_id = $1 AND (name = 'meta_page_token' OR name = 'WHATSAPP_ACCESS_TOKEN')", tenant_id)
-        if has_meta:
-             provider = 'meta_direct'
-        elif conv_data and conv_data['external_chatwoot_id']:
-             provider = 'chatwoot'
+        # Only use meta_direct if explicitly configured and NOT in chatwoot
+        has_meta_direct = await db.pool.fetchval("SELECT 1 FROM credentials WHERE tenant_id = $1 AND name = 'meta_page_token'", tenant_id)
+        if has_meta_direct:
+            provider = 'meta_direct'
         else:
-             provider = 'meta_direct' # Default for social
-    elif conv_data and conv_data['external_chatwoot_id']:
-        provider = 'chatwoot'
+            # Check if there is ANY chatwoot connection for the tenant
+            has_cw = await db.pool.fetchval("SELECT 1 FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_API_TOKEN'", tenant_id)
+            provider = 'chatwoot' if has_cw else 'ycloud' # Default fallback
     else:
         provider = 'ycloud'
 
-    logger.info("routing_message", provider=provider, channel=channel, tenant_id=tenant_id)
+    logger.info("📤 DELIVERY: Routing message", 
+                provider=provider, 
+                channel=channel, 
+                tenant_id=tenant_id, 
+                conv_id=conv_id,
+                phone=phone)
 
     # 2. Decision Matrix
     if provider == 'meta_direct':
         meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
+        logger.info(f"📤 DELIVERY: Using Meta Direct | url={meta_service_url}")
         async with httpx.AsyncClient() as client:
             if channel == 'whatsapp':
                 phone_id_row = await db.pool.fetchrow("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'WHATSAPP_PHONE_NUMBER_ID'", tenant_id)
                 token_row = await db.pool.fetchrow("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'WHATSAPP_ACCESS_TOKEN'", tenant_id)
                 
                 if not phone_id_row or not token_row:
+                    logger.error("❌ DELIVERY: Meta WhatsApp Credentials Missing")
                     raise HTTPException(500, "Meta WhatsApp Credentials Missing")
                 
                 res = await client.post(f"{meta_service_url}/whatsapp/send", json={
@@ -2548,20 +2554,24 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
             else:
                 token_row = await db.pool.fetchrow("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'meta_page_token'", tenant_id)
                 if not token_row:
+                    logger.error("❌ DELIVERY: Meta Page Token Missing")
                     raise HTTPException(500, "Meta Page Token Missing")
                 
                 res = await client.post(f"{meta_service_url}/messages/send", json={
                     "recipient_id": phone, "text": text, "access_token": token_row['value']
                 }, timeout=10.0)
             
+            logger.info(f"📡 DELIVERY: Meta Service response | status={res.status_code}")
             if res.status_code not in [200, 201]:
-                logger.error(f"Meta Service Error {res.status_code}: {res.text}")
+                logger.error(f"❌ DELIVERY: Meta Service Error {res.status_code}: {res.text}")
                 raise HTTPException(res.status_code, f"Meta Service Error: {res.text}")
 
     elif provider == 'chatwoot':
         cw_conversation_id = payload_data.get("external_chatwoot_id") or (conv_data['external_chatwoot_id'] if conv_data else None)
         cw_account_id = payload_data.get("external_account_id") or (conv_data['external_account_id'] if conv_data else None)
         
+        logger.info(f"📤 DELIVERY: Using Chatwoot | conv_id={cw_conversation_id} | account_id={cw_account_id}")
+
         if not cw_conversation_id and conv_data and conv_data['meta']:
             try:
                 meta_json = json.loads(conv_data["meta"])
@@ -2570,6 +2580,7 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
             except: pass
 
         if not cw_conversation_id:
+            logger.error("❌ DELIVERY: Missing Chatwoot Conversation ID")
             raise HTTPException(400, "Missing Chatwoot Conversation ID")
 
         # Protocol Omega: Prioritize Database Credentials (v6.2 - Strict Decryption)
@@ -2599,7 +2610,6 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
             cw_token = os.getenv("CHATWOOT_API_TOKEN") or os.getenv("CHATWOOT_BOT_TOKEN")
 
         # 3. Account ID Resolution (Payload > DB > Env)
-        cw_account_id = payload_data.get("external_account_id") or (conv_data['external_account_id'] if conv_data else None)
         if not cw_account_id:
             cw_acc_enc = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_ACCOUNT_ID'", tenant_id)
             if not cw_acc_enc:
@@ -2609,6 +2619,8 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                 cw_account_id = decrypt_password(cw_acc_enc)
             else:
                 cw_account_id = os.getenv("CHATWOOT_ACCOUNT_ID", "1")
+
+        logger.info(f"📡 DELIVERY: Chatwoot Attempt | url={cw_url} | account={cw_account_id} | token_found={bool(cw_token)}")
 
         async with httpx.AsyncClient() as client:
             cw_msg_url = f"{cw_url}/api/v1/accounts/{cw_account_id}/conversations/{cw_conversation_id}/messages"
@@ -2620,13 +2632,15 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                 headers={"api_access_token": cw_token},
                 timeout=10.0
             )
+            logger.info(f"📡 DELIVERY: Chatwoot response | status={res.status_code}")
             if res.status_code not in [200, 201]:
-                logger.error(f"Chatwoot Error {res.status_code}: {res.text} | URL: {cw_msg_url}")
+                logger.error(f"❌ DELIVERY: Chatwoot Error {res.status_code}: {res.text}")
                 raise HTTPException(res.status_code, f"Chatwoot Error: {res.text}")
 
     else:
         # Default: YCloud / Legacy WhatsApp Service
         wa_url = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp_service:8002")
+        logger.info(f"📤 DELIVERY: Using YCloud Relay | url={wa_url}")
         async with httpx.AsyncClient() as client:
             res = await client.post(f"{wa_url}/messages/send", json={"to": phone, "text": text}, headers={
                 "X-Internal-Token": os.getenv("INTERNAL_API_TOKEN", "internal-secret"),

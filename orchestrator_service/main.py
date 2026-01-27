@@ -2121,26 +2121,38 @@ def extract_response_from_agent_output(agent_output: str) -> str:
 async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_source):
     buffer_key = f"buffer:{from_num}"
     pending_key = f"pending:{from_num}"
+    lock_key = f"active_task:{from_num}"
     
-    logger.info(f"⏳ BUFFER: Waiting for debounce | identifier={from_num} | wait_time=2s")
-    await asyncio.sleep(2)
+    logger.info(f"⏳ BUFFER: Starting process_buffer_task loop | identifier={from_num}")
     
     try:
-        messages_raw = await redis_client.lrange(buffer_key, 0, -1)
-        await redis_client.delete(buffer_key)
-        await redis_client.delete(pending_key)
-        
-        if not messages_raw: 
-            logger.info(f"📭 BUFFER: Empty buffer | identifier={from_num}")
-            return
-        
-        combined_text = "\n".join([m.decode('utf-8') for m in messages_raw])
-        logger.info(f"📥 BUFFER: Consuming messages | identifier={from_num} | message_count={len(messages_raw)} | combined_length={len(combined_text)}")
-        
-        async for _ in execute_agent_v3_logic(from_num, t_id, c_id, corr_id, combined_text, customer_name, ch_source):
-            pass # Sink to trigger background delivery
+        # Loop until buffer is empty
+        while True:
+            # Debounce: wait a bit for more messages to group
+            await asyncio.sleep(2)
+            
+            messages_raw = await redis_client.lrange(buffer_key, 0, -1)
+            if not messages_raw:
+                logger.info(f"📭 BUFFER: No more messages | identifier={from_num} | releasing_lock")
+                break
+                
+            # Consume the messages we just read
+            await redis_client.delete(buffer_key)
+            await redis_client.delete(pending_key)
+            
+            combined_text = "\n".join([m.decode('utf-8') for m in messages_raw])
+            logger.info(f"📥 BUFFER: Consuming batch | identifier={from_num} | count={len(messages_raw)} | text_length={len(combined_text)}")
+            
+            # Execute agent (Synchronous sink to ensure one task at a time per user)
+            async for _ in execute_agent_v3_logic(from_num, t_id, c_id, corr_id, combined_text, customer_name, ch_source):
+                pass 
+                
     except Exception as e:
-        logger.error("buffer_processing_failed", error=str(e))
+        logger.error("buffer_processing_failed", error=str(e), identifier=from_num)
+    finally:
+        # Always release the lock
+        await redis_client.delete(lock_key)
+        logger.info(f"🔓 LOCK: Released | identifier={from_num}")
 
 async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id, content, customer_name, channel_source='whatsapp'):
     """
