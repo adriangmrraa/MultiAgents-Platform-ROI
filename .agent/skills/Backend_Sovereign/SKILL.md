@@ -32,6 +32,10 @@ api_key = await get_tenant_credential(
 - `smtp`: Email delivery (Modo Agente)
 - `tiendanube`: E-commerce tokens
 - `whatsapp_cloud`: Meta Business API
+- `chatwoot`: Chatwoot API (v6.1 uses both CHATWOOT_API_TOKEN and CHATWOOT_BOT_TOKEN)
+
+### 2b. Omnichannel Identity (v6.1 Patch)
+Al procesar mensajes de Chatwoot, **SIEMPRE** persistir `external_chatwoot_id` y `external_account_id` en la tabla `chat_conversations`. Esto es crítico para que `unified_message_delivery` pueda responder correctamente.
 
 ## 2. Tenant Resolution Protocol (Critical)
 

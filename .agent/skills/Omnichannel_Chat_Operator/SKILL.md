@@ -135,6 +135,7 @@ async def send_message(
             
     elif provider == 'chatwoot':
          # Chatwoot Gateway (All Channels)
+         # v6.1: Almacena external_chatwoot_id y external_account_id para re-uso
          await chatwoot_client.send_message(payload)
          
     else:
@@ -190,6 +191,9 @@ async def set_human_override(
     # hasta que is_locked = false
     
     return {"locked": payload.locked}
+
+### Detección Automática de Ecos (Chatwoot Dash)
+Si un humano responde directamente desde la interfaz de Chatwoot, el `whatsapp_service` captura el evento `message_created` (outgoing) y lo marca como `is_echo = True`. Al llegar al Orchestrator, este activa el bloqueo de IA automáticamente para ese chat.
 ```
 
 ## 5. Templates HSM (Meta 24h Window)

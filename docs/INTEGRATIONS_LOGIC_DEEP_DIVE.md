@@ -35,6 +35,11 @@ Nexus v6.0 implementa un enrutador inteligente en el Orchestrator (`admin_routes
 | **FB / IG** | Meta Direct | `meta_service` | `POST /messages/send` |
 | **FB / IG** | Chatwoot | *Directo via Orchestrator* | `/conversations/...` |
 
+### 🛠️ Mejoras v6.1 (Sovereign Patch)
+- **Persistencia de Identidad**: El Orchestrator ahora almacena `external_chatwoot_id` y `external_account_id` en la tabla `chat_conversations`. Esto garantiza que las respuestas manuales lleguen al chat correcto sin fallos de "ID no encontrado".
+- **Alineación de Tokens**: Se reconoce tanto `CHATWOOT_API_TOKEN` como `CHATWOOT_BOT_TOKEN` en las variables de entorno del Orchestrator para máxima compatibilidad.
+- **Detección de Intervención**: Al responder desde Chatwoot, el sistema detecta el "Echo" y activa el `human_override` automáticamente por 24 horas, bloqueando la IA para evitar respuestas duplicadas.
+
 > [!IMPORTANT]
 > A partir de v6.1, **`whatsapp_service` es exclusivamente un Gateway para YCloud**. Toda la lógica de ruteo redundante para IG/FB ha sido delegada al Orchestrator para evitar discrepancias de configuración. "La Inteligencia reside en el Orchestrator, la Conexión en los Gateways".
 

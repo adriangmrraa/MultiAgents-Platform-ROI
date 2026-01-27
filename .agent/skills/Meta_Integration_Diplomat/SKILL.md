@@ -165,25 +165,15 @@ async def connect_meta(
 ```
 
 
-### Endpoint de Envío WhatsApp (Cloud API)
-```python
-# meta_service/main.py
-
-@app.post("/whatsapp/send")
-async def send_whatsapp_message_proxy(data: dict):
-    """
-    Proxy directo a WhatsApp Cloud API.
-    Difiere de Graph API (FB/IG) en estructura de payload.
-    """
-    url = f"https://graph.facebook.com/v19.0/{phone_number_id}/messages"
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": recipient_id,
-        "type": "text",
-        "text": {"body": text}
-    }
     # ...
-```
+
+### 🛠️ Omnichannel Routing v6.1 (Triangular)
+A partir de v6.1, el Orchestrator centraliza el ruteo. 
+- **Meta Direct**: Prioridad si hay tokens de Meta.
+- **Chatwoot**: Gateway secundario para FB/IG si IDs están presentes.
+- **YCloud**: Gateway exclusivo para WhatsApp.
+
+Toda comunicación hacia FB/IG/WA debe pasar por `unified_message_delivery` en el Orchestrator.
 
 ## 5. Meta Service: Token Exchange & Discovery
 

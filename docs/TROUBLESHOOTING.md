@@ -84,16 +84,14 @@ Este documento recopila los errores más comunes encontrados durante el desplieg
 ## 8. Errores de Simulación y Modelos (v6.0)
 
 ### Error: `TypeError: Header value must be str or bytes, not NoneType`
-*   **Causa**: Intentar simular un agente o enviar un mensaje sin tener la API Key del proveedor (OpenAI/Google) configurada en la bóveda de credenciales del tenant (valor `None`).
+*   **Causa**: Intentar enviar un mensaje vía Chatwoot sin el token configurado (`None`).
 *   **Solución**: 
-    1. Asegúrate de que el inquilino tenga una clave válida en `Credentials`.
-    2. El sistema v6.0 ahora incluye un filtro de headers nulos, pero la falta de la llave impedirá la respuesta de la IA.
+    1. Asegúrate de que el inquilino tenga la credencial `CHATWOOT_API_TOKEN` en la bóveda, o que el servicio tenga `CHATWOOT_BOT_TOKEN` en el `.env`.
+    2. El sistema v6.1 ahora incluye un fallback a string vacío para evitar este crash, pero el mensaje no se enviará sin un token válido.
 
-### Error: `Model not found (gpt-5-mini)` o similar
-*   **Causa**: El `ModelRegistry` no está actualizado a los estándares de Enero 2026 o hay un error de tipeo en el campo `model_version`.
-*   **Solución**: 
-    1. Verifica que el modelo exista en `app/core/models.py`.
-    2. Reinicia el orquestador para recargar el registro oficial.
+### Error: `Model not found (gpt-4o-mini)` o similar
+*   **Causa**: El `ModelRegistry` no está actualizado o hay un error de tipeo en el campo `model_version`.
+*   **Solución**: Verifica que el modelo exista en `app/core/models.py`. Si usas `gpt-4o-mini` (Estándar v6.1), asegúrate de que el tenant tenga acceso a dicho modelo.
 
 ## 9. Errores de Integración Multicanal
 
@@ -102,7 +100,14 @@ Este documento recopila los errores más comunes encontrados durante el desplieg
 *   **Solución**: Actualizar `meta_service` a la última versión que incluye el proxy dedicado a WhatsApp Cloud API.
 
 ### Error: `Missing Chatwoot Conversation ID`
-*   **Causa**: La base de datos no tiene el `external_chatwoot_id` en la columna dedicada (o en `meta` JSON legacy).
+*   **Causa**: La base de datos no tiene el `external_chatwoot_id` vinculado.
 *   **Diagnóstico**: El sistema intenta responder via Chatwoot pero no sabe a qué conversación apuntar.
-*   **Solución**: Verificar que el webhook de Chatwoot (`/webhooks/chatwoot`) esté recibiendo eventos y guardando correctamente el ID al crear la conversación.
+*   **Solución**: 
+    1. Verifica que la tabla `chat_conversations` tenga poblada la columna `external_chatwoot_id` y `external_account_id`.
+    2. A partir de v6.1, el Orchestrator auto-descubre y persiste estos IDs desde el primer mensaje entrante. Si el chat es legacy, intenta enviar un mensaje desde el panel de Chatwoot para sincronizar la identidad.
+
+## 10. Errores de Sincronización Humana
+*   **Síntoma**: El bot responde aunque yo esté hablando por Chatwoot.
+*   **Causa**: El "Eco" del mensaje humano no está llegando al Orchestrator.
+*   **Solución**: Verifica que el `whatsapp_service` (o el gateway correspondiente) tenga acceso al Orchestrator y esté configurado para reenviar eventos `outgoing`. Revisa que `is_echo` se marque como `True` en los logs del Orchestrator.
 

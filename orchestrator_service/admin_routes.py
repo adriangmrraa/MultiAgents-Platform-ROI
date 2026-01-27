@@ -2309,7 +2309,7 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
     # Priority Resolution (v6.1 Sovereign Architecture)
     if db_provider:
         provider = db_provider
-    elif conv_data and conv_data.get('external_chatwoot_id'):
+    elif conv_data and conv_data['external_chatwoot_id']:
         # If we have a Chatwoot ID, we MUST stay in Chatwoot for continuity
         provider = 'chatwoot'
     elif channel in ['instagram', 'facebook']:
@@ -2317,11 +2317,11 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
         has_meta = await db.pool.fetchval("SELECT 1 FROM credentials WHERE tenant_id = $1 AND (name = 'meta_page_token' OR name = 'WHATSAPP_ACCESS_TOKEN')", tenant_id)
         if has_meta:
              provider = 'meta_direct'
-        elif conv_data and conv_data.get('external_chatwoot_id'):
+        elif conv_data and conv_data['external_chatwoot_id']:
              provider = 'chatwoot'
         else:
              provider = 'meta_direct' # Default for social
-    elif conv_data and conv_data.get('external_chatwoot_id'):
+    elif conv_data and conv_data['external_chatwoot_id']:
         provider = 'chatwoot'
     else:
         provider = 'ycloud'
@@ -2357,10 +2357,10 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                 raise HTTPException(res.status_code, f"Meta Service Error: {res.text}")
 
     elif provider == 'chatwoot':
-        cw_conversation_id = payload_data.get("external_chatwoot_id") or (conv_data.get("external_chatwoot_id") if conv_data else None)
-        cw_account_id = payload_data.get("external_account_id")
+        cw_conversation_id = payload_data.get("external_chatwoot_id") or (conv_data['external_chatwoot_id'] if conv_data else None)
+        cw_account_id = payload_data.get("external_account_id") or (conv_data['external_account_id'] if conv_data else None)
         
-        if not cw_conversation_id and conv_data and conv_data.get("meta"):
+        if not cw_conversation_id and conv_data and conv_data['meta']:
             try:
                 meta_json = json.loads(conv_data["meta"])
                 cw_conversation_id = meta_json.get("chatwoot_conversation_id")
@@ -2394,7 +2394,7 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
 
         if not cw_account_id:
             # Try conv_data first (selected above)
-            cw_account_id = conv_data.get("external_account_id") if conv_data else None
+            cw_account_id = conv_data['external_account_id'] if conv_data else None
             
             if not cw_account_id:
                 cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_ACCOUNT_ID'", tenant_id)
@@ -2402,14 +2402,17 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                      cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_ACCOUNT_ID' LIMIT 1") or "1"
 
         async with httpx.AsyncClient() as client:
+            cw_msg_url = f"{cw_url}/api/v1/accounts/{cw_account_id}/conversations/{cw_conversation_id}/messages"
+            logger.info("chatwoot_delivery_attempt", url=cw_msg_url, account_id=cw_account_id, conv_id=cw_conversation_id)
+            
             res = await client.post(
-                f"{cw_url}/api/v1/accounts/{cw_account_id}/conversations/{cw_conversation_id}/messages",
+                cw_msg_url,
                 json={"content": text, "message_type": "outgoing"},
                 headers={"api_access_token": cw_token},
                 timeout=10.0
             )
             if res.status_code not in [200, 201]:
-                logger.error(f"Chatwoot Error {res.status_code}: {res.text}")
+                logger.error(f"Chatwoot Error {res.status_code}: {res.text}", url=cw_msg_url)
                 raise HTTPException(res.status_code, f"Chatwoot Error: {res.text}")
 
     else:
@@ -2491,16 +2494,8 @@ async def admin_send_message(request: Request):
     if not phone or not text:
          raise HTTPException(400, "Phone and message required (Could not resolve user from conversation)")
 
-    # 2. Persist in DB as 'human_supervisor'
-    await db.pool.execute(
-        """
-        INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number, channel_source)
-    VALUES ($1, $2, $3, 'human_supervisor', $4, $5, NOW(), $6, $7)
-        """,
-        str(uuid.uuid4()), tenant_id, conv_id, text, correlation_id, phone, channel
-    )
-
     # 3. Routing Logic: Unified (Triangular) Delivery
+    # Protocol Omega: Deliver FIRST, Persist SECOND to prevent duplicates on error/retry
     await unified_message_delivery(
         tenant_id=tenant_id,
         conv_id=conv_id,
@@ -2509,6 +2504,16 @@ async def admin_send_message(request: Request):
         channel=channel,
         correlation_id=correlation_id,
         payload_data=data
+    )
+
+    # 4. Final Persistence in DB as 'human_supervisor'
+    # Only reachable if delivery succeeded (no HTTPException raised above)
+    await db.pool.execute(
+        """
+        INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number, channel_source)
+        VALUES ($1, $2, $3, 'human_supervisor', $4, $5, NOW(), $6, $7)
+        """,
+        str(uuid.uuid4()), tenant_id, conv_id, text, correlation_id, phone, channel
     )
 
     return {"status": "sent", "correlation_id": correlation_id}
