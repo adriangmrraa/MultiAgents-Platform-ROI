@@ -170,11 +170,23 @@ Disparador manual para el bootstrapper de Supabase/pgvector.
 API de alta seguridad para que los microservicios obtengan credenciales desencriptadas.
 *   **Auth**: Requiere header `X-Internal-Token`.
 *   **Query Params**: `tenant_id` (opcional) para scope de inquilino.
-*   **Respuesta**:
+
+### 📡 Universal Delivery Relay
+`POST /messages/relay` (Servicio: `whatsapp_service`)
+
+Punto de salida centralizado para toda la mensajería multi-canal.
+*   **Propósito**: Unifica la entrega, aplica **Spacing (4s)** y gestiona el enrutamiento dinámico (Meta, Chatwoot, YCloud).
+*   **Payload**:
     ```json
     {
-      "name": "OPENAI_API_KEY",
-      "value": "sk-proj-..."
+      "to": "ID_DESTINO",
+      "text": "Contenido del mensaje",
+      "provider": "ycloud | meta_direct | chatwoot",
+      "channel_source": "whatsapp | instagram | facebook",
+      "tenant_id": 123,
+      "conversation_id": "uuid",
+      "external_chatwoot_id": 456,
+      "external_account_id": 1
     }
     ```
 

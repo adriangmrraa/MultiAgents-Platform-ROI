@@ -13,35 +13,27 @@ La integración con Meta no es un simple OAuth. Es un proceso de **Vinculación 
 2.  **Login Flow (Popup)**: Manejo de la ventana emergente de permisos.
 3.  **Discovery Wizard**: Interfaz post-login que permite elegir qué activos conectar.
 
-## 1A. Multi-Provider Routing (Triángulo de Comunicación)
+## 1A. Universal Delivery Relay (v6.2.9 Architecture)
 
-Nexus v6.0 implementa un enrutador inteligente en el Orchestrator (`admin_routes.py`) que arbitra entre tres proveedores posibles para el canal WhatsApp, y dos para FB/IG.
+Nexus v6.2.9 evoluciona la entrega de mensajes. Ya no se trata de ruteo disperso; ahora toda la comunicación de salida fluye a través de un **Relay Gateway Centralizada** (`whatsapp_service`).
 
-### Estrategia de Ruteo
-1.  **Meta Direct (Prioridad 1)**: Si el tenant tiene configurado `provider='meta_direct'` (u obtienen token via Diplomat).
-    *   **FB/IG**: Usa Graph API (`/messages/send`) via `meta_service`.
-    *   **WhatsApp**: Usa Cloud API (`/whatsapp/send`) via `meta_service`. *Requiere `WHATSAPP_PHONE_NUMBER_ID`*.
-2.  **Chatwoot (Prioridad 2)**: Si el `channel_source` es social y no hay Meta Direct, o si explícitamente se usa `provider='chatwoot'`.
-    *   Usa la API de Chatwoot (`/conversations/{id}/messages`) via `ChatwootClient`.
-3.  **YCloud (Prioridad 3 - Default para WA)**:
-    *   Usa la API de YCloud via `whatsapp_service` (Gateway dedicado).
+### Estrategia de Entrega Única
+1.  **Orquestador as Client**: El orquestador decide *qué* decir y delega el *cómo* al Relay.
+2.  **Relay Gateway Intelligence**:
+    *   **Spacing (4s)**: El relay aplica un retraso humano entre burbujas para evitar bans de Meta.
+    *   **Dynamic Auth**: Consulta las credenciales des-encriptadas al Orquestador según el `tenant_id`.
+    *   **Protocol Neutral**: Maneja Graph API (FB/IG/WA), YCloud y Chatwoot de forma transparente.
 
-### Tabla de Decisiones (v6.1)
-| Canal | Proveedor Preferido | Microservicio Gateway | Endpoint |
+### Tabla de Decisiones (v6.2.9)
+| Canal | Proveedor | Gateway de Entrega | Lógica Especial |
 | :--- | :--- | :--- | :--- |
-| **WhatsApp** | Meta Direct | `meta_service` | `POST /whatsapp/send` |
-| **WhatsApp** | YCloud | `whatsapp_service` | `POST /messages/send` |
-| **WhatsApp** | Chatwoot | *Directo via Orchestrator* | `/conversations/...` |
-| **FB / IG** | Meta Direct | `meta_service` | `POST /messages/send` |
-| **FB / IG** | Chatwoot | *Directo via Orchestrator* | `/conversations/...` |
-
-### 🛠️ Mejoras v6.1 (Sovereign Patch)
-- **Persistencia de Identidad**: El Orchestrator ahora almacena `external_chatwoot_id` y `external_account_id` en la tabla `chat_conversations`. Esto garantiza que las respuestas manuales lleguen al chat correcto sin fallos de "ID no encontrado".
-- **Alineación de Tokens**: Se reconoce tanto `CHATWOOT_API_TOKEN` como `CHATWOOT_BOT_TOKEN` en las variables de entorno del Orchestrator para máxima compatibilidad.
-- **Detección de Intervención**: Al responder desde Chatwoot, el sistema detecta el "Echo" y activa el `human_override` automáticamente por 24 horas, bloqueando la IA para evitar respuestas duplicadas.
+| **WhatsApp** | Meta Direct | `whatsapp_service` (Relay) | Graph API + Multi-Tenant IDs |
+| **WhatsApp** | YCloud | `whatsapp_service` (Relay) | YCloud Client + Spacing |
+| **FB / IG** | Meta Direct | `whatsapp_service` (Relay) | Graph API + Spacing 4s |
+| **Cualquiera** | Chatwoot | `whatsapp_service` (Relay) | Chatwoot API Relay |
 
 > [!IMPORTANT]
-> A partir de v6.1, **`whatsapp_service` es exclusivamente un Gateway para YCloud**. Toda la lógica de ruteo redundante para IG/FB ha sido delegada al Orchestrator para evitar discrepancias de configuración. "La Inteligencia reside en el Orchestrator, la Conexión en los Gateways".
+> A partir de v6.2.9, **`whatsapp_service` NO es solo para WhatsApp**. Es el **Universal Relay Gateway**. La "Inteligencia de Envío" (spacing, re-intentos por canal) reside en este gateway, permitiendo que el Orquestador se enfoque 100% en el razonamiento de la IA.
 
 ---
 

@@ -2511,6 +2511,11 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
     cw_id = payload_data.get("external_chatwoot_id") or (conv_data['external_chatwoot_id'] if conv_data else None)
     cw_acc = payload_data.get("external_account_id") or (conv_data['external_account_id'] if conv_data else None)
     
+    # Emergency Fallback (v6.2.10): If account_id is missing, try global credential
+    if not cw_acc and cw_id:
+        cw_acc = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_ACCOUNT_ID'", tenant_id)
+        logger.info(f"🔄 RELAY: Account ID fallback | acc={cw_acc} | tenant={tenant_id}")
+    
     provider = 'ycloud'
     if cw_id:
         provider = 'chatwoot'

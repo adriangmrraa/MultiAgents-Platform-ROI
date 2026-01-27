@@ -57,6 +57,36 @@ async def get_config(name: str, default: str = None, tenant_id: int = None) -> s
         
     return default
 
+def smart_split(text: str, max_chars: int = 400) -> List[str]:
+    """
+    Emergency Auto-Splitter (Nexus v6.2.10).
+    Splits long messages by double newlines or character limits.
+    """
+    if not text: return []
+    if len(text) <= max_chars and "\n\n" not in text:
+        return [text]
+    
+    # 1. Split by double newlines first (Natural breaks)
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    
+    refined_parts = []
+    for p in paragraphs:
+        if len(p) <= max_chars:
+            refined_parts.append(p)
+        else:
+            # 2. Hard split by max_chars if a paragraph is still too long
+            # (Keeping it simple: split by words/sentences if possible? For now, slice)
+            while len(p) > max_chars:
+                cut_idx = p.rfind('. ', 0, max_chars)
+                if cut_idx == -1: cut_idx = p.rfind(' ', 0, max_chars)
+                if cut_idx == -1: cut_idx = max_chars
+                
+                refined_parts.append(p[:cut_idx+1].strip())
+                p = p[cut_idx+1:].strip()
+            if p: refined_parts.append(p)
+            
+    return refined_parts
+
 # Initialize startup values (can be overridden later)
 YCLOUD_API_KEY = os.getenv("YCLOUD_API_KEY")
 YCLOUD_WEBHOOK_SECRET = os.getenv("YCLOUD_WEBHOOK_SECRET")
@@ -561,66 +591,83 @@ async def relay_message(msg: RelayMessage, request: Request):
     correlation_id = request.headers.get("X-Correlation-Id") or str(uuid.uuid4())
     logger.info("📡 RELAY: Received message", provider=msg.provider, channel=msg.channel_source, to=msg.to)
 
+    # Emergency Auto-Splitter (v6.2.10)
+    # If the message is a wall of text, fragment it.
+    parts = smart_split(msg.text)
+    logger.info("📦 RELAY: Message analyzed", bubbles=len(parts), original_length=len(msg.text))
+
     try:
-        if msg.provider == 'meta_direct':
-            # 1. Fetch Page Token / Phone ID from Orchestrator (Credential Architecture v2)
-            meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
-            
-            async with httpx.AsyncClient() as client:
-                if msg.channel_source == 'whatsapp':
-                    phone_id = await get_config("WHATSAPP_PHONE_NUMBER_ID", tenant_id=msg.tenant_id)
-                    token_wa = await get_config("WHATSAPP_ACCESS_TOKEN", tenant_id=msg.tenant_id)
-                    
-                    if not phone_id or not token_wa:
-                        raise Exception("Meta WhatsApp Credentials Missing")
-                    
-                    res = await client.post(f"{meta_service_url}/whatsapp/send", json={
-                        "recipient_id": msg.to, "text": msg.text, 
-                        "access_token": token_wa, "phone_number_id": phone_id
-                    }, timeout=10.0)
-                else:
-                    page_token = await get_config("meta_page_token", tenant_id=msg.tenant_id)
-                    if not page_token:
-                        raise Exception("Meta Page Token Missing")
-                    
-                    res = await client.post(f"{meta_service_url}/messages/send", json={
-                        "recipient_id": msg.to, "text": msg.text, "access_token": page_token
-                    }, timeout=10.0)
+        for idx, text_part in enumerate(parts):
+            # Spacing between auto-bubbles (Standard 4s)
+            if idx > 0:
+                logger.info("⏳ SPACING: Multi-bubble delay | bubbles_sent={}/{}".format(idx, len(parts)))
+                await asyncio.sleep(4)
+
+            if msg.provider == 'meta_direct':
+                # 1. Fetch Page Token / Phone ID from Orchestrator (Credential Architecture v2)
+                meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
                 
-                if res.status_code not in [200, 201]:
-                    raise Exception(f"Meta Service Error: {res.text}")
+                async with httpx.AsyncClient() as client:
+                    if msg.channel_source == 'whatsapp':
+                        phone_id = await get_config("WHATSAPP_PHONE_NUMBER_ID", tenant_id=msg.tenant_id)
+                        token_wa = await get_config("WHATSAPP_ACCESS_TOKEN", tenant_id=msg.tenant_id)
+                        
+                        if not phone_id or not token_wa:
+                            raise Exception("Meta WhatsApp Credentials Missing")
+                        
+                        res = await client.post(f"{meta_service_url}/whatsapp/send", json={
+                            "recipient_id": msg.to, "text": text_part, 
+                            "access_token": token_wa, "phone_number_id": phone_id
+                        }, timeout=10.0)
+                    else:
+                        page_token = await get_config("meta_page_token", tenant_id=msg.tenant_id)
+                        if not page_token:
+                            raise Exception("Meta Page Token Missing")
+                        
+                        res = await client.post(f"{meta_service_url}/messages/send", json={
+                            "recipient_id": msg.to, "text": text_part, "access_token": page_token
+                        }, timeout=10.0)
+                    
+                    if res.status_code not in [200, 201]:
+                        logger.error("❌ RELAY: Meta Service Error", status=res.status_code, body=res.text)
+                        raise Exception(f"Meta Service Error: {res.text}")
 
-        elif msg.provider == 'chatwoot':
-            cw_url = await get_config("CHATWOOT_BASE_URL", "https://app.chatwoot.com", tenant_id=msg.tenant_id)
-            if cw_url.endswith("/"): cw_url = cw_url[:-1]
-            
-            cw_token = await get_config("CHATWOOT_API_TOKEN", tenant_id=msg.tenant_id)
-            cw_account_id = msg.external_account_id or await get_config("CHATWOOT_ACCOUNT_ID", "1", tenant_id=msg.tenant_id)
-            cw_conversation_id = msg.external_chatwoot_id
-            
-            if not cw_conversation_id or not cw_token:
-                raise Exception("Missing Chatwoot Context (Conv/Token)")
+            elif msg.provider == 'chatwoot':
+                cw_url = await get_config("CHATWOOT_BASE_URL", "https://app.chatwoot.com", tenant_id=msg.tenant_id)
+                if cw_url.endswith("/"): cw_url = cw_url[:-1]
+                
+                cw_token = await get_config("CHATWOOT_API_TOKEN", tenant_id=msg.tenant_id)
+                cw_account_id = msg.external_account_id or await get_config("CHATWOOT_ACCOUNT_ID", "1", tenant_id=msg.tenant_id)
+                cw_conversation_id = msg.external_chatwoot_id
+                
+                if not cw_conversation_id or not cw_token:
+                    logger.error("❌ RELAY: Missing Chatwoot Context", conv_id=cw_conversation_id, has_token=bool(cw_token))
+                    raise Exception("Missing Chatwoot Context (Conv/Token)")
 
-            async with httpx.AsyncClient() as client:
-                cw_msg_url = f"{cw_url}/api/v1/accounts/{cw_account_id}/conversations/{cw_conversation_id}/messages"
-                res = await client.post(
-                    cw_msg_url,
-                    json={"content": msg.text, "message_type": "outgoing"},
-                    headers={"api_access_token": cw_token},
-                    timeout=10.0
-                )
-                if res.status_code not in [200, 201]:
-                    raise Exception(f"Chatwoot Error: {res.text}")
+                async with httpx.AsyncClient() as client:
+                    cw_msg_url = f"{cw_url}/api/v1/accounts/{cw_account_id}/conversations/{cw_conversation_id}/messages"
+                    logger.info("📡 RELAY: Sending to Chatwoot", url=cw_msg_url)
+                    res = await client.post(
+                        cw_msg_url,
+                        json={"content": text_part, "message_type": "outgoing"},
+                        headers={"api_access_token": cw_token},
+                        timeout=10.0
+                    )
+                    if res.status_code not in [200, 201]:
+                        logger.error("❌ RELAY: Chatwoot Error", status=res.status_code, body=res.text)
+                        raise Exception(f"Chatwoot Error: {res.text}")
 
-        else:
-            # Default: YCloud (WhatsApp Business API)
-            v_ycloud = await get_config("YCLOUD_API_KEY", YCLOUD_API_KEY)
-            business_number = await get_config(f"WHATSAPP_PHONE_NUMBER_ID_{msg.tenant_id}") or "default"
-            
-            client_yc = YCloudClient(v_ycloud, business_number)
-            await client_yc.send_text(msg.to, msg.text, correlation_id)
+            else:
+                # Default: YCloud (WhatsApp Business API)
+                v_ycloud = await get_config("YCLOUD_API_KEY", YCLOUD_API_KEY)
+                # business_number = await get_config(f"WHATSAPP_PHONE_NUMBER_ID_{msg.tenant_id}") or "default"
+                # Fix: Use tenant aware config
+                phone_id_yc = await get_config("WHATSAPP_PHONE_NUMBER_ID", tenant_id=msg.tenant_id) or "default"
+                
+                client_yc = YCloudClient(v_ycloud, phone_id_yc)
+                await client_yc.send_text(msg.to, text_part, correlation_id)
 
-        return {"status": "sent", "correlation_id": correlation_id}
+        return {"status": "sent", "correlation_id": correlation_id, "bubbles_sent": len(parts)}
 
     except Exception as e:
         logger.error("relay_failed", error=str(e), correlation_id=correlation_id)

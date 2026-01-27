@@ -275,5 +275,29 @@ async for _ in execute_agent_v3_logic(identifier, tenant_id, conversation_id, st
 
 ---
 
+## 15. Fragmentación de Mensajes y Burbujas Faltantes (v6.2.9)
+
+### 🔴 Síntoma: El bot manda muchas burbujas o el cliente solo recibe la primera.
+**Contexto**: Ocurre principalmente en Instagram y Facebook Messenger cuando el agente es muy rápido o el contenido tiene múltiples partes.
+
+### ✅ Solución Arquitectónica v6.2.9:
+El sistema ha sido blindado mediante dos mecanismos de latencia controlada:
+
+1.  **Buffer Atómico de 16s (Entrada)**:
+    - El Orquestador ahora espera **16 segundos de silencio** del usuario antes de procesar una respuesta.
+    - Esto agrupa ráfagas de mensajes del tipo "Hola", "¿Cómo vas?", "¿Tenés stock?" en una sola petición lógica a la IA.
+    - Si el usuario sigue escribiendo, el temporizador de 16s se reinicia.
+
+2.  **Spacing de 4s (Salida)**:
+    - Implementado en el **Universal Delivery Relay** (`whatsapp_service`).
+    - Entre el envío de cada burbuja (`|||`), el sistema inyecta un **retraso de 4 segundos**.
+    - **Por qué**: Meta (IG/FB) a menudo descarta mensajes que llegan con milisegundos de diferencia por considerarlos spam o errores de red. El spacing de 4s garantiza la entrega total y simula un ritmo humano.
+
+### 🔍 Cómo depurar:
+- Busca en los logs del Orquestador la línea `⏳ SPACING: Waiting 4s before next bubble`.
+- Si necesitas agrupar más o menos mensajes, ajusta el valor de `timer_key` en `admin_routes.py` y `main.py`.
+
+---
+
 **© 2026 Platform AI Solutions - Sovereign Troubleshooting Division**
 

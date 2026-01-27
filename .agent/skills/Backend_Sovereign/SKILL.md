@@ -35,7 +35,23 @@ api_key = await get_tenant_credential(
 - `chatwoot`: Chatwoot API (v6.1 uses both CHATWOOT_API_TOKEN and CHATWOOT_BOT_TOKEN)
 
 ### 2b. Omnichannel Identity (v6.1 Patch)
-Al procesar mensajes de Chatwoot, **SIEMPRE** persistir `external_chatwoot_id` y `external_account_id` en la tabla `chat_conversations`. Esto es crítico para que `unified_message_delivery` pueda responder correctamente.
+Al procesar mensajes de Chatwoot, **SIEMPRE** persistir `external_chatwoot_id` e `external_account_id` en la tabla `chat_conversations`. Esto es crítico para que `unified_message_delivery` pueda responder correctamente.
+
+### 2c. Universal Delivery Relay (v6.2.9)
+**NO** llamar directamente a `meta_service` o `ycloud` para envíos desde el Orquestador.
+**SIEMPRE** delegar al `whatsapp_service` usando el endpoint de Relay:
+```python
+# Protocolo v6.2.9
+relay_payload = {
+    "to": phone,
+    "text": text,
+    "provider": "meta_direct" | "chatwoot" | "ycloud",
+    "channel_source": "instagram" | "facebook" | "whatsapp",
+    "tenant_id": tenant_id
+}
+await client.post("/messages/relay", json=relay_payload)
+```
+*Beneficio*: Manejo automático de **Spacing (4s)** y **Buffer (16s)**.
 
 ## 2. Tenant Resolution Protocol (Critical)
 

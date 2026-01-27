@@ -112,7 +112,7 @@ const sendMessage = async (
 };
 ```
 
-### Backend Routing (Orchestrator)
+### Backend Routing (Orchestrator v6.2.9)
 ```python
 # orchestrator_service/app/api/v1/endpoints/chats.py
 
@@ -121,36 +121,24 @@ async def send_message(
     payload: SendMessageRequest,
     current_user = Depends(verify_admin_token)
 ):
-    # Resolver tenant
+    # 1. Resolver tenant e ID de conversación
     tenant_id = await resolve_tenant(current_user.id)
     
-    # Routing por channel_source & Provider Preference (Consolidated Logic)
-    if provider == 'meta_direct':
-        if payload.channel_source == 'whatsapp':
-            # NEW: WhatsApp Cloud API Direct
-            await meta_service.send_whatsapp(payload)
-        else:
-            # FB/IG Graph API
-            await meta_service.send_social_message(payload)
-            
-    elif provider == 'chatwoot':
-         # Chatwoot Gateway (All Channels)
-         # v6.1: Almacena external_chatwoot_id y external_account_id para re-uso
-         await chatwoot_client.send_message(payload)
-         
-    else:
-        # Default / Legacy: YCloud
-        await whatsapp_service.send(payload.message)
+    # 2. Delegar al Universal Delivery Relay (v6.2.9)
+    # Se centraliza en whatsapp_service para aplicar Spacing (4s) y Auth Dinámica.
+    relay_payload = {
+        "to": payload.to_number,
+        "text": payload.message,
+        "provider": resolve_provider(payload.channel_source),
+        "channel_source": payload.channel_source,
+        "tenant_id": tenant_id,
+        "conversation_id": payload.conversation_id
+    }
     
-    # Guardar en DB para auditoría
-    msg = ChatMessage(
-        conversation_id=payload.conversation_id,
-        sender='agent',
-        content=payload.message,
-        sent_context={'human_operator': current_user.id}
-    )
-    session.add(msg)
-    await session.commit()
+    await delivery_relay.post("/messages/relay", json=relay_payload)
+    
+    # 3. Guardar en DB para auditoría
+    # ... persistencia ...
     
     return {"status": "sent"}
 ```
