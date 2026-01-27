@@ -40,6 +40,8 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 router.include_router(templates_router, prefix="/templates", tags=["templates"])
 
 # --- Models ---
+SENSITIVE_CATEGORIES = ['whatsapp_cloud', 'meta_whatsapp', 'tiendanube', 'openai', 'security', 'google', 'smtp', 'chatwoot']
+
 class TenantModel(BaseModel):
     store_name: str
     bot_phone_number: str
@@ -450,8 +452,7 @@ async def save_credential(cred: CredentialModel, current_user: User = Depends(ge
 
         # Security: Encrypt sensitive categories
         final_value = cred.value
-        sensitive_categories = ['whatsapp_cloud', 'meta_whatsapp', 'tiendanube', 'openai', 'security', 'google', 'smtp', 'chatwoot']
-        if cred.category in sensitive_categories:
+        if cred.category in SENSITIVE_CATEGORIES:
             from utils import encrypt_password
             final_value = encrypt_password(cred.value)
             
@@ -683,11 +684,16 @@ async def list_credentials(category: Optional[str] = None, current_user: User = 
         rows = await db.pool.fetch(query, *params)
             
         data = [dict(r) for r in rows]
-        # Cast UUIDs to strings
+        from utils import decrypt_password
+        # Cast UUIDs to strings and Decrypt if sensitive (Nexus v6.2)
         for item in data:
             if 'id_uuid' in item and item['id_uuid']:
                 item['id'] = str(item['id_uuid'])
                 del item['id_uuid']
+            
+            if item.get('category') in SENSITIVE_CATEGORIES and item.get('value'):
+                dec = decrypt_password(item['value'])
+                if dec: item['value'] = dec # Only replace if decryption succeeded
         
         # Performance: Cache result
         try:
@@ -2370,38 +2376,43 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
         if not cw_conversation_id:
             raise HTTPException(400, "Missing Chatwoot Conversation ID")
 
-        cw_url = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_BASE_URL'", tenant_id)
-        if not cw_url:
+        # Protocol Omega: Prioritize Database Credentials (v6.2 - Strict Decryption)
+        from utils import decrypt_password
+        
+        # 1. Base URL Resolution
+        cw_url_enc = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_BASE_URL'", tenant_id)
+        if cw_url_enc:
+            cw_url = decrypt_password(cw_url_enc)
+            if not cw_url: cw_url = cw_url_enc # Fallback if already plain text (non-base64)
+        else:
             cw_url = os.getenv("CHATWOOT_BASE_URL", "https://app.chatwoot.com")
-        cw_token = os.getenv("CHATWOOT_API_TOKEN") or os.getenv("CHATWOOT_BOT_TOKEN")
+        
+        # Ensure it has no trailing slash to avoid double slash in URL join
+        if cw_url.endswith("/"): cw_url = cw_url[:-1]
+
+        # 2. Token Resolution (DB > Env)
+        cw_token = None
+        cw_token_enc = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_API_TOKEN'", tenant_id)
+        if not cw_token_enc:
+             cw_token_enc = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_API_TOKEN' AND scope = 'global' LIMIT 1")
+        
+        if cw_token_enc:
+            cw_token = decrypt_password(cw_token_enc)
         
         if not cw_token:
-            # Protocol Omega: Tenant-scoped credentials prioritized (v6.1)
-            token_encrypted = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_API_TOKEN'", tenant_id)
-            if not token_encrypted:
-                 # Legacy fallback
-                 token_encrypted = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_API_TOKEN' LIMIT 1")
-            
-            if token_encrypted:
-                try:
-                    from utils import decrypt_password
-                    cw_token = decrypt_password(token_encrypted)
-                except Exception as e:
-                    logger.error(f"cw_token_decrypt_failed: {str(e)}")
-        
-        # FINAL SAFETY: httpx will fail if value is None. Default to empty if user says "no credentials"
-        if cw_token is None:
-            logger.warning(f"chatwoot_token_null_fallback for tenant_id={tenant_id}")
-            cw_token = "" 
+            cw_token = os.getenv("CHATWOOT_API_TOKEN") or os.getenv("CHATWOOT_BOT_TOKEN")
 
+        # 3. Account ID Resolution (Payload > DB > Env)
+        cw_account_id = payload_data.get("external_account_id") or (conv_data['external_account_id'] if conv_data else None)
         if not cw_account_id:
-            cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_ACCOUNT_ID'", tenant_id)
-            if not cw_account_id:
-                 # Legacy fallback
-                 cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_ACCOUNT_ID' LIMIT 1")
-                 if not cw_account_id:
-                     logger.warning(f"chatwoot_account_id_missing_fallback_to_1 for tenant_id={tenant_id}")
-                     cw_account_id = "1"
+            cw_acc_enc = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_ACCOUNT_ID'", tenant_id)
+            if not cw_acc_enc:
+                cw_acc_enc = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_ACCOUNT_ID' AND scope = 'global' LIMIT 1")
+            
+            if cw_acc_enc:
+                cw_account_id = decrypt_password(cw_acc_enc)
+            else:
+                cw_account_id = os.getenv("CHATWOOT_ACCOUNT_ID", "1")
 
         async with httpx.AsyncClient() as client:
             cw_msg_url = f"{cw_url}/api/v1/accounts/{cw_account_id}/conversations/{cw_conversation_id}/messages"
@@ -2529,23 +2540,26 @@ pass
 
 # --- Tools Management ---
 
-@router.get("/media/{media_id}", dependencies=[Depends(verify_admin_token)])
-async def get_media(media_id: str):
+@router.get("/media/{media_id}", dependencies=[Depends(get_current_user)])
+async def get_media(media_id: str, current_user: User = Depends(get_current_user)):
     """Proxy media from YCloud to frontend securely. Acts as a stream proxy."""
-    # 1. Get YCloud Creds
-    # In a real app we'd resolve tenant from request or media owner, 
-    # but for now we fallback to global env/creds
-    v_ycloud = os.getenv("YCLOUD_API_KEY")
+    # 1. Get YCloud Creds (Strict Tenant Isolation - Nexus v6.2)
+    tenant_id = current_user.tenant_id
+    
+    # Try tenant-scoped first
+    v_ycloud = await get_tenant_credential(tenant_id, "whatsapp_ycloud", "YCLOUD_API_KEY")
     if not v_ycloud:
-         # Try internal lookup
-         try:
-            val = await get_internal_credential("YCLOUD_API_KEY", os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY"))
-            v_ycloud = val["value"]
-         except:
-            pass
+        # Try global scope in DB
+        v_ycloud_enc = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'YCLOUD_API_KEY' AND scope = 'global' LIMIT 1")
+        if v_ycloud_enc:
+            from utils import decrypt_password
+            v_ycloud = decrypt_password(v_ycloud_enc)
             
     if not v_ycloud:
-        raise HTTPException(status_code=500, detail="YCloud configuration missing")
+        v_ycloud = os.getenv("YCLOUD_API_KEY")
+            
+    if not v_ycloud:
+        raise HTTPException(status_code=500, detail="YCloud configuration missing (Not found in DB or ENV)")
 
     # 2. Fetch from YCloud Media API
     # https://docs.ycloud.com/reference/whatsapp-business-account-media-download
