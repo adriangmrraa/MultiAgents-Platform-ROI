@@ -32,7 +32,7 @@ INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECR
 # Resilience & Engine
 from app.core.resilience import safe_db_call
 from app.core.engine import NexusEngine # NEW
-from app.core.credentials import get_tenant_credential # NEW
+from app.core.credentials import get_tenant_credential, get_tenant_credential_by_type  # Credential Architecture v2
 from app.api.agents import get_or_create_sales_agent, AGENT_TEMPLATES # Nexus v5.25
 from app.api.templates import router as templates_router # Nexus v5.41
 
@@ -88,7 +88,7 @@ async def verify_admin_token(x_admin_token: str = Header(None)):
         print(f"AUTH_DEBUG: Expected '{masked_expected}' vs Received '{masked_received}'")
         raise HTTPException(status_code=401, detail="Invalid Admin Token")
 
-async def verify_internal_token(x_internal_secret: str = Header(None, alias="X-Internal-Secret")):
+async def verify_internal_token(x_internal_token: str = Header(None, alias="X-Internal-Token")):
     """
     Security Barrier for Inter-Service Communication (Sovereign Cloud).
     Used by: Tienda Nube Service -> Orchestrator (Sync/Audit)
@@ -96,8 +96,35 @@ async def verify_internal_token(x_internal_secret: str = Header(None, alias="X-I
     if not INTERNAL_API_TOKEN:
          raise HTTPException(status_code=500, detail="Security Config Missing (INTERNAL_API_TOKEN)")
          
-    if x_internal_secret != INTERNAL_API_TOKEN:
+    if x_internal_token != INTERNAL_API_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid Internal Secret Header")
+
+@router.get("/internal/credentials/{name}", dependencies=[Depends(verify_internal_token)])
+async def get_internal_credential_endpoint(name: str, tenant_id: Optional[int] = None):
+    """
+    Internal API for microservices (whatsapp_service, meta_service) to fetch 
+    decrypted credentials from our Sovereign Vault (Nexus v6.2).
+    """
+    try:
+        if tenant_id:
+            val = await get_tenant_credential(tenant_id, "general", name)
+            if not val:
+                 val = await get_tenant_credential(tenant_id, "%", name)
+        else:
+            query = "SELECT value FROM credentials WHERE name = $1 AND scope = 'global' LIMIT 1"
+            val_enc = await db.pool.fetchval(query, name)
+            from utils import decrypt_password
+            val = decrypt_password(val_enc) if val_enc else None
+            
+        if not val:
+            val = os.getenv(name)
+            
+        if val:
+            return {"name": name, "value": val}
+        raise HTTPException(status_code=404, detail=f"Credential {name} not found")
+    except Exception as e:
+        logger.error(f"internal_credential_fetch_failed: {str(e)}")
+        raise HTTPException(500, detail=str(e))
 
 # --- RBAC Helper ---
 from functools import wraps
@@ -221,6 +248,7 @@ async def list_tenants(limit: int = 100, current_user: User = Depends(get_curren
     - Owner: Can ONLY see tenants they own (by owner_email).
     """
     
+    
     if current_user.role == "SuperAdmin":
         query = "SELECT * FROM tenants ORDER BY id ASC LIMIT $1"
         rows = await db.pool.fetch(query, limit)
@@ -241,6 +269,140 @@ async def list_tenants(limit: int = 100, current_user: User = Depends(get_curren
         # 2. Secret Sanitization
         r['tiendanube_access_token'] = None
         
+        results.append(r)
+    
+    return {"tenants": results}
+
+
+# ============================================
+# Credential Types Catalog (Credential Architecture v2)
+# ============================================
+@router.get("/credential-types", dependencies=[Depends(verify_admin_token)])
+async def get_credential_types():
+    """
+    Returns the catalog of available credential types.
+    Used by the frontend to display a dropdown of credential types instead of free text input.
+    
+    Credential Architecture v2: Eliminates dependency on user-provided credential names.
+    """
+    try:
+        query = """
+            SELECT 
+                ct.id,
+                ct.internal_key,
+                ct.display_name,
+                ct.description,
+                ct.is_required,
+                ct.field_type,
+                ct.placeholder,
+                op.name AS provider_name,
+                op.display_name AS provider_display_name
+            FROM credential_types ct
+            LEFT JOIN oauth_providers op ON ct.provider_id = op.id
+            ORDER BY op.name, ct.display_name
+        """
+        rows = await db.pool.fetch(query)
+        
+        # Group by provider
+        providers = {}
+        for row in rows:
+            provider_name = row['provider_name'] or 'other'
+            if provider_name not in providers:
+                providers[provider_name] = {
+                    "name": provider_name,
+                    "display_name": row['provider_display_name'] or provider_name.title(),
+                    "types": []
+                }
+            
+            providers[provider_name]["types"].append({
+                "id": row['id'],
+                "internal_key": row['internal_key'],
+                "display_name": row['display_name'],
+                "description": row['description'],
+                "is_required": row['is_required'],
+                "field_type": row['field_type'],
+                "placeholder": row['placeholder']
+            })
+        
+        return {"providers": list(providers.values())}
+    except Exception as e:
+        logger.error(f"credential_types_fetch_failed: {str(e)}")
+        raise HTTPException(500, detail=str(e))
+
+
+@router.get("/tenants/{tenant_id}")
+@safe_db_call
+async def get_tenant_by_id(tenant_id: int, current_user: User = Depends(get_current_user)):
+    """
+    Retrieves a single tenant by ID.
+    """
+    # Security: Only SuperAdmin or the owner can view tenant details
+    if current_user.role != "SuperAdmin":
+        # Check if user owns this tenant
+        owner_check = await db.pool.fetchval(
+            "SELECT owner_email FROM tenants WHERE id = $1",
+            tenant_id
+        )
+        if owner_check != current_user.email:
+            raise HTTPException(403, detail="Access denied")
+    
+    row = await db.pool.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
+    if not row:
+        raise HTTPException(404, detail="Tenant not found")
+    
+    r = dict(row)
+    
+    # JSONB Parsing
+    if r.get('handoff_policy') and isinstance(r['handoff_policy'], str):
+        try: r['handoff_policy'] = json.loads(r['handoff_policy'])
+        except: r['handoff_policy'] = {}
+    
+    # Secret Sanitization
+    r['tiendanube_access_token'] = None
+    
+    return r
+
+
+@router.put("/tenants/{tenant_id}")
+@safe_db_call
+async def update_tenant(tenant_id: int, data: dict, current_user: User = Depends(get_current_user)):
+    """
+    Updates a tenant's configuration.
+    """
+    # Security: Only SuperAdmin or the owner can update tenant
+    if current_user.role != "SuperAdmin":
+        owner_check = await db.pool.fetchval(
+            "SELECT owner_email FROM tenants WHERE id = $1",
+            tenant_id
+        )
+        if owner_check != current_user.email:
+            raise HTTPException(403, detail="Access denied")
+    
+    # Allowed fields
+    allowed_fields = ['store_name', 'store_description', 'handoff_policy', 'tiendanube_store_id']
+    updates = []
+    params = [tenant_id]
+    param_idx = 2
+    
+    for field in allowed_fields:
+        if field in data:
+            value = data[field]
+            if field == 'handoff_policy' and isinstance(value, dict):
+                value = json.dumps(value)
+            updates.append(f"{field} = ${param_idx}")
+            params.append(value)
+            param_idx += 1
+    
+    if not updates:
+        raise HTTPException(400, detail="No valid fields to update")
+    
+    query = f"UPDATE tenants SET {', '.join(updates)} WHERE id = $1 RETURNING id"
+    result = await db.pool.fetchval(query, *params)
+    
+    if not result:
+        raise HTTPException(404, detail="Tenant not found")
+    
+    return {"status": "ok", "tenant_id": result}
         results.append(r)
         
     return results
@@ -1000,7 +1162,7 @@ async def test_credential_connection(data: ConnectionTestRequest, current_user: 
         if not token:
              return {"status": "error", "message": "No credentials found or configured."}
              
-        store_id = await get_tenant_credential(tenant_id, "tiendanube", "TIENDANUBE_USER_ID")
+        store_id = await get_tenant_credential_by_type(tenant_id, "TIENDANUBE_STORE_ID")
         if not store_id:
              # Try legacy fallback just for ID (Protocol Omega compatibility)
              row = await db.pool.fetchrow("SELECT tiendanube_store_id FROM tenants WHERE id = $1", tenant_id)
@@ -1055,7 +1217,7 @@ async def get_store_products(current_user: User = Depends(get_current_user)):
         token = await TokenManager.get_valid_token(tenant_id, "tiendanube")
         
         # Get Store ID (Standard or Legacy)
-        store_id = await get_tenant_credential(tenant_id, 'tiendanube', 'TIENDANUBE_USER_ID')
+        store_id = await get_tenant_credential_by_type(tenant_id, "TIENDANUBE_STORE_ID")
         
         if not store_id:
              # Legacy Fallback
@@ -2546,8 +2708,8 @@ async def get_media(media_id: str, current_user: User = Depends(get_current_user
     # 1. Get YCloud Creds (Strict Tenant Isolation - Nexus v6.2)
     tenant_id = current_user.tenant_id
     
-    # Try tenant-scoped first
-    v_ycloud = await get_tenant_credential(tenant_id, "whatsapp_ycloud", "YCLOUD_API_KEY")
+    # Try tenant-scoped first (Credential Architecture v2)
+    v_ycloud = await get_tenant_credential_by_type(tenant_id, "YCLOUD_API_KEY")
     if not v_ycloud:
         # Try global scope in DB
         v_ycloud_enc = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'YCLOUD_API_KEY' AND scope = 'global' LIMIT 1")
@@ -3139,8 +3301,8 @@ async def improve_prompt(req: PromptImproveRequest):
         from langchain.schema import SystemMessage, HumanMessage
         from app.api.agents import FIELD_SYSTEM_PROMPTS
         
-        # Sovereign Credentials: Fetch key from DB with fallback to global settings
-        openai_key = await get_tenant_credential(req.tenant_id, "openai", "%api_key%")
+        # Sovereign Credentials: Fetch key from DB with fallback to global settings (Credential Architecture v2)
+        openai_key = await get_tenant_credential_by_type(req.tenant_id, "OPENAI_API_KEY")
         if not openai_key:
             openai_key = settings.OPENAI_API_KEY
         
@@ -3641,7 +3803,7 @@ async def get_rag_galaxy(tenant_id: str):
         from app.core.rag import RAGCore
         
         # Sovereign Credentials: Fetch key from DB
-        openai_key = await get_tenant_credential(int(tenant_id), "openai", "%api_key%")
+        openai_key = await get_tenant_credential_by_type(int(tenant_id), "OPENAI_API_KEY")
         
         rag = RAGCore(tenant_id, openai_api_key=openai_key)
         
@@ -3720,8 +3882,8 @@ async def search_rag(
         if not effective_user_id:
             return {"ok": False, "error": "Missing user_id context for strict isolation"}
 
-        openai_key = await get_tenant_credential(int(tenant_id), "openai")
-        google_key = await get_tenant_credential(int(tenant_id), "google")
+        openai_key = await get_tenant_credential_by_type(int(tenant_id), "OPENAI_API_KEY")
+        google_key = await get_tenant_credential_by_type(int(tenant_id), "GOOGLE_API_KEY")
         
         if google_key:
             provider = "google"
@@ -3845,8 +4007,8 @@ async def upload_knowledge_file(
 
     # 1b. Sovereign Credential Check
     from admin_routes import get_tenant_credential
-    openai_key = await get_tenant_credential(tenant_id, "openai")
-    google_key = await get_tenant_credential(tenant_id, "google")
+    openai_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
+    google_key = await get_tenant_credential_by_type(tenant_id, "GOOGLE_API_KEY")
     
     if not openai_key and not google_key:
         logger.warning(f"knowledge_upload_blocked_no_keys: tenant {tenant_id}")
@@ -3913,8 +4075,8 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str,
     try:
         # 1. Fetch Sovereign Credential
         from admin_routes import get_tenant_credential # Ensure availability
-        openai_key = await get_tenant_credential(tenant_id, "openai")
-        google_key = await get_tenant_credential(tenant_id, "google")
+        openai_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
+        google_key = await get_tenant_credential_by_type(tenant_id, "GOOGLE_API_KEY")
         
         if google_key: # Google takes precedence if both exist
             provider = "google"
@@ -4509,9 +4671,9 @@ async def simulate_agent(req: AgentSimulation):
 
 
         # 5. Fetch Credentials
-        openai_key = await get_tenant_credential(req.tenant_id, "openai")
-        google_key = await get_tenant_credential(req.tenant_id, "google")
-        tn_token = await get_tenant_credential(req.tenant_id, "tiendanube")
+        openai_key = await get_tenant_credential_by_type(req.tenant_id, "OPENAI_API_KEY")
+        google_key = await get_tenant_credential_by_type(req.tenant_id, "GOOGLE_API_KEY")
+        tn_token = await get_tenant_credential_by_type(req.tenant_id, "TIENDANUBE_ACCESS_TOKEN")
         
         # 6. Build Request
         # Note: Do NOT add "version" to root. AgentThinkRequest doesn't have it.
@@ -4779,30 +4941,37 @@ async def receive_chatwoot_webhook(
     account_map = payload.get("account", {})
     
     chatwoot_conv_id = conversation_map.get("id")
-    chatwoot_contact_id = contact_map.get("id")
     chatwoot_account_id = account_map.get("id")
+    
+    # 2.5 Resolve TRUE Contact (The Customer)
+    # By default, 'contact_map' in the root payload is the SENDER of the message.
+    # If msg_type is 'outgoing', the sender is a Human Agent/Adrian. We need to find the Customer.
+    customer_map = conversation_map.get("meta", {}).get("sender", {})
+    if not customer_map:
+         # Fallback to the message sender if we can't find the conversation meta sender (usually for incoming)
+         customer_map = contact_map
+    
+    chatwoot_contact_id = customer_map.get("id")
     # Phone or Email or ID
-    # 3. Resolve Native Conversation
+    # 3. Resolve Native Conversation Identifier
     
     # helper: map chatwoot channel to nexus channel
     cw_channel = conversation_map.get("channel", "")
     logger.info(f"WEBHOOK DEBUG: Raw Channel='{cw_channel}'") # DEBUG LOG
 
     nexus_channel = "chatwoot"
-    # Case insensitive check
     cw_lower = cw_channel.lower()
     if "whatsapp" in cw_lower: nexus_channel = "whatsapp"
     elif "instagram" in cw_lower: nexus_channel = "instagram"
     elif "facebook" in cw_lower: nexus_channel = "facebook"
     
-    # helper: better identifier extraction
-    identifier = contact_map.get("phone_number")
+    # Resolve Identifier from CUSTOMER, not Sender
+    identifier = customer_map.get("phone_number")
     
     if nexus_channel == "instagram":
-        # Try to get IG username
-        additional = contact_map.get("additional_attributes", {})
+        additional = customer_map.get("additional_attributes", {})
         social = additional.get("social_profiles", {})
-        identifier = social.get("instagram") or contact_map.get("name")
+        identifier = social.get("instagram") or customer_map.get("name")
         # IG doesn't strictly need phone
         
     if nexus_channel == "facebook":
@@ -4828,14 +4997,15 @@ async def receive_chatwoot_webhook(
     conv_row = await db.pool.fetchrow(conv_query, tenant_id, chatwoot_conv_id, str(chatwoot_conv_id), identifier)
     
     # helper: better avatar extraction
-    avatar_url = contact_map.get("thumbnail") or contact_map.get("avatar_url")
+    avatar_url = customer_map.get("thumbnail") or customer_map.get("avatar_url")
     if not avatar_url and nexus_channel == "facebook":
-         # Facebook specific locations
-         avatar_url = contact_map.get("additional_attributes", {}).get("profile_pic")
+         avatar_url = customer_map.get("additional_attributes", {}).get("profile_pic")
     
     if conv_row:
         conversation_id = conv_row['id']
-        # Update existing conversation to ensure latest channel/metadata
+        # Update existing conversation
+        # IF IT'S OUTGOING (Echo), we do NOT overwrite the general 'sender_name' 
+        # unless it was previously null, keeping the customer's identity in the UI list.
         await db.pool.execute("""
             UPDATE chat_conversations 
             SET channel = $1, 
@@ -4850,8 +5020,9 @@ async def receive_chatwoot_webhook(
             "chatwoot_conversation_id": chatwoot_conv_id, 
             "chatwoot_contact_id": chatwoot_contact_id,
             "chatwoot_account_id": chatwoot_account_id,
-            "sender_name": contact_map.get("name"),
-            "sender_avatar": avatar_url
+            "customer_name": customer_map.get("name"),
+            "customer_avatar": avatar_url,
+            "last_sender_type": msg_type
         }), conversation_id)
     else:
         # Create new conversation (Synced from Chatwoot)
@@ -4867,8 +5038,8 @@ async def receive_chatwoot_webhook(
             "chatwoot_conversation_id": chatwoot_conv_id, 
             "chatwoot_contact_id": chatwoot_contact_id,
             "chatwoot_account_id": chatwoot_account_id,
-            "sender_name": contact_map.get("name"),
-            "sender_avatar": avatar_url
+            "customer_name": customer_map.get("name"),
+            "customer_avatar": avatar_url
         }))
 
     # 4. Attachments (Phase 8: Media Support)
@@ -4901,7 +5072,54 @@ async def receive_chatwoot_webhook(
         VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7)
     """, msg_id, tenant_id, conversation_id, role, data, identifier, json.dumps(parsed_attachments))
     
-    # 5. Publish to Redis (The "Visualization" part)
+    # 5. Integrate with AI Orchestrator (Lifecycle v6.2)
+    # Detect Echo (Manual reply from human)
+    is_echo = False
+    if msg_type == 'outgoing':
+        is_echo = True
+    
+    # Trigger Background Task for AI / Echo Processing
+    # We simulate a partial Inbound Event for the Orchestrator
+    orchestrator_payload = {
+        "provider": "chatwoot",
+        "event_id": msg_id,
+        "from_number": identifier,
+        "content": data,
+        "customer_name": contact_map.get("name"),
+        "event_type": "chatwoot.message_created",
+        "channel_source": nexus_channel,
+        "external_chatwoot_id": chatwoot_conv_id,
+        "external_account_id": chatwoot_account_id,
+        "tenant_id": tenant_id,
+        "message_type": msg_type, # 'incoming' or 'outgoing'
+        "attachments": parsed_attachments
+    }
+    
+    # Internal trigger to main.py:/chat logic
+    # Since we are in the same process but different file/router, we could call a helper
+    # or just let the Frontend/Chatwoot hit this, and we background the AI task.
+    
+    from main import process_buffer_task # Import dynamically to avoid circularity
+    
+    # Atomic Buffer Consumption (v6.2)
+    buffer_key = f"buffer:{identifier}"
+    timer_key = f"timer:{identifier}"
+    lock_key = f"active_task:{identifier}"
+    
+    # 1. Buffering
+    await redis_client.rpush(buffer_key, data)
+    await redis_client.setex(timer_key, 16, "1") # 16s debounce
+    
+    # 2. Trigger Task if not running
+    if not await redis_client.get(lock_key):
+        await redis_client.setex(lock_key, 60, "1") # 60s lock for the task
+        background_tasks.add_task(
+            process_buffer_task, 
+            identifier, tenant_id, conversation_id, str(uuid.uuid4()), 
+            customer_map.get("name"), nexus_channel
+        )
+
+    # 6. Publish to Redis (The "Visualization" part)
     redis_payload = {
         "event": "message",
         "data": {

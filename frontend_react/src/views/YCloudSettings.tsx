@@ -46,19 +46,19 @@ export const YCloudSettings: React.FC = () => {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            // Save API Key
+            // Save API Key (Credential Architecture v2)
             await fetchApi('/admin/credentials', {
                 method: 'POST',
                 body: {
-                    name: 'YCloud API Key',
+                    credential_type_id: 10,  // YCLOUD_API_KEY
+                    user_label: 'YCloud API Key',
                     value: apiKey,
-                    category: 'whatsapp_cloud', // Using standard category
                     description: 'Main API Key for YCloud Integration',
                     scope: 'global'
                 }
             });
 
-            // Save Webhook Secret
+            // Save Webhook Secret (using legacy name-based approach for now)
             await fetchApi('/admin/credentials', {
                 method: 'POST',
                 body: {

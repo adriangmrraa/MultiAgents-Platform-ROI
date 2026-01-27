@@ -63,7 +63,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 from db import db, redis_client
-from app.core.credentials import get_tenant_credential 
+from app.core.credentials import get_tenant_credential, get_tenant_credential_by_type 
 from app.core.db_setup import background_db_setup  # Nexus v5.9 Self-Healing
 
 # Configuration & Environment
@@ -1415,41 +1415,101 @@ ACCIÓN REQUERIDA:
 {metadata_section}Tienda: {config['store_name']}
 """
 
-    # 3. SMTP Send
+    # 3. Send Email using Platform Global SMTP (User-Friendly - No SMTP config required)
     try:
-        smtp_host = str(config['smtp_host']).strip().replace("http://", "").replace("https://", "") if config['smtp_host'] else ""
-        smtp_user = str(config['smtp_username']).strip() if config['smtp_username'] else ""
-        smtp_pass = decrypt_password(config['smtp_password_encrypted'])
-        smtp_port = config['smtp_port']
-        smtp_sec = str(config['smtp_security']).strip().upper() if config['smtp_security'] else "SSL"
+        from app.core.email import EmailService
+        from fastapi_mail import MessageSchema, MessageType
         
         target_email = str(config['destination_email']).strip() if config['destination_email'] else ""
-
-        if smtp_user and smtp_pass and smtp_host and target_email:
-            msg = MIMEText(body)
-            msg['Subject'] = subject
-            msg['From'] = smtp_user
-            msg['To'] = target_email
-            msg['Date'] = formatdate(localtime=True)
-
-            if smtp_sec == 'SSL':
-                with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
-                    server.login(smtp_user, smtp_pass)
-                    server.send_message(msg)
-            elif smtp_sec == 'STARTTLS':
-                with smtplib.SMTP(smtp_host, smtp_port) as server:
-                    server.starttls()
-                    server.login(smtp_user, smtp_pass)
-                    server.send_message(msg)
-            else: # NONE or fallback
-                with smtplib.SMTP(smtp_host, smtp_port) as server:
-                    server.login(smtp_user, smtp_pass)
-                    server.send_message(msg)
-            
-            logger.info("handoff_email_sent_smtp", to=target_email, host=smtp_host, port=smtp_port, security=smtp_sec)
-        else:
-            await call_mcp_tool("sendemail", {"Subject": subject, "Text": body})
-            logger.info("handoff_email_sent_mcp_fallback", to=target_email)
+        
+        if not target_email:
+            logger.warning("handoff_no_destination_email", tenant_id=tid)
+            return "Error: No se configuró un email de destino para derivaciones."
+        
+        # Use Platform Global SMTP (same credentials as verification emails)
+        dynamic_conf = await EmailService.get_connection_config(tenant_id=tid, mode="system")
+        
+        # Create professional HTML email
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background-color: #f4f4f4;
+                    margin: 0;
+                    padding: 20px;
+                }}
+                .container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    background: white;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    padding: 20px;
+                    text-align: center;
+                    color: white;
+                }}
+                .content {{
+                    padding: 30px;
+                    line-height: 1.6;
+                    color: #333;
+                }}
+                .footer {{
+                    background: #f8f9fa;
+                    padding: 15px;
+                    text-align: center;
+                    font-size: 12px;
+                    color: #6c757d;
+                    border-top: 1px solid #dee2e6;
+                }}
+                pre {{
+                    background: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 4px;
+                    border-left: 4px solid #667eea;
+                    overflow-x: auto;
+                    white-space: pre-wrap;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>🔔 Derivación Humana</h2>
+                </div>
+                <div class="content">
+                    <pre>{body}</pre>
+                </div>
+                <div class="footer">
+                    Enviado automáticamente por Nexus Platform<br>
+                    © 2025 MultiAgents Platform
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        message = MessageSchema(
+            subject=subject,
+            recipients=[target_email],
+            body=html_body,
+            subtype=MessageType.html
+        )
+        
+        from fastapi_mail import FastMail
+        fm = FastMail(dynamic_conf)
+        await fm.send_message(message)
+        
+        logger.info("handoff_email_sent_platform_smtp", 
+                   to=target_email, 
+                   server=dynamic_conf.MAIL_SERVER, 
+                   from_email=dynamic_conf.MAIL_FROM)
             
     except Exception as e:
         logger.error("handoff_email_failed", error=str(e))
@@ -2012,8 +2072,8 @@ REGLAS:
 ID DEL AGENTE ELEGIDO:"""
 
     try:
-        # Sovereign Credentials: Fetch key from DB
-        openai_key = await get_tenant_credential(tenant_id, "openai", "%api_key%")
+        # Sovereign Credentials: Fetch key from DB (Credential Architecture v2)
+        openai_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
         
         llm = ChatOpenAI(model="gpt-4o-mini", api_key=openai_key or OPENAI_API_KEY, temperature=0, max_tokens=10)
         resp = await llm.ainvoke(prompt)
@@ -2165,9 +2225,9 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             if tactical or response_g:
                 tool_instructions_list.append(f"[{t_name}]: TÁCTICA: {tactical or ''} RESPUESTA: {response_g or ''}")
 
-        # Sovereign Credentials
-        openai_key = await get_tenant_credential(tenant_id, "openai", "%api_key%")
-        tn_token = await get_tenant_credential(tenant_id, "tiendanube", "%access_token%")
+        # Sovereign Credentials (Credential Architecture v2)
+        openai_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
+        tn_token = await get_tenant_credential_by_type(tenant_id, "TIENDANUBE_ACCESS_TOKEN")
 
         # 4. Agent Request
         agent_request = {

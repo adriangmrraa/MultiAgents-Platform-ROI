@@ -206,3 +206,63 @@ Este error ocurre **antes** de llegar a nuestro código, directamente en los ser
 ### 3. Conexión Exitosa pero "Pendiente" en UI
 *   Hubo un error al guardar el `TIENDANUBE_USER_ID`.
 *   Verificar los logs del `tiendanube_service` buscando "credential_synced".
+
+---
+
+# 🆕 Mejoras de Arquitectura v6.2 (Sovereign Identity Protocol)
+
+## 1. Protocolo de Identidad Blindada para Chatwoot
+
+### Problema Resuelto: "Conversación Conmigo Mismo"
+En versiones anteriores, cuando un agente humano respondía manualmente desde Chatwoot (Instagram/Facebook), el sistema creaba una conversación duplicada con el nombre del agente en lugar del cliente.
+
+### Solución v6.2: TRUE Contact Resolution
+El webhook unificado (`/admin/chatwoot/webhook`) ahora implementa:
+- **Customer Map Extraction**: Extrae la información del cliente real desde `conversation.meta.sender` en lugar del `sender` del mensaje.
+- **Identity Persistence**: Garantiza que el nombre y avatar del cliente en el Dashboard nunca sean sobrescritos por los datos del agente.
+- **Metadata Enrichment**: Almacena `customer_name` y `customer_avatar` en el campo `meta` de `chat_conversations`.
+
+## 2. Atomic Buffer Consumption (Debounce Inteligente)
+
+Para canales sociales donde los usuarios envían múltiples mensajes cortos en ráfaga:
+- **Buffer Redis**: Acumula mensajes durante 16 segundos antes de procesarlos.
+- **Lock Mechanism**: Previene procesamiento concurrente con un lock de 60 segundos.
+- **Beneficios**:
+  - Reduce costos de tokens al consolidar contexto.
+  - Mejora coherencia de respuestas de la IA.
+  - Evita respuestas fragmentadas.
+
+## 3. API Interna de Credenciales (X-Internal-Token)
+
+### Endpoint: `/admin/internal/credentials/{name}`
+Permite a microservicios (`whatsapp_service`, `tiendanube_service`, `meta_service`) obtener credenciales desencriptadas de forma segura.
+
+**Seguridad**:
+- Header requerido: `X-Internal-Token`
+- Soporta scope global y por tenant
+- Elimina la necesidad de variables de entorno redundantes
+
+**Ejemplo de uso**:
+```python
+headers = {"X-Internal-Token": INTERNAL_SECRET_KEY}
+response = await httpx.get(
+    f"{ORCHESTRATOR_URL}/admin/internal/credentials/YCLOUD_API_KEY",
+    headers=headers,
+    params={"tenant_id": 123}
+)
+api_key = response.json()["value"]
+```
+
+## 4. Webhook Unificado de Chatwoot
+
+Toda la lógica de recepción de mensajes de Chatwoot (Instagram, Facebook, WebChat) se ha centralizado en el Orchestrator:
+- **Endpoint**: `/admin/chatwoot/webhook?access_token=SECURE_TOKEN`
+- **Procesamiento**:
+  - Detección automática de Ecos (respuestas humanas)
+  - Activación de Human Handoff Lock (24h)
+  - Trigger automático del motor de IA
+  - Sincronización en tiempo real con el Dashboard
+
+---
+
+**© 2026 Platform AI Solutions - Sovereign Integration Division**

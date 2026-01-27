@@ -9,7 +9,7 @@ from typing import Dict, Any, List
 from db import db, redis_client 
 from app.core.rag import RAGCore
 from langchain_openai import ChatOpenAI
-from app.core.credentials import get_tenant_credential
+from app.core.credentials import get_tenant_credential, get_tenant_credential_by_type  # Credential Architecture v2
 
 logger = structlog.get_logger()
 
@@ -33,8 +33,9 @@ class NexusEngine:
         
         # 0. Context Preparation
         # Fetch Tenant-Specific AI Keys (Sovereign Credentials System)
-        self.openai_api_key = await get_tenant_credential(int(self.tenant_id), "openai", "%api_key%")
-        self.google_api_key = await get_tenant_credential(int(self.tenant_id), "google", "%api_key%")
+        # Sovereign Credentials (Credential Architecture v2)
+        self.openai_api_key = await get_tenant_credential_by_type(int(self.tenant_id), "OPENAI_API_KEY")
+        self.google_api_key = await get_tenant_credential_by_type(int(self.tenant_id), "GOOGLE_API_KEY")
         
         # Initialize RAG (RAGCore handles tenant-first, global-fallback internally now)
         self.rag = RAGCore(self.tenant_id, api_key=self.openai_api_key)

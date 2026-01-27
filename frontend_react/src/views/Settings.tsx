@@ -60,13 +60,24 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
         if (!token || !id) return alert("Completa ambos campos");
         try {
             const tenantId = import.meta.env.VITE_DEFAULT_TENANT_ID || 1;
+            // Credential Architecture v2
             await fetchApi('/admin/credentials', {
                 method: 'POST',
-                body: { tenant_id: tenantId, category: 'tiendanube', name: 'TIENDANUBE_ACCESS_TOKEN', value: token }
+                body: {
+                    tenant_id: tenantId,
+                    credential_type_id: 12,  // TIENDANUBE_ACCESS_TOKEN
+                    user_label: 'Tienda Nube Access Token',
+                    value: token
+                }
             });
             await fetchApi('/admin/credentials', {
                 method: 'POST',
-                body: { tenant_id: tenantId, category: 'tiendanube', name: 'TIENDANUBE_USER_ID', value: id }
+                body: {
+                    tenant_id: tenantId,
+                    credential_type_id: 11,  // TIENDANUBE_STORE_ID
+                    user_label: 'Tienda Nube Store ID',
+                    value: id
+                }
             });
             window.location.reload();
         } catch (e) {

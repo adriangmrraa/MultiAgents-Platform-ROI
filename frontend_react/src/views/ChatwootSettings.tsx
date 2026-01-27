@@ -51,13 +51,13 @@ export const ChatwootSettings: React.FC = () => {
         try {
             const tenantId = import.meta.env.VITE_DEFAULT_TENANT_ID || 1;
 
-            // Save API Token
+            // Save API Token (Credential Architecture v2)
             await fetchApi('/admin/credentials', {
                 method: 'POST',
                 body: {
-                    name: 'CHATWOOT_API_TOKEN',
+                    credential_type_id: 2,  // CHATWOOT_API_TOKEN
+                    user_label: 'Chatwoot API Token',
                     value: apiToken,
-                    category: 'chatwoot',
                     description: 'Tenant specific Chatwoot API Token',
                     scope: 'tenant',
                     tenant_id: tenantId
@@ -68,9 +68,9 @@ export const ChatwootSettings: React.FC = () => {
             await fetchApi('/admin/credentials', {
                 method: 'POST',
                 body: {
-                    name: 'CHATWOOT_ACCOUNT_ID',
+                    credential_type_id: 4,  // CHATWOOT_ACCOUNT_ID
+                    user_label: 'Chatwoot Account ID',
                     value: accountId,
-                    category: 'chatwoot',
                     description: 'Tenant specific Chatwoot Account ID',
                     scope: 'tenant',
                     tenant_id: tenantId
@@ -81,9 +81,9 @@ export const ChatwootSettings: React.FC = () => {
             await fetchApi('/admin/credentials', {
                 method: 'POST',
                 body: {
-                    name: 'CHATWOOT_BASE_URL',
+                    credential_type_id: 3,  // CHATWOOT_BASE_URL
+                    user_label: 'Chatwoot Base URL',
                     value: baseUrl || 'https://app.chatwoot.com',
-                    category: 'chatwoot',
                     description: 'Tenant specific Chatwoot Instance URL',
                     scope: 'tenant',
                     tenant_id: tenantId

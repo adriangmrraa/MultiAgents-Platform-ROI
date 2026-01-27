@@ -102,3 +102,35 @@ Disparador manual para el bootstrapper de Supabase/pgvector.
 `POST /admin/meta/webhook`
 *   **Propósito**: Ingesta y normalización de eventos de Meta (Textos, Audios, Status Updates).
 *   **Seguridad**: Verifica firma HMAC con `META_APP_SECRET`.
+
+---
+
+## APIs Internas (v6.2 - Inter-Service Communication)
+
+### 🔐 Internal Credentials API
+`GET /admin/internal/credentials/{name}`
+
+API de alta seguridad para que los microservicios obtengan credenciales desencriptadas.
+*   **Auth**: Requiere header `X-Internal-Token`.
+*   **Query Params**: `tenant_id` (opcional) para scope de inquilino.
+*   **Respuesta**:
+    ```json
+    {
+      "name": "OPENAI_API_KEY",
+      "value": "sk-proj-..."
+    }
+    ```
+
+### 💬 Chatwoot Unified Webhook
+`POST /admin/chatwoot/webhook`
+
+Receiver central para eventos de Chatwoot (Instagram, Facebook, WebChat).
+*   **Query Params**: `access_token` (requerido para validación de inquilino).
+*   **Procesamiento v6.2**:
+    - **Identity Fix**: Resuelve al cliente real ignorando ecos de agentes.
+    - **Atomic Buffer**: Debouncing de mensajes en Redis (16s).
+    - **AI Trigger**: Despierta al Orquestador automáticamente.
+
+---
+
+**© 2026 Platform AI Solutions - Sovereign Engine Core**

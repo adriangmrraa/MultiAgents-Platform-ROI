@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.template import WhatsAppTemplate
-from app.core.credentials import get_tenant_credential
+from app.core.credentials import get_tenant_credential, get_tenant_credential_by_type  # Credential Architecture v2
 import httpx
 import structlog
 import uuid
@@ -13,8 +13,9 @@ class MetaTemplateService:
     
     @staticmethod
     async def get_meta_credentials(tenant_id: int):
-        token = await get_tenant_credential(tenant_id, 'whatsapp', 'meta_page_token')
-        waba_id = await get_tenant_credential(tenant_id, 'whatsapp', 'meta_business_account_id')
+        # Credential Architecture v2: Use internal_key for robust lookup
+        token = await get_tenant_credential_by_type(tenant_id, 'META_PAGE_ACCESS_TOKEN')
+        waba_id = await get_tenant_credential_by_type(tenant_id, 'META_WHATSAPP_BUSINESS_ACCOUNT_ID')
         
         if not token or not waba_id:
             # Fallback for dev/legacy or manual setups if stored differently

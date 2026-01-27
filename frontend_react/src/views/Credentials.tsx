@@ -6,12 +6,24 @@ import { useLanguage } from '../contexts/LanguageContext';
 
 interface Credential {
     id?: number;
-    name: string;
+    name: string;  // DEPRECATED: Will be replaced by credential_type_id
+    user_label?: string;  // NEW: Optional user-friendly label
+    credential_type_id?: number;  // NEW: FK to credential_types
     value: string;
-    category: string;
+    category: string;  // DEPRECATED: Will be inferred from credential_type
     description: string;
     scope: 'global' | 'tenant';
     tenant_id?: number | null;
+}
+
+interface CredentialType {
+    id: number;
+    internal_key: string;
+    display_name: string;
+    description: string;
+    is_required: boolean;
+    field_type: string;
+    placeholder: string;
 }
 
 interface Tenant {
@@ -24,12 +36,15 @@ export const Credentials: React.FC = () => {
     const { fetchApi } = useApi();
     const [credentials, setCredentials] = useState<Credential[]>([]);
     const [tenants, setTenants] = useState<Tenant[]>([]);
+    const [credentialTypes, setCredentialTypes] = useState<CredentialType[]>([]);  // NEW
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCred, setEditingCred] = useState<Credential | null>(null);
 
     // Form State
     const [formData, setFormData] = useState<Credential>({
         name: '',
+        user_label: '',  // NEW
+        credential_type_id: undefined,  // NEW
         value: '',
         category: 'openai',
         description: '',
@@ -42,9 +57,10 @@ export const Credentials: React.FC = () => {
 
     const loadData = async () => {
         try {
-            const [credsData, tenantsData] = await Promise.all([
+            const [credsData, tenantsData, typesData] = await Promise.all([
                 fetchApi('/admin/credentials'),
-                fetchApi('/admin/tenants')
+                fetchApi('/admin/tenants'),
+                fetchApi('/admin/credential-types')  // NEW
             ]);
 
             if (Array.isArray(credsData)) {
@@ -60,11 +76,26 @@ export const Credentials: React.FC = () => {
                 console.error("Invalid tenants data:", tenantsData);
                 setTenants([]);
             }
+
+            // NEW: Load credential types
+            if (typesData?.providers) {
+                const allTypes: CredentialType[] = [];
+                typesData.providers.forEach((provider: any) => {
+                    provider.types.forEach((type: CredentialType) => {
+                        allTypes.push(type);
+                    });
+                });
+                setCredentialTypes(allTypes);
+            } else {
+                console.error("Invalid credential types data:", typesData);
+                setCredentialTypes([]);
+            }
         } catch (e) {
-            console.error("Failed to load credentials/tenants", e);
+            console.error("Failed to load credentials/tenants/types", e);
             // Don't crash the UI, use empty
             setCredentials([]);
             setTenants([]);
+            setCredentialTypes([]);
         }
     };
 
@@ -140,6 +171,8 @@ export const Credentials: React.FC = () => {
         setEditingCred(null);
         setFormData({
             name: '',
+            user_label: '',  // NEW
+            credential_type_id: undefined,  // NEW
             value: '',
             category: 'openai',
             description: '',
@@ -148,6 +181,9 @@ export const Credentials: React.FC = () => {
         });
         setIsModalOpen(true);
     };
+
+    // NEW: Get selected credential type details
+    const selectedType = credentialTypes.find(t => t.id === formData.credential_type_id);
 
     return (
         <div className="view active">
@@ -207,14 +243,48 @@ export const Credentials: React.FC = () => {
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingCred ? t('common.edit') + ' ' + t('credentials.identifier') : t('credentials.newCredential')}>
                 <form onSubmit={handleSubmit}>
+                    {/* NEW: Credential Type Dropdown (Credential Architecture v2) */}
                     <div className="form-group">
-                        <label>{t('credentials.identifier')}</label>
-                        <input
+                        <label>Tipo de Credencial *</label>
+                        <select
                             required
-                            value={formData.name}
-                            onChange={e => setFormData({ ...formData, name: e.target.value })}
-                            placeholder="Ej: OpenAI Key Principal"
+                            value={formData.credential_type_id || ''}
+                            onChange={e => {
+                                const typeId = parseInt(e.target.value);
+                                const type = credentialTypes.find(t => t.id === typeId);
+                                setFormData({
+                                    ...formData,
+                                    credential_type_id: typeId,
+                                    name: type?.internal_key || '',  // Auto-fill internal name
+                                    category: type?.internal_key.split('_')[0].toLowerCase() || 'other'  // Infer category
+                                });
+                            }}
+                        >
+                            <option value="">Selecciona un tipo...</option>
+                            {credentialTypes.map(type => (
+                                <option key={type.id} value={type.id}>
+                                    {type.display_name} {type.is_required && '(Requerido)'}
+                                </option>
+                            ))}
+                        </select>
+                        {selectedType && (
+                            <p style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '5px' }}>
+                                {selectedType.description}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* NEW: Optional User Label */}
+                    <div className="form-group">
+                        <label>Etiqueta Personalizada (Opcional)</label>
+                        <input
+                            value={formData.user_label || ''}
+                            onChange={e => setFormData({ ...formData, user_label: e.target.value })}
+                            placeholder="Ej: Mi API Key de Pruebas"
                         />
+                        <p style={{ fontSize: '11px', color: '#a1a1aa', marginTop: '5px' }}>
+                            Nombre descriptivo para identificar esta credencial (solo para tu referencia)
+                        </p>
                     </div>
 
                     {formData.category === 'smtp' ? (

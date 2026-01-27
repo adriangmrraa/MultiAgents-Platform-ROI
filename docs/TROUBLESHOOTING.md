@@ -112,3 +112,117 @@ Este documento recopila los errores más comunes encontrados durante el desplieg
 *   **Causa**: El "Eco" del mensaje humano no está llegando al Orchestrator.
 *   **Solución**: Verifica que el `whatsapp_service` (o el gateway correspondiente) tenga acceso al Orchestrator y esté configurado para reenviar eventos `outgoing`. Revisa que `is_echo` se marque como `True` en los logs del Orchestrator.
 
+---
+
+## 11. Errores Específicos v6.2 (Identity & Credentials)
+
+### Error: "Conversación con mi nombre" en el Dashboard
+*   **Síntoma**: Aparece un chat con tu nombre (ej: Adrian Gamarra) en lugar del cliente.
+*   **Causa**: Versiones anteriores a v6.2 usaban al remitente del mensaje (agente) como identidad de la conversación.
+*   **Solución**: La v6.2 corrige esto automáticamente. Si ves un chat con tu nombre, simplemente envía un nuevo mensaje desde Chatwoot y el sistema actualizará la identidad al cliente real.
+
+### Error: Campos de credenciales aparecen como "********"
+*   **Síntoma**: No puedes editar API Tokens o Base URLs en el Dashboard.
+*   **Causa**: Las credenciales están encriptadas y el endpoint no las decriptaba para el frontend.
+*   **Solución v6.2**: El sistema ahora decripta automáticamente las categorías sensibles (`CHATWOOT`, `WHATSAPP`, `OPENAI`) antes de enviarlas al Dashboard.
+
+### Error: `401 Unauthorized` entre microservicios
+*   **Síntoma**: WhatsApp Service o Tienda Nube Service no pueden comunicarse con el Orchestrator.
+*   **Causa**: Mismatch en el header de seguridad o token interno incorrecto.
+*   **Solución**: 
+    1. Verifica que el header sea `X-Internal-Token` (v6.2 estándar).
+    2. Asegúrate de que `INTERNAL_API_TOKEN` sea idéntico en todos los servicios.
+
+### Error: Media Proxy (Imágenes/Audios no cargan)
+*   **Síntoma**: Los archivos multimedia no se visualizan en el chat.
+*   **Causa**: El endpoint `get_media` no tenía aislamiento de inquilinos.
+*   **Solución v6.2**: 
+    1. `get_media` ahora requiere `tenant_id`.
+    2. Verifica que la credencial `YCLOUD_API_KEY` exista en la tabla `credentials` para ese tenant.
+
+---
+
+## 12. Agentes No Responden en Canales Reales (Issue Activo - Enero 2026)
+
+### 🔴 Síntoma: El agente funciona en Chat de Prueba pero no responde en Instagram/Facebook/WhatsApp
+
+**Contexto**:
+- El agente está **activado** (`is_active = true`).
+- El Wizard muestra configuración correcta (canales, herramientas, modelo).
+- El **Chat de Prueba** interno funciona perfectamente.
+- Los mensajes entrantes desde canales reales NO generan respuestas del agente.
+
+**Diagnóstico paso a paso**:
+
+#### 1. Verificar recepción de webhooks
+Revisa los logs del Orchestrator para confirmar que los mensajes están llegando:
+```bash
+# En el contenedor del orchestrator_service
+tail -f /var/log/orchestrator.log | grep "chatwoot_webhook"
+```
+
+**Qué buscar**: Líneas como `WEBHOOK DEBUG: Raw Channel='instagram'` o `message_created event received`.
+
+#### 2. Validar tenant_id y credenciales
+Ejecuta esta query para confirmar la alineación:
+```sql
+SELECT 
+    a.id AS agent_id,
+    a.name AS agent_name,
+    a.tenant_id,
+    a.channels,
+    a.is_active,
+    c.name AS credential_name,
+    c.category
+FROM agents a
+LEFT JOIN credentials c ON a.tenant_id = c.tenant_id
+WHERE a.is_active = true AND c.category IN ('chatwoot', 'openai')
+ORDER BY a.tenant_id;
+```
+
+**Qué buscar**: Confirma que cada agente activo tiene credenciales de `chatwoot` y `openai` en su `tenant_id`.
+
+#### 3. Verificar campo `channels` en agentes
+```sql
+SELECT id, name, channels 
+FROM agents 
+WHERE is_active = true;
+```
+
+**Formato esperado**: `["instagram", "facebook", "whatsapp"]` (JSON array).
+**Error común**: Si el campo está vacío `[]` o es `null`, el agente no se activará para ningún canal.
+
+#### 4. Confirmar ejecución del Atomic Buffer
+Agrega logging temporal en `admin_routes.py` (línea ~4975):
+```python
+logger.info(f"🔥 BUFFER TASK TRIGGERED | identifier={identifier} | tenant={tenant_id}")
+```
+
+Envía un mensaje de prueba y busca este log. Si no aparece, el `process_buffer_task` no se está ejecutando.
+
+#### 5. Revisar el motor de IA
+Verifica que `execute_agent_v3_logic` en `main.py` esté recibiendo el contexto correcto:
+```python
+# Línea ~2040 en main.py
+logger.info(f"🤖 AI ENGINE STARTED | from={from_num} | tenant={t_id} | conv={c_id}")
+```
+
+**Causas comunes de fallo**:
+- **Credencial OpenAI faltante o inválida**: El motor se detiene silenciosamente.
+- **Modelo no disponible**: Si el agente usa `gpt-4o` y el tenant no tiene acceso, falla sin error visible.
+- **Timeout de Redis**: Si el buffer expira antes de procesarse.
+
+---
+
+**Solución temporal (Bypass del Buffer)**:
+Si necesitas probar sin el Atomic Buffer, comenta las líneas 4974-4985 en `admin_routes.py` y llama directamente a:
+```python
+async for _ in execute_agent_v3_logic(identifier, tenant_id, conversation_id, str(uuid.uuid4()), data, customer_map.get("name"), nexus_channel):
+    pass
+```
+
+**⚠️ Advertencia**: Esto eliminará el debounce inteligente y puede causar respuestas fragmentadas.
+
+---
+
+**© 2026 Platform AI Solutions - Sovereign Reliability Division**
