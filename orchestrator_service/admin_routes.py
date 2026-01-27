@@ -4801,6 +4801,7 @@ async def delete_agent(agent_id: int, current_user: User = Depends(get_current_u
 
 # Nexus v5.99: Configuration Hydration Endpoint (Fix Persistence)
 @router.get("/agents/{agent_id}/config", dependencies=[Depends(verify_admin_token)])
+@router.get("/agents/{agent_id}", dependencies=[Depends(verify_admin_token)])
 async def get_agent_config(agent_id: int):
     """
     Get FULL agent config for Wizard Hydration.

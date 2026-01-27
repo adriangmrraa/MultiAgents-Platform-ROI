@@ -11,7 +11,7 @@ interface ChatMessage {
 
 export const OnboardingChat: React.FC = () => {
     const navigate = useNavigate();
-    const { fetchApi, loading } = useApi();
+    const { fetchApi } = useApi();
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [userInput, setUserInput] = useState('');
     const [sessionId] = useState(() => Math.random().toString(36).substring(7));
@@ -108,7 +108,7 @@ export const OnboardingChat: React.FC = () => {
 
             if (res.status === 'draft_saved') {
                 // Redirect to Wizard with Draft ID
-                navigate(`/agents/new?draft_id=${res.draft_id}`);
+                navigate(`/admin/agents/new?draft_id=${res.draft_id}`);
             }
         } catch (err) {
             alert("Error creating draft: " + err);

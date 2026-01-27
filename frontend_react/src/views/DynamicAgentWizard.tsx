@@ -409,7 +409,7 @@ export const DynamicAgentWizard = () => {
             const loadDraft = async () => {
                 try {
                     // Fetch the DRAFT agent (is_active=False)
-                    const draftAgent = await fetchApi(`/admin/agents/${draftId}`);
+                    const draftAgent = await fetchApi(`/admin/agents/${draftId}/config`);
 
                     if (draftAgent && draftAgent.config) {
                         console.log("Hydrating Draft:", draftAgent.config);
@@ -503,11 +503,10 @@ export const DynamicAgentWizard = () => {
         if (!tpl) return;
 
         setSelectedTemplate(key);
+        const fields = tpl.fields || {}; // Template uses nested 'fields' structure
         setFormData(prev => ({
             ...prev,
-            agent_tone: tpl.agent_tone,
-            business_rules: tpl.business_rules,
-            synonym_dictionary: tpl.synonym_dictionary,
+            ...fields,
             template_type: key // Important for simulation
         }));
     };

@@ -111,15 +111,15 @@ async def onboarding_generate(
     # 1. Prepare JSON Config
     # We map the flat extracted_data to the Wizard's 'config' structure
     wizard_config = {
-        "agent_name": final_config.get("agent_name", "Nuevo Agente"),
-        "store_description": final_config.get("store_description", ""),
+        "store_name": final_config.get("agent_name", "Nuevo Agente"), # Corrected key
+        "business_description": final_config.get("store_description", ""), # Corrected key
         "agent_tone": final_config.get("agent_tone", ""),
         "business_rules": final_config.get("business_rules", ""),
         "synonym_dictionary": final_config.get("synonym_dictionary", ""),
+        "website_url": final_config.get("store_website", ""), # Corrected key
         "store_address": final_config.get("store_address", ""),
         "shipping_partners": final_config.get("shipping_partners", ""),
         "catalog_knowledge": final_config.get("catalog_knowledge", ""),
-        "store_website": final_config.get("store_website", "")
     }
 
     # 2. Insert into DB
@@ -165,15 +165,15 @@ async def onboarding_draft(
     
     # 1. Prepare Wizard Config
     wizard_config = {
-        "agent_name": final_config.get("agent_name", "Nuevo Agente (Borrador)"),
-        "store_description": final_config.get("store_description", ""),
+        "store_name": final_config.get("agent_name", "Nuevo Agente (Borrador)"), # Corrected key
+        "business_description": final_config.get("store_description", ""), # Corrected key
         "agent_tone": final_config.get("agent_tone", ""),
         "business_rules": final_config.get("business_rules", ""),
         "synonym_dictionary": final_config.get("synonym_dictionary", ""),
+        "website_url": final_config.get("store_website", ""), # Corrected key
         "store_address": final_config.get("store_address", ""),
         "shipping_partners": final_config.get("shipping_partners", ""),
         "catalog_knowledge": final_config.get("catalog_knowledge", ""),
-        "store_website": final_config.get("store_website", "")
     }
 
     # 2. Insert into DB as INACTIVE
