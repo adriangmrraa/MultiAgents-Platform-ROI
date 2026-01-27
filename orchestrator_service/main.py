@@ -1773,27 +1773,110 @@ ACCIÓN REQUERIDA:
     
     return handoff_msg
 
-# --- Tactical Prompt Injections (Omega Protocol Defaults) ---
+# --- Tactical Prompt Injections (Pointe Coach Textual Instructions) ---
 tactical_injections = {
-    "search_specific_products": "TÁCTICA: Pide siempre el talle o medidas del pie antes de buscar zapatillas de punta. Traduce 'puntas' o 'zapatillas' a la categoría calzado. Si el cliente pregunta de forma vaga, pide precisión.",
-    "search_by_category": "TÁCTICA: Si encuentran 'accesorios', sugiere protectores de silicona o cintas, son el complemento ideal para las puntas.",
-    "browse_general_storefront": "TÁCTICA: Muestra lo nuevo en colecciones de mallas o marcas premium como Gaynor Minden. Usa esta herramienta solo para dar una visión general.",
-    "search_knowledge_base": "TÁCTICA: Consulta siempre la política de cambios de zapatillas usadas (está prohibido si están marcadas). Responde sobre políticas, envíos o talles generales.",
-    "derivhumano": "TÁCTICA: Activa si el cliente pide 'prueba de puntas' presencial, tiene dudas técnicas de lesiones, o frustración extrema.",
-    "orders": "TÁCTICA: Pide el ID numérico sin #. Aclara que los pedidos de puntas pueden demorar 48hs extras por preparación de cintas.",
-    "cupones_list": "TÁCTICA: Si el cliente duda por el precio, consulta cupones activos (ej: BIENVENIDA) para incentivar el cierre."
+    "search_specific_products": """BÚSQUEDA INTELIGENTE: Si piden "Malla Negra", busca solo "Malla" (o "Leotardo") y filtra vos mismo si hay variantes en negro. NO busques "Malla Negra" directo.
+
+REGLA DE MAPEO: Antes de usar esta tool, compará la palabra con el Diccionario de Sinónimos. (ej: "mallas" -> buscás `search_specific_products(q='Leotardos')`).
+
+GATE: Usa `search_specific_products` SIEMPRE que pidan algo específico. VALIDATION FIRST: Antes de buscar, identificá si el usuario pide una categoría del Diccionario de Sinónimos.
+
+RELEVANCIA ESTRICTA (CRÍTICO): Si el usuario pide una categoría específica (ej: "Medias"), está terminantemente PROHIBIDO mostrar productos de otra categoría. Solo mostrá lo que se pidió tras el mapeo.
+
+DICCIONARIO OBLIGATORIO: Mapeá CUALQUIER sinónimo a su categoría base antes de llamar a la tool. Nunca busques por el término informal del usuario si existe traducción.""",
+    
+    "search_by_category": """Antes de ejecutar, verifica en el Diccionario de Sinónimos si la categoría solicitada tiene un mapeo (ej: 'mallas' → 'Leotardos').""",
+    
+    "browse_general_storefront": """USAR SIEMPRE para consultas vagas ("¿Qué tienen?", "Mostrame algo") o como último recurso. No repreguntar, mostrar productos.
+
+REGLA DE FALLBACK (SMART RETRY): Si buscás algo específico con search_specific_products y la tool devuelve 0 resultados:
+- CASO A (Categoría en Diccionario): Si buscaste por Categoría Base (ej: Leotardos) y no hay nada, decí: "En este momento no tengo stock de [Leotardos] por ahora". NO muestres zapatillas ni otros productos al azar.
+- CASO B (Consulta Vaga): Solo si la consulta es vaga, podés usar `browse_general_storefront`.
+
+PARCHE CRÍTICO — ANTI "RESPUESTA SIN TOOL": Si el usuario pide "¿qué tienen disponible?": siempre responder con productos reales del catálogo.""",
+    
+    "search_knowledge_base": """Consulta siempre la política de cambios de zapatillas usadas (está prohibido si están marcadas). Responde sobre políticas, envíos o talles generales. No uses esta tool para productos (usar search_specific_products).
+
+REGLAS ESPECÍFICAS:
+- Zapatillas usadas/marcadas: NO se cambian (política crítica).
+- Consultas sobre: políticas de devolución, tiempos de envío, guías de talles, cuidado de productos.
+- Si no hay info en RAG, admitir: "No tengo esa información, te derivo a un humano".""",
+    
+    "derivhumano": """Usá `derivhumano` inmediatamente si:
+(A) El usuario pide hablar con alguien.
+(B) Tiene un PROBLEMA REAL con un pago o pedido que la tool no resuelve (ej: demora excesiva, queja).
+(C) Hace preguntas técnicas profundas.
+
+FITTING (SOLO PUNTAS): Ofrecelo exclusivamente para zapatillas de punta. Si el usuario acepta, usá `derivhumano`.
+
+DERIVACIÓN OBLIGATORIA: Está TERMINANTEMENTE PROHIBIDO decir que derivás a un humano o usar el mensaje de cierre de derivación si NO ejecutaste exitosamente la tool `derivhumano` en ese mismo turno. Si la derivación es necesaria, llamá a la tool primero.
+
+PROHIBIDO derivar para un simple chequeo de estado de orden (para eso está la tool orders).""",
+    
+    "orders": """ESTADO DE PEDIDO (SIN DERIVAR): Si el usuario solo quiere saber "dónde está mi pedido", usá SIEMPRE la tool `orders`. No derivés a humano para esto.
+
+Pide el ID numérico sin #. Si el usuario da el ID con #, quitar el # antes de buscar.""",
+    
+    "cupones_list": """Si el cliente duda por el precio, consulta cupones activos para incentivar el cierre. No ofrecer cupones automáticamente, solo si detectas objeción de precio.
+
+Gatillos:
+- Cliente dice: "está caro", "es mucho", "no me alcanza".
+- Cliente pregunta por descuentos/promos.
+
+PROHIBIDO inventar cupones que no existen en la tool response.""",
+    
+    "sendemail": """Usar junto a derivhumano cuando se necesita notificar al equipo por email. Esta tool complementa la derivación."""
 }
 
-# --- Response Extraction Guides (Omega Protocol Defaults) ---
+# --- Response Extraction Guides (Pointe Coach Textual Instructions) ---
 response_guides = {
-    "search_specific_products": "GUÍA DE RESPUESTA: Muestra imagen ![nombre](url) ||| nombre, precio y aclara si incluye cintas/elásticos. Detalle breve (máximo 15 palabras).",
-    "search_by_category": "GUÍA DE RESPUESTA: Muestra las subcategorías de danza disponibles (Mallas, Calzado, Accesorios) y ofrece ver los destacados.",
-    "browse_general_storefront": "GUÍA DE RESPUESTA: Destaca el top 3 de productos más vendidos para bailarinas con sus imágenes y precios.",
-    "search_knowledge_base": "GUÍA DE RESPUESTA: Proporciona la respuesta técnica sobre el calce o la tabla de talles de forma concisa y profesional.",
-    "orders": "GUÍA DE RESPUESTA: Informa el estado (Pagado/Enviado) y si ya fue despachado por el correo elegido.",
-    "cupones_list": "GUÍA DE RESPUESTA: Extrae el código del cupón y el porcentaje de descuento de forma muy visible.",
-    "derivhumano": "GUÍA DE RESPUESTA: Dile al cliente que una experta en fitting se contactará para asesorarla personalmente y pausamos 24h.",
-    "sendemail": "GUÍA DE RESPUESTA: Confirma que se envió la notificación al equipo y que recibirán respuesta en su email."
+    "search_specific_products": """OBJETIVO PRINCIPAL: Mostrar 3 OPCIONES si la tool devuelve suficientes resultados.
+ESCASEZ: Si hay menos de 3 (1 o 2), mostrá solo los que hay. Decí la verdad. Prohibido inventar productos para llenar los 3 espacios.
+
+ANTI-REPETICIÓN (ESTRICTO): Revisá el historial. Si el usuario pide "más" o insiste y la tool devuelve los mismos productos que ya mostraste, NO los repitas. Decí la verdad. Está prohibido volver a mandar una ficha de producto si ya se mandó en los últimos 2 turnos.
+
+FORMATO DE PRESENTACIÓN (WHATSAPP - LIMPIO):
+Secuencia OBLIGATORIA: Intro -> Prod 1 -> Prod 2 -> Prod 3 -> CTA.
+
+Estructura del campo `text` para productos (TODO EN UNO):
+[NOMBRE DEL PRODUCTO]
+Precio: $[PRECIO NUMÉRICO]
+Variantes: [LISTA DE VARIANTES]
+[DESCRIPCIÓN: FIDEDIGNA PERO RESUMIDA A MÁXIMO 2 LÍNEAS. NO TE EXCEDAS.]
+[URL SIN ADORNOS]
+
+REGLA DE CALL TO ACTION (CIERRE OBLIGATORIO):
+- CASO 1 (SOLO ZAPATILLAS DE PUNTA): Siempre ofrecer "Fitting". El mensaje DEBE ser: "Para las puntas es clave que te asesores para elegir la mejor punta que se adecue a tu pie 🩰 Te contactamos con una asesora (FITTER)?". (IMPORTANTE: Esto NO aplica para Media Punta ni otros productos).
+- CASO 2 (MUCHOS PRODUCTOS - 3 o +): Ofrecer link a la web.
+- CASO 3 (POCOS PRODUCTOS - 1 o 2 totales): NO digas "ver más opciones". Usá un cierre de servicio: "¿Te puedo ayudar con algo más?" """,
+    
+    "search_by_category": """Usa el mismo formato que search_specific_products. Máximo 3 productos por respuesta para evitar saturación.""",
+    
+    "browse_general_storefront": """Mismo formato que search_specific_products. Mostrar 3 opciones del catálogo general con imágenes, precios y variantes.
+
+CTA Final: "Si querés ver más opciones, entrá a nuestra web: {store_website}".""",
+    
+    "search_knowledge_base": """Proporciona la respuesta técnica sobre el calce o la tabla de talles de forma concisa y profesional. NO inventes. Cita la fuente si es relevante (ej: "Según nuestra guía de tallas..."). Si es politica crítica, enfatizar con mayúsculas: "IMPORTANTE: Las zapatillas marcadas NO se cambian".""",
+    
+    "orders": """Sé ULTRA BREVE: informá el estado y listo. 
+
+Formato: "Tu pedido [ID] está [ESTADO] y fue despachado por [CORREO]."
+
+No des detalles innecesarios. CTA: "¿Te puedo ayudar con algo más?" """,
+    
+    "cupones_list": """Extrae el código del cupón y el porcentaje de descuento de forma muy visible.
+
+Formato: "🎟️ Tengo un cupón para vos: **[CÓDIGO]** - [%] OFF en [CONDICIÓN]. Aplicalo al momento de pagar para activar el descuento." """,
+    
+    "derivhumano": """El mensaje de despedida tras derivar DEBE ser según el motivo:
+
+(1) Para FITTING/PUNTAS: '➡Te derivamos con una asesora (FITTER), que esta capacitada para que encuentres la mejor punta que se adecue a TU PIE 🩰 en breve se contacta con vos.'
+
+(2) Para PEDIDOS: 'Fijate que ya te contacto con mis compañeras para que te ayuden con tu orden #... y sepas exactamente el estado.'
+
+(3) Para OTROS (ayuda general, quejas, pedido de humano): Usá un mensaje cálido y coherente con lo que pidió el usuario.""",
+    
+    "sendemail": """Confirma que se envió la notificación al equipo. "Listo, ya notifiqué al equipo. Te van a contactar por email o WhatsApp en las próximas horas." """
 }
 
 tools = [search_specific_products, search_by_category, browse_general_storefront, search_knowledge_base, cupones_list, orders, sendemail, derivhumano]
