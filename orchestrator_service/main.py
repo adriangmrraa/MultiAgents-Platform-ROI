@@ -2230,7 +2230,19 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             # Prio 1: Agent Config
             raw_prompt = agent_row['system_prompt_template']
             enabled_tools = json.loads(agent_row['enabled_tools']) if agent_row['enabled_tools'] else []
-            knowledge_sources = agent_row['knowledge_sources'] if 'knowledge_sources' in agent_row and agent_row['knowledge_sources'] else []
+            ks_raw = agent_row.get('knowledge_sources')
+            if ks_raw:
+                if isinstance(ks_raw, str):
+                    try:
+                        knowledge_sources = json.loads(ks_raw)
+                        if not isinstance(knowledge_sources, list):
+                             knowledge_sources = [ks_raw]
+                    except:
+                        knowledge_sources = [ks_raw]
+                else:
+                    knowledge_sources = ks_raw
+            else:
+                knowledge_sources = []
             model_config = {
                 "provider": agent_row['model_provider'],
                 "name": agent_row['model_version'], # Mapping Fix: Agent Service expects 'name'
