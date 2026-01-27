@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useAuth } from '../contexts/AuthContext';
 import { Modal } from '../components/Modal';
-import { Store, ShoppingBag, Plus, Trash2, Edit2, CheckCircle, XCircle, Sparkles, HelpCircle, BookOpen, Wrench, Save } from 'lucide-react';
+import { ShoppingBag, Plus, Trash2, Edit2, CheckCircle, XCircle, Wrench, Save } from 'lucide-react';
 
 interface Tenant {
     id?: number;
@@ -11,9 +11,6 @@ interface Tenant {
     tiendanube_store_id?: string;
     tiendanube_access_token?: string;
     owner_email?: string;
-    store_website?: string;
-    store_description?: string;
-    store_catalog_knowledge?: string;
     handoff_enabled?: boolean;
     handoff_target_email?: string;
 }
@@ -38,29 +35,9 @@ export const Stores: React.FC = () => {
         tiendanube_store_id: '',
         tiendanube_access_token: '',
         owner_email: '',
-        store_website: '',
-        store_description: '',
-        store_catalog_knowledge: ''
+        handoff_enabled: false,
+        handoff_target_email: ''
     });
-
-    const [improving, setImproving] = useState<string | null>(null);
-
-    const handleImprovePrompt = async (field: 'description' | 'catalog') => {
-        const text = field === 'description' ? formData.store_description : formData.store_catalog_knowledge;
-        if (!text) return;
-        setImproving(field);
-        try {
-            const res = await fetchApi('/admin/ai/improve-prompt', { method: 'POST', body: { text, context: 'catalog' } });
-            if (res.refined_text) {
-                if (field === 'description') setFormData({ ...formData, store_description: res.refined_text });
-                else setFormData({ ...formData, store_catalog_knowledge: res.refined_text });
-            }
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setImproving(null);
-        }
-    };
 
     const loadTenants = async () => {
         try {
@@ -69,11 +46,11 @@ export const Stores: React.FC = () => {
                 setTenants(data);
             } else {
                 console.error("Invalid tenants data received:", data);
-                setTenants([]); // Safe fallback to empty array
+                setTenants([]);
             }
         } catch (e) {
             console.error("Failed to load tenants", e);
-            setTenants([]); // Safe fallback
+            setTenants([]);
         }
     };
 
@@ -103,7 +80,6 @@ export const Stores: React.FC = () => {
         try {
             await fetchApi(`/admin/tenants/${tenantId}`, { method: 'DELETE' });
 
-            // Check if we deleted the active tenant
             if (user?.tenant_id === tenantId) {
                 console.log("Deleted active tenant. Refreshing profile...");
                 await refreshProfile();
@@ -129,7 +105,8 @@ export const Stores: React.FC = () => {
             tiendanube_store_id: '',
             tiendanube_access_token: '',
             owner_email: '',
-            store_website: ''
+            handoff_enabled: false,
+            handoff_target_email: ''
         });
         setIsModalOpen(true);
     };
@@ -238,7 +215,8 @@ export const Stores: React.FC = () => {
                         </div>
                         <div className="form-group">
                             <label>Teléfono del Bot (WhatsApp)</label>
-                            <input required value={formData.bot_phone_number} onChange={e => setFormData({ ...formData, bot_phone_number: e.target.value })} placeholder="Ej: 54911..." />
+                            <input required value={formData.bot_phone_number} onChange={e => setFormData({ ...formData, bot_phone_number: e.target.value })} placeholder="Ej: 5493704..." />
+                            <p className="text-[10px] text-gray-500 mt-1">Usa el número real de WhatsApp (con código de país, sin el +). Este ID vincula tus registros locales.</p>
                         </div>
                     </div>
 
@@ -257,69 +235,6 @@ export const Stores: React.FC = () => {
                     <div className="form-group" style={{ marginTop: '20px' }}>
                         <label>Email del Dueño</label>
                         <input value={formData.owner_email} onChange={e => setFormData({ ...formData, owner_email: e.target.value })} placeholder="admin@store.com" />
-                    </div>
-
-                    <div className="form-group">
-                        <label>Website URL</label>
-                        <input value={formData.store_website} onChange={e => setFormData({ ...formData, store_website: e.target.value })} placeholder="https://..." />
-                    </div>
-
-                    <h4 style={{ color: 'var(--accent)', margin: '20px 0 10px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <BookOpen size={16} /> Base de Conocimiento (IA/RAG)
-                    </h4>
-
-                    <div className="p-3 mb-4 rounded border border-accent/20 bg-accent/5 text-xs text-secondary-foreground leading-relaxed">
-                        <strong className="text-accent underline">Guía Maestra:</strong> Para que el robot venda correctamente, usa las <strong>Categorías</strong> y <strong>Marcas</strong> exactas de tu tienda.
-                        Ejemplo: "Vendo <em>Zapatillas</em> de marca <em>Adidas</em> y <em>Nike</em>". Esto permite que la IA construya búsquedas precisas (<code>q=Zapatillas Adidas</code>) en lugar de inventar términos.
-                    </div>
-
-                    <div className="form-group">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <label>Descripción del Negocio</label>
-                            <button
-                                type="button"
-                                className="btn-secondary"
-                                style={{ padding: '2px 8px', fontSize: '10px', height: 'auto' }}
-                                onClick={() => handleImprovePrompt('description')}
-                                disabled={improving !== null || !formData.store_description}
-                            >
-                                <Sparkles size={10} style={{ marginRight: '4px' }} />
-                                {improving === 'description' ? 'Mejorando...' : 'IA: Refinar'}
-                            </button>
-                        </div>
-                        <textarea
-                            className="bg-black/40 border border-white/10 rounded p-2 text-sm text-white w-full h-24 outline-none"
-                            value={formData.store_description}
-                            onChange={e => setFormData({ ...formData, store_description: e.target.value })}
-                            placeholder="Ej: Somos una tienda de moda sustentable..."
-                        />
-                    </div>
-
-                    <div className="form-group" style={{ marginTop: '10px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                Catálogo y Estructura Técnica
-                                <span title="Lista aquí tipos de productos y marcas. Crucial para búsquedas precisas.">
-                                    <HelpCircle size={14} style={{ opacity: 0.5, cursor: 'help' }} />
-                                </span>
-                            </label>
-                            <button
-                                type="button"
-                                className="btn-secondary"
-                                style={{ padding: '2px 8px', fontSize: '10px', height: 'auto' }}
-                                onClick={() => handleImprovePrompt('catalog')}
-                                disabled={improving !== null || !formData.store_catalog_knowledge}
-                            >
-                                <Sparkles size={10} style={{ marginRight: '4px' }} />
-                                {improving === 'catalog' ? 'Mejorando...' : 'IA: Refinar'}
-                            </button>
-                        </div>
-                        <textarea
-                            className="bg-black/40 border border-white/10 rounded p-2 text-sm text-white w-full h-32 outline-none"
-                            value={formData.store_catalog_knowledge}
-                            onChange={e => setFormData({ ...formData, store_catalog_knowledge: e.target.value })}
-                            placeholder="Ej: Tenemos Botas, Sandalias y Zapatillas. Marcas: Nike, Adidas, Timberland."
-                        />
                     </div>
 
                     <h4 style={{ color: 'var(--accent)', margin: '20px 0 10px', fontSize: '14px' }}>Derivación a Humano (Gmail)</h4>
@@ -343,13 +258,14 @@ export const Stores: React.FC = () => {
                             <p className="text-xs text-secondary mt-1">
                                 Se enviará un correo cuando el agente active la tool <code>derivhumano</code>.
                                 <br />
-                                <span className="text-accent/80">Nota: Configura el Host/Password SMTP desde el botón de herramientas <Wrench size={10} style={{ display: 'inline' }} /> en la lista de tiendas.</span>
+                                <span className="text-accent/80 font-bold">Importante:</span> El sistema ahora es Soberano. Recuerda también vincular tu WABA ID en la sección de <strong>Canales</strong> para que el bot pueda responder.
                             </p>
-                            <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-xs text-yellow-200">
-                                <strong>Nota:</strong> Asegúrate de que las credenciales SMTP estén configuradas en las variables de entorno del servidor (TIENDANUBE_SERVICE_URL).
-                            </div>
                         </div>
                     )}
+
+                    <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-sm text-blue-300">
+                        ℹ️ <strong>Nota v7.0.4:</strong> La <strong>Descripción del Negocio</strong>, <strong>Catálogo</strong> y <strong>Website URL</strong> ahora se configuran directamente en el <strong>Agent Wizard</strong> para cada agente individual.
+                    </div>
 
                     <div style={{ marginTop: '30px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                         <button type="button" className="btn-secondary" onClick={() => setIsModalOpen(false)}>Cancelar</button>

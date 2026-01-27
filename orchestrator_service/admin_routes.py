@@ -3206,6 +3206,44 @@ async def create_tenant(tenant: TenantModel, current_user: User = Depends(get_cu
     except Exception as e:
          raise HTTPException(status_code=500, detail=str(e))
 
+@router.put("/tenants/{tenant_id}", dependencies=[Depends(verify_admin_token)])
+async def update_tenant(tenant_id: int, request: Request, current_user: User = Depends(get_current_user)):
+    """
+    v7.0.4: Update tenant by ID.
+    Simplified to only update essential store metadata (no catalog/description/website here).
+    """
+    body = await request.json()
+    
+    # Verify ownership or admin
+    existing = await db.pool.fetchrow("SELECT id, tenant_id FROM tenants WHERE id = $1", tenant_id)
+    if not existing:
+        raise HTTPException(404, "Tenant not found")
+    
+    # Update only allowed fields
+    await db.pool.execute("""
+        UPDATE tenants SET 
+            store_name = $1,
+            bot_phone_number = $2,
+            owner_email = $3,
+            tiendanube_store_id = $4,
+            tiendanube_access_token = $5,
+            handoff_enabled = $6,
+            handoff_target_email = $7,
+            updated_at = NOW()
+        WHERE id = $8
+    """,
+        body.get("store_name"),
+        body.get("bot_phone_number"),
+        body.get("owner_email"),
+        body.get("tiendanube_store_id"),
+        body.get("tiendanube_access_token"),
+        body.get("handoff_enabled", False),
+        body.get("handoff_target_email"),
+        tenant_id
+    )
+    
+    return {"status": "updated", "tenant_id": tenant_id}
+
 @router.delete("/tenants/{phone}", dependencies=[Depends(verify_admin_token)])
 async def delete_tenant(phone: str):
     try:
