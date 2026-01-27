@@ -1051,6 +1051,32 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Migration 35 (TN Vault Sync) failed or already applied';
     END $$;
+    """,
+    # 36. Fix Credentials Table Constraints (v7.1.1)
+    """
+    DO $$
+    BEGIN
+        -- 1. Drop overly restrictive or incorrectly named constraints
+        ALTER TABLE credentials DROP CONSTRAINT IF EXISTS uq_credentials_name_tenant;
+        DROP INDEX IF EXISTS idx_credentials_tenant_unique;
+        DROP INDEX IF EXISTS idx_credentials_global_unique;
+
+        -- 2. Create modern, category-aware unique constraints
+        -- Global Scope (tenant_id IS NULL)
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_credentials_global_cat_unique') THEN
+            CREATE UNIQUE INDEX idx_credentials_global_cat_unique 
+            ON credentials (category, name) WHERE tenant_id IS NULL;
+        END IF;
+
+        -- Tenant Scope (tenant_id IS NOT NULL)
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_credentials_tenant_cat_unique') THEN
+            CREATE UNIQUE INDEX idx_credentials_tenant_cat_unique 
+            ON credentials (tenant_id, category, name) WHERE tenant_id IS NOT NULL;
+        END IF;
+
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Migration 36 (Fix Credentials Constraints) failed: %', SQLERRM;
+    END $$;
     """
 ]
 

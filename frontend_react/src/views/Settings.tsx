@@ -16,6 +16,8 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
     const [activeTab, setActiveTab] = useState<'integrations' | 'ycloud' | 'meta' | 'web' | 'chatwoot'>(initialTab);
     const { fetchApi } = useApi();
     const [connections, setConnections] = useState<any>(null);
+    const [tenants, setTenants] = useState<any[]>([]);
+    const [selectedTenantId, setSelectedTenantId] = useState<string>(import.meta.env.VITE_DEFAULT_TENANT_ID || "1");
 
     // Fetch Connection Status
     useEffect(() => {
@@ -23,6 +25,10 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
             try {
                 const detailsData = await fetchApi(`/admin/tenants/${import.meta.env.VITE_DEFAULT_TENANT_ID || 1}/details`);
                 setConnections(detailsData?.connections);
+
+                // Also fetch all tenants for the dropdown
+                const tenantsData = await fetchApi('/admin/tenants');
+                setTenants(tenantsData || []);
             } catch (err) {
                 console.error("Settings data fetch error:", err);
             }
@@ -58,26 +64,13 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
         const token = (document.getElementById('tn_manual_token') as HTMLInputElement).value;
         const id = (document.getElementById('tn_manual_id') as HTMLInputElement).value;
         if (!token || !id) return alert("Completa ambos campos");
+        if (!selectedTenantId) return alert("Selecciona una tienda");
+
         try {
-            const tenantId = import.meta.env.VITE_DEFAULT_TENANT_ID || 1;
-            // Credential Architecture v2
-            await fetchApi('/admin/credentials', {
-                method: 'POST',
-                body: {
-                    tenant_id: tenantId,
-                    credential_type_id: 12,  // TIENDANUBE_ACCESS_TOKEN
-                    user_label: 'Tienda Nube Access Token',
-                    value: token
-                }
-            });
-            await fetchApi('/admin/credentials', {
-                method: 'POST',
-                body: {
-                    tenant_id: tenantId,
-                    credential_type_id: 11,  // TIENDANUBE_STORE_ID
-                    user_label: 'Tienda Nube Store ID',
-                    value: id
-                }
+            // Consolidated v7.1.0 Endpoint (Backend handles encryption & Vault sync)
+            await fetchApi(`/admin/tenants/${selectedTenantId}`, {
+                method: 'PUT',
+                body: { tiendanube_access_token: token, tiendanube_store_id: id }
             });
             window.location.reload();
         } catch (e) {
@@ -257,6 +250,18 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
                                     </button>
                                     {showManualTn && (
                                         <div className="mt-4 space-y-4 bg-black/40 p-4 rounded-lg border border-white/5">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] uppercase text-slate-500 font-bold">Seleccionar Tienda</label>
+                                                <select
+                                                    value={selectedTenantId}
+                                                    onChange={(e) => setSelectedTenantId(e.target.value)}
+                                                    className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none"
+                                                >
+                                                    {tenants.map((t: any) => (
+                                                        <option key={t.id} value={t.id}>{t.store_name} (ID: {t.id})</option>
+                                                    ))}
+                                                </select>
+                                            </div>
                                             <input type="password" id="tn_manual_token" className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none" placeholder="Access Token" />
                                             <input type="text" id="tn_manual_id" className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none" placeholder="Store ID" />
                                             <button onClick={handleManualConnect} className="w-full py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded">Guardar</button>
