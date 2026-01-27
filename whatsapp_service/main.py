@@ -204,7 +204,13 @@ async def verify_signature(request: Request):
     global YCLOUD_WEBHOOK_SECRET
     if not YCLOUD_WEBHOOK_SECRET:
          logger.info("lazy_loading_ycloud_secret", source="orchestrator")
+         # 1. Try Global Scope
          YCLOUD_WEBHOOK_SECRET = await get_config("YCLOUD_WEBHOOK_SECRET")
+         
+         # 2. Fallback to Default Tenant (v6.2.25 Fix for Self-Hosted)
+         if not YCLOUD_WEBHOOK_SECRET:
+             logger.info("lazy_loading_ycloud_secret_fallback", tenant_id=1)
+             YCLOUD_WEBHOOK_SECRET = await get_config("YCLOUD_WEBHOOK_SECRET", tenant_id=1)
     
     if not YCLOUD_WEBHOOK_SECRET:
         logger.error("missing_ycloud_webhook_secret_critical")
