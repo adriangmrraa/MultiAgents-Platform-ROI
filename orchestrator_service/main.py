@@ -1094,7 +1094,7 @@ CATALOGO:
         RAISE NOTICE 'Migration 36 (Fix Credentials Constraints) failed: %', SQLERRM;
     END $$;
     """
-    ],
+    ,
 
     # 37. Global Templates (v7.2.1)
     """
