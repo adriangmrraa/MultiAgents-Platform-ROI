@@ -265,11 +265,24 @@ async def list_tenants(limit: int = 100, current_user: User = Depends(get_curren
     
     
     if current_user.role == "SuperAdmin":
-        query = "SELECT * FROM tenants ORDER BY id ASC LIMIT $1"
+        query = """
+            SELECT t.*, 
+            (EXISTS (SELECT 1 FROM credentials c WHERE c.tenant_id = t.id AND c.name = 'TIENDANUBE_ACCESS_TOKEN') AND 
+             EXISTS (SELECT 1 FROM credentials c WHERE c.tenant_id = t.id AND c.name = 'TIENDANUBE_STORE_ID')) as is_tn_connected
+            FROM tenants t 
+            ORDER BY t.id ASC LIMIT $1
+        """
         rows = await db.pool.fetch(query, limit)
     else:
         # Strict Scoping for Owners
-        query = "SELECT * FROM tenants WHERE owner_email = $1 ORDER BY id ASC LIMIT $2"
+        query = """
+            SELECT t.*, 
+            (EXISTS (SELECT 1 FROM credentials c WHERE c.tenant_id = t.id AND c.name = 'TIENDANUBE_ACCESS_TOKEN') AND 
+             EXISTS (SELECT 1 FROM credentials c WHERE c.tenant_id = t.id AND c.name = 'TIENDANUBE_STORE_ID')) as is_tn_connected
+            FROM tenants t 
+            WHERE t.owner_email = $1 
+            ORDER BY t.id ASC LIMIT $2
+        """
         rows = await db.pool.fetch(query, current_user.email, limit)
 
     results = []
@@ -4565,15 +4578,15 @@ async def list_knowledge_collections(current_user: User = Depends(get_current_us
                 "Content-Type": "application/json"
             }
             # Fetch metadata column only, filter by tenant via metadata containment
-            # Strategy: Fetch top 500 recent docs to scan for collections.
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            # Strategy: Fetch top 2000 recent docs to scan for collections.
+            async with httpx.AsyncClient(timeout=12.0) as client:
                 params = {
                     "select": "metadata",
-                    "limit": "500",
+                    "limit": "2000",
                     "order": "id.desc" 
                 }
                 # Filter by tenant inside metadata (Cast to string for Supabase REST filter)
-                params[f"metadata->>tenant_id"] = f"eq.{tenant_id}"
+                params[f"metadata->>tenant_id"] = f"eq.{str(tenant_id)}"
 
                 resp = await client.get(f"{supabase_url}/rest/v1/documents", headers=headers, params=params)
                 if resp.status_code == 200:

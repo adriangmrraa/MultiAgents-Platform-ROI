@@ -797,6 +797,7 @@ export const DynamicAgentWizard = () => {
         try {
             const body = {
                 name: formData.store_name,
+                role: formData.role || 'sales',
                 template_type: formData.template_type || 'sales',
                 tenant_id: selectedTenantId,
                 enabled_tools: selectedTools,

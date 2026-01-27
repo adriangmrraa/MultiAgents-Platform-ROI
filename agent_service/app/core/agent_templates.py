@@ -49,14 +49,6 @@ You are the AI Assistant for {self.store_name}.
 
 ## CORE INSTRUCTIONS
 {self.get_core_instructions()}
-
-## FORMAT INSTRUCTIONS
-Always respond in the following JSON format:
-{{
-  "thought": "Internal reasoning...",
-  "response": "Final response to user...",
-  "tool_use": null or {{ "name": "tool_name", "arguments": {{...}} }}
-}}
 """
 
     def filter_tools(self, all_tools: List[Any]) -> List[Any]:

@@ -194,7 +194,7 @@ export const Stores: React.FC = () => {
                                     </td>
                                     <td>{t.tiendanube_store_id || 'N/A'}</td>
                                     <td>
-                                        {t.tiendanube_store_id ? (
+                                        {t.is_tn_connected ? (
                                             <span className="service-pill ok"><CheckCircle size={10} /> Conectado</span>
                                         ) : (
                                             <span className="service-pill error"><XCircle size={10} /> Sin Configurar</span>
