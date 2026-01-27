@@ -129,7 +129,7 @@ async def onboarding_generate(
     # We follow the same pattern as get_or_create_sales_agent but forcing a new one
     q_insert = text("""
         INSERT INTO agents (name, role, tenant_id, config, model_provider, model_version, is_active, enabled_tools)
-        VALUES (:name, :role, :tenant_id, :config, :provider, :version, :is_active, :tools)
+        VALUES (:name, :role, :tenant_id, :config :: jsonb, :provider, :version, :is_active, :tools :: jsonb)
         RETURNING id
     """)
 
@@ -181,7 +181,7 @@ async def onboarding_draft(
     # 2. Insert into DB as INACTIVE
     q_insert = text("""
         INSERT INTO agents (name, role, tenant_id, config, model_provider, model_version, is_active, enabled_tools)
-        VALUES (:name, :role, :tenant_id, :config, :provider, :version, :is_active, :tools)
+        VALUES (:name, :role, :tenant_id, :config :: jsonb, :provider, :version, :is_active, :tools :: jsonb)
         RETURNING id
     """)
 

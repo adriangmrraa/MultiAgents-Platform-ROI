@@ -1094,6 +1094,18 @@ CATALOGO:
         RAISE NOTICE 'Migration 36 (Fix Credentials Constraints) failed: %', SQLERRM;
     END $$;
     """
+    ],
+
+    # 37. Global Templates (v7.2.1)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_template BOOLEAN DEFAULT FALSE;
+        ALTER TABLE agents ALTER COLUMN tenant_id DROP NOT NULL;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to evolve agents table for global templates';
+    END $$;
+    """
 ]
 
 @asynccontextmanager

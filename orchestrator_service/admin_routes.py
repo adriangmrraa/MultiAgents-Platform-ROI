@@ -5012,11 +5012,55 @@ async def list_available_tools_legacy(current_user: User = Depends(get_current_u
 
 
 @router.get("/agent-templates", dependencies=[Depends(verify_admin_token)])
-async def list_agent_templates():
+async def list_agent_templates(current_user: User = Depends(get_current_user)):
     """
-    Nexus v5.25 Filter: Returns list of available wizard templates.
+    Nexus v7.2 Dynamic Templates: Returns hybrid list of Hardcoded + DB Templates.
+    Global templates (tenant_id IS NULL) are available to everyone.
     """
-    return AGENT_TEMPLATES
+    # 1. Start with Hardcoded (Base System)
+    # We use deepcopy/copy to avoid mutating the global constant if we were to modify it (we won't, but safety first)
+    final_templates = AGENT_TEMPLATES.copy()
+
+    # 2. Fetch from DB (Global + My Tenant)
+    try:
+        query = """
+            SELECT id, name, role, config 
+            FROM agents 
+            WHERE is_template = TRUE 
+            AND (tenant_id IS NULL OR tenant_id = $1)
+            ORDER BY created_at DESC
+        """
+        rows = await db.pool.fetch(query, current_user.tenant_id)
+
+        for row in rows:
+            # ID as string key
+            key = str(row['id'])
+            
+            # Safe Config Parsing
+            config = json.loads(row['config']) if row['config'] else {}
+            if isinstance(config, str): config = json.loads(config) # Double decoding safety
+
+            # Map to Frontend Structure
+            final_templates[key] = {
+                "label": row['name'], # The template name
+                "description": config.get('store_description') or config.get('description') or "Plantilla personalizada",
+                "icon": config.get('icon', 'Sparkles'), # Default icon if not set
+                "fields": {
+                    "agent_tone": config.get('agent_tone', ''),
+                    "business_rules": config.get('business_rules', ''),
+                    "synonym_dictionary": config.get('synonym_dictionary', ''),
+                    "store_description": config.get('store_description', ''),
+                    "catalog_summary": config.get('catalog_summary', ''),
+                    # Add extra fields if needed by Wizard override logic
+                }
+            }
+            
+    except Exception as e:
+        logger.error(f"failed_to_fetch_dynamic_templates: {e}")
+        # Fail silently and return at least the hardcoded ones
+        pass
+
+    return final_templates
 
 @router.get("/agents/sales-config/{tenant_id_ignored}", dependencies=[Depends(verify_admin_token)])
 async def get_sales_agent_config(tenant_id_ignored: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
