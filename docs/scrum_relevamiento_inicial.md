@@ -9,7 +9,7 @@
 
 *   **Gestión Reactiva:** La atención al cliente actual se limita a responder preguntas, sin capacidad de iniciativa estratégica o de ventas proactivas.
 *   **Desconexión Operativa:** Las herramientas de chat, creación de contenido, gestión de catálogo y estrategia de marketing operan en silos, requiriendo intervención humana constante para conectarlas.
-*   **Escalabilidad Limitada:** A medida que aumenta el volumen de interacciones, la calidad de la atención y la personalización disminuyen drásticamente.
+*   **Escalabilidad Limitada:** A medida que aumenta el volumen de interacciones, la calidad de la atención y la personalización disminuyen drásticamente. 
 *   **Lentitud en Ejecución:** La creación de activos visuales y copys para campañas toma días o semanas, perdiendo oportunidades de mercado en tiempo real.
 
 **Dolores identificados (Pain Points):**
