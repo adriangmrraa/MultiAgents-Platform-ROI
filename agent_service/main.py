@@ -43,14 +43,6 @@ async def validation_exception_handler(request, exc):
         content={"detail": exc.errors(), "body": str(await request.body())},
     )
 
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request, exc):
-    logger.error("validation_error", errors=exc.errors(), body=await request.body())
-    return JSONResponse(
-        status_code=422,
-        content={"detail": exc.errors(), "body": str(await request.body())},
-    )
-
 # --- Common Models (Shared logically with Orchestrator) ---
 class OrchestratorMessage(BaseModel):
     part: Optional[int] = None
