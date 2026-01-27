@@ -1621,8 +1621,6 @@ async def get_stats(current_user: User = Depends(get_current_user)):
         logger.error(f"❌ Stats: Aggregation failed | error={str(e)}")
         # Low-level fallback
         return {"total_messages": 0, "processed_messages": 0, "roi_metrics": {"total_gmv": 0}}
-            "error": "Database unavailable"
-        }
 
 def sanitize_payload(payload: Any) -> Any:
     """Recursively mask sensitive keys in a dictionary or list."""
