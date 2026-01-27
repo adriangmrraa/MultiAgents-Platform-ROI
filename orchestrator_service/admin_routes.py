@@ -121,10 +121,14 @@ async def get_internal_credential_endpoint(name: str, tenant_id: Optional[int] =
             
         if val:
             return {"name": name, "value": val}
-        raise HTTPException(status_code=404, detail=f"Credential {name} not found")
+            
+        # Return 200 with NULL value instead of 404 to avoid breaking the caller (v6.2.14)
+        logger.warning(f"⚠️ credential_not_found: {name} (returned null)")
+        return {"name": name, "value": None}
     except Exception as e:
         logger.error(f"internal_credential_fetch_failed: {str(e)}")
-        raise HTTPException(500, detail=str(e))
+        # Don't crash the caller, return None
+        return {"name": name, "value": None}
 
 # --- RBAC Helper ---
 from functools import wraps

@@ -621,33 +621,64 @@ async def relay_message(msg: RelayMessage, request: Request):
                 await asyncio.sleep(4)
 
             if msg.provider == 'meta_direct':
-                # 1. Fetch Page Token / Phone ID from Orchestrator (Credential Architecture v2)
-                meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
+                # 1. Fetch Credentials Directly
+                # Consolidated Logic (Nexus v6.2.15): Relay talks directly to Meta Graph API
+                # Eliminates 'meta_service' dependency for improved reliability.
                 
                 async with httpx.AsyncClient() as client:
                     if msg.channel_source == 'whatsapp':
+                        # Should usually go via YCloud, but if 'meta_direct' works for WA Cloud API:
                         phone_id = await get_config("WHATSAPP_PHONE_NUMBER_ID", tenant_id=msg.tenant_id)
                         token_wa = await get_config("WHATSAPP_ACCESS_TOKEN", tenant_id=msg.tenant_id)
-                        
+
                         if not phone_id or not token_wa:
-                            raise Exception("Meta WhatsApp Credentials Missing")
+                             logger.error("❌ RELAY: Missing Meta WA Credentials", tenant_id=msg.tenant_id)
+                             # Fallback to YCloud if credentials miss
+                             raise Exception("Meta WhatsApp Credentials Missing")
+
+                        url = f"https://graph.facebook.com/v19.0/{phone_id}/messages"
+                        headers = {
+                            "Authorization": f"Bearer {token_wa}",
+                            "Content-Type": "application/json"
+                        }
+                        payload = {
+                            "messaging_product": "whatsapp",
+                            "recipient_type": "individual",
+                            "to": msg.to,
+                            "type": "text",
+                            "text": {"body": text_part}
+                        }
                         
-                        res = await client.post(f"{meta_service_url}/whatsapp/send", json={
-                            "recipient_id": msg.to, "text": text_part, 
-                            "access_token": token_wa, "phone_number_id": phone_id
-                        }, timeout=10.0)
+                        logger.info("📡 RELAY: Sending to WA Cloud API", url=url)
+                        res = await client.post(url, headers=headers, json=payload, timeout=10.0)
+                        
                     else:
+                        # Instagram / Facebook Page
                         page_token = await get_config("meta_page_token", tenant_id=msg.tenant_id)
                         if not page_token:
-                            raise Exception("Meta Page Token Missing")
+                            # Try global fallback
+                            page_token = await get_config("META_PAGE_TOKEN")
                         
-                        res = await client.post(f"{meta_service_url}/messages/send", json={
-                            "recipient_id": msg.to, "text": text_part, "access_token": page_token
-                        }, timeout=10.0)
-                    
+                        if not page_token:
+                             logger.error("❌ RELAY: Missing Meta Page Token", tenant_id=msg.tenant_id)
+                             raise Exception("Meta Page Token Missing")
+
+                        # Graph API URL for Page/IG Messages
+                        url = "https://graph.facebook.com/v19.0/me/messages"
+                        params = {"access_token": page_token}
+                        # IG/FB Recipient is PSID
+                        payload = {
+                            "recipient": {"id": msg.to},
+                            "message": {"text": text_part},
+                            "messaging_type": "RESPONSE"
+                        }
+
+                        logger.info(f"📡 RELAY: Sending to Meta Graph API ({msg.channel_source})", url=url, recipient=msg.to)
+                        res = await client.post(url, params=params, json=payload, timeout=10.0)
+
                     if res.status_code not in [200, 201]:
-                        logger.error("❌ RELAY: Meta Service Error", status=res.status_code, body=res.text)
-                        raise Exception(f"Meta Service Error: {res.text}")
+                        logger.error("❌ RELAY: Meta Graph API Error", status=res.status_code, body=res.text)
+                        raise Exception(f"Meta Platform Error: {res.text}")
 
             elif msg.provider == 'chatwoot':
                 cw_url = await get_config("CHATWOOT_BASE_URL", "https://app.chatwoot.com", tenant_id=msg.tenant_id)

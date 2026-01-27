@@ -479,7 +479,8 @@ migration_steps = [
         correlation_id TEXT,
         from_number VARCHAR(128),
         meta JSONB DEFAULT '{}',
-        channel_source VARCHAR(32) DEFAULT 'whatsapp'
+        channel_source VARCHAR(32) DEFAULT 'whatsapp',
+        is_shadow_indexed BOOLEAN DEFAULT FALSE
     );
     """,
     # 9b. Chat Messages Repair (Comprehensive Repair to avoid missing columns and fix legacy ID type)
@@ -514,7 +515,8 @@ migration_steps = [
         correlation_id TEXT,
         from_number VARCHAR(128),
         meta JSONB DEFAULT '{}',
-        channel_source VARCHAR(32) DEFAULT 'whatsapp'
+        channel_source VARCHAR(32) DEFAULT 'whatsapp',
+        is_shadow_indexed BOOLEAN DEFAULT FALSE
     );
     """,
     # Ensure columns in case table existed but was missing those
@@ -527,6 +529,7 @@ migration_steps = [
         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS media_id UUID;
         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT '{}';
         ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS channel_source VARCHAR(32) DEFAULT 'whatsapp';
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS is_shadow_indexed BOOLEAN DEFAULT FALSE;
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Schema repair failed for chat_messages';
     END $$;
