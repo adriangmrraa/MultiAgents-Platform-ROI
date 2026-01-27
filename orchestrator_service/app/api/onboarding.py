@@ -140,3 +140,55 @@ async def onboarding_generate(
     except Exception as e:
         logger.error(f"Failed to create agent via Onboarding: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+@router.post("/draft")
+async def onboarding_draft(
+    tenant_id: int = Body(..., embed=True),
+    final_config: dict = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Saves the Architect's output as a DRAFT agent (is_active=False).
+    Returns draft_id for the Wizard to hydrate.
+    """
+    from sqlalchemy import text
+    import json
+    
+    # 1. Prepare Wizard Config
+    wizard_config = {
+        "agent_name": final_config.get("agent_name", "Nuevo Agente (Borrador)"),
+        "store_description": final_config.get("store_description", ""),
+        "agent_tone": final_config.get("agent_tone", ""),
+        "business_rules": final_config.get("business_rules", ""),
+        "synonym_dictionary": final_config.get("synonym_dictionary", ""),
+        "store_address": final_config.get("store_address", ""),
+        "shipping_partners": final_config.get("shipping_partners", ""),
+        "catalog_knowledge": final_config.get("catalog_knowledge", ""),
+        "store_website": final_config.get("store_website", "")
+    }
+
+    # 2. Insert into DB as INACTIVE
+    q_insert = text("""
+        INSERT INTO agents (name, role, tenant_id, config, model_provider, model_version, is_active, enabled_tools)
+        VALUES (:name, :role, :tenant_id, :config, :provider, :version, :is_active, :tools)
+        RETURNING id
+    """)
+
+    try:
+        result = await db.execute(q_insert, {
+            "name": f"[DRAFT] {final_config.get('agent_name', 'Agente')}", 
+            "role": "sales", 
+            "tenant_id": tenant_id,
+            "config": json.dumps(wizard_config),
+            "provider": "openai",
+            "version": "gpt-4o",
+            "is_active": False, # <--- DRAFT MODE
+            "tools": ["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"]
+        })
+        await db.commit()
+        draft_id = result.scalar()
+        
+        return {"draft_id": draft_id, "status": "draft_saved"}
+        
+    except Exception as e:
+        logger.error(f"Failed to save draft: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

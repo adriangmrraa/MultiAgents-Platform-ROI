@@ -96,9 +96,9 @@ export const OnboardingChat: React.FC = () => {
     const handleCreateAgent = async () => {
         if (!extractedData) return;
 
-        // Call Generate
+        // Call Draft Endpoint
         try {
-            const res = await fetchApi('/admin/onboarding/generate', {
+            const res = await fetchApi('/admin/onboarding/draft', {
                 method: 'POST',
                 body: {
                     tenant_id: 1, // TODO
@@ -106,11 +106,12 @@ export const OnboardingChat: React.FC = () => {
                 }
             });
 
-            if (res.status === 'created') {
-                navigate(`/agents/${res.agent_id}`);
+            if (res.status === 'draft_saved') {
+                // Redirect to Wizard with Draft ID
+                navigate(`/agents/new?draft_id=${res.draft_id}`);
             }
         } catch (err) {
-            alert("Error creating agent: " + err);
+            alert("Error creating draft: " + err);
         }
     };
 
