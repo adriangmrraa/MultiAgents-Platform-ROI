@@ -314,7 +314,7 @@ export const Stores: React.FC = () => {
                                         <textarea
                                             rows={2}
                                             className="text-xs bg-black/20 border border-white/5 w-full p-2 rounded"
-                                            value={toolConfigs[tool.name]?.tactical || ''}
+                                            value={toolConfigs[tool.name]?.tactical || tool.prompt_injection || ''}
                                             onChange={e => setToolConfigs({
                                                 ...toolConfigs,
                                                 [tool.name]: { ...toolConfigs[tool.name], tactical: e.target.value }
@@ -327,7 +327,7 @@ export const Stores: React.FC = () => {
                                         <textarea
                                             rows={2}
                                             className="text-xs bg-black/20 border border-white/5 w-full p-2 rounded"
-                                            value={toolConfigs[tool.name]?.response_guide || ''}
+                                            value={toolConfigs[tool.name]?.response_guide || tool.response_guide || ''}
                                             onChange={e => setToolConfigs({
                                                 ...toolConfigs,
                                                 [tool.name]: { ...toolConfigs[tool.name], response_guide: e.target.value }

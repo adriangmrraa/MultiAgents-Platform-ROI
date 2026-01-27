@@ -176,6 +176,7 @@ async def get_tools(current_user: User = Depends(get_current_user)):
     """
     Hybrid Tool Discovery: System (Code) + Custom (DB).
     Scoped: System Tools + My Tenant Tools
+    Nexus v6.2: Returns injections and guides for UI pre-population.
     """
     tenant_id = current_user.tenant_id
     
@@ -185,10 +186,14 @@ async def get_tools(current_user: User = Depends(get_current_user)):
     db_tools = [dict(row) for row in db_tools_rows]
     
     # 2. System Tools (Registered in memory)
+    # We use both name-based and object-based registries
     system_tools = [
         {
             "name": t.name, 
+            "label": getattr(t, 'label', t.name.replace('_', ' ').title()),
             "description": t.description, 
+            "icon": getattr(t, 'icon', 'Wrench'),
+            "category": getattr(t, 'category', 'general'),
             "type": "system", 
             "service_url": "internal",
             "prompt_injection": SYSTEM_TOOL_INJECTIONS.get(t.name, ""),
@@ -204,10 +209,10 @@ async def get_tools(current_user: User = Depends(get_current_user)):
     # System tools first (potentially modified by DB)
     for st in system_tools:
         if st['name'] in db_tool_map:
-            # Overwrite with DB version (prompt_injection, response_guide, config, etc.)
+            # Overwrite with DB version
             st.update({
-                "prompt_injection": db_tool_map[st['name']]['prompt_injection'],
-                "response_guide": db_tool_map[st['name']].get('response_guide', ""),
+                "prompt_injection": db_tool_map[st['name']]['prompt_injection'] or st['prompt_injection'],
+                "response_guide": db_tool_map[st['name']].get('response_guide') or st['response_guide'],
                 "config": db_tool_map[st['name']]['config'],
                 "id": db_tool_map[st['name']]['id'],
                 "service_url": db_tool_map[st['name']]['service_url'] or st['service_url']
@@ -4994,90 +4999,13 @@ async def list_available_models():
 # --- Nexus v5.99: Tool Discovery ---
 
 
-@router.get("/tools", dependencies=[Depends(verify_admin_token)])
-async def list_available_tools():
+@router.get("/tools-available", dependencies=[Depends(verify_admin_token)])
+async def list_available_tools_legacy(current_user: User = Depends(get_current_user)):
     """
-    Returns the comprehensive arsenal of tools available to agents.
-    Nexus v5.99: Hybrid System (Hardcoded Core + DB Custom).
+    Alias for tool discovery (admin side).
+    Nexus v6.2: Redirects to the main discovery logic to avoid code duplication.
     """
-    # 1. Core System Tools (Hardcoded Integrity)
-    system_tools = [
-        {
-            "name": "search_specific_products",
-            "label": "Buscador de Productos", 
-            "description": "Permite al agente buscar productos por nombre, categoría o características en tu catálogo.",
-            "icon": "Search",
-            "category": "sales"
-        },
-        {
-            "name": "orders",
-            "label": "Estado de Pedidos",
-            "description": "Permite consultar el estado de un pedido (en camino, entregado) usando el ID de orden.",
-            "icon": "Package",
-            "category": "support"
-        },
-        {
-            "name": "check_stock",
-            "label": "Verificador de Stock",
-            "description": "Consulta disponibilidad de talles y colores en tiempo real.",
-            "icon": "Box",
-            "category": "sales"
-        },
-        {
-            "name": "derivhumano", 
-            "label": "Derivación a Humano",
-            "description": "CRÍTICO: Permite escalar la conversación a un agente humano si el usuario lo pide o está furioso.",
-            "icon": "UserCheck", 
-            "category": "system"
-        },
-        {
-            "name": "create_order",
-            "label": "Crear Orden (Checkout)",
-            "description": "Genera un link de pago/carrito para cerrar la venta.",
-            "icon": "ShoppingCart",
-            "category": "sales"
-        },
-        {
-            "name": "search_by_category",
-            "label": "Buscar por Categoría",
-            "description": "Permite al agente navegar por las categorías del catálogo (ej: Mallas, Calzado).",
-            "icon": "Grid",
-            "category": "sales"
-        },
-        {
-            "name": "browse_general_storefront",
-            "label": "Ver Escaparate General",
-            "description": "Muestra los productos destacados y novedades de la página principal.",
-            "icon": "Layout",
-            "category": "sales"
-        },
-        {
-            "name": "cupones_list",
-            "label": "Listar Cupones",
-            "description": "Consulta los cupones activos para ofrecer descuentos al cliente.",
-            "icon": "Ticket",
-            "category": "sales"
-        },
-        {
-            "name": "sendemail",
-            "label": "Enviar Correo (Handoff)",
-            "description": "Envía un correo electrónico de derivación al equipo humano.",
-            "icon": "Mail",
-            "category": "system"
-        },
-        {
-            "name": "search_knowledge_base",
-            "label": "Consultar Base de Conocimiento",
-            "description": "Lee tus PDFs y documentos subidos para responder preguntas específicas (Políticas, Manuales).",
-            "icon": "BookOpen",
-            "category": "knowledge"
-        }
-    ]
-    
-    # 2. Custom Tools (DB) - Placeholder for future expansion
-    # custom_tools = await db.pool.fetch("SELECT name, description, ... FROM tools ...")
-    
-    return system_tools
+    return await get_tools(current_user)
 
 # --- Nexus v5.24 - v5.25: Native Sales Agent & Templates ---
 
