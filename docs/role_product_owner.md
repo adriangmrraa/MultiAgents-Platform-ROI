@@ -8,7 +8,7 @@ El Product Owner es la voz del cliente dentro del equipo de desarrollo. Su aport
 ## Aportes Clave y Responsabilidades
 
 ### 1. Gestión del Backlog y Priorización
-*   **Tarea:** Mantener el backlog de `orchestrator_service`, `agent_service` y `frontend` ordenado por valor.
+*   **Tarea:** Mantener el backlog de `orchestrator_service`, `agent_service` y `frontend` ordenado por valor.  
 *   **Acción:** Decidir qué características entran en el Sprint (ej. "¿Hacemos primero la integración con Chatwoot o la generación de imágenes?"). Priorizar features que eliminen la fricción de contexto.
 
 ### 2. Definición de Historias de Usuario (User Stories)
