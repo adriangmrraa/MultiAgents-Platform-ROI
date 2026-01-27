@@ -95,3 +95,14 @@ Este documento recopila los errores más comunes encontrados durante el desplieg
     1. Verifica que el modelo exista en `app/core/models.py`.
     2. Reinicia el orquestador para recargar el registro oficial.
 
+## 9. Errores de Integración Multicanal
+
+### Error: `404 Not Found` en `meta_service` al enviar WhatsApp
+*   **Causa**: El Orchestrator intenta enviar un mensaje de WhatsApp via `meta_direct` pero el `meta_service` no tiene el endpoint `/whatsapp/send` (Versiones < 6.1).
+*   **Solución**: Actualizar `meta_service` a la última versión que incluye el proxy dedicado a WhatsApp Cloud API.
+
+### Error: `Missing Chatwoot Conversation ID`
+*   **Causa**: La base de datos no tiene el `external_chatwoot_id` en la columna dedicada (o en `meta` JSON legacy).
+*   **Diagnóstico**: El sistema intenta responder via Chatwoot pero no sabe a qué conversación apuntar.
+*   **Solución**: Verificar que el webhook de Chatwoot (`/webhooks/chatwoot`) esté recibiendo eventos y guardando correctamente el ID al crear la conversación.
+

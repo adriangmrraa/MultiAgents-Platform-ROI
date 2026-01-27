@@ -163,8 +163,18 @@ El backend implementa una captura de errores proactiva para el servicio de corre
 ## 7. Meta Uplink Protocol (v6.0)
 The dedicated system for Sovereign Social Connection.
 
-### A. The Diplomat (`meta_service`)
-A dedicated microservice that isolates the complex OAuth dance from the core orchestrator.
+### A. The Diplomat (`meta_service`) & Triangular Routing (v6.1)
+Platform AI Solutions now supports a **Triangular Routing Strategy** for messages:
+
+1.  **Meta Direct (Preferred)**:
+    -   **Social (FB/IG)**: Handled via Graph API (`/messages/send`).
+    -   **WhatsApp**: Handled via Cloud API (`/whatsapp/send`) **[NEW]**.
+2.  **Chatwoot (Human Gateway)**:
+    -   Used if `provider='chatwoot'` or as fallback for Social channels.
+3.  **YCloud (Legacy WhatsApp)**:
+    -   Used if neither Meta nor Chatwoot are configured for WA.
+
+**Microservice Specs (`meta_service`)**:
 - **Port**: 8000 (Internal Only).
 - **Communication**: HTTP JSON.
 - **Security**: `INTERNAL_SECRET_KEY` header required for all inter-service calls.

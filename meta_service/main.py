@@ -205,6 +205,52 @@ async def send_message_proxy(data: dict):
         except httpx.ConnectError as e:
             logger.error("meta_connection_error_send", url=url, error=str(e))
             raise HTTPException(status_code=503, detail=f"Could not connect to {url} to send message. Check network.")
+@app.post("/whatsapp/send")
+async def send_whatsapp_message_proxy(data: dict):
+    """
+    Sends a message via WhatsApp Cloud API.
+    Payload: {
+        "recipient_id": "...",    # User Phone Number
+        "text": "...",
+        "access_token": "...",
+        "phone_number_id": "..."  # Required for WhatsApp Cloud API
+    }
+    """
+    recipient_id = data.get("recipient_id")
+    text = data.get("text")
+    access_token = data.get("access_token")
+    phone_number_id = data.get("phone_number_id")
+
+    if not all([recipient_id, text, access_token, phone_number_id]):
+        raise HTTPException(400, "Missing required fields (recipient_id, text, access_token, phone_number_id)")
+
+    # WhatsApp Cloud API URL
+    url = f"https://graph.facebook.com/v19.0/{phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": recipient_id,
+        "type": "text",
+        "text": {"body": text}
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(url, headers=headers, json=payload)
+            
+            if resp.status_code not in [200, 201]:
+                logger.error("whatsapp_send_failed", status=resp.status_code, body=resp.text)
+                raise HTTPException(resp.status_code, f"WhatsApp Cloud API Error: {resp.text}")
+                
+            return resp.json()
+        except httpx.ConnectError as e:
+            logger.error("whatsapp_connection_error_send", url=url, error=str(e))
+            raise HTTPException(status_code=503, detail=f"Could not connect to {url} to send message. Check network.")
+
 @app.post("/privacy/data-deletion")
 async def data_deletion_callback(request: Request):
     """

@@ -50,8 +50,11 @@ El operador escribe y envía:
       "channel_source": "instagram" // Vital para saber a qué API externa llamar
     }
     ```
-4.  **Backend Routing**: El orquestador detecta `channel_source` y enruta al microservicio correcto.
-5.  **Omnichannel Identity (v6.0)**: Las conversaciones ahora incluyen `platform_origin` y `source_identifier` para rastrear exactamente qué cuenta de Meta o YCloud recibió el mensaje, permitiendo múltiples números por tenant.
+4.  **Backend Routing (Triangular Strategy)**: El orquestador detecta `channel_source` y el `provider` configurado para el tenant:
+    *   **Meta Direct**: Usa `meta_service` (Graph API para Social, Cloud API para WA).
+    *   **Chatwoot**: Usa `ChatwootClient` (Gateway Unificado).
+    *   **YCloud**: Usa `whatsapp_service` (Solo WhatsApp).
+5.  **Omnichannel Identity (v6.0)**: Las conversaciones ahora incluyen `platform_origin` y `source_identifier` para rastrear exactamente qué cuenta de Meta o YCloud recibió el mensaje.
 
 ---
 

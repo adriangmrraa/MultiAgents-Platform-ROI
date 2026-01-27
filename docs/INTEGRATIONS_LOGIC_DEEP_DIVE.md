@@ -13,6 +13,28 @@ La integración con Meta no es un simple OAuth. Es un proceso de **Vinculación 
 2.  **Login Flow (Popup)**: Manejo de la ventana emergente de permisos.
 3.  **Discovery Wizard**: Interfaz post-login que permite elegir qué activos conectar.
 
+## 1A. Multi-Provider Routing (Triángulo de Comunicación)
+
+Nexus v6.0 implementa un enrutador inteligente en el Orchestrator (`admin_routes.py`) que arbitra entre tres proveedores posibles para el canal WhatsApp, y dos para FB/IG.
+
+### Estrategia de Ruteo
+1.  **Meta Direct (Prioridad 1)**: Si el tenant tiene configurado `provider='meta_direct'` (u obtienen token via Diplomat).
+    *   **FB/IG**: Usa Graph API (`/messages/send`) via `meta_service`.
+    *   **WhatsApp**: Usa Cloud API (`/whatsapp/send`) via `meta_service`. *Requiere `WHATSAPP_PHONE_NUMBER_ID`*.
+2.  **Chatwoot (Prioridad 2)**: Si el `channel_source` es social y no hay Meta Direct, o si explícitamente se usa `provider='chatwoot'`.
+    *   Usa la API de Chatwoot (`/conversations/{id}/messages`) via `ChatwootClient`.
+3.  **YCloud (Prioridad 3 - Default para WA)**:
+    *   Usa la API de YCloud via `whatsapp_service` (Gateway dedicado).
+
+### Tabla de Decisiones
+| Canal | Proveedor Preferido | Ruteo Backend | Endpoint |
+| :--- | :--- | :--- | :--- |
+| **WhatsApp** | Meta Direct | `meta_service` | `POST /whatsapp/send` |
+| **WhatsApp** | YCloud | `whatsapp_service` | `POST /messages/send` |
+| **WhatsApp** | Chatwoot | `Orchestrator` -> `Chatwoot` | `POST /conversations/...` |
+| **FB / IG** | Meta Direct | `meta_service` | `POST /messages/send` |
+| **FB / IG** | Chatwoot | `Orchestrator` -> `Chatwoot` | `POST /conversations/...` |
+
 ---
 
 ## 🔄 Flujo de Conexión (Paso a Paso)
@@ -108,6 +130,11 @@ Esta es la sección más frágil del sistema debido a la dependencia externa (Me
 El backend (`meta_service`) puede lanzar excepciones específicas que el frontend debe mostrar.
 *   `OAuthException`: Token vencido o revocado por el usuario.
 *   `Permissions Missing`: El usuario desmarcó un permiso crítico en el popup.
+
+#### C. WABA Integration (Direct Cloud API)
+El endpoint `POST /whatsapp/send` en `meta_service` maneja el envío directo a WhatsApp Cloud API.
+*   **Payload Diferente**: Usa `messaging_product: "whatsapp"` y requiere `phone_number_id`.
+*   **Token**: Puede usar el mismo System User Token que las Pages, o uno específico de WABA.
 
 ### 3. Debugging de UI (Wizard)
 *   **Wizard no abre**: Verifica si `res.status === 'success'`. Si el backend falló al obtener assets (ej: timeout de Meta), no enviará assets y el wizard no tiene qué mostrar.

@@ -56,3 +56,49 @@ Disparador manual para el bootstrapper de Supabase/pgvector.
 `DELETE /admin/knowledge/{id}`
 *   **Comportamiento Destructivo**: Esta operación es **irreversible** en Supabase.
 *   **Performance**: Puede tardar 1-2 segundos en retornar mientras limpia los vectores embebidos del clúster de Supabase (pgvector).
+
+## Integraciones Meta (Meta Service v6.1)
+
+### 🔗 Connect OAuth
+`POST /admin/meta/connect`
+*   **Propósito**: Intercambio de códigos OAuth por tokens de larga duración.
+*   **Payload**:
+    ```json
+    {
+      "code": "AQC...",
+      "redirect_uri": "https://...",
+      "tenant_id": 123
+    }
+    ```
+
+### 📩 Send Message (Social - FB/IG)
+`POST /admin/meta/messages/send`
+*   **Uso**: Envío de mensajes a Messenger e Instagram Direct (Graph API).
+*   **Payload**:
+    ```json
+    {
+      "recipient_id": "123456",
+      "text": "Hola mundo",
+      "access_token": "PAGE_TOKEN",
+      "messaging_type": "RESPONSE"
+    }
+    ```
+
+### 🟢 Send Message (WhatsApp Cloud API)
+`POST /admin/meta/whatsapp/send`
+*   **Uso**: Envío directo a WhatsApp Cloud API (WABA).
+*   **Diferencia Clave**: Requiere `phone_number_id` y usa estructura `messaging_product`.
+*   **Payload**:
+    ```json
+    {
+      "recipient_id": "54911...",
+      "text": "Hola WhatsApp",
+      "access_token": "SYSTEM_USER_TOKEN",
+      "phone_number_id": "100200..."
+    }
+    ```
+
+### 🪝 Webhooks
+`POST /admin/meta/webhook`
+*   **Propósito**: Ingesta y normalización de eventos de Meta (Textos, Audios, Status Updates).
+*   **Seguridad**: Verifica firma HMAC con `META_APP_SECRET`.

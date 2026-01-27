@@ -173,7 +173,10 @@ export const Chats: React.FC = () => {
                     phone: d.external_user_id || '',
                     is_locked: d.is_locked || false,
                     status: d.status || 'active', // Fix: Ensure status is mapped
-                    channel: d.channel
+                    channel: d.channel,
+                    provider: d.provider,
+                    platform_origin: d.platform_origin,
+                    meta: d.meta
                 }));
 
                 // Client-side search (Optional: ideally move to backend)

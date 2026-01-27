@@ -2356,7 +2356,7 @@ async def admin_send_message(request: Request):
 
     # 3. Routing Logic: Provider-Aware (Nexus v5.1 Alignment)
     # Fetch full conversation record for provider details
-    conv_data = await db.pool.fetchrow("SELECT provider, external_user_id, meta FROM chat_conversations WHERE id = $1", conv_id)
+    conv_data = await db.pool.fetchrow("SELECT provider, external_user_id, meta, external_chatwoot_id FROM chat_conversations WHERE id = $1", conv_id)
     
     provider = conv_data['provider'] if conv_data else 'chatwoot' if channel in ['instagram', 'facebook'] else 'ycloud'
     
@@ -2365,41 +2365,88 @@ async def admin_send_message(request: Request):
         # --- META DIRECT SEND ---
         meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
         
-        # Resolve Page Token
-        token_row = await db.pool.fetchrow("""
-            SELECT value FROM credentials 
-            WHERE tenant_id = $1 AND name = 'meta_page_token'
-        """, tenant_id)
-        
-        access_token = token_row['value'] if token_row else None
-        
-        if not access_token:
-            logger.error("meta_send_failed_no_token", tenant_id=tenant_id)
-            raise HTTPException(500, "Meta Page Token not configured for this tenant")
-
         async with httpx.AsyncClient() as client:
-            try:
-                res = await client.post(
-                    f"{meta_service_url}/messages/send",
-                    json={
-                        "recipient_id": phone,
-                        "text": text,
-                        "access_token": access_token
-                    },
-                    timeout=10.0
-                )
-                if res.status_code not in [200, 201]:
-                    logger.error(f"Meta Service Error {res.status_code}: {res.text}")
-                    raise HTTPException(res.status_code, f"Meta Service Error: {res.text}")
-            except Exception as e:
-                logger.error(f"Meta Send Exception: {e}")
-                raise HTTPException(500, f"Failed to send via Meta Service: {str(e)}")
+            if channel == 'whatsapp':
+                # RESOLVE WABA PHONE NUMBER ID
+                # This ID is usually stored in the tenant config or credentials
+                # For MVP, we assume it's stored as 'WHATSAPP_PHONE_NUMBER_ID' (Standard)
+                phone_id_row = await db.pool.fetchrow("""
+                    SELECT value FROM credentials 
+                    WHERE tenant_id = $1 AND name = 'WHATSAPP_PHONE_NUMBER_ID'
+                """, tenant_id)
+                phone_number_id = phone_id_row['value'] if phone_id_row else None
+
+                # RESOLVE ACCESS TOKEN (Specific for WA or Shared)
+                # Typically WABA uses System User Token or specific WABA Token
+                token_row = await db.pool.fetchrow("""
+                    SELECT value FROM credentials 
+                    WHERE tenant_id = $1 AND name = 'WHATSAPP_ACCESS_TOKEN'
+                """, tenant_id)
+                access_token = token_row['value'] if token_row else None
+
+                if not phone_number_id or not access_token:
+                     logger.error("meta_wa_send_failed_config", tenant_id=tenant_id)
+                     raise HTTPException(500, "Meta WhatsApp Configuration (Phone ID / Token) missing")
+
+                try:
+                    res = await client.post(
+                        f"{meta_service_url}/whatsapp/send",
+                        json={
+                            "recipient_id": phone,
+                            "text": text,
+                            "access_token": access_token,
+                            "phone_number_id": phone_number_id
+                        },
+                        timeout=10.0
+                    )
+                    if res.status_code not in [200, 201]:
+                        logger.error(f"Meta WA Service Error {res.status_code}: {res.text}")
+                        raise HTTPException(res.status_code, f"Meta WA Service Error: {res.text}")
+                except Exception as e:
+                    logger.error(f"Meta WA Send Exception: {e}")
+                    raise HTTPException(500, f"Failed to send via Meta Service (WA): {str(e)}")
+
+            else:
+                # FACEBOOK / INSTAGRAM
+                # Resolve Page Token
+                token_row = await db.pool.fetchrow("""
+                    SELECT value FROM credentials 
+                    WHERE tenant_id = $1 AND name = 'meta_page_token'
+                """, tenant_id)
+                
+                access_token = token_row['value'] if token_row else None
+                
+                if not access_token:
+                    logger.error("meta_send_failed_no_token", tenant_id=tenant_id)
+                    raise HTTPException(500, "Meta Page Token not configured for this tenant")
+
+                try:
+                    res = await client.post(
+                        f"{meta_service_url}/messages/send",
+                        json={
+                            "recipient_id": phone,
+                            "text": text,
+                            "access_token": access_token
+                        },
+                        timeout=10.0
+                    )
+                    if res.status_code not in [200, 201]:
+                        logger.error(f"Meta Service Error {res.status_code}: {res.text}")
+                        raise HTTPException(res.status_code, f"Meta Service Error: {res.text}")
+                except Exception as e:
+                    logger.error(f"Meta Send Exception: {e}")
+                    raise HTTPException(500, f"Failed to send via Meta Service: {str(e)}")
 
     elif provider == 'chatwoot':
         # --- CHATWOOT SEND ---
         cw_conversation_id = data.get("external_chatwoot_id")
         cw_account_id = data.get("external_account_id")
         
+        # 1. Fallback to DB Column (Primary Source for Chatwoot)
+        if not cw_conversation_id and conv_data:
+            cw_conversation_id = conv_data.get("external_chatwoot_id")
+
+        # 2. Fallback to Meta (Legacy)
         if not cw_conversation_id and conv_data and conv_data.get("meta"):
             try:
                 meta_json = json.loads(conv_data["meta"])
