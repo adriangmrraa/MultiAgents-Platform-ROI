@@ -1060,18 +1060,28 @@ CATALOGO:
         ALTER TABLE credentials DROP CONSTRAINT IF EXISTS uq_credentials_name_tenant;
         DROP INDEX IF EXISTS idx_credentials_tenant_unique;
         DROP INDEX IF EXISTS idx_credentials_global_unique;
+        DROP INDEX IF EXISTS idx_credentials_global_cat_unique;
+        DROP INDEX IF EXISTS idx_credentials_tenant_cat_unique;
+        DROP INDEX IF EXISTS idx_credentials_upsert_logic;
 
-        -- 2. Create modern, category-aware unique constraints
-        -- Global Scope (tenant_id IS NULL)
+        -- 2. Protocol Omega: Clean duplicates to ensure index creation succeeds
+        DELETE FROM credentials a USING credentials b 
+        WHERE a.id_uuid < b.id_uuid 
+        AND a.tenant_id IS NOT DISTINCT FROM b.tenant_id 
+        AND a.category IS NOT DISTINCT FROM b.category 
+        AND a.name IS NOT DISTINCT FROM b.name;
+
+        -- 3. Create modern, category-aware unique index for ON CONFLICT (tenant_id, category, name)
+        -- Using standard unique index because ON CONFLICT requires it.
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_credentials_upsert_logic') THEN
+            CREATE UNIQUE INDEX idx_credentials_upsert_logic 
+            ON credentials (tenant_id, category, name);
+        END IF;
+
+        -- 4. Global Scope Uniqueness (tenant_id IS NULL) - Fallback protection
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_credentials_global_cat_unique') THEN
             CREATE UNIQUE INDEX idx_credentials_global_cat_unique 
             ON credentials (category, name) WHERE tenant_id IS NULL;
-        END IF;
-
-        -- Tenant Scope (tenant_id IS NOT NULL)
-        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_credentials_tenant_cat_unique') THEN
-            CREATE UNIQUE INDEX idx_credentials_tenant_cat_unique 
-            ON credentials (tenant_id, category, name) WHERE tenant_id IS NOT NULL;
         END IF;
 
     EXCEPTION WHEN OTHERS THEN
