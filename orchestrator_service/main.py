@@ -2088,16 +2088,55 @@ ID DEL AGENTE ELEGIDO:"""
         return agents[0]
 
 
+def extract_response_from_agent_output(agent_output: str) -> str:
+    """
+    Extrae solo el campo 'response' del output del agente.
+    Maneja múltiples formatos: JSON con thought/response/tool_use, o texto plano.
+    
+    Args:
+        agent_output: Output del agente (puede ser JSON string o texto plano)
+    
+    Returns:
+        Solo el texto de respuesta, sin metadata técnica
+    """
+    if not agent_output:
+        return ""
+    
+    # Intentar parsear como JSON
+    try:
+        parsed = json.loads(agent_output.strip())
+        if isinstance(parsed, dict):
+            # Si tiene campo 'response', extraerlo
+            if 'response' in parsed:
+                return parsed['response']
+            # Si no, devolver el JSON completo como string (fallback)
+            return str(parsed)
+    except (json.JSONDecodeError, ValueError):
+        # No es JSON, devolver tal cual
+        pass
+    
+    # Fallback: devolver el texto original
+    return agent_output
+
 async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_source):
     buffer_key = f"buffer:{from_num}"
     pending_key = f"pending:{from_num}"
+    
+    logger.info(f"⏳ BUFFER: Waiting for debounce | identifier={from_num} | wait_time=2s")
     await asyncio.sleep(2)
+    
     try:
         messages_raw = await redis_client.lrange(buffer_key, 0, -1)
         await redis_client.delete(buffer_key)
         await redis_client.delete(pending_key)
-        if not messages_raw: return
+        
+        if not messages_raw: 
+            logger.info(f"📭 BUFFER: Empty buffer | identifier={from_num}")
+            return
+        
         combined_text = "\n".join([m.decode('utf-8') for m in messages_raw])
+        logger.info(f"📥 BUFFER: Consuming messages | identifier={from_num} | message_count={len(messages_raw)} | combined_length={len(combined_text)}")
+        
         async for _ in execute_agent_v3_logic(from_num, t_id, c_id, corr_id, combined_text, customer_name, ch_source):
             pass # Sink to trigger background delivery
     except Exception as e:
@@ -2265,7 +2304,11 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                     yield chunk
 
         # 6. Post-Stream: Consolidation & Delivery
-        if not full_text_accumulated: return
+        if not full_text_accumulated: 
+            logger.warning(f"⚠️ AGENT: No response generated | from={from_number} | tenant={tenant_id}")
+            return
+        
+        logger.info(f"🤖 AGENT: Raw response received | from={from_number} | length={len(full_text_accumulated)} | preview={full_text_accumulated[:100]}...")
 
         parts = full_text_accumulated.split("|||")
         for text_content in [p.strip() for p in parts if p.strip()]:
@@ -2273,27 +2316,33 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                 reason = text_content.split("HUMAN_HANDOFF_REQUESTED:")[1].strip()
                 await trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, customer_name)
                 continue
+            
+            # CRITICAL FIX: Extract only 'response' field from JSON
+            clean_response = extract_response_from_agent_output(text_content)
+            logger.info(f"✅ AGENT: Response extracted | from={from_number} | clean_length={len(clean_response)} | preview={clean_response[:100]}...")
 
             # Persist
             agent_msg_id = uuid.uuid4()
             await db.pool.execute("""
                 INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number, channel_source)
                 VALUES ($1, $2, $3, 'assistant', $4, $5, NOW(), $6, (SELECT channel_source FROM chat_conversations WHERE id = $3))
-            """, agent_msg_id, tenant_id, conv_id, text_content, correlation_id, from_number)
+            """, agent_msg_id, tenant_id, conv_id, clean_response, correlation_id, from_number)
             
             # Nexus v5.32: Shadow RAG Ingestion (Agent Message)
             asyncio.create_task(ShadowIndexer.process_message(str(agent_msg_id), tenant_id))
             
             # Unified Delivery Logic (Nexus v6.1 - Triangular Routing)
+            logger.info(f"📤 CHATWOOT: Sending response | conv={conv_id} | channel={channel_source} | length={len(clean_response)}")
             try:
                 await unified_message_delivery(
                     tenant_id=tenant_id,
                     conv_id=conv_id,
                     phone=from_number,
-                    text=text_content,
+                    text=clean_response,
                     channel=channel_source,
                     correlation_id=correlation_id
                 )
+                logger.info(f"✅ CHATWOOT: Response sent successfully | conv={conv_id}")
             except Exception as e:
                 logger.error("agent_delivery_failed", error=str(e), conv_id=str(conv_id))
                 # We don't raise here to allow other parts to be sent if splitting by |||
