@@ -100,7 +100,7 @@ Guardá este documento en `docs/plantilla_[nombre_proyecto].md`.
 
 ### Paso 3: Integración en el Código
 
-#### A. Actualizar Agent Templates
+#### Opción A: Hardcoded Template (Legacy/Fallback)
 
 Editá `orchestrator_service/app/api/agents.py`:
 
@@ -118,6 +118,35 @@ AGENT_TEMPLATES = {
     }
 }
 ```
+
+#### Opción B: Database Template (Recomendado - v7.2+)
+
+Insertá el template directamente en la base de datos para que sea dinámico y global:
+
+```sql
+INSERT INTO agents (
+    name, role, system_prompt_template, config, enabled_tools, 
+    is_template, tenant_id, is_active
+) VALUES (
+    'Nombre del Template', 
+    'sales', 
+    'Eres un asistente virtual de...', -- Prompt Base
+    '{
+        "agent_name": "...",
+        "agent_tone": "...", 
+        "business_rules": "...",
+        "synonym_dictionary": "...",
+        "store_description": "..."
+    }'::jsonb,
+    '["search_specific_products", "search_by_category", "orders"]'::jsonb,
+    TRUE, -- Marcado como Template
+    NULL, -- NULL = Global (Visible para todos)
+    FALSE -- Inactivo por defecto
+);
+```
+
+> [!IMPORTANT]
+> Los templates en DB aparecen automáticamente en el Wizard. El Orchestrator los identifica por `is_template = TRUE`. Si `tenant_id` es `NULL`, la plantilla es **Global**.
 
 #### B. Actualizar Tool Instructions
 

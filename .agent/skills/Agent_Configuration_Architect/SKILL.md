@@ -44,7 +44,26 @@ AGENT_TEMPLATES = {
 
 ---
 
-## 3. Instrucciones de Herramientas (Tool Config)
+## 3. Dynamic Global Templates (v7.2+)
+
+Nexus ahora soporta **Templates Dinámicos** almacenados en la base de datos. Esto permite crear plantillas que aparecen automáticamente en el Wizard de todos los inquilinos.
+
+### Lógica de Visibilidad
+El endpoint `/admin/agent-templates` mezcla los templates hardcoded con los de la base de datos siguiendo esta lógica:
+-   `is_template = TRUE`: El registro es tratado como una plantilla, no como un agente vivo.
+-   `tenant_id IS NULL`: **Template Global**. Visible para todas las cuentas del sistema.
+-   `tenant_id = X`: **Template Privado**. Visible solo para el inquilino X.
+
+### Mapeo de Campos
+El JSON en la columna `config` del template debe mapear a los campos expected del Wizard:
+- `store_description` -> Descripción en el Wizard.
+- `agent_tone` -> Tono y Personalidad.
+- `business_rules` -> Reglas de Negocio.
+- `synonym_dictionary` -> Diccionario de Sinónimos.
+
+---
+
+## 4. Instrucciones de Herramientas (Tool Config)
 
 Cada herramienta tiene dos componentes de inyección de prompt definidos en `orchestrator_service/main.py`:
 

@@ -61,32 +61,29 @@ async def onboarding_interview(
         ai_text = response.choices[0].message.content
         ONBOARDING_SESSIONS[session_id].append({"role": "assistant", "content": ai_text})
 
-        # 5. Check for <CONFIG_READY>
+        # 5. Check for <CONFIG_READY> (Regex Robustness)
+        import re
         config_ready = False
         extracted_data = None
+        
+        # Pattern to find anything between <CONFIG_READY> tags, ignoring case and multi-line
+        pattern = re.compile(r"<CONFIG_READY>(.*?)</CONFIG_READY>", re.DOTALL | re.IGNORECASE)
+        match = pattern.search(ai_text)
 
-        if "<CONFIG_READY>" in ai_text:
+        if match:
             config_ready = True
             try:
-                json_str = ai_text.split("<CONFIG_READY>")[1].split("</CONFIG_READY>")[0].strip()
+                json_str = match.group(1).strip()
                 
-                # Robustness: Remove markdown code blocks if present
-                if json_str.startswith("```json"):
-                    json_str = json_str.replace("```json", "", 1)
-                if json_str.startswith("```"):
-                    json_str = json_str.replace("```", "", 1)
-                if json_str.endswith("```"):
-                    json_str = json_str.rsplit("```", 1)[0]
+                # Robustness: Remove markdown code blocks if present (```json or ```)
+                json_str = re.sub(r"```(?:json)?\n?|\n?```", "", json_str).strip()
                 
-                extracted_data = json.loads(json_str.strip())
-                # Clean the response for the UI (remove the JSON block entirely for the user)
-                # We split by the FIRST tag occurrence to remove the block and everything after (if it was at the end)
-                # But to be safe, let's just replace the block.
-                # Actually, the user might want to see the text BEFORE the block.
-                ai_text = ai_text.split("<CONFIG_READY>")[0].strip()
+                extracted_data = json.loads(json_str)
+                
+                # Clean the response for the UI (remove the whole block)
+                ai_text = pattern.sub("", ai_text).strip()
             except Exception as e:
                 logger.error(f"JSON Parsing Error in Onboarding: {e}")
-                # We don't fail, we just don't flag ready yet
                 config_ready = False
 
         return {
