@@ -355,8 +355,7 @@ async def get_credential_types():
         # Self-Healing: Ensure YCloud Webhook Secret exists (v6.2.23)
         await ensure_ycloud_credential_types()
 
-        query = """
-            SELECT 
+        rows = await db.pool.fetch(query)
         
         # Group by provider
         providers = {}
