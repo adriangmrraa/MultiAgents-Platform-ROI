@@ -223,6 +223,57 @@ const LivePreviewPanel = ({ formData, tenantId = 1, knowledgeCollections = [] }:
     );
 };
 
+// === Tenant Selector Component (v7.0 Multi-Tenant Binding) ===
+const TenantSelector = ({ selectedTenantId, onChange }: { selectedTenantId: number, onChange: (id: number) => void }) => {
+    const { fetchApi } = useApi();
+    const [tenants, setTenants] = useState<{ id: number, store_name: string }[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const loadTenants = async () => {
+            try {
+                const data = await fetchApi('/admin/tenants');
+                if (Array.isArray(data)) setTenants(data);
+            } catch (err) {
+                console.error("Failed to load tenants", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadTenants();
+    }, []);
+
+    if (loading || tenants.length <= 1) return null; // Hide if single tenant
+
+    return (
+        <div className="glass p-6 rounded-2xl border border-white/5 mb-6 bg-gradient-to-br from-blue-500/10 to-cyan-500/10">
+            <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-white/10 rounded-lg">
+                    <Store size={18} className="text-cyan-300" />
+                </div>
+                <h3 className="text-sm font-bold text-white">Tienda Asociada (Tenant)</h3>
+            </div>
+
+            <div className="relative">
+                <select
+                    value={selectedTenantId}
+                    onChange={(e) => onChange(parseInt(e.target.value))}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white appearance-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all cursor-pointer"
+                >
+                    {tenants.map(t => (
+                        <option key={t.id} value={t.id}>{t.store_name} (ID: {t.id})</option>
+                    ))}
+                </select>
+                <div className="absolute right-4 top-3.5 pointer-events-none text-white/40">▼</div>
+            </div>
+
+            <p className="mt-3 text-[10px] text-white/30">
+                Este agente solo podrá acceder a credenciales y canales vinculados a esta tienda.
+            </p>
+        </div>
+    );
+};
+
 export const DynamicAgentWizard = () => {
     const { fetchApi, loading } = useApi();
     const { user } = useAuth();
@@ -748,7 +799,7 @@ export const DynamicAgentWizard = () => {
             const payload = {
                 ...formData,
                 name: formData['store_name'] || "Agente de Ventas",
-                tenant_id: user?.tenant_id || 1,
+                tenant_id: selectedTenantId, // v7.0: Use selected tenant instead of user.tenant_id
                 role: 'sales',
                 system_prompt_template: formData['agent_tone'],
 
@@ -869,6 +920,9 @@ export const DynamicAgentWizard = () => {
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-8">
+                        {/* v7.0: Tenant Selection */}
+                        <TenantSelector selectedTenantId={selectedTenantId} onChange={setSelectedTenantId} />
+
                         {/* Nexus v5.99: Channel Selection */}
                         <ChannelSelector />
 
