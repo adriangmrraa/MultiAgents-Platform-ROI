@@ -2019,10 +2019,12 @@ async def get_chats_summary(
 @safe_db_call
 async def get_chat_history(
     conversation_id: str,
+    limit: int = 50,
+    offset: int = 0,
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get full history for a conversation.
+    Get paginated history for a conversation.
     Joins with chat_media for full context.
     Protocol Omega: Verifies tenant ownership.
     """
@@ -2036,7 +2038,8 @@ async def get_chat_history(
         JOIN chat_conversations c ON m.conversation_id = c.id
         LEFT JOIN chat_media med ON m.media_id = med.id
         WHERE m.conversation_id = $1 AND c.tenant_id = $2
-        ORDER BY m.created_at ASC
+        ORDER BY m.created_at DESC
+        LIMIT $3 OFFSET $4
     """
     # Validate UUID
     try:
@@ -2044,7 +2047,7 @@ async def get_chat_history(
     except:
         raise HTTPException(status_code=400, detail="Invalid UUID")
 
-    rows = await db.pool.fetch(query, uuid_obj, current_user.tenant_id)
+    rows = await db.pool.fetch(query, uuid_obj, current_user.tenant_id, limit, offset)
     
     messages = []
     for r in rows:

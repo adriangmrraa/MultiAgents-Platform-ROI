@@ -25,6 +25,7 @@ interface Chat {
 }
 
 interface Message {
+    id?: string;
     role: string;
     content: string;
     timestamp: string;
@@ -247,27 +248,68 @@ export const Chats: React.FC = () => {
     // Icon helper
     // Old icon helper removed in favor of getChannelStyle
 
+    const [msgOffset, setMsgOffset] = useState(0);
+    const [hasMoreMsgs, setHasMoreMsgs] = useState(true);
+    const MSG_LIMIT = 30;
+
     // Load Conversation History (with polling)
     useEffect(() => {
         if (!selectedChatId) return;
 
-        const loadHistory = async (chatId: string) => {
-            console.log("Loading history for:", chatId); // DEBUG
+        // Reset on chat switch
+        setMessages([]);
+        setMsgOffset(0);
+        setHasMoreMsgs(true);
+
+        const loadHistory = async (chatId: string, isInitial = false) => {
             try {
-                const data = await fetchApi(`/admin/chats/${chatId}/messages`);
-                console.log("History Data Received:", data); // DEBUG
+                // For polling, we always fetch offset 0 (most recent)
+                // If it's initial load, we fetch offset 0 and set offset to limit
+                const url = `/admin/chats/${chatId}/messages?limit=${MSG_LIMIT}&offset=0`;
+                const data = await fetchApi(url);
+
                 if (Array.isArray(data)) {
-                    setMessages(data);
+                    const sorted = [...data].reverse(); // Backend returns DESC, we want ASC for chat history
+
+                    if (isInitial) {
+                        setMessages(sorted);
+                        setMsgOffset(MSG_LIMIT);
+                        setHasMoreMsgs(data.length === MSG_LIMIT);
+                    } else {
+                        // Polling: Merge only if we have new messages (last ID differs)
+                        setMessages(prev => {
+                            const lastMsgId = prev.length > 0 ? prev[prev.length - 1].id : null;
+                            const newMsgs = sorted.filter(m => !prev.some(p => p.id === m.id));
+                            if (newMsgs.length > 0) return [...prev, ...newMsgs];
+                            return prev;
+                        });
+                    }
                 }
             } catch (err) {
                 console.error("Failed to load history:", err);
             }
         };
-        loadHistory(selectedChatId);
 
-        const historyInterval = setInterval(() => loadHistory(selectedChatId), 3000);
+        loadHistory(selectedChatId, true);
+
+        const historyInterval = setInterval(() => loadHistory(selectedChatId, false), 3000);
         return () => clearInterval(historyInterval);
     }, [selectedChatId, fetchApi]);
+
+    const loadOlderMessages = async () => {
+        if (!selectedChatId || !hasMoreMsgs) return;
+        try {
+            const data = await fetchApi(`/admin/chats/${selectedChatId}/messages?limit=${MSG_LIMIT}&offset=${msgOffset}`);
+            if (Array.isArray(data)) {
+                const sorted = [...data].reverse();
+                setMessages(prev => [...sorted, ...prev]);
+                setMsgOffset(prev => prev + MSG_LIMIT);
+                setHasMoreMsgs(data.length === MSG_LIMIT);
+            }
+        } catch (err) {
+            console.error("Failed to load older messages:", err);
+        }
+    };
 
     const handleToggleHandoff = async (enabled: boolean) => {
         if (!selectedChatId) return;
@@ -489,6 +531,17 @@ export const Chats: React.FC = () => {
 
                             {/* Messages */}
                             <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-black/10 scroll-smooth">
+                                {hasMoreMsgs && messages.length >= MSG_LIMIT && (
+                                    <div className="flex justify-center pb-4">
+                                        <button
+                                            onClick={loadOlderMessages}
+                                            className="text-xs bg-white/5 hover:bg-white/10 text-gray-400 px-4 py-2 rounded-full border border-white/10 transition-all flex items-center gap-2"
+                                        >
+                                            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+                                            Cargar mensajes anteriores
+                                        </button>
+                                    </div>
+                                )}
                                 {messages.map((msg, idx) => {
                                     // Audio Protocol Parsing (Legacy)
                                     const audioMatch = msg.content && typeof msg.content === 'string'

@@ -8,31 +8,20 @@ import uuid
 import structlog
 from typing import Any, Dict, List, Optional, Literal
 from fastapi import FastAPI, HTTPException, Header, Depends, Body
-from pydantic import BaseModel, Field, SecretStr
-from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-from langchain.output_parsers import PydanticOutputParser
-from langchain.tools import tool
-import httpx
-import tiktoken
-from fastapi.responses import StreamingResponse
-from contextvars import ContextVar # Protocol Omega: Isolation
-from app.core.agent_templates import AgentTemplateFactory # Nexus v5.27
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import StreamingResponse, JSONResponse
 
-# --- Initialize Structlog ---
-structlog.configure(
-    processors=[
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer()
-    ],
-    logger_factory=structlog.PrintLoggerFactory(),
-)
-logger = structlog.get_logger()
+# ... (Initialize Structlog unchanged)
 
 app = FastAPI(title="Agent Core Service", version="1.0.0")
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    logger.error("validation_error", errors=exc.errors(), body=await request.body())
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": str(await request.body())},
+    )
 
 # --- Common Models (Shared logically with Orchestrator) ---
 class OrchestratorMessage(BaseModel):

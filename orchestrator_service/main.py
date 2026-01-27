@@ -2289,9 +2289,10 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             "history": remote_history,
             "context": {"store_name": tenant_row['store_name'], "system_prompt": sys_template, "current_channel": channel_source},
             "credentials": {
-                "openai_api_key": openai_key,
-                "tiendanube_access_token": tn_token,
-                "tiendanube_store_id": str(tenant_row['tiendanube_store_id']) if tenant_row.get('tiendanube_store_id') else None
+                "openai_api_key": openai_key or OPENAI_API_KEY, 
+                "tiendanube_store_id": str(tenant_row['tiendanube_store_id']) if tenant_row.get('tiendanube_store_id') else None, 
+                "tiendanube_access_token": tn_token or tenant_row.get('tiendanube_access_token'), 
+                "tiendanube_service_url": TIENDANUBE_SERVICE_URL
             },
             "agent_config": {
                 "tools": enabled_tools, 
@@ -2301,8 +2302,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                 "temperature": temp_value, # Root-level Propagation
                 "template_type": agent_row['template_type'] if agent_row else "sales",
                 "wizard_overrides": wizard_overrides if agent_row else {}
-            },
-            "credentials": {"openai_api_key": openai_key or OPENAI_API_KEY, "tiendanube_store_id": tenant_row['tiendanube_store_id'], "tiendanube_access_token": tn_token or tenant_row.get('tiendanube_access_token'), "tiendanube_service_url": TIENDANUBE_SERVICE_URL}
+            }
         }
 
         # 5. Call Agent Service (Streaming Session)
