@@ -2306,12 +2306,20 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
     
     db_provider = conv_data['provider'] if conv_data else None
     
+    # Priority Resolution (v6.1 Sovereign Architecture)
     if db_provider:
         provider = db_provider
+    elif channel in ['instagram', 'facebook']:
+        # If social, prioritize Meta Direct if configured, else fallback to CW
+        has_meta = await db.pool.fetchval("SELECT 1 FROM credentials WHERE tenant_id = $1 AND (name = 'meta_page_token' OR name = 'WHATSAPP_ACCESS_TOKEN')", tenant_id)
+        if has_meta:
+             provider = 'meta_direct'
+        elif conv_data and conv_data.get('external_chatwoot_id'):
+             provider = 'chatwoot'
+        else:
+             provider = 'meta_direct' # Default for social
     elif conv_data and conv_data.get('external_chatwoot_id'):
         provider = 'chatwoot'
-    elif channel in ['instagram', 'facebook']:
-        provider = 'meta_direct'
     else:
         provider = 'ycloud'
 
@@ -2361,14 +2369,29 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
 
         cw_url = os.getenv("CHATWOOT_BASE_URL", "https://app.chatwoot.com")
         cw_token = os.getenv("CHATWOOT_API_TOKEN")
-        if not cw_token:
-            token_encrypted = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_API_TOKEN' LIMIT 1")
-            if token_encrypted:
-                from utils import decrypt_password
-                cw_token = decrypt_password(token_encrypted)
         
+        if not cw_token:
+            # Protocol Omega: Tenant-scoped credentials prioritized (v6.1)
+            token_encrypted = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_API_TOKEN'", tenant_id)
+            if not token_encrypted:
+                 # Legacy fallback
+                 token_encrypted = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_API_TOKEN' LIMIT 1")
+            
+            if token_encrypted:
+                try:
+                    from utils import decrypt_password
+                    cw_token = decrypt_password(token_encrypted)
+                except Exception as e:
+                    logger.error("cw_token_decrypt_failed", error=str(e))
+        
+        if not cw_token:
+            logger.error("chatwoot_token_missing", tenant_id=tenant_id)
+            raise HTTPException(500, "Chatwoot API Token Missing. Please check Credentials.")
+
         if not cw_account_id:
-            cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_ACCOUNT_ID' LIMIT 1") or "1"
+            cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_ACCOUNT_ID'", tenant_id)
+            if not cw_account_id:
+                 cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_ACCOUNT_ID' LIMIT 1") or "1"
 
         async with httpx.AsyncClient() as client:
             res = await client.post(

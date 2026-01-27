@@ -26,14 +26,17 @@ Nexus v6.0 implementa un enrutador inteligente en el Orchestrator (`admin_routes
 3.  **YCloud (Prioridad 3 - Default para WA)**:
     *   Usa la API de YCloud via `whatsapp_service` (Gateway dedicado).
 
-### Tabla de Decisiones
-| Canal | Proveedor Preferido | Ruteo Backend | Endpoint |
+### Tabla de Decisiones (v6.1)
+| Canal | Proveedor Preferido | Microservicio Gateway | Endpoint |
 | :--- | :--- | :--- | :--- |
 | **WhatsApp** | Meta Direct | `meta_service` | `POST /whatsapp/send` |
 | **WhatsApp** | YCloud | `whatsapp_service` | `POST /messages/send` |
-| **WhatsApp** | Chatwoot | `Orchestrator` -> `Chatwoot` | `POST /conversations/...` |
+| **WhatsApp** | Chatwoot | *Directo via Orchestrator* | `/conversations/...` |
 | **FB / IG** | Meta Direct | `meta_service` | `POST /messages/send` |
-| **FB / IG** | Chatwoot | `Orchestrator` -> `Chatwoot` | `POST /conversations/...` |
+| **FB / IG** | Chatwoot | *Directo via Orchestrator* | `/conversations/...` |
+
+> [!IMPORTANT]
+> A partir de v6.1, **`whatsapp_service` es exclusivamente un Gateway para YCloud**. Toda la lógica de ruteo redundante para IG/FB ha sido delegada al Orchestrator para evitar discrepancias de configuración. "La Inteligencia reside en el Orchestrator, la Conexión en los Gateways".
 
 ---
 

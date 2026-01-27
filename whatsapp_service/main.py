@@ -547,48 +547,30 @@ async def send_message(message: SendMessage, request: Request):
     # For this MVP, let's assume global YCloud config unless passed
     
     try:
-        # Enrutador Inteligente (Nexus v4.0)
-        if message.channel_source in ["instagram", "facebook"]:
-            # Route via Chatwoot
-            cw_base = await get_config("CHATWOOT_BASE_URL", CHATWOOT_BASE_URL)
-            cw_token = await get_config("CHATWOOT_BOT_TOKEN", CHATWOOT_BOT_TOKEN)
-            
-            if not cw_base or not cw_token:
-                raise HTTPException(status_code=500, detail="Chatwoot configuration missing")
-            
-            cw_client = ChatwootClient(cw_base, cw_token)
-            await cw_client.send_text_message(
-                account_id=message.external_account_id,
-                conversation_id=message.external_chatwoot_id,
-                text=message.text
-            )
-            return {"status": "sent_via_chatwoot", "correlation_id": correlation_id}
-            
-        else:
-            # Route via YCloud (WhatsApp)
-            v_ycloud = await get_config("YCLOUD_API_KEY", YCLOUD_API_KEY)
-            
-            # Updated Logic: We will parse `from_number` from query param or header if available, or fetch from config
-            business_number = request.query_params.get("from_number")
-            if not business_number:
-                # Fallback to env or fetch
-                 business_number = await get_config("YCLOUD_Phone_Number_ID") # Placeholder
-            
-            if not business_number:
-                 # Basic fallback
-                 business_number = "default"
+        # WhatsApp Service is now a PURE YCloud Gateway (Nexus v6.0)
+        # FB/IG routing is handled by the Orchestrator via Meta Service.
+        
+        v_ycloud = await get_config("YCLOUD_API_KEY", YCLOUD_API_KEY)
+        
+        # Meta-information for routing
+        business_number = request.query_params.get("from_number")
+        if not business_number:
+             business_number = await get_config("YCLOUD_Phone_Number_ID") 
+        
+        if not business_number:
+             business_number = "default"
 
-            # Initialize Client
-            client = YCloudClient(v_ycloud, business_number)
-            
-            # Send
-            if message.imageUrl:
-                 await client.send_image(message.to, message.imageUrl, correlation_id)
-            
-            if message.text:
-                 await client.send_text(message.to, message.text, correlation_id)
-                 
-            return {"status": "sent_via_ycloud", "correlation_id": correlation_id}
+        # Initialize Client
+        client = YCloudClient(v_ycloud, business_number)
+        
+        # Logic for media vs text
+        if message.imageUrl:
+             await client.send_image(message.to, message.imageUrl, correlation_id)
+        
+        if message.text:
+             await client.send_text(message.to, message.text, correlation_id)
+             
+        return {"status": "sent_via_ycloud", "correlation_id": correlation_id}
         
     except Exception as e:
         logger.error("manual_send_failed", error=str(e), channel=message.channel_source, correlation_id=correlation_id)
