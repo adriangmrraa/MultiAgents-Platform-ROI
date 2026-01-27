@@ -7,7 +7,7 @@
 ---
 
 ## 🚀 SPRINT 1: Cimientos y Conexión (Semanas 1-2)
-**Objetivo de Negocio:** Lograr que el sistema "exista" y pueda leer los productos de la tienda automáticamente.
+**Objetivo de Negocio:** Lograr que el sistema "exista" y pueda leer los productos de la   tienda automáticamente.
 
 ### ÉPICA 1: Infraestructura Base
 #### Historia 1.1: Entorno de Trabajo Estable
