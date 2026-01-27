@@ -17,11 +17,37 @@ interface FieldConfig {
 const AGENT_CONFIG_SCHEMA: FieldConfig[] = [
     {
         "key": "store_name",
-        "label": "Nombre del Negocio",
+        "label": "Nombre del Negocio (DisplayName)",
         "type": "text",
         "defaultValue": "Pointe Coach",
         "placeholder": "Ej: Ferrería Central",
         "description": "El nombre oficial de tu tienda que usará el agente para presentarse."
+    },
+    {
+        "key": "website_url",
+        "label": "URL de la Web",
+        "type": "text",
+        "defaultValue": "https://www.pointecoach.shop",
+        "placeholder": "https://tu-tienda.com",
+        "description": "Link principal para el Call to Action final."
+    },
+    {
+        "key": "business_description",
+        "label": "Descripción Comercial (Contexto)",
+        "type": "textarea",
+        "rows": 5,
+        "defaultValue": "Pointe Coach es una tienda especializada en artículos de danza y ballet, distribuidores oficiales de las mejores marcas internacionales. Ofrecemos zapatillas de punta, media punta, indumentaria y accesorios técnicos para bailarines de todos los niveles.",
+        "placeholder": "Ej: Distribuidora líder de herramientas industriales y para el hogar con más de 20 años de experiencia.",
+        "description": "El 'Quiénes Somos' que le da contexto al cerebro del agente."
+    },
+    {
+        "key": "catalog_knowledge",
+        "label": "Resumen de Categorías (Catálogo)",
+        "type": "textarea",
+        "rows": 8,
+        "defaultValue": "- Zapatillas: Puntas, Media punta.\n- Medias: Convertibles, Socks, Contemporáneo, Poliamida, Patín.\n- Accesorios: Metatarsianas, Bolsa de red, Elásticos, Cintas, Endurecedor de puntas, Punteras, Protectores.\n- Otros: Bolsos, Leotardos.",
+        "placeholder": "Lista de tus categorías principales.",
+        "description": "Mapa mental de tus categorías principales para búsquedas proactivas."
     },
     {
         "key": "shadow_rag_enabled",
@@ -30,16 +56,6 @@ const AGENT_CONFIG_SCHEMA: FieldConfig[] = [
         "defaultValue": "false",
         "placeholder": "",
         "description": "ADVERTENCIA: Si activas esto, el agente leerá el historial de chats pasados para imitar el estilo y recordar contexto. Consume más tokens."
-    },
-
-    {
-        "key": "store_description",
-        "label": "Descripción Comercial (Contexto)",
-        "type": "textarea",
-        "rows": 5,
-        "defaultValue": "Pointe Coach es una tienda especializada en artículos de danza y ballet, distribuidores oficiales de las mejores marcas internacionales. Ofrecemos zapatillas de punta, media punta, indumentaria y accesorios técnicos para bailarines de todos los niveles.",
-        "placeholder": "Ej: Distribuidora líder de herramientas industriales y para el hogar con más de 20 años de experiencia.",
-        "description": "El 'Quiénes Somos' que le da contexto al cerebro del agente."
     },
     {
         "key": "agent_tone",
@@ -67,23 +83,6 @@ const AGENT_CONFIG_SCHEMA: FieldConfig[] = [
         "defaultValue": "## REGLAS UNIVERSALES DE SEGURIDAD (NO BORRAR):\n1. VERACIDAD ABSOLUTA: Está PROHIBIDO inventar precios, stock, variantes o fechas de entrega. Si la herramienta no te da el dato, decí \"No tengo esa información en este momento\" y derivá a un humano.\n2. ALCANCE: Solo respondé preguntas relacionadas con la tienda, los productos y el proceso de compra. Si te preguntan de política, religión o competencia, respondé amablemente que solo podés ayudar con productos de la tienda.\n3. DERIVACIÓN INTELIGENTE: Usá la tool `derivhumano` inmediatamente si: (A) El cliente está enojado o frustrado. (B) Hay un problema con un pago o envío demorado. (C) Piden hablar con una persona.\n4. PROMOCIONES: Solo mencioná descuentos o cupones si aparecen explícitamente en la tool `cupones_list`. No asumas que hay envíos gratis a menos que sea una regla confirmada.\n5. ANTI-REPETICIÓN: Si ya mostraste un producto y el usuario pide \"más opciones\" pero no hay más, decí la verdad. No repitas los mismos productos como si fueran nuevos.\n\n## REGLAS ESPECÍFICAS DE ESTE NEGOCIO (EJEMPLO - MODIFICAR):\n6. FITTING (EJEMPLO): Ofrecelo exclusivamente para zapatillas de punta. Si acepta, derivar a humano.\n7. ENVÍOS (EJEMPLO): Trabajamos con Andreani. El costo se calcula en el checkout.",
         "placeholder": "1. Regla de envíos...\n2. Regla de devoluciones...",
         "description": "Incluye reglas base de seguridad. Mantené las primeras 5 y modificá las reglas específicas (punto 6 en adelante) según tu negocio."
-    },
-    {
-        "key": "catalog_summary",
-        "label": "Resumen de Categorías",
-        "type": "textarea",
-        "rows": 8,
-        "defaultValue": "- Zapatillas: Puntas, Media punta.\n- Medias: Convertibles, Socks, Contemporáneo, Poliamida, Patín.\n- Accesorios: Metatarsianas, Bolsa de red, Elásticos, Cintas, Endurecedor de puntas, Punteras, Protectores.\n- Otros: Bolsos, Leotardos.",
-        "placeholder": "Lista de tus categorías principales.",
-        "description": "Mapa mental de tus categorías principales para búsquedas proactivas."
-    },
-    {
-        "key": "store_website",
-        "label": "URL de la Web",
-        "type": "text",
-        "defaultValue": "https://www.pointecoach.shop",
-        "placeholder": "https://tu-tienda.com",
-        "description": "Link principal para el Call to Action final."
     }
 ];
 
@@ -345,9 +344,9 @@ export const DynamicAgentWizard = () => {
                             agent_tone: cfg.agent_tone || agent.system_prompt_template || getDef('agent_tone'),
                             business_rules: cfg.business_rules || getDef('business_rules'),
                             synonym_dictionary: cfg.synonym_dictionary || getDef('synonym_dictionary'),
-                            store_description: cfg.store_description || getDef('store_description'),
-                            catalog_summary: cfg.catalog_summary || getDef('catalog_summary'),
-                            store_website: cfg.store_website || agent.store_website || getDef('store_website'),
+                            business_description: cfg.business_description || agent.metadata?.business_description || cfg.store_description || getDef('business_description'),
+                            catalog_knowledge: cfg.catalog_knowledge || agent.metadata?.catalog_knowledge || cfg.catalog_summary || getDef('catalog_knowledge'),
+                            website_url: cfg.website_url || agent.metadata?.website_url || agent.store_website || cfg.store_website || getDef('website_url'),
                             model_provider: agent.model_provider || 'openai',
                             model_version: agent.model_version || 'gpt-4o',
                             template_type: cfg.template_type || agent.template_type
@@ -796,37 +795,37 @@ export const DynamicAgentWizard = () => {
         }
 
         try {
-            const payload = {
-                ...formData,
-                name: formData['store_name'] || "Agente de Ventas",
-                tenant_id: selectedTenantId, // v7.0: Use selected tenant instead of user.tenant_id
-                role: 'sales',
-                system_prompt_template: formData['agent_tone'],
-
-                // Explicit Persistence Fixes
-                model_provider: formData.model_provider || 'openai',
-                model_version: formData.model_version || 'gpt-4o',
-                temperature: parseFloat(formData.temperature) || 0.7,
-                template_type: selectedTemplate || formData.template_type,
+            const body = {
+                name: formData.store_name,
+                template_type: formData.template_type || 'sales',
+                tenant_id: selectedTenantId,
                 enabled_tools: selectedTools,
+                channels: selectedChannels,
                 knowledge_sources: knowledgeCollections,
-                channels: selectedChannels, // Using the new state
-                store_website: formData.store_website, // Explicit URL Persistence
-
-                // Config JSONB (Metadata)
+                model_provider: formData.model_provider,
+                model_version: formData.model_version,
+                temperature: parseFloat(formData.temperature),
+                // Metadata v7.1.0
+                metadata: {
+                    website_url: formData.website_url,
+                    business_description: formData.business_description,
+                    catalog_knowledge: formData.catalog_knowledge
+                },
                 config: {
                     ...formData,
+                    // Ensure metadata is ALSO in config if needed by legacy code
+                    website_url: formData.website_url,
+                    business_description: formData.business_description,
+                    catalog_knowledge: formData.catalog_knowledge,
                     knowledge_config: {
                         collections: knowledgeCollections
-                    },
-                    template_type: selectedTemplate || formData.template_type,
-                    store_website: formData.store_website // Sync inside JSON too
+                    }
                 }
             };
 
             await fetchApi(agentId ? `/admin/agents/${agentId}` : '/admin/agents', {
                 method: agentId ? 'PUT' : 'POST',
-                body: payload
+                body: body
             });
 
             setSuccess(true);

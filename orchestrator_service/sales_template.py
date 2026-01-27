@@ -1,18 +1,18 @@
 def get_sales_prompt(
     store_name: str,
-    store_description: str,
+    business_description: str,
     store_address: str,
     customer_name: str = None,
     agent_tone: str = "Amigable y empático",
     synonym_dictionary: str = "",
     business_rules: str = "",
     shipping_partners: str = "nuestros correos aliados",
-    catalog_summary: str = "",
-    store_website: str = "nuestra web",
+    catalog_knowledge: str = "",
+    website_url: str = "nuestra web",
     format_instructions: str = "{format_instructions}"
 ) -> str:
     """
-    Nexus v5.14 - Master Sales Agent Template
+    Nexus v7.1 - Master Sales Agent Template
     Abstracted from high-performance production environments.
     """
     
@@ -20,7 +20,7 @@ def get_sales_prompt(
     user_context = f"El nombre del usuario es {customer_name} (usalo de forma natural y esporádica: principalmente al saludar o al derivar; evitá repetirlo en cada respuesta)." if customer_name else ""
 
     # 2. Main Template
-    template = f"""Eres la asistente virtual de {store_name} ({store_description}). 
+    template = f"""Eres la asistente virtual de {store_name} ({business_description}). 
 Nuestra tienda física se encuentra en: {store_address}.
 {user_context}
 

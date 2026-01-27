@@ -7,7 +7,6 @@ import { ShoppingBag, Plus, Trash2, Edit2, CheckCircle, XCircle, Wrench, Save } 
 interface Tenant {
     id?: number;
     store_name: string;
-    bot_phone_number: string;
     tiendanube_store_id?: string;
     tiendanube_access_token?: string;
     owner_email?: string;
@@ -31,7 +30,6 @@ export const Stores: React.FC = () => {
 
     const [formData, setFormData] = useState<Tenant>({
         store_name: '',
-        bot_phone_number: '',
         tiendanube_store_id: '',
         tiendanube_access_token: '',
         owner_email: '',
@@ -123,7 +121,6 @@ export const Stores: React.FC = () => {
         setEditingTenant(null);
         setFormData({
             store_name: '',
-            bot_phone_number: '',
             tiendanube_store_id: '',
             tiendanube_access_token: '',
             owner_email: '',
@@ -181,7 +178,6 @@ export const Stores: React.FC = () => {
                         <thead>
                             <tr>
                                 <th>Tienda / Dueño</th>
-                                <th>WhatsApp Bot</th>
                                 <th>Tienda Nube ID</th>
                                 <th>Estado</th>
                                 <th>Acciones</th>
@@ -189,14 +185,13 @@ export const Stores: React.FC = () => {
                         </thead>
                         <tbody>
                             {tenants.map(t => (
-                                <tr key={t.id || t.bot_phone_number}>
+                                <tr key={t.id || t.store_name}>
                                     <td>
                                         <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <ShoppingBag size={14} color="var(--accent)" /> {t.store_name}
                                         </div>
                                         <div style={{ fontSize: '11px', color: '#a1a1aa', marginLeft: '22px' }}>{t.owner_email || 'Sin email'}</div>
                                     </td>
-                                    <td>{t.bot_phone_number}</td>
                                     <td>{t.tiendanube_store_id || 'N/A'}</td>
                                     <td>
                                         {t.tiendanube_store_id ? (
@@ -218,7 +213,7 @@ export const Stores: React.FC = () => {
                             ))}
                             {tenants.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                                    <td colSpan={4} style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
                                         No tienes tiendas configuradas. ¡Agrega la primera!
                                     </td>
                                 </tr>
@@ -230,15 +225,20 @@ export const Stores: React.FC = () => {
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingTenant ? 'Editar Tienda' : 'Nueva Tienda'}>
                 <form onSubmit={handleSubmit}>
+                    <div className="form-group border-l-4 border-orange-500 bg-orange-500/10 p-4 mb-6">
+                        <p className="text-sm text-orange-200">
+                            <strong>Nota:</strong> La gestión del número de teléfono (WhatsApp) se ha movido a la sección de <a href="/channels" className="underline font-bold">Canales</a> para centralizar la vinculación multi-tenant.
+                        </p>
+                    </div>
+
                     <div className="form-grid">
                         <div className="form-group">
                             <label>Nombre de la Tienda</label>
                             <input required value={formData.store_name} onChange={e => setFormData({ ...formData, store_name: e.target.value })} placeholder="Ej: Mi E-commerce" />
                         </div>
                         <div className="form-group">
-                            <label>Teléfono del Bot (WhatsApp)</label>
-                            <input required value={formData.bot_phone_number} onChange={e => setFormData({ ...formData, bot_phone_number: e.target.value })} placeholder="Ej: 5493704..." />
-                            <p className="text-[10px] text-gray-500 mt-1">Usa el número real de WhatsApp (con código de país, sin el +). Este ID vincula tus registros locales.</p>
+                            <label>Email del Dueño</label>
+                            <input value={formData.owner_email} onChange={e => setFormData({ ...formData, owner_email: e.target.value })} placeholder="admin@store.com" />
                         </div>
                     </div>
 
@@ -254,10 +254,6 @@ export const Stores: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="form-group" style={{ marginTop: '20px' }}>
-                        <label>Email del Dueño</label>
-                        <input value={formData.owner_email} onChange={e => setFormData({ ...formData, owner_email: e.target.value })} placeholder="admin@store.com" />
-                    </div>
 
                     <h4 style={{ color: 'var(--accent)', margin: '20px 0 10px', fontSize: '14px' }}>Derivación a Humano (Gmail)</h4>
                     <div className="flex items-center gap-2 mb-4">

@@ -417,13 +417,15 @@ async def get_tenant_by_id(tenant_id: int, current_user: User = Depends(get_curr
     return r
 
 
-@router.put("/tenants/{tenant_id}")
+@router.put("/tenants/{tenant_id}", dependencies=[Depends(get_current_user)])
 @safe_db_call
 async def update_tenant(tenant_id: int, data: dict, current_user: User = Depends(get_current_user)):
     """
-    Updates a tenant configuration.
+    Consolidated Tenant Update (v7.1.0)
+    - Simplifies Store management.
+    - Syncs TiendaNube credentials to Vault.
+    - Security: Only SuperAdmin or the owner can update tenant.
     """
-    # Security: Only SuperAdmin or the owner can update tenant
     if current_user.role != "SuperAdmin":
         owner_check = await db.pool.fetchval(
             "SELECT owner_email FROM tenants WHERE id = $1",
@@ -432,76 +434,76 @@ async def update_tenant(tenant_id: int, data: dict, current_user: User = Depends
         if owner_check != current_user.email:
             raise HTTPException(403, detail="Access denied")
     
-    # Allowed fields
-    allowed_fields = ['store_name', 'store_description', 'handoff_policy', 'tiendanube_store_id']
+    # 1. Allowed fields for the 'tenants' table (Simplified)
+    # We remove bot_phone_number (managed in Channels) 
+    # and business metadata (managed in Agent Wizard)
+    allowed_tenant_fields = ['store_name', 'tiendanube_store_id', 'handoff_enabled', 'handoff_target_email']
+    
     updates = []
     params = [tenant_id]
     param_idx = 2
     
-    for field in allowed_fields:
+    for field in allowed_tenant_fields:
         if field in data:
-            value = data[field]
-            if field == 'handoff_policy' and isinstance(value, dict):
-                value = json.dumps(value)
             updates.append(f"{field} = ${param_idx}")
-            params.append(value)
+            params.append(data[field])
             param_idx += 1
+            
+    # Handle handoff_policy (JSONB)
+    if 'handoff_policy' in data:
+        policy = data['handoff_policy']
+        updates.append(f"handoff_policy = ${param_idx}")
+        params.append(json.dumps(policy) if isinstance(policy, (dict, list)) else policy)
+        param_idx += 1
+
+    # 2. Sync to Credential Vault (TiendaNube)
+    from utils import encrypt_password
     
+    # access_token sync
+    if 'tiendanube_access_token' in data and data['tiendanube_access_token']:
+        raw_token = data['tiendanube_access_token']
+        # Don't re-encrypt if it looks like it's already masked/empty (though UI should handle this)
+        if raw_token and not raw_token.startswith("****"):
+            encrypted_token = encrypt_password(raw_token)
+            
+            # Update tenants table (legacy/compatibility)
+            updates.append(f"tiendanube_access_token = ${param_idx}")
+            params.append(encrypted_token)
+            param_idx += 1
+            
+            # Sync to Vault (v6.2+ Credentials table)
+            # Find the credential_type_id for 'access_token' in 'tiendanube' provider
+            # This is safer than just 'category' for future-proofing
+            await db.pool.execute("""
+                INSERT INTO credentials (tenant_id, category, name, value, scope, updated_at)
+                VALUES ($1, 'tiendanube', 'access_token', $2, 'tenant', NOW())
+                ON CONFLICT (tenant_id, category, name) DO UPDATE 
+                SET value = EXCLUDED.value, updated_at = NOW()
+            """, tenant_id, encrypted_token)
+            logger.info("vault_sync_tiendanube_access_token", tenant_id=tenant_id)
+
+    # store_id sync
+    if 'tiendanube_store_id' in data and data['tiendanube_store_id']:
+        store_id = str(data['tiendanube_store_id'])
+        await db.pool.execute("""
+            INSERT INTO credentials (tenant_id, category, name, value, scope, updated_at)
+            VALUES ($1, 'tiendanube', 'store_id', $2, 'tenant', NOW())
+            ON CONFLICT (tenant_id, category, name) DO UPDATE 
+            SET value = EXCLUDED.value, updated_at = NOW()
+        """, tenant_id, store_id)
+        logger.info("vault_sync_tiendanube_store_id", tenant_id=tenant_id)
+
     if not updates:
-        raise HTTPException(400, detail="No valid fields to update")
+        # If only credentials were provided, we might not have tenant table updates
+        return {"status": "ok", "message": "Credentials updated"}
     
-    query = f"UPDATE tenants SET {', '.join(updates)} WHERE id = $1 RETURNING id"
+    query = f"UPDATE tenants SET {', '.join(updates)}, updated_at = NOW() WHERE id = $1 RETURNING id"
     result = await db.pool.fetchval(query, *params)
     
     if not result:
         raise HTTPException(404, detail="Tenant not found")
     
     return {"status": "ok", "tenant_id": result}
-
-
-@router.put("/tenants/{tenant_id}", dependencies=[Depends(verify_admin_token)])
-@require_role("SuperAdmin")
-async def update_tenant(tenant_id: int, data: TenantModel):
-    try:
-        from utils import encrypt_password
-        
-        # Check if tenant exists
-        exists = await db.pool.fetchval("SELECT 1 FROM tenants WHERE id = $1", tenant_id)
-        if not exists:
-            raise HTTPException(404, "Tenant not found")
-            
-        # Optional: Encrypt token if provided
-        encrypted_token = None
-        if data.tiendanube_access_token:
-            # Only encrypt if it's not already encrypted (basic length check or prefix check could go here)
-            # For now, we assume if user sends it, it's fresh.
-            encrypted_token = encrypt_password(data.tiendanube_access_token)
-
-
-        q = """
-            UPDATE tenants SET 
-                store_name = $1,
-                bot_phone_number = $2,
-                owner_email = $3,
-                store_website = $4,
-                store_description = $5,
-                store_catalog_knowledge = $6,
-                tiendanube_store_id = $7,
-                tiendanube_access_token = COALESCE($8, tiendanube_access_token),
-                updated_at = NOW()
-            WHERE id = $9
-            RETURNING id
-        """
-        await db.pool.execute(q, 
-            data.store_name, data.bot_phone_number, data.owner_email, 
-            data.store_website, data.store_description, data.store_catalog_knowledge,
-            data.tiendanube_store_id, encrypted_token, tenant_id
-        )
-        
-        return {"status": "ok", "message": f"Tenant {tenant_id} updated"}
-    except Exception as e:
-        logger.error(f"Error updating tenant: {e}")
-        raise HTTPException(500, str(e))
 
 @router.delete("/tenants/{tenant_id}", dependencies=[Depends(verify_admin_token)])
 @require_role("SuperAdmin")

@@ -993,6 +993,64 @@ CATALOGO:
             FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
         END IF;
     END $$;
+    """,
+    # 34. Agent Metadata Migration (Sovereign Metadata v7.1.0)
+    """
+    DO $$
+    BEGIN
+        -- Migrate store metadata to agents table
+        UPDATE agents a
+        SET metadata = (
+            COALESCE(a.metadata, '{}'::jsonb) || 
+            jsonb_build_object(
+                'website_url', t.store_website,
+                'business_description', t.store_description,
+                'catalog_knowledge', t.store_catalog_knowledge
+            )
+        )
+        FROM tenants t
+        WHERE a.tenant_id = t.id
+        AND (t.store_website IS NOT NULL OR t.store_description IS NOT NULL OR t.store_catalog_knowledge IS NOT NULL)
+        -- Optimization: Only run once per agent version if possible, but safe here due to idempotent jsonb_build_object
+        AND (a.metadata->>'website_url' IS NULL);
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Migration 34 (Metadata) failed or already applied';
+    END $$;
+    """,
+    # 35. Sync existing TiendaNube credentials to Vault (v7.1.0)
+    """
+    DO $$
+    BEGIN
+        -- Sync access_token from tenants to credentials table
+        INSERT INTO credentials (tenant_id, category, name, value, scope, updated_at)
+        SELECT 
+            id as tenant_id,
+            'tiendanube' as category,
+            'access_token' as name,
+            tiendanube_access_token as value,
+            'tenant' as scope,
+            NOW() as updated_at
+        FROM tenants
+        WHERE tiendanube_access_token IS NOT NULL
+        ON CONFLICT (tenant_id, category, name) DO UPDATE 
+        SET value = EXCLUDED.value, updated_at = NOW();
+
+        -- Sync store_id
+        INSERT INTO credentials (tenant_id, category, name, value, scope, updated_at)
+        SELECT 
+            id as tenant_id,
+            'tiendanube' as category,
+            'store_id' as name,
+            tiendanube_store_id as value,
+            'tenant' as scope,
+            NOW() as updated_at
+        FROM tenants
+        WHERE tiendanube_store_id IS NOT NULL
+        ON CONFLICT (tenant_id, category, name) DO UPDATE 
+        SET value = EXCLUDED.value, updated_at = NOW();
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Migration 35 (TN Vault Sync) failed or already applied';
+    END $$;
     """
 ]
 
