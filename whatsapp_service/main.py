@@ -199,6 +199,17 @@ async def verify_signature(request: Request):
     if not t or not s: raise HTTPException(status_code=401, detail="Missing timestamp or signature")
     if abs(time.time() - int(t)) > 300: raise HTTPException(status_code=401, detail="Timestamp out of tolerance")
     raw_body = await request.body()
+
+    # Dynamic Credential Loading (v6.2.24 Fix)
+    global YCLOUD_WEBHOOK_SECRET
+    if not YCLOUD_WEBHOOK_SECRET:
+         logger.info("lazy_loading_ycloud_secret", source="orchestrator")
+         YCLOUD_WEBHOOK_SECRET = await get_config("YCLOUD_WEBHOOK_SECRET")
+    
+    if not YCLOUD_WEBHOOK_SECRET:
+        logger.error("missing_ycloud_webhook_secret_critical")
+        raise HTTPException(status_code=503, detail="Configuration Missing: YCloud Webhook Secret")
+
     signed_payload = f"{t}.{raw_body.decode('utf-8')}"
     expected = hmac.new(YCLOUD_WEBHOOK_SECRET.encode("utf-8"), signed_payload.encode("utf-8"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, s): raise HTTPException(status_code=401, detail="Invalid signature")
