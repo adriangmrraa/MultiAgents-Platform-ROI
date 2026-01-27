@@ -2516,6 +2516,9 @@ BEGIN
         phone_number TEXT,
         instagram_psid TEXT,
         facebook_psid TEXT,
+        circle TEXT DEFAULT 'unknown',
+        first_name TEXT,
+        last_name TEXT,
         name TEXT,
         email TEXT,
         notes TEXT,
@@ -2543,6 +2546,9 @@ BEGIN
        -- Identity v6.1: PSIDs
        ALTER TABLE customers ADD COLUMN IF NOT EXISTS instagram_psid TEXT;
        ALTER TABLE customers ADD COLUMN IF NOT EXISTS facebook_psid TEXT;
+       ALTER TABLE customers ADD COLUMN IF NOT EXISTS circle TEXT DEFAULT 'unknown';
+       ALTER TABLE customers ADD COLUMN IF NOT EXISTS first_name TEXT;
+       ALTER TABLE customers ADD COLUMN IF NOT EXISTS last_name TEXT;
        -- Phone number shouldn't be NOT NULL since Social users might not have it yet
        ALTER TABLE customers ALTER COLUMN phone_number DROP NOT NULL;
     END IF;

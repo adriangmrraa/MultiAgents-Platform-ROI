@@ -2542,7 +2542,9 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
 
     # 2. Call Relay Service
     wa_url = os.getenv("WHATSAPP_SERVICE_URL")
-    if not wa_url:
+    if wa_url:
+        wa_url = wa_url.strip() # Remove spaces (v6.2.13)
+    else:
          # Cloud Fallback Matrix (Nexus v6.2.12 - Dash vs Underscore Resilience)
          # Try underscored internal name as default
          wa_url = "http://whatsapp_service:8002"
@@ -2567,7 +2569,7 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                 f"{wa_url}/messages/relay", 
                 json=relay_payload, 
                 headers={
-                    "X-Internal-Token": os.getenv("INTERNAL_API_TOKEN", "internal-secret"),
+                    "X-Internal-Token": INTERNAL_API_TOKEN or "internal-secret",
                     "X-Correlation-Id": correlation_id
                 }, 
                 timeout=12.0 # Increased for cloud stability
@@ -2586,7 +2588,7 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                         f"{dash_url}/messages/relay", 
                         json=relay_payload, 
                         headers={
-                            "X-Internal-Token": os.getenv("INTERNAL_API_TOKEN", "internal-secret"),
+                            "X-Internal-Token": INTERNAL_API_TOKEN or "internal-secret",
                             "X-Correlation-Id": correlation_id
                         }, 
                         timeout=12.0
