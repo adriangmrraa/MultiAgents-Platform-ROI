@@ -15,7 +15,8 @@ import {
     Menu,
     X,
     Database,
-    FileText
+    FileText,
+    Link as LinkIcon
 } from 'lucide-react';
 
 import { useLanguage } from '../contexts/LanguageContext';
@@ -73,6 +74,7 @@ export const Sidebar: React.FC = () => {
                     <div className="h-px bg-white/5 w-8 mx-auto my-4" />
 
                     <NavItem to="/credentials" icon={<Key size={20} />} label={t('sidebar.keymaster')} desc={t('sidebar.keymasterDesc')} />
+                    <NavItem to="/channels" icon={<LinkIcon size={20} />} label="Canales" desc="Gestión Multi-Tenant de Canales" />
                     <NavItem to="/settings/ycloud" icon={<Mail size={20} />} label={t('sidebar.ycloud')} desc={t('sidebar.ycloudDesc')} />
                     <NavItem to="/nexus-setup" icon={<Zap size={20} />} label={t('sidebar.nexusEngine')} desc={t('sidebar.nexusEngineDesc')} />
                     <NavItem to="/magic" icon={<Sparkles size={20} />} label={t('sidebar.magic')} desc={t('sidebar.magicDesc')} />

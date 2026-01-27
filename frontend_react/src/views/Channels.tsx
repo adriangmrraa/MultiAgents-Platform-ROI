@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApi } from '../hooks/useApi';
-import { Plus, Trash2, Link as LinkIcon } from 'lucide-react';
+import { Plus, Trash2, Edit2, Link as LinkIcon, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface ChannelBinding {
     id: number;
@@ -14,6 +14,7 @@ export const Channels = () => {
     const { fetchApi } = useApi();
     const [bindings, setBindings] = useState<ChannelBinding[]>([]);
     const [showModal, setShowModal] = useState(false);
+    const [editingBinding, setEditingBinding] = useState<ChannelBinding | null>(null);
     const [formData, setFormData] = useState({ provider: 'ycloud', channel_id: '', label: '' });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -36,8 +37,18 @@ export const Channels = () => {
         setLoading(true);
         setError(null);
         try {
-            await fetchApi('/admin/channels/bind', { method: 'POST', body: formData });
+            if (editingBinding) {
+                // Edit mode
+                await fetchApi(`/admin/channels/edit/${editingBinding.id}`, {
+                    method: 'PUT',
+                    body: { channel_id: formData.channel_id, label: formData.label }
+                });
+            } else {
+                // Create mode
+                await fetchApi('/admin/channels/bind', { method: 'POST', body: formData });
+            }
             setShowModal(false);
+            setEditingBinding(null);
             setFormData({ provider: 'ycloud', channel_id: '', label: '' });
             loadBindings();
         } catch (err: any) {
@@ -48,7 +59,7 @@ export const Channels = () => {
     };
 
     const handleUnbind = async (id: number) => {
-        if (!confirm('¿Desvincular este canal?')) return;
+        if (!confirm('¿Desvincular este canal? Esta acción no se puede deshacer.')) return;
         try {
             await fetchApi(`/admin/channels/unbind/${id}`, { method: 'DELETE' });
             loadBindings();
@@ -57,79 +68,165 @@ export const Channels = () => {
         }
     };
 
+    const openEditModal = (binding: ChannelBinding) => {
+        setEditingBinding(binding);
+        setFormData({ provider: binding.provider, channel_id: binding.channel_id, label: binding.label });
+        setShowModal(true);
+    };
+
+    const openCreateModal = () => {
+        setEditingBinding(null);
+        setFormData({ provider: 'ycloud', channel_id: '', label: '' });
+        setShowModal(true);
+    };
+
+    const providerStatus = {
+        ycloud: bindings.find(b => b.provider === 'ycloud'),
+        chatwoot: bindings.find(b => b.provider === 'chatwoot'),
+        meta: bindings.find(b => b.provider === 'meta')
+    };
+
     return (
-        <div className="max-w-4xl mx-auto p-6">
+        <div className="max-w-5xl mx-auto p-6">
             <div className="flex items-center justify-between mb-6">
-                <h1 className="text-2xl font-bold text-white">Canales Vinculados</h1>
+                <div>
+                    <h1 className="text-2xl font-bold text-white">Canales Vinculados</h1>
+                    <p className="text-sm text-gray-400 mt-1">Gestión Multi-Tenant de Canales (v7.0.2)</p>
+                </div>
                 <button
-                    onClick={() => setShowModal(true)}
-                    className="flex items-center gap-2 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-xl transition-colors"
+                    onClick={openCreateModal}
+                    className="flex items-center gap-2 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-accent/20"
                 >
                     <Plus size={16} /> Vincular Canal
                 </button>
             </div>
 
             {error && (
-                <div className="bg-red-500/20 border border-red-500 text-red-300 px-4 py-3 rounded-xl mb-4">
+                <div className="bg-red-500/20 border border-red-500 text-red-300 px-4 py-3 rounded-xl mb-4 flex items-center gap-2">
+                    <AlertCircle size={18} />
                     {error}
                 </div>
             )}
 
-            <div className="space-y-3">
+            {/* Provider Status Cards */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+                <StatusCard
+                    provider="YCloud"
+                    status={providerStatus.ycloud ? 'configured' : 'pending'}
+                    channelId={providerStatus.ycloud?.channel_id}
+                />
+                <StatusCard
+                    provider="Chatwoot"
+                    status={providerStatus.chatwoot ? 'configured' : 'pending'}
+                    channelId={providerStatus.chatwoot?.channel_id}
+                />
+                <StatusCard
+                    provider="Meta"
+                    status={providerStatus.meta ? 'configured' : 'pending'}
+                    channelId={providerStatus.meta?.channel_id}
+                />
+            </div>
+
+            {/* Individual Channel Cards */}
+            <div className="space-y-4">
                 {bindings.map(b => (
-                    <div key={b.id} className="glass p-4 rounded-xl border border-white/10 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-accent/20 rounded-lg">
-                                <LinkIcon size={18} className="text-accent" />
-                            </div>
-                            <div>
-                                <div className="text-sm font-bold text-white">{b.label}</div>
-                                <div className="text-xs text-gray-400">
-                                    {b.provider.toUpperCase()} · {b.channel_id}
+                    <div key={b.id} className="glass p-5 rounded-2xl border border-white/10 hover:border-accent/30 transition-all">
+                        <div className="flex items-start justify-between">
+                            <div className="flex items-start gap-4">
+                                <div className="p-3 bg-accent/20 rounded-xl">
+                                    <LinkIcon size={20} className="text-accent" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-sm font-bold text-white">{b.label || 'Sin etiqueta'}</span>
+                                        <span className="px-2 py-0.5 bg-white/10 rounded-full text-[10px] text-white/60 uppercase font-bold">
+                                            {b.provider}
+                                        </span>
+                                    </div>
+                                    <div className="text-xs text-gray-400 font-mono">
+                                        Channel ID: <span className="text-white">{b.channel_id}</span>
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 mt-1">
+                                        Creado: {new Date(b.created_at).toLocaleDateString('es-AR', {
+                                            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                                        })}
+                                    </div>
                                 </div>
                             </div>
+
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => openEditModal(b)}
+                                    className="p-2 hover:bg-blue-500/20 rounded-lg text-gray-400 hover:text-blue-400 transition-colors"
+                                    title="Editar canal"
+                                >
+                                    <Edit2 size={16} />
+                                </button>
+                                <button
+                                    onClick={() => handleUnbind(b.id)}
+                                    className="p-2 hover:bg-red-500/20 rounded-lg text-gray-400 hover:text-red-400 transition-colors"
+                                    title="Desvincular canal"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
                         </div>
-                        <button
-                            onClick={() => handleUnbind(b.id)}
-                            className="p-2 hover:bg-red-500/20 rounded-lg text-gray-400 hover:text-red-400 transition-colors"
-                        >
-                            <Trash2 size={16} />
-                        </button>
                     </div>
                 ))}
 
                 {bindings.length === 0 && (
-                    <div className="text-center text-gray-500 py-12">
-                        No hay canales vinculados. Agrega uno para comenzar.
+                    <div className="text-center text-gray-500 py-16 glass rounded-2xl border border-white/5">
+                        <LinkIcon size={48} className="mx-auto mb-4 text-gray-600" />
+                        <p className="text-lg font-bold text-gray-400">No hay canales vinculados</p>
+                        <p className="text-sm text-gray-500 mt-2">Agrega tu primer canal para comenzar</p>
                     </div>
                 )}
             </div>
 
+            {/* Create/Edit Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50">
-                    <div className="glass max-w-md w-full p-6 rounded-2xl border border-white/10">
-                        <h2 className="text-xl font-bold text-white mb-4">Vincular Nuevo Canal</h2>
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50" onClick={() => setShowModal(false)}>
+                    <div className="glass max-w-md w-full p-6 rounded-2xl border border-white/10" onClick={e => e.stopPropagation()}>
+                        <h2 className="text-xl font-bold text-white mb-4">
+                            {editingBinding ? 'Editar Canal' : 'Vincular Nuevo Canal'}
+                        </h2>
                         <form onSubmit={handleBind} className="space-y-4">
-                            <div>
-                                <label className="block text-sm text-gray-400 mb-2">Proveedor</label>
-                                <select
-                                    value={formData.provider}
-                                    onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white"
-                                >
-                                    <option value="ycloud">YCloud (WhatsApp)</option>
-                                    <option value="meta">Meta (IG/FB)</option>
-                                </select>
-                            </div>
+                            {!editingBinding && (
+                                <div>
+                                    <label className="block text-sm text-gray-400 mb-2">Proveedor</label>
+                                    <select
+                                        value={formData.provider}
+                                        onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white"
+                                    >
+                                        <option value="ycloud">YCloud (WhatsApp)</option>
+                                        <option value="chatwoot">Chatwoot</option>
+                                        <option value="meta">Meta (IG/FB)</option>
+                                    </select>
+                                </div>
+                            )}
+
+                            {editingBinding && (
+                                <div className="bg-blue-500/10 border border-blue-500/30 px-4 py-3 rounded-xl text-sm text-blue-300">
+                                    Provider: <strong>{editingBinding.provider.toUpperCase()}</strong> (no editable)
+                                </div>
+                            )}
 
                             <div>
-                                <label className="block text-sm text-gray-400 mb-2">Channel ID</label>
+                                <label className="block text-sm text-gray-400 mb-2">
+                                    Channel ID {formData.provider === 'ycloud' && '(WABA ID)'}
+                                    {formData.provider === 'chatwoot' && '(Inbox ID)'}
+                                </label>
                                 <input
                                     type="text"
                                     value={formData.channel_id}
                                     onChange={(e) => setFormData({ ...formData, channel_id: e.target.value })}
-                                    placeholder="Ej: 123456789"
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white"
+                                    placeholder={
+                                        formData.provider === 'ycloud' ? 'Ej: 1234567890' :
+                                            formData.provider === 'chatwoot' ? 'Ej: 5' :
+                                                'Ej: 123456'
+                                    }
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono"
                                     required
                                 />
                             </div>
@@ -158,7 +255,7 @@ export const Channels = () => {
                                     disabled={loading}
                                     className="flex-1 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-xl transition-colors disabled:opacity-50"
                                 >
-                                    {loading ? 'Vinculando...' : 'Vincular'}
+                                    {loading ? 'Procesando...' : editingBinding ? 'Guardar Cambios' : 'Vincular'}
                                 </button>
                             </div>
                         </form>
@@ -168,3 +265,25 @@ export const Channels = () => {
         </div>
     );
 };
+
+// Status Card Component
+const StatusCard = ({ provider, status, channelId }: { provider: string, status: 'configured' | 'pending', channelId?: string }) => (
+    <div className={`glass p-4 rounded-xl border ${status === 'configured' ? 'border-green-500/30 bg-green-500/5' : 'border-white/10'}`}>
+        <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-bold text-white">{provider}</span>
+            {status === 'configured' ? (
+                <CheckCircle size={16} className="text-green-400" />
+            ) : (
+                <AlertCircle size={16} className="text-yellow-400" />
+            )}
+        </div>
+        {status === 'configured' && channelId && (
+            <div className="text-[10px] text-gray-400 font-mono truncate">
+                {channelId}
+            </div>
+        )}
+        <div className={`text-xs mt-1 ${status === 'configured' ? 'text-green-400' : 'text-yellow-400'}`}>
+            {status === 'configured' ? '✅ Configurado' : '⚠️ Pendiente'}
+        </div>
+    </div>
+);

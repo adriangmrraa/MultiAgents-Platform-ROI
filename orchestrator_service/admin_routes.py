@@ -571,6 +571,17 @@ async def bind_channel(payload: dict, current_user: User = Depends(get_current_u
     if existing:
         raise HTTPException(409, detail=f"Channel already bound to tenant {existing['tenant_id']}")
     
+    # v7.0.1: Enforce 1 channel per provider limit
+    provider_count = await db.pool.fetchval(
+        "SELECT COUNT(*) FROM channel_bindings WHERE tenant_id = $1 AND provider = $2",
+        tenant_id, provider
+    )
+    if provider_count >= 1:
+        raise HTTPException(
+            409, 
+            detail=f"Ya tienes un canal {provider.upper()} configurado. Desvincúlalo primero antes de agregar uno nuevo."
+        )
+    
     # Create binding
     await db.pool.execute(
         """INSERT INTO channel_bindings (tenant_id, provider, channel_id, label) 
@@ -609,6 +620,60 @@ async def unbind_channel(binding_id: int, current_user: User = Depends(get_curre
     })
     
     return {"status": "unbound"}
+
+@router.put("/channels/edit/{binding_id}", dependencies=[Depends(verify_admin_token)])
+async def edit_channel(
+    binding_id: int, 
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    v7.0.2: Updates a channel binding (label and channel_id).
+    Verifies ownership and validates uniqueness of new channel_id.
+    """
+    tenant_id = current_user.tenant_id
+    body = await request.json()
+    
+    new_channel_id = body.get("channel_id")
+    new_label = body.get("label", "")
+    
+    # Verify ownership
+    binding = await db.pool.fetchrow(
+        "SELECT provider FROM channel_bindings WHERE id = $1 AND tenant_id = $2",
+        binding_id, tenant_id
+    )
+    if not binding:
+        raise HTTPException(404, detail="Binding not found")
+    
+    provider = binding["provider"]
+    
+    # Check if new channel_id conflicts with another binding
+    if new_channel_id:
+        conflict = await db.pool.fetchrow(
+            "SELECT tenant_id FROM channel_bindings WHERE provider = $1 AND channel_id = $2 AND id != $3",
+            provider, new_channel_id, binding_id
+        )
+        if conflict:
+            raise HTTPException(409, detail=f"Channel ID {new_channel_id} is already bound")
+    
+    # Update
+    if new_channel_id:
+        await db.pool.execute(
+            "UPDATE channel_bindings SET channel_id = $1, label = $2, updated_at = NOW() WHERE id = $3",
+            new_channel_id, new_label, binding_id
+        )
+    else:
+        await db.pool.execute(
+            "UPDATE channel_bindings SET label = $1, updated_at = NOW() WHERE id = $2",
+            new_label, binding_id
+        )
+    
+    # Audit log
+    logger.info("channel_binding_updated", extra={
+        "tenant_id": tenant_id, "binding_id": binding_id, "actor": current_user.email
+    })
+    
+    return {"status": "updated", "binding_id": binding_id}
 
 @router.get("/internal/routing/resolve", dependencies=[Depends(verify_internal_token)])
 async def resolve_tenant_from_channel(provider: str, channel_id: str):
