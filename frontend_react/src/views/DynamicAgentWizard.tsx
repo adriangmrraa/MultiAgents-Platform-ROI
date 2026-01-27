@@ -400,7 +400,6 @@ export const DynamicAgentWizard = () => {
                 console.error("Failed to load init data", err);
             }
         };
-        initData();
     }, []);
 
     // Nexus v7.2: Hydrate Draft from Onboarding Architect
@@ -435,7 +434,7 @@ export const DynamicAgentWizard = () => {
             loadDraft();
         }
     }, [draftId]);
-    initData();
+
 
     if (agentId) {
         const loadAgent = async () => {

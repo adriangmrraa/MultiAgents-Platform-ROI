@@ -68,9 +68,21 @@ async def onboarding_interview(
         if "<CONFIG_READY>" in ai_text:
             config_ready = True
             try:
-                json_str = ai_text.split("<CONFIG_READY>")[1].split("</CONFIG_READY>")[0]
-                extracted_data = json.loads(json_str)
-                # Clean the response for the UI (remove the JSON block)
+                json_str = ai_text.split("<CONFIG_READY>")[1].split("</CONFIG_READY>")[0].strip()
+                
+                # Robustness: Remove markdown code blocks if present
+                if json_str.startswith("```json"):
+                    json_str = json_str.replace("```json", "", 1)
+                if json_str.startswith("```"):
+                    json_str = json_str.replace("```", "", 1)
+                if json_str.endswith("```"):
+                    json_str = json_str.rsplit("```", 1)[0]
+                
+                extracted_data = json.loads(json_str.strip())
+                # Clean the response for the UI (remove the JSON block entirely for the user)
+                # We split by the FIRST tag occurrence to remove the block and everything after (if it was at the end)
+                # But to be safe, let's just replace the block.
+                # Actually, the user might want to see the text BEFORE the block.
                 ai_text = ai_text.split("<CONFIG_READY>")[0].strip()
             except Exception as e:
                 logger.error(f"JSON Parsing Error in Onboarding: {e}")
@@ -130,7 +142,7 @@ async def onboarding_generate(
             "provider": "openai",
             "version": "gpt-4o",
             "is_active": True,
-            "tools": ["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"] # Standard Suite
+            "tools": json.dumps(["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"]) # Standard Suite
         })
         await db.commit()
         new_id = result.scalar()
@@ -182,7 +194,7 @@ async def onboarding_draft(
             "provider": "openai",
             "version": "gpt-4o",
             "is_active": False, # <--- DRAFT MODE
-            "tools": ["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"]
+            "tools": json.dumps(["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"])
         })
         await db.commit()
         draft_id = result.scalar()
