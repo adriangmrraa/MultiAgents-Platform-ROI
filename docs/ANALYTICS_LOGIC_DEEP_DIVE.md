@@ -12,7 +12,7 @@ La Tower agrega datos de **toda la infraestructura**, rompiendo el aislamiento d
 1.  **Metrics Aggregator**: Consolida contadores de PostgreSQL y Redis.
 2.  **Infra Pulse**: Monitor de salud de los servicios Dockerizados.
 3.  **Tenant Registry**: Listado maestro de todas las tiendas instaladas.
-
+  
 ---
 
 ## 🔄 Flujo de Datos
