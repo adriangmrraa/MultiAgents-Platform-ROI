@@ -2348,10 +2348,32 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         # FIRST: Extract response from (potentially JSON) output
         clean_response_full = extract_response_from_agent_output(full_text_accumulated)
         
-        # SECOND: Split by '|||' only if the agent intended separate bubbles INSIDE the response
-        parts = clean_response_full.split("|||")
+        # SECOND: Split by '|||' (Intentional AI breaks)
+        initial_parts = clean_response_full.split("|||")
         
-        for text_content in [p.strip() for p in parts if p.strip()]:
+        # THIRD: Emergency Auto-Splitter (v6.2.11)
+        # Further split long parts by double newlines or char limits to improve UI/Relay stability
+        final_parts = []
+        for p in [p.strip() for p in initial_parts if p.strip()]:
+            if len(p) > 400 or "\n\n" in p:
+                # Basic split by double newline
+                subparts = [sp.strip() for sp in p.split("\n\n") if sp.strip()]
+                for sp in subparts:
+                    if len(sp) > 500: # Hard limit for sub-splitting
+                        # Split by sentence or space
+                        while len(sp) > 500:
+                            cut = sp.rfind('. ', 0, 500)
+                            if cut == -1: cut = sp.rfind(' ', 0, 500)
+                            if cut == -1: cut = 500
+                            final_parts.append(sp[:cut+1].strip())
+                            sp = sp[cut+1:].strip()
+                        if sp: final_parts.append(sp)
+                    else:
+                        final_parts.append(sp)
+            else:
+                final_parts.append(p)
+
+        for idx, text_content in enumerate(final_parts):
             if "HUMAN_HANDOFF_REQUESTED:" in text_content:
                 reason = text_content.split("HUMAN_HANDOFF_REQUESTED:")[1].strip()
                 await trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, customer_name)
@@ -2391,9 +2413,8 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             # Unified Delivery Logic (Nexus v6.1 - Triangular Routing)
             logger.info(f"📤 CHATWOOT: Sending response | conv={conv_id} | channel={channel_source} | length={len(clean_response)}")
             try:
-                # Spacing Fix: If there were multiple parts, add a delay between bubbles
-                # to prevent Meta from dropping rapid-fire messages.
-                if parts.index(text_content) > 0:
+                # Spacing Fix: Delay between bubbles
+                if idx > 0:
                      logger.info(f"⏳ SPACING: Waiting 4s before next bubble | from={from_number}")
                      await asyncio.sleep(4)
 
@@ -2401,7 +2422,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                     tenant_id=tenant_id,
                     conv_id=conv_id,
                     phone=from_number,
-                    text=clean_response,
+                    text=text_content,
                     channel=channel_source,
                     correlation_id=correlation_id
                 )

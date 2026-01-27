@@ -2555,7 +2555,11 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                 # For now, we trust the gateway.
                 raise HTTPException(res.status_code, f"Delivery Gateway Error: {res.text}")
         except Exception as e:
-            logger.error(f"❌ RELAY: Connection failed | error={str(e)}")
+            msg = str(e)
+            if "Name or service not known" in msg:
+                logger.error(f"❌ RELAY: DNS FAILURE | Host '{wa_url}' unreachable. Check your environment variables (WHATSAPP_SERVICE_URL).")
+            else:
+                logger.error(f"❌ RELAY: Connection failed | error={msg}")
             raise e
 
     return {"status": "sent"}
@@ -3761,7 +3765,7 @@ async def get_rag_galaxy(tenant_id: str):
         # Sovereign Credentials: Fetch key from DB
         openai_key = await get_tenant_credential_by_type(int(tenant_id), "OPENAI_API_KEY")
         
-        rag = RAGCore(tenant_id, openai_api_key=openai_key)
+        rag = RAGCore(tenant_id, api_key=openai_key)
         
         # In a real scenario, we would sample ChromaDB. 
         # For MVP/Didactic view, we generate nodes from the catalog and assets.
