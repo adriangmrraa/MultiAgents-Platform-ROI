@@ -41,7 +41,9 @@ export const Stores: React.FC = () => {
 
     const loadTenants = async () => {
         try {
+            console.log('[Stores] Loading tenants...');
             const data = await fetchApi('/admin/tenants');
+            console.log('[Stores] Loaded tenants:', data);
             if (Array.isArray(data)) {
                 setTenants(data);
             } else {
@@ -63,15 +65,25 @@ export const Stores: React.FC = () => {
         try {
             if (editingTenant && editingTenant.id) {
                 // UPDATE (PUT)
-                await fetchApi(`/admin/tenants/${editingTenant.id}`, { method: 'PUT', body: formData });
+                console.log('[Stores] Updating tenant:', editingTenant.id, formData);
+                const result = await fetchApi(`/admin/tenants/${editingTenant.id}`, { method: 'PUT', body: formData });
+                console.log('[Stores] Update result:', result);
             } else {
                 // CREATE (POST)
+                console.log('[Stores] Creating tenant:', formData);
                 await fetchApi('/admin/tenants', { method: 'POST', body: formData });
             }
+
             setIsModalOpen(false);
-            loadTenants();
+            setEditingTenant(null);
+
+            // Force reload from server
+            await loadTenants();
+
+            alert('✅ Tienda guardada correctamente');
         } catch (e: any) {
-            alert('Error al guardar tienda: ' + e.message);
+            console.error('[Stores] Error saving:', e);
+            alert('❌ Error al guardar tienda: ' + e.message);
         }
     };
 
