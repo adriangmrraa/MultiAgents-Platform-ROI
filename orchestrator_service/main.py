@@ -913,7 +913,9 @@ CATALOGO:
         -- TiendaNube
         IF tn_id IS NOT NULL THEN
             INSERT INTO credential_types (provider_id, internal_key, display_name, description, is_required, field_type, placeholder)
-            VALUES (tn_id, 'TIENDANUBE_ACCESS_TOKEN', 'TiendaNube Access Token', 'OAuth Access Token', true, 'password', 'bearer_token')
+            VALUES 
+            (tn_id, 'TIENDANUBE_ACCESS_TOKEN', 'TiendaNube Access Token', 'OAuth Access Token', true, 'password', 'bearer_token'),
+            (tn_id, 'TIENDANUBE_STORE_ID', 'TiendaNube Store ID', 'Unique identifier for the TiendaNube store', true, 'text', '123456')
             ON CONFLICT (internal_key) DO NOTHING;
         END IF;
 
@@ -1022,11 +1024,12 @@ CATALOGO:
     DO $$
     BEGIN
         -- Sync access_token from tenants to credentials table
-        INSERT INTO credentials (tenant_id, category, name, value, scope, updated_at)
+        INSERT INTO credentials (tenant_id, category, name, user_label, value, scope, updated_at)
         SELECT 
             id as tenant_id,
             'tiendanube' as category,
-            'access_token' as name,
+            'TIENDANUBE_ACCESS_TOKEN' as name,
+            'TiendaNube Access Token' as user_label,
             tiendanube_access_token as value,
             'tenant' as scope,
             NOW() as updated_at
@@ -1036,11 +1039,12 @@ CATALOGO:
         SET value = EXCLUDED.value, updated_at = NOW();
 
         -- Sync store_id
-        INSERT INTO credentials (tenant_id, category, name, value, scope, updated_at)
+        INSERT INTO credentials (tenant_id, category, name, user_label, value, scope, updated_at)
         SELECT 
             id as tenant_id,
             'tiendanube' as category,
-            'store_id' as name,
+            'TIENDANUBE_STORE_ID' as name,
+            'TiendaNube Store ID' as user_label,
             tiendanube_store_id as value,
             'tenant' as scope,
             NOW() as updated_at
@@ -1051,7 +1055,7 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Migration 35 (TN Vault Sync) failed or already applied';
     END $$;
-    """,
+    """
     # 36. Fix Credentials Table Constraints (v7.1.1)
     """
     DO $$

@@ -462,23 +462,20 @@ async def update_tenant(tenant_id: int, data: dict, current_user: User = Depends
     # access_token sync
     if 'tiendanube_access_token' in data and data['tiendanube_access_token']:
         raw_token = data['tiendanube_access_token']
-        # Don't re-encrypt if it looks like it's already masked/empty (though UI should handle this)
         if raw_token and not raw_token.startswith("****"):
             encrypted_token = encrypt_password(raw_token)
             
-            # Update tenants table (legacy/compatibility)
             updates.append(f"tiendanube_access_token = ${param_idx}")
             params.append(encrypted_token)
             param_idx += 1
             
-            # Sync to Vault (v6.2+ Credentials table)
-            # Find the credential_type_id for 'access_token' in 'tiendanube' provider
-            # This is safer than just 'category' for future-proofing
+            # Sync to Vault (Canonical name)
             await db.pool.execute("""
-                INSERT INTO credentials (tenant_id, category, name, value, scope, updated_at)
-                VALUES ($1, 'tiendanube', 'access_token', $2, 'tenant', NOW())
+                INSERT INTO credentials (tenant_id, category, name, user_label, value, scope, updated_at, credential_type_id)
+                VALUES ($1, 'tiendanube', 'TIENDANUBE_ACCESS_TOKEN', 'TiendaNube Access Token', $2, 'tenant', NOW(), 
+                    (SELECT id FROM credential_types WHERE internal_key = 'TIENDANUBE_ACCESS_TOKEN' LIMIT 1))
                 ON CONFLICT (tenant_id, category, name) DO UPDATE 
-                SET value = EXCLUDED.value, updated_at = NOW()
+                SET value = EXCLUDED.value, user_label = EXCLUDED.user_label, updated_at = NOW()
             """, tenant_id, encrypted_token)
             logger.info("vault_sync_tiendanube_access_token", tenant_id=tenant_id)
 
@@ -486,10 +483,11 @@ async def update_tenant(tenant_id: int, data: dict, current_user: User = Depends
     if 'tiendanube_store_id' in data and data['tiendanube_store_id']:
         store_id = str(data['tiendanube_store_id'])
         await db.pool.execute("""
-            INSERT INTO credentials (tenant_id, category, name, value, scope, updated_at)
-            VALUES ($1, 'tiendanube', 'store_id', $2, 'tenant', NOW())
+            INSERT INTO credentials (tenant_id, category, name, user_label, value, scope, updated_at, credential_type_id)
+            VALUES ($1, 'tiendanube', 'TIENDANUBE_STORE_ID', 'TiendaNube Store ID', $2, 'tenant', NOW(),
+                (SELECT id FROM credential_types WHERE internal_key = 'TIENDANUBE_STORE_ID' LIMIT 1))
             ON CONFLICT (tenant_id, category, name) DO UPDATE 
-            SET value = EXCLUDED.value, updated_at = NOW()
+            SET value = EXCLUDED.value, user_label = EXCLUDED.user_label, updated_at = NOW()
         """, tenant_id, store_id)
         logger.info("vault_sync_tiendanube_store_id", tenant_id=tenant_id)
 

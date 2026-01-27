@@ -203,7 +203,7 @@ export const Credentials: React.FC = () => {
                     {credentials.filter(c => c.scope === 'global').map(cred => (
                         <div key={cred.id} className="stat-card" style={{ padding: '15px', background: 'rgba(255,255,255,0.03)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                <span style={{ fontWeight: 600 }}>{cred.name}</span>
+                                <span style={{ fontWeight: 600 }}>{cred.user_label || cred.name}</span>
                                 <span style={{ fontSize: '11px', background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '10px' }}>{cred.category}</span>
                             </div>
                             <div style={{ fontSize: '12px', color: '#a1a1aa', marginBottom: '15px', fontFamily: 'monospace' }}>
@@ -224,7 +224,7 @@ export const Credentials: React.FC = () => {
                     {credentials.filter(c => c.scope === 'tenant').map(cred => (
                         <div key={cred.id} className="stat-card" style={{ padding: '15px', background: 'rgba(255,255,255,0.03)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                <span style={{ fontWeight: 600 }}>{cred.name}</span>
+                                <span style={{ fontWeight: 600 }}>{cred.user_label || cred.name}</span>
                                 <span style={{ fontSize: '11px', background: 'rgba(0, 230, 118, 0.1)', color: 'var(--success)', padding: '2px 8px', borderRadius: '10px' }}>
                                     {tenants.find(t => t.id === cred.tenant_id)?.store_name || 'Tienda Desconocida'}
                                 </span>
