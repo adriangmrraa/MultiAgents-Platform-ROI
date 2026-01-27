@@ -2604,7 +2604,8 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
              cw_token_enc = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_API_TOKEN' AND scope = 'global' LIMIT 1")
         
         if cw_token_enc:
-            cw_token = decrypt_password(cw_token_enc)
+            decrypted = decrypt_password(cw_token_enc)
+            cw_token = decrypted if decrypted else cw_token_enc
         
         if not cw_token:
             cw_token = os.getenv("CHATWOOT_API_TOKEN") or os.getenv("CHATWOOT_BOT_TOKEN")
@@ -2616,7 +2617,8 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                 cw_acc_enc = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_ACCOUNT_ID' AND scope = 'global' LIMIT 1")
             
             if cw_acc_enc:
-                cw_account_id = decrypt_password(cw_acc_enc)
+                decrypted = decrypt_password(cw_acc_enc)
+                cw_account_id = decrypted if decrypted else cw_acc_enc
             else:
                 cw_account_id = os.getenv("CHATWOOT_ACCOUNT_ID", "1")
 
@@ -4714,7 +4716,10 @@ async def simulate_agent(req: AgentSimulation):
             "template_type": template_type,
             "wizard_overrides": wizard_overrides,
             "tools": ["search_specific_products", "browse_general_storefront", "orders", "search_knowledge_base"], 
-            "model": {"provider": "openai", "version": "gpt-4o-mini"}
+            "model": {
+                "provider": req.formData.get("model_provider", "openai"),
+                "name": req.formData.get("model_version", "gpt-4o-mini")
+            }
         }
 
 
@@ -4724,14 +4729,8 @@ async def simulate_agent(req: AgentSimulation):
         tn_token = await get_tenant_credential_by_type(req.tenant_id, "TIENDANUBE_ACCESS_TOKEN")
         
         # 6. Build Request
-        # Note: Do NOT add "version" to root. AgentThinkRequest doesn't have it.
-        
         final_openai_key = openai_key or os.getenv("OPENAI_API_KEY")
-        if final_openai_key:
-            logger.info(f"Using OpenAI key: {final_openai_key[:6]}...{final_openai_key[-4:]} (Source: {'Tenant DB' if openai_key else 'Global Env'})")
-        else:
-            logger.warning("No OpenAI API key found for simulation!")
-
+        
         agent_request = {
             "tenant_id": req.tenant_id,
             "message": req.message,
@@ -4743,17 +4742,13 @@ async def simulate_agent(req: AgentSimulation):
             },
             "agent_config": {
                 **agent_config,
-                "model": {
-                    "provider": req.formData.get("model_provider", "openai"),
-                    "name": req.formData.get("model_version", "gpt-5-mini")  # Updated default to Jan 2026
-                },
                 "temperature": float(req.formData.get("temperature", 0.3)),
                 "reasoning_effort": req.formData.get("reasoning_effort")  # Nexus v5.99: GPT-5.2 advanced param
             },
             "credentials": {
                 "openai_api_key": final_openai_key,
                 "google_api_key": google_key or os.getenv("GOOGLE_API_KEY"),
-                "tiendanube_store_id": tenant['tiendanube_store_id'],
+                "tiendanube_store_id": str(tenant['tiendanube_store_id']) if tenant['tiendanube_store_id'] else None,
                 "tiendanube_access_token": tn_token,
                 "tiendanube_service_url": os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003")
             }

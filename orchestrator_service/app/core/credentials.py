@@ -42,7 +42,7 @@ async def get_tenant_credential_by_type(tenant_id: int, internal_key: str) -> st
         
         if row and row['value']:
             decrypted = decrypt_password(row['value'])
-            return decrypted
+            return decrypted if decrypted else row['value']
             
         return None
     except Exception as e:
@@ -86,7 +86,7 @@ async def get_tenant_credential(tenant_id: int, category: str, name_pattern: str
         
         if row and row['value']:
             decrypted = decrypt_password(row['value'])
-            return decrypted
+            return decrypted if decrypted else row['value']
             
         return None
     except Exception as e:

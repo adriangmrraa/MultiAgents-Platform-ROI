@@ -2339,15 +2339,33 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             logger.info(f"✅ AGENT: Response extracted | from={from_number} | clean_length={len(clean_response)} | preview={clean_response[:100]}...")
 
             # Persist
-            agent_msg_id = uuid.uuid4()
+            agent_msg_id = str(uuid.uuid4())
             await db.pool.execute("""
                 INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number, channel_source)
                 VALUES ($1, $2, $3, 'assistant', $4, $5, NOW(), $6, (SELECT channel_source FROM chat_conversations WHERE id = $3))
             """, agent_msg_id, tenant_id, conv_id, clean_response, correlation_id, from_number)
             
             # Nexus v5.32: Shadow RAG Ingestion (Agent Message)
-            asyncio.create_task(ShadowIndexer.process_message(str(agent_msg_id), tenant_id))
+            asyncio.create_task(ShadowIndexer.process_message(agent_msg_id, tenant_id))
             
+            # --- Real-Time Update for UI (Protocol Omega) ---
+            redis_payload = {
+                "event": "message",
+                "data": {
+                    "id": agent_msg_id,
+                    "conversation_id": str(conv_id),
+                    "role": "assistant",
+                    "content": clean_response,
+                    "from_number": from_number,
+                    "created_at": datetime.now().isoformat()
+                }
+            }
+            channel_redis = f"events:tenant:{tenant_id}:assets"
+            try:
+                await redis_client.publish(channel_redis, json.dumps(redis_payload))
+            except Exception as e:
+                logger.warning(f"⚠️ UI: Failed to publish agent message | error={str(e)}")
+
             # Unified Delivery Logic (Nexus v6.1 - Triangular Routing)
             logger.info(f"📤 CHATWOOT: Sending response | conv={conv_id} | channel={channel_source} | length={len(clean_response)}")
             try:
