@@ -128,8 +128,8 @@ async def onboarding_generate(
     # 2. Insert into DB
     # We follow the same pattern as get_or_create_sales_agent but forcing a new one
     q_insert = text("""
-        INSERT INTO agents (name, role, tenant_id, config, model_provider, model_version, is_active, enabled_tools)
-        VALUES (:name, :role, :tenant_id, :config :: jsonb, :provider, :version, :is_active, :tools :: jsonb)
+        INSERT INTO agents (name, role, tenant_id, config, model_provider, model_version, is_active, enabled_tools, system_prompt_template)
+        VALUES (:name, :role, :tenant_id, :config :: jsonb, :provider, :version, :is_active, :tools :: jsonb, :prompt)
         RETURNING id
     """)
 
@@ -142,7 +142,8 @@ async def onboarding_generate(
             "provider": "openai",
             "version": "gpt-4o",
             "is_active": True,
-            "tools": json.dumps(["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"]) # Standard Suite
+            "tools": json.dumps(["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"]), # Standard Suite
+            "prompt": "Eres un asistente virtual de ventas." # Pivot: Placeholder prompt to satisfy NotNull constraint. Wizard will overwrite.
         })
         await db.commit()
         new_id = result.scalar()
@@ -180,8 +181,8 @@ async def onboarding_draft(
 
     # 2. Insert into DB as INACTIVE
     q_insert = text("""
-        INSERT INTO agents (name, role, tenant_id, config, model_provider, model_version, is_active, enabled_tools)
-        VALUES (:name, :role, :tenant_id, :config :: jsonb, :provider, :version, :is_active, :tools :: jsonb)
+        INSERT INTO agents (name, role, tenant_id, config, model_provider, model_version, is_active, enabled_tools, system_prompt_template)
+        VALUES (:name, :role, :tenant_id, :config :: jsonb, :provider, :version, :is_active, :tools :: jsonb, :prompt)
         RETURNING id
     """)
 
@@ -194,7 +195,8 @@ async def onboarding_draft(
             "provider": "openai",
             "version": "gpt-4o",
             "is_active": False, # <--- DRAFT MODE
-            "tools": json.dumps(["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"])
+            "tools": json.dumps(["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"]),
+            "prompt": "[DRAFT] Pendiente de generacion." # Pivot: Placeholder for draft
         })
         await db.commit()
         draft_id = result.scalar()
