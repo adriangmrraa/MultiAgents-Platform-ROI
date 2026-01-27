@@ -263,6 +263,79 @@ Toda la lógica de recepción de mensajes de Chatwoot (Instagram, Facebook, WebC
   - Trigger automático del motor de IA
   - Sincronización en tiempo real con el Dashboard
 
+
+## 5. Centralización de Emails de Derivación (v6.2)
+
+### Problema Resuelto: Complejidad SMTP del Tenant
+En versiones anteriores, cuando un agente derivaba una conversación a un humano (`derivhumano` tool), el sistema requería que cada tenant configurara sus propias credenciales SMTP:
+- `smtp_host`
+- `smtp_port`
+- `smtp_username`
+- `smtp_password_encrypted`
+- `smtp_security`
+
+Esto generaba:
+- **Barrera de entrada técnica**: Usuarios sin conocimientos técnicos no podían activar derivaciones
+- **Costos adicionales**: Cada tenant necesitaba su propio servidor SMTP
+- **Complejidad de soporte**: Debugging de problemas SMTP específicos por tenant
+
+### Solución v6.2: SMTP Global de Plataforma
+
+Todos los emails de derivación ahora se envían usando las credenciales SMTP globales de la plataforma (mismas que los emails de verificación).
+
+**Cambios implementados**:
+
+1. **Función `derivhumano()` actualizada** (`orchestrator_service/main.py`):
+   ```python
+   # Antes (v6.1)
+   smtp_config = await get_tenant_credential(tenant_id, "smtp", "%host%")
+   # Configuración compleja de SMTP por tenant...
+   
+   # Ahora (v6.2)
+   from app.core.email import EmailService
+   dynamic_conf = await EmailService.get_connection_config(
+       tenant_id=tid, 
+       mode="system"  # Usa SMTP global
+   )
+   ```
+
+2. **Simplificación de configuración**:
+   - **Antes**: 5 campos técnicos SMTP + 1 email destino
+   - **Ahora**: 1 campo simple (`destination_email`)
+
+3. **Migración de esquema** (`scripts/migration_cleanup_handoff_smtp.sql`):
+   ```sql
+   ALTER TABLE tenant_human_handoff_config
+   DROP COLUMN IF EXISTS smtp_host,
+   DROP COLUMN IF EXISTS smtp_port,
+   DROP COLUMN IF EXISTS smtp_security,
+   DROP COLUMN IF EXISTS smtp_username,
+   DROP COLUMN IF EXISTS smtp_password_encrypted;
+   ```
+
+**Beneficios**:
+- 🎯 **UX mejorada**: Configuración reducida de 6 campos a 1
+- 🔒 **Seguridad**: Credenciales SMTP centralizadas y controladas
+- 💰 **Costo**: Un solo servidor SMTP para toda la plataforma
+- ⚡ **Mantenimiento**: Cambios de SMTP se hacen en un solo lugar (env vars)
+- 🏢 **Branding**: Todos los emails salen del dominio corporativo de la plataforma
+
+**Email HTML profesional**:
+Los emails de derivación ahora usan un template HTML moderno con:
+- Gradientes y diseño limpio
+- Información estructurada del cliente y motivo de derivación
+- Link directo a WhatsApp del cliente
+- Footer con branding de Nexus Platform
+
+**Configuración requerida** (solo una vez en variables de entorno):
+```bash
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=noreply@platform.com
+SMTP_PASS=app_password_here
+```
+
 ---
 
 **© 2026 Platform AI Solutions - Sovereign Integration Division**
+

@@ -225,4 +225,55 @@ async for _ in execute_agent_v3_logic(identifier, tenant_id, conversation_id, st
 
 ---
 
-**© 2026 Platform AI Solutions - Sovereign Reliability Division**
+## 14. Errores de Frontend - TypeError: i.map is not a function (v6.2)
+
+### Error: `TypeError: i.map is not a function` en página de Agentes
+*   **Síntoma**: La página `/admin/agents` muestra "Nexus System Failure" con error en consola del navegador.
+*   **Causa**: El endpoint del backend devuelve un objeto `{"key": [...]}` en lugar de un array `[...]` directamente.
+*   **Diagnóstico**: 
+    1. Verificar en Network tab del navegador la respuesta de `/admin/agents` o `/admin/tenants`
+    2. Si la respuesta es `{"tenants": [...]}` en lugar de `[...]`, el frontend no puede hacer `.map()`
+    3. El componente React espera un array pero recibe un objeto
+
+*   **Solución v6.2**:
+    ```python
+    # INCORRECTO (causa el error)
+    @router.get("/tenants")
+    async def list_tenants():
+        results = [...]
+        return {"tenants": results}  # ❌ Objeto
+    
+    # CORRECTO (v6.2)
+    @router.get("/tenants")
+    async def list_tenants():
+        results = [...]
+        return results  # ✅ Array directo
+    ```
+
+*   **Endpoints afectados** (verificar que devuelvan arrays):
+    - `GET /admin/agents` → Debe devolver `[{...}, {...}]`
+    - `GET /admin/tenants` → Debe devolver `[{...}, {...}]`
+    - `GET /admin/tools` → Debe devolver `[{...}, {...}]`
+    - `GET /admin/knowledge/list` → Debe devolver `[{...}, {...}]`
+
+*   **Verificación rápida**:
+    ```bash
+    # Probar endpoint directamente
+    curl -H "Authorization: Bearer TOKEN" https://api.tudominio.com/admin/agents
+    
+    # Debe devolver:
+    [{...}, {...}]  # ✅ Correcto
+    
+    # NO debe devolver:
+    {"agents": [{...}]}  # ❌ Incorrecto
+    ```
+
+*   **Fix adicional**: Si el error persiste después de corregir el backend:
+    1. Hacer hard refresh en el navegador: `Ctrl + Shift + R` (Windows/Linux) o `Cmd + Shift + R` (Mac)
+    2. Limpiar caché del navegador
+    3. Rebuild del frontend si es necesario: `npm run build`
+
+---
+
+**© 2026 Platform AI Solutions - Sovereign Troubleshooting Division**
+

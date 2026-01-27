@@ -13,7 +13,7 @@ La plataforma ha alcanzado su pico de madurez con la implementación de la **Sob
 ---
 
 ## 🛡️ Auditoría de Soberanía (Checklist Final)
-
+  
 ### 1. Integridad de la Bóveda (Vault)
 *   **[OK] AES-256 Encryption**: Todas las credenciales encriptadas en reposo.
 *   **[OK] Context Isolation**: Inyección de llaves vía `ContextVars` previene fugas.

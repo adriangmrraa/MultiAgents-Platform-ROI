@@ -31,6 +31,33 @@ Disparador manual para el bootstrapper de Supabase/pgvector.
 
 ## Agentes (Gestión v6.0)
 
+### 📋 Listar Agentes
+`GET /admin/agents`
+*   **Auth**: Requiere autenticación de usuario (`get_current_user`).
+*   **Scope**: 
+    - **SuperAdmin**: Ve todos los agentes de todos los tenants.
+    - **Usuario regular**: Ve solo los agentes de su tenant.
+*   **Respuesta**: Array de agentes con información del tenant.
+    ```json
+    [
+      {
+        "id": "uuid-123",
+        "name": "Agente de Ventas (IA)",
+        "role": "sales",
+        "tenant_id": 1,
+        "tenant_name": "Mi Tienda",
+        "model_provider": "openai",
+        "model_version": "gpt-4o",
+        "temperature": 0.3,
+        "is_active": true,
+        "enabled_tools": ["search_specific_products", "create_order"],
+        "channels": ["whatsapp", "instagram", "web"],
+        "created_at": "2026-01-27T00:00:00Z"
+      }
+    ]
+    ```
+*   **Nota v6.2**: Este endpoint devuelve un **array vacío** `[]` si no hay agentes, evitando errores de frontend.
+
 ### 🤖 Crear Agente
 `POST /admin/agents`
 *   **Validación**: El campo `model_version` es validado contra el registry. Si el modelo no existe, se asigna `gpt-5-mini` automáticamente.
@@ -41,6 +68,36 @@ Disparador manual para el bootstrapper de Supabase/pgvector.
     *   `model_provider`, `model_version` y `enabled_tools` viven en la **raíz** del JSON.
     *   `config` (JSONB) encapsula parámetros dinámicos: `reasoning_effort`, `text_verbosity`, `agent_tone`.
 *   **Intelligent Sync**: Si cambias a un modelo **Premium/Flagship**, el sistema ajustará automáticamente los timeouts y filtros de razonamiento.
+
+## Tenants (Gestión Multi-Inquilino)
+
+### 📋 Listar Tenants
+`GET /admin/tenants`
+*   **Auth**: Requiere autenticación de usuario (`get_current_user`).
+*   **Scope**:
+    - **SuperAdmin**: Ve todos los tenants (límite configurable).
+    - **Owner**: Ve solo tenants donde `owner_email` coincide con su email.
+*   **Query Params**:
+    - `limit` (opcional, default: 100): Número máximo de resultados.
+*   **Respuesta**: Array de tenants (cambio en v6.2 - antes devolvía `{"tenants": [...]}`).
+    ```json
+    [
+      {
+        "id": 1,
+        "store_name": "Mi Tienda",
+        "bot_phone_number": "+5491112345678",
+        "owner_email": "owner@example.com",
+        "store_location": "Buenos Aires, Argentina",
+        "store_website": "https://mitienda.com",
+        "store_description": "Tienda de productos artesanales",
+        "handoff_policy": {},
+        "tiendanube_access_token": null
+      }
+    ]
+    ```
+*   **Seguridad**: El campo `tiendanube_access_token` siempre se devuelve como `null` por razones de seguridad.
+*   **Breaking Change v6.2**: La respuesta ahora es un array directo en lugar de `{"tenants": [...]}` para consistencia con otros endpoints.
+
 
 ## Gestión de Conocimiento (Knowledge v6.0)
 
