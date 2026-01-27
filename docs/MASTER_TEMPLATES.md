@@ -14,7 +14,7 @@ La joya de la corona. Diseñado para E-commerce transaccional.
     *   Si no hay stock: Ofrecer alternativa inmediata.
     *   Cierre: Sugerir "Agregar al carrito" en cada interacción positiva.
 *   **Stack de Herramientas**: Completo (`search`, `orders`, `RAG`).
-
+  
 ## 2. Soporte y Posventa (Support)
 Diseñado para la retención y resolución de L1 (Nivel 1).
 
