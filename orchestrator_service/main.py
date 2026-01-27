@@ -1775,23 +1775,25 @@ ACCIÓN REQUERIDA:
 
 # --- Tactical Prompt Injections (Omega Protocol Defaults) ---
 tactical_injections = {
-    "search_specific_products": "TÁCTICA: Cuando busques productos, usa SIEMPRE el parámetro 'q' con el nombre del producto, categoría o marca exacta. Si el cliente pregunta de forma vaga, pide precisión antes de buscar.",
-    "search_by_category": "TÁCTICA: Selecciona la categoría correcta del catálogo para el parámetro 'category'. Si no estás seguro, usa 'search_specific_products' en su lugar.",
-    "browse_general_storefront": "TÁCTICA: Usa esta herramienta solo para dar una visión general. Si el cliente menciona un producto específico, detente y usa 'search_specific_products'.",
-    "search_knowledge_base": "TÁCTICA: Usa esta herramienta para responder preguntas sobre políticas, envíos, talles generales o información de la marca que NO sea un producto específico.",
-    "derivhumano": "TÁCTICA: Activa esta herramienta si detectas frustración extrema, si el cliente pide hablar con un humano explícitamente, o si hay un problema técnico que no puedes resolver.",
-    "orders": "TÁCTICA: Para buscar órdenes, solicita al cliente el ID numérico sin el símbolo #. Informa el estado actual de forma clara."
+    "search_specific_products": "TÁCTICA: Pide siempre el talle o medidas del pie antes de buscar zapatillas de punta. Traduce 'puntas' o 'zapatillas' a la categoría calzado. Si el cliente pregunta de forma vaga, pide precisión.",
+    "search_by_category": "TÁCTICA: Si encuentran 'accesorios', sugiere protectores de silicona o cintas, son el complemento ideal para las puntas.",
+    "browse_general_storefront": "TÁCTICA: Muestra lo nuevo en colecciones de mallas o marcas premium como Gaynor Minden. Usa esta herramienta solo para dar una visión general.",
+    "search_knowledge_base": "TÁCTICA: Consulta siempre la política de cambios de zapatillas usadas (está prohibido si están marcadas). Responde sobre políticas, envíos o talles generales.",
+    "derivhumano": "TÁCTICA: Activa si el cliente pide 'prueba de puntas' presencial, tiene dudas técnicas de lesiones, o frustración extrema.",
+    "orders": "TÁCTICA: Pide el ID numérico sin #. Aclara que los pedidos de puntas pueden demorar 48hs extras por preparación de cintas.",
+    "cupones_list": "TÁCTICA: Si el cliente duda por el precio, consulta cupones activos (ej: BIENVENIDA) para incentivar el cierre."
 }
 
 # --- Response Extraction Guides (Omega Protocol Defaults) ---
 response_guides = {
-    "search_specific_products": "GUÍA DE RESPUESTA: Para cada producto, envía PRIMERO la imagen en una burbuja separada usando ![nombre](url) seguido de |||, luego nombre, precio y un detalle breve y fidedigno (máximo 15 palabras). Si no hay stock, indícalo.",
-    "search_by_category": "GUÍA DE RESPUESTA: Resume las categorías encontradas y ofrece ver los productos destacados de cada una.",
-    "browse_general_storefront": "GUÍA DE RESPUESTA: Envía la imagen del primer producto destacado con ![nombre](url) ||| y menciona las 3 novedades más llamativas con sus precios.",
-    "search_knowledge_base": "GUÍA DE RESPUESTA: Proporciona la respuesta basada en el conocimiento de forma concisa y profesional.",
-    "orders": "GUÍA DE RESPUESTA: Extrae el estado (Ej: 'Pagado', 'Enviado') y la fecha estimada de entrega si está disponible.",
+    "search_specific_products": "GUÍA DE RESPUESTA: Muestra imagen ![nombre](url) ||| nombre, precio y aclara si incluye cintas/elásticos. Detalle breve (máximo 15 palabras).",
+    "search_by_category": "GUÍA DE RESPUESTA: Muestra las subcategorías de danza disponibles (Mallas, Calzado, Accesorios) y ofrece ver los destacados.",
+    "browse_general_storefront": "GUÍA DE RESPUESTA: Destaca el top 3 de productos más vendidos para bailarinas con sus imágenes y precios.",
+    "search_knowledge_base": "GUÍA DE RESPUESTA: Proporciona la respuesta técnica sobre el calce o la tabla de talles de forma concisa y profesional.",
+    "orders": "GUÍA DE RESPUESTA: Informa el estado (Pagado/Enviado) y si ya fue despachado por el correo elegido.",
     "cupones_list": "GUÍA DE RESPUESTA: Extrae el código del cupón y el porcentaje de descuento de forma muy visible.",
-    "derivhumano": "GUÍA DE RESPUESTA: Confirma al usuario que un humano revisará el caso y que el chat quedará pausado por 24h."
+    "derivhumano": "GUÍA DE RESPUESTA: Dile al cliente que una experta en fitting se contactará para asesorarla personalmente y pausamos 24h.",
+    "sendemail": "GUÍA DE RESPUESTA: Confirma que se envió la notificación al equipo y que recibirán respuesta en su email."
 }
 
 tools = [search_specific_products, search_by_category, browse_general_storefront, search_knowledge_base, cupones_list, orders, sendemail, derivhumano]

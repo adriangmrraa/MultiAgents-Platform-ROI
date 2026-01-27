@@ -4556,59 +4556,28 @@ async def list_agents(current_user: User = Depends(get_current_user)):
 @router.get("/knowledge/collections", dependencies=[Depends(verify_admin_token)])
 async def list_knowledge_collections(current_user: User = Depends(get_current_user)):
     """
-    Returns unique collections found in the Vector Database (Supabase) for the current tenant.
+    Returns unique collections found in our local database for the current tenant.
     Used by Agent Wizard to configure Selective Knowledge.
-    Nexus v5.99 Fix: Use real Integer ID.
+    Nexus v5.72: Switched to PostgreSQL Truth for Speed & Stability.
     """
-    # RESOLUCIÓN DE TENANT (FUENTE DE VERDAD: TABLA USERS)
+    # RESOLUCIÓN DE TENANT
     user_row = await db.pool.fetchrow("SELECT tenant_id FROM users WHERE id = $1", current_user.id)
     tenant_id = user_row['tenant_id'] if user_row else current_user.tenant_id
     
-    collections = set()
+    # 1. Fetch from Local DB (Truth)
+    # We query the collection column which is auto-healed during upload
+    rows = await db.pool.fetch("""
+        SELECT DISTINCT collection 
+        FROM rag_documents 
+        WHERE tenant_id = $1 
+          AND collection IS NOT NULL 
+          AND collection != ''
+    """, tenant_id)
     
-    # Supabase REST (Truth)
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+    collections = [r['collection'].strip() for r in rows]
     
-    if supabase_url and supabase_key:
-        try:
-            headers = {
-                "apikey": supabase_key, 
-                "Authorization": f"Bearer {supabase_key}",
-                "Content-Type": "application/json"
-            }
-            # Fetch metadata column only, filter by tenant via metadata containment
-            # Strategy: Fetch top 2000 recent docs to scan for collections.
-            async with httpx.AsyncClient(timeout=12.0) as client:
-                params = {
-                    "select": "metadata",
-                    "limit": "2000",
-                    "order": "id.desc" 
-                }
-                # Filter by tenant inside metadata (Cast to string for Supabase REST filter)
-                params[f"metadata->>tenant_id"] = f"eq.{str(tenant_id)}"
-
-                resp = await client.get(f"{supabase_url}/rest/v1/documents", headers=headers, params=params)
-                if resp.status_code == 200:
-                    rows = resp.json()
-                    for r in rows:
-                        meta = r.get("metadata", {})
-                        # Extract collection
-                        # If 'collection' key missing, fallback to 'source' directory if it looks like one
-                        coll = meta.get("collection")
-                        if coll:
-                            collections.add(coll.strip())
-                        elif "source" in meta:
-                             # Heuristic: "Ventas/precios.pdf" -> "Ventas"
-                             src = meta["source"]
-                             if "/" in src:
-                                 parts = src.split("/")
-                                 if len(parts) > 1:
-                                     collections.add(parts[0].strip())
-        except Exception as e:
-            logger.warning(f"knowledge_collections_fetch_failed: {e}")
-            
-    return sorted(list(collections))
+    # If no collections found in DB, we should return empty to avoid hallucinations
+    return sorted(collections)
 
 def _inject_knowledge_config(system_prompt: str, config: Dict[str, Any]) -> str:
     """
@@ -5067,6 +5036,34 @@ async def list_available_tools():
             "description": "Genera un link de pago/carrito para cerrar la venta.",
             "icon": "ShoppingCart",
             "category": "sales"
+        },
+        {
+            "name": "search_by_category",
+            "label": "Buscar por Categoría",
+            "description": "Permite al agente navegar por las categorías del catálogo (ej: Mallas, Calzado).",
+            "icon": "Grid",
+            "category": "sales"
+        },
+        {
+            "name": "browse_general_storefront",
+            "label": "Ver Escaparate General",
+            "description": "Muestra los productos destacados y novedades de la página principal.",
+            "icon": "Layout",
+            "category": "sales"
+        },
+        {
+            "name": "cupones_list",
+            "label": "Listar Cupones",
+            "description": "Consulta los cupones activos para ofrecer descuentos al cliente.",
+            "icon": "Ticket",
+            "category": "sales"
+        },
+        {
+            "name": "sendemail",
+            "label": "Enviar Correo (Handoff)",
+            "description": "Envía un correo electrónico de derivación al equipo humano.",
+            "icon": "Mail",
+            "category": "system"
         },
         {
             "name": "search_knowledge_base",

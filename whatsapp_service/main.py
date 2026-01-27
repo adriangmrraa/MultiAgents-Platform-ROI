@@ -479,12 +479,18 @@ async def ycloud_webhook(request: Request):
                 "mime_type": node.get("mime_type"),
                 "provider_id": node.get("id")
             })
-            # Transcription
+            # Transcription (Nexus v6.2.20)
             if node.get("link"):
                 logger.info("audio_received_starting_transcription", correlation_id=correlation_id)
-                transcription = await transcribe_audio(node.get("link"), correlation_id)
-                if transcription:
-                     text_content = transcription
+                v_openai = await get_config("OPENAI_API_KEY", OPENAI_API_KEY)
+                # Ensure we have the key before attempting transcription
+                if v_openai:
+                    transcription = await transcribe_audio(node.get("link"), correlation_id)
+                    if transcription:
+                         text_content = transcription
+                         logger.info("audio_transcribed_success", text=transcription[:50])
+                else:
+                    logger.warning("transcription_skipped_missing_key")
                      
         if media_list:
              # Construct payload compatible with InboundChatEvent + Media extension
@@ -494,7 +500,7 @@ async def ycloud_webhook(request: Request):
                 "provider_message_id": msg.get("wamid") or event.get("id"),
                 "from_number": from_n, 
                 "to_number": to_n, 
-                "text": text_content, # Can be None/null
+                "text": text_content, # Transcribed text or caption
                 "customer_name": name,
                 "event_type": "whatsapp.inbound_message.received", 
                 "correlation_id": correlation_id,
@@ -519,16 +525,19 @@ async def ycloud_webhook(request: Request):
         text = None
         if msg.get("type") == "text":
             text = msg.get("text", {}).get("body")
+        elif msg.get("type") == "audio":
+            # Echo of an audio message from the HUMAN side
+            text = "[Audio Manual]"
         
-        if text and user_phone:
+        if (text or msg.get("type") == "audio") and user_phone:
              payload = {
                 "provider": "ycloud", 
                 "event_id": event.get("id"), 
                 "provider_message_id": msg.get("wamid") or event.get("id"),
-                "from_number": user_phone,     # Ensuring this maps to 'external_user_id' in DB
+                "from_number": user_phone,     # Map to the customer
                 "to_number": bot_phone,
-                "text": text,
-                "event_type": "whatsapp.message.echo", # Standardize for Orchestrator
+                "text": text or "[Media Manual]",
+                "event_type": "whatsapp.message.echo", # Critical for 24h Lock
                 "correlation_id": correlation_id
              }
              headers = {"X-Correlation-Id": correlation_id}
