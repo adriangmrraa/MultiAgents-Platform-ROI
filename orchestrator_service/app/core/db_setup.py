@@ -10,7 +10,7 @@ async def background_db_setup():
     Non-blocking background task that retries DB initialization.
     Nexus v5.9 - Self-Healing Protocol.
     """
-    max_retries = 10
+    max_retries = 5
     retry_delay = 5  # seconds
 
     for attempt in range(1, max_retries + 1):

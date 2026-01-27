@@ -508,6 +508,42 @@ class AgentModel(BaseModel):
     template_type: Optional[str] = None
 
 
+# --- Agents Endpoints ---
+
+@router.get("/agents", dependencies=[Depends(get_current_user)])
+async def list_agents(current_user: User = Depends(get_current_user)):
+    """
+    Lists all agents for the current user's tenant.
+    SuperAdmin can see all agents.
+    """
+    try:
+        if current_user.role == "SuperAdmin":
+            # SuperAdmin sees all agents
+            query = """
+                SELECT a.*, t.store_name as tenant_name
+                FROM agents a
+                LEFT JOIN tenants t ON a.tenant_id = t.id
+                ORDER BY a.created_at DESC
+            """
+            rows = await db.pool.fetch(query)
+        else:
+            # Regular users see only their tenant's agents
+            query = """
+                SELECT a.*, t.store_name as tenant_name
+                FROM agents a
+                LEFT JOIN tenants t ON a.tenant_id = t.id
+                WHERE a.tenant_id = $1
+                ORDER BY a.created_at DESC
+            """
+            rows = await db.pool.fetch(query, current_user.tenant_id)
+        
+        # Convert to list of dicts
+        agents = [dict(row) for row in rows]
+        return agents
+    except Exception as e:
+        logger.error("list_agents_failed", error=str(e))
+        return []
+
 
 
 @router.delete("/tools/{name}", dependencies=[Depends(get_current_user)])
