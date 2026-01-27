@@ -80,7 +80,10 @@ GLOBAL_TN_ACCESS_TOKEN = os.getenv("TIENDANUBE_ACCESS_TOKEN") or os.getenv("GLOB
 NEXUS_V3_ENABLED = os.getenv("NEXUS_V3_ENABLED", "true").lower() == "true"
 AGENT_SERVICE_URL = os.getenv("AGENT_SERVICE_URL", "http://agent_service:8001")
 TIENDANUBE_SERVICE_URL = os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003")
-WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp_service:8002")
+WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL")
+if not WHATSAPP_SERVICE_URL:
+    # Use underscore as primary, will fallback to dash in unified_message_delivery if needed
+    WHATSAPP_SERVICE_URL = "http://whatsapp_service:8002"
 INTERNAL_SECRET_KEY = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "agente-js-secret-key-2024")
 
@@ -130,8 +133,6 @@ class SimpleEvent:
         self.media = media or []
         self.correlation_id = str(uuid.uuid4())
         self.channel_source = channel_source
-        self.external_chatwoot_id = external_cw_id
-        self.external_account_id = external_acc_id
         self.external_chatwoot_id = external_cw_id
         self.external_account_id = external_acc_id
         self.tenant_id = tenant_id

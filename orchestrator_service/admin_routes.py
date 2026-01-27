@@ -1550,8 +1550,9 @@ async def bootstrap():
 @safe_db_call
 async def get_stats(current_user: User = Depends(get_current_user)):
     """
-    Get dashboard statistics for the CURRENT TENANT.
-    Implements Aggregated Cache pattern (TTL 300s).
+    SaaS Dashboard "CEO View".
+    Returns ROI metrics (GMV, Conversions) + System Health.
+    Scoped by Tenant.
     """
     tenant_id = current_user.tenant_id
     cache_key = f"dashboard:stats:{tenant_id}"
@@ -1562,46 +1563,64 @@ async def get_stats(current_user: User = Depends(get_current_user)):
         if cached:
             return json.loads(cached)
     except Exception as e:
-        print(f"WARN: Redis cache error (get): {e}")
+        logger.warning(f"⚠️ Stats: Redis cache error | error={str(e)}")
 
-    # 2. Fetch from DB (Fallback/Live)
+    # 2. GMV & ROI Heuristics
+    avg_ticket = 45000.0
+    date_limit = datetime.now() - timedelta(days=30)
+    
+    # Message Stats
+    q_msgs = "SELECT COUNT(*) FROM chat_messages m JOIN chat_conversations c ON m.conversation_id = c.id WHERE c.tenant_id = $1"
+    q_proc = "SELECT COUNT(*) FROM chat_messages m JOIN chat_conversations c ON m.conversation_id = c.id WHERE c.tenant_id = $1 AND m.role = 'assistant'"
+    
+    # Conversions
+    q_conversions = """
+        SELECT COUNT(DISTINCT c.id)
+        FROM chat_conversations c
+        JOIN chat_messages m ON c.id = m.conversation_id
+        WHERE c.tenant_id = $1 AND c.last_message_at >= $2
+        AND (
+            m.content ILIKE '%tu pedido es el #%' OR 
+            m.content ILIKE '%gracias por tu compra%' OR
+            m.content ILIKE '%pago recibido%' OR
+            m.content ILIKE '%link de pago generado%'
+        )
+    """
+    
     try:
-        # Tenant Info
-        active_tenants = 1 # Sovereign Identity: You are the only tenant you see
+        total_messages = await db.pool.fetchval(q_msgs, tenant_id) or 0
+        processed_messages = await db.pool.fetchval(q_proc, tenant_id) or 0
+        conversions = await db.pool.fetchval(q_conversions, tenant_id, date_limit) or 0
+        gmv = conversions * avg_ticket
         
-        # Message stats (Source of Truth: chat_messages for THIS tenant)
-        # We need to join with conversations to filter by tenant_id, OR if chat_messages has tenant_id (it should, but let's check schema. Assuming optimization: join conversation)
-        # Checking schema from previous knowledge: chat_messages usually links to conversation_id. conversation links to tenant_id.
-        
-        # Optimized Queries for Tenant
-        q_total = "SELECT COUNT(m.id) FROM chat_messages m JOIN chat_conversations c ON m.conversation_id = c.id WHERE c.tenant_id = $1"
-        total_messages = await db.pool.fetchval(q_total, tenant_id)
-        
-        q_processed = "SELECT COUNT(m.id) FROM chat_messages m JOIN chat_conversations c ON m.conversation_id = c.id WHERE c.tenant_id = $1 AND m.role = 'assistant'"
-        processed_messages = await db.pool.fetchval(q_processed, tenant_id)
-        
+        active_tenants = 1
+        if current_user.role == "SuperAdmin":
+            active_tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants") or 0
+            
         stats_data = {
             "active_tenants": active_tenants,
             "total_messages": total_messages,
             "processed_messages": processed_messages,
+            "roi_metrics": {
+                "total_gmv": gmv,
+                "conversions": conversions,
+                "last_30_days": gmv,
+                "formatted_gmv": f"${gmv:,.0f}"
+            },
             "cached_at": datetime.utcnow().isoformat()
         }
         
         # 3. Cache result
         try:
             await redis_client.setex(cache_key, 300, json.dumps(stats_data))
-        except Exception as e:
-            print(f"WARN: Redis cache error (set): {e}")
+        except Exception: pass
 
         return stats_data
 
-    except Exception as db_err:
-        print(f"CRIT: DB Stats failed: {db_err}")
-        # Return fallback structure to prevent UI crash
-        return {
-            "active_tenants": 0,
-            "total_messages": 0,
-            "processed_messages": 0,
+    except Exception as e:
+        logger.error(f"❌ Stats: Aggregation failed | error={str(e)}")
+        # Low-level fallback
+        return {"total_messages": 0, "processed_messages": 0, "roi_metrics": {"total_gmv": 0}}
             "error": "Database unavailable"
         }
 
@@ -2524,7 +2543,12 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
         provider = 'meta_direct' if has_meta else 'chatwoot'
 
     # 2. Call Relay Service
-    wa_url = os.getenv("WHATSAPP_SERVICE_URL", "http://whatsapp_service:8002")
+    wa_url = os.getenv("WHATSAPP_SERVICE_URL")
+    if not wa_url:
+         # Cloud Fallback Matrix (Nexus v6.2.12 - Dash vs Underscore Resilience)
+         # Try underscored internal name as default
+         wa_url = "http://whatsapp_service:8002"
+    
     logger.info(f"📤 RELAY: Sending to Gateway | provider={provider} | url={wa_url}")
 
     relay_payload = {
@@ -2538,6 +2562,7 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
         "external_account_id": cw_acc
     }
 
+    # Attempt Delivery with Dash Fallback if Underscore fails
     async with httpx.AsyncClient() as client:
         try:
             res = await client.post(
@@ -2547,20 +2572,38 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                     "X-Internal-Token": os.getenv("INTERNAL_API_TOKEN", "internal-secret"),
                     "X-Correlation-Id": correlation_id
                 }, 
-                timeout=10.0
+                timeout=12.0 # Increased for cloud stability
             )
             if res.status_code not in [200, 201]:
                 logger.error(f"❌ RELAY: Gateway error | status={res.status_code} | body={res.text}")
-                # Fallback to direct YCloud if it's a critical timeout/failure? 
-                # For now, we trust the gateway.
                 raise HTTPException(res.status_code, f"Delivery Gateway Error: {res.text}")
         except Exception as e:
             msg = str(e)
-            if "Name or service not known" in msg:
-                logger.error(f"❌ RELAY: DNS FAILURE | Host '{wa_url}' unreachable. Check your environment variables (WHATSAPP_SERVICE_URL).")
+            # DYNAMIC DNS FALLBACK: If underscore host fails, try dash host (Easypanel Standard)
+            if ("Name or service not known" in msg or "ConnectError" in msg) and "whatsapp_service" in wa_url:
+                dash_url = wa_url.replace("whatsapp_service", "whatsapp-service")
+                logger.warning(f"🔁 RELAY: Primary host failed. Attempting Dash Fallback | url={dash_url}")
+                try:
+                    res_dash = await client.post(
+                        f"{dash_url}/messages/relay", 
+                        json=relay_payload, 
+                        headers={
+                            "X-Internal-Token": os.getenv("INTERNAL_API_TOKEN", "internal-secret"),
+                            "X-Correlation-Id": correlation_id
+                        }, 
+                        timeout=12.0
+                    )
+                    if res_dash.status_code in [200, 201]:
+                        logger.info("✅ RELAY: Dash Fallback Success")
+                        return {"status": "sent"}
+                    else:
+                        raise HTTPException(res_dash.status_code, f"Relay Failed (All hosts) | error={res_dash.text}")
+                except Exception as e2:
+                    logger.error(f"❌ RELAY: Critical DNS failure on all hosts | error={str(e2)}")
+                    raise e2
             else:
                 logger.error(f"❌ RELAY: Connection failed | error={msg}")
-            raise e
+                raise e
 
     return {"status": "sent"}
 
@@ -2753,74 +2796,8 @@ async def list_available_models():
 
 # --- Analytics / Telemetry ---
 
-@router.get("/stats", dependencies=[Depends(get_current_user)])
-async def get_stats(current_user: User = Depends(get_current_user)):
-    """
-    SaaS Dashboard "CEO View".
-    Returns ROI metrics (GMV, Conversions) + System Health.
-    Scoped by Tenant.
-    """
-    tenant_id = current_user.tenant_id
-    
-    # 1. GMV & Conversions (Last 30 Days)
-    # Heuristic: sum value of closed/won conversations
-    # For now, we use the same heuristic as report_assisted_gmv but efficient
-    days = 30
-    avg_ticket = 45000.0 # Configurable per tenant later
-    
-    date_limit = datetime.now() - timedelta(days=days)
-    
-    q_conversions = """
-        SELECT COUNT(DISTINCT c.id)
-        FROM chat_conversations c
-        JOIN chat_messages m ON c.id = m.conversation_id
-        WHERE c.last_message_at >= $1
-        AND (
-            m.content ILIKE '%tu pedido es el #%' OR 
-            m.content ILIKE '%gracias por tu compra%' OR
-            m.content ILIKE '%pago recibido%' OR
-            m.content ILIKE '%link de pago generado%'
-        )
-    """
-    params_conv = [date_limit]
-    
-    # Scoping
-    if current_user.role != "SuperAdmin":
-        q_conversions += " AND c.tenant_id = $2"
-        params_conv.append(tenant_id)
-        
-    conversions = await db.pool.fetchval(q_conversions, *params_conv) or 0
-    gmv = conversions * avg_ticket
-    
-    # 2. Operational Metrics
-    q_msgs = "SELECT COUNT(*) FROM chat_messages"
-    q_proc = "SELECT COUNT(*) FROM chat_messages WHERE role = 'assistant'"
-    params_msgs = []
-    
-    if current_user.role != "SuperAdmin":
-        q_msgs += " JOIN chat_conversations c ON chat_messages.conversation_id = c.id WHERE c.tenant_id = $1"
-        q_proc += " JOIN chat_conversations c ON chat_messages.conversation_id = c.id WHERE c.tenant_id = $1"
-        params_msgs.append(tenant_id)
-        
-    total_messages = await db.pool.fetchval(q_msgs, *params_msgs) or 0
-    processed_messages = await db.pool.fetchval(q_proc, *params_msgs) or 0
-    
-    # 3. Tenant Count
-    active_tenants = 1
-    if current_user.role == "SuperAdmin":
-        active_tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants") or 0
-        
-    return {
-        "active_tenants": active_tenants,
-        "total_messages": total_messages,
-        "processed_messages": processed_messages,
-        "roi_metrics": {
-            "total_gmv": gmv,
-            "conversions": conversions,
-            "last_30_days": gmv, # Assuming total_gmv IS last 30 days for now
-            "formatted_gmv": f"${gmv:,.0f}"
-        }
-    }
+# Consolidado en línea 1549
+pass
 
 @router.get("/analytics/summary", dependencies=[Depends(verify_admin_token)])
 @require_role('SuperAdmin')

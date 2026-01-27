@@ -41,12 +41,29 @@ async def get_config(name: str, default: str = None, tenant_id: int = None) -> s
     try:
         async with httpx.AsyncClient() as client:
             params = {"tenant_id": tenant_id} if tenant_id else {}
-            resp = await client.get(
-                f"{ORCHESTRATOR_URL}/admin/internal/credentials/{name}",
-                headers={"X-Internal-Token": INTERNAL_SECRET_KEY or "internal-secret"},
-                params=params,
-                timeout=5.0
-            )
+            url = f"{ORCHESTRATOR_URL}/admin/internal/credentials/{name}"
+            
+            try:
+                resp = await client.get(
+                    url,
+                    headers={"X-Internal-Token": INTERNAL_SECRET_KEY or "internal-secret"},
+                    params=params,
+                    timeout=5.0
+                )
+            except Exception as e:
+                # DNS Fallback (Nexus v6.2.12)
+                if ("Name or service not known" in str(e) or "ConnectError" in str(e)) and "orchestrator_service" in url:
+                    dash_url = url.replace("orchestrator_service", "orchestrator-service")
+                    logger.warning(f"🔁 CONFIG: Primary host failed. Attempting Dash Fallback | url={dash_url}")
+                    resp = await client.get(
+                        dash_url,
+                        headers={"X-Internal-Token": INTERNAL_SECRET_KEY or "internal-secret"},
+                        params=params,
+                        timeout=5.0
+                    )
+                else:
+                    raise e
+
             if resp.status_code == 200:
                 val = resp.json().get("value")
                 if val:
