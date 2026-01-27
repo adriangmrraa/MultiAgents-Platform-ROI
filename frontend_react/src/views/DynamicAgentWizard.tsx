@@ -403,100 +403,78 @@ export const DynamicAgentWizard = () => {
         initData();
     }, []);
 
-    // Nexus v7.2: Hydrate Draft from Onboarding Architect
+    // Nexus v7.3: Unified Hydration Logic (Borrador & Edición)
     useEffect(() => {
-        if (draftId) {
-            const loadDraft = async () => {
-                try {
-                    // Fetch the DRAFT agent (is_active=False)
-                    const draftAgent = await fetchApi(`/admin/agents/${draftId}/config`);
+        const idToLoad = agentId || draftId;
+        if (!idToLoad) return;
 
-                    if (draftAgent && draftAgent.config) {
-                        console.log("Hydrating Draft:", draftAgent.config);
+        const loadAgentData = async () => {
+            try {
+                const data = await fetchApi(`/admin/agents/${idToLoad}/config`);
+                if (data) {
+                    const cfg = data.config || {};
+                    const getDef = (k: string) => AGENT_CONFIG_SCHEMA.find(f => f.key === k)?.defaultValue || '';
 
-                        // Merge draft config into form data
-                        setFormData(prev => ({
-                            ...prev,
-                            ...draftAgent.config
-                        }));
+                    // 1. Hydrate Form State
+                    setFormData(prev => ({
+                        ...prev,
+                        ...data,
+                        ...cfg,
+                        temperature: data.temperature?.toString() || '0.7',
+                        // Name logic: Remove [DRAFT] prefix if present, fallback to store_name or server name
+                        store_name: cfg.store_name || (data.name ? data.name.replace("[DRAFT] ", "") : getDef('store_name')),
+                        // Tone: fallback to template or default
+                        agent_tone: cfg.agent_tone || data.system_prompt_template || getDef('agent_tone'),
+                        // Other core fields
+                        business_rules: cfg.business_rules || getDef('business_rules'),
+                        synonym_dictionary: cfg.synonym_dictionary || getDef('synonym_dictionary'),
+                        business_description: cfg.business_description || cfg.store_description || getDef('business_description'),
+                        catalog_knowledge: cfg.catalog_knowledge || cfg.catalog_summary || getDef('catalog_knowledge'),
+                        website_url: cfg.website_url || cfg.store_website || getDef('website_url'),
+                        model_provider: data.model_provider || 'openai',
+                        model_version: data.model_version || 'gpt-4o',
+                        template_type: cfg.template_type || data.template_type || (draftId ? 'sales' : 'custom')
+                    }));
 
-                        // Auto-select 'Sales' template or new 'Custom' (using Sales for now)
-                        setSelectedTemplate('sales');
+                    const parseArray = (val: any) => {
+                        if (!val) return [];
+                        if (Array.isArray(val)) return val;
+                        if (typeof val === 'string') {
+                            try { return JSON.parse(val); } catch { return []; }
+                        }
+                        return [];
+                    };
 
-                        // Visual Feedback
+                    // 2. Extra States
+                    setSelectedTools(parseArray(data.enabled_tools));
+                    const loadedChannels = parseArray(data.channels);
+                    if (loadedChannels.length > 0) setSelectedChannels(loadedChannels);
+
+                    let loadedCols = parseArray(data.knowledge_sources);
+                    if (loadedCols.length === 0 && cfg.knowledge_config?.collections) {
+                        loadedCols = cfg.knowledge_config.collections;
+                    }
+                    setKnowledgeCollections(loadedCols);
+
+                    // 3. UI State
+                    // Priority: config.template_type > data.template_type > draft (sales) > role (if sales)
+                    const tplKey = cfg.template_type || data.template_type || (draftId ? 'sales' : (data.role === 'sales' ? 'sales' : 'custom'));
+                    if (tplKey && tplKey !== 'custom') {
+                        setSelectedTemplate(tplKey);
+                    }
+
+                    if (draftId) {
                         setResetFeedback("✨ Configuración del Arquitecto Importada");
                         setTimeout(() => setResetFeedback(null), 8000);
                     }
-                } catch (e) {
-                    console.error("Failed to hydrate draft", e);
-                    setError("No se pudo cargar el borrador del Arquitecto.");
                 }
-            };
-            loadDraft();
-        }
-    }, [draftId]);
-
-
-
-    useEffect(() => {
-        if (agentId) {
-            const loadAgent = async () => {
-                try {
-                    const agent = await fetchApi(`/admin/agents/${agentId}/config`);
-                    if (agent) {
-                        const cfg = agent.config || {};
-                        const getDef = (k: string) => AGENT_CONFIG_SCHEMA.find(f => f.key === k)?.defaultValue || '';
-
-                        // 1. Core Metadata
-                        setFormData({
-                            ...agent,
-                            ...cfg,
-                            temperature: agent.temperature?.toString() || '0.7',
-                            store_name: agent.name || getDef('store_name'),
-                            agent_tone: cfg.agent_tone || agent.system_prompt_template || getDef('agent_tone'),
-                            business_rules: cfg.business_rules || getDef('business_rules'),
-                            synonym_dictionary: cfg.synonym_dictionary || getDef('synonym_dictionary'),
-                            business_description: cfg.business_description || agent.metadata?.business_description || cfg.store_description || getDef('business_description'),
-                            catalog_knowledge: cfg.catalog_knowledge || agent.metadata?.catalog_knowledge || cfg.catalog_summary || getDef('catalog_knowledge'),
-                            website_url: cfg.website_url || agent.metadata?.website_url || agent.store_website || cfg.store_website || getDef('website_url'),
-                            model_provider: agent.model_provider || 'openai',
-                            model_version: agent.model_version || 'gpt-4o',
-                            template_type: cfg.template_type || agent.template_type
-                        });
-
-                        const parseArray = (data: any) => {
-                            if (!data) return [];
-                            if (Array.isArray(data)) return data;
-                            if (typeof data === 'string') {
-                                try { return JSON.parse(data); } catch { return []; }
-                            }
-                            return [];
-                        };
-
-                        // 2. Tools
-                        setSelectedTools(parseArray(agent.enabled_tools));
-
-                        // 3. Channels (Persistence Fix)
-                        const loadedChannels = parseArray(agent.channels);
-                        if (loadedChannels.length > 0) {
-                            setSelectedChannels(loadedChannels);
-                        }
-
-                        // 4. Knowledge
-                        let loadedCols = parseArray(agent.knowledge_sources);
-                        if (loadedCols.length === 0 && agent.config?.knowledge_config?.collections) {
-                            loadedCols = agent.config.knowledge_config.collections;
-                        }
-                        setKnowledgeCollections(loadedCols);
-                    }
-                } catch (err) {
-                    console.error("Failed to load agent data", err);
-                    setError("No se pudo cargar la configuración del agente.");
-                }
-            };
-            loadAgent();
-        }
-    }, [agentId, fetchApi]);
+            } catch (err) {
+                console.error("Hydration Failed:", err);
+                setError("No se pudo cargar la configuración.");
+            }
+        };
+        loadAgentData();
+    }, [agentId, draftId, fetchApi]);
 
     const handleLoadTemplate = (key: string) => {
         const tpl = templates[key];

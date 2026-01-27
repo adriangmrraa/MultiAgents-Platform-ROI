@@ -4608,7 +4608,19 @@ def _inject_knowledge_config(system_prompt: str, config: Dict[str, Any]) -> str:
     instruction += f"Available for 'collection_filter': {json.dumps(collections)}\n"
     instruction += "IMPORTANT: When using 'search_knowledge_base', YOU MUST use one of these values for 'collection_filter' if the user's query matches the topic. Otherwise, pass null."
     
-    return system_prompt + instruction
+def sanitize_surrogates(obj):
+    """
+    Recursively removes malformed Unicode surrogates from strings within a dict/list.
+    Prevents Postgres 'Unicode low surrogate must follow a high surrogate' errors.
+    """
+    if isinstance(obj, str):
+        # This encodes effectively ignoring surrogates and decodes back to clean utf-8
+        return obj.encode('utf-8', 'ignore').decode('utf-8')
+    elif isinstance(obj, dict):
+        return {k: sanitize_surrogates(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_surrogates(i) for i in obj]
+    return obj
 
 @router.post("/agents", dependencies=[Depends(verify_admin_token)])
 async def create_agent(agent: AgentModel, current_user: User = Depends(get_current_user)):
@@ -4646,12 +4658,16 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
         # 2026 Validation: Ensure model is valid, otherwise fallback
         validated_model = validate_model(agent.model_version)
         
+        # 4. Sanitize context/config (Fix Unicode Surrogates v7.3)
+        clean_config = sanitize_surrogates(agent.config or {})
+        clean_prompt = sanitize_surrogates(final_prompt)
+
         agent_id = await db.pool.fetchval(
             q, 
             agent.name, agent.role, tenant_int, str(current_user.id),
             agent.model_provider, validated_model, agent.temperature,
-            final_prompt, json.dumps(agent.enabled_tools), # Use Injected Prompt
-            json.dumps(agent.channels), agent.is_active, agent.template_type, json.dumps(agent.config or {})
+            clean_prompt, json.dumps(agent.enabled_tools), # Use Sanizited Prompt
+            json.dumps(agent.channels), agent.is_active, agent.template_type, json.dumps(clean_config)
         )
         
         # Update knowledge_sources separately if it exists (for schema flexibility)
@@ -4721,6 +4737,10 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
         validated_model = validate_model(agent.model_version)
         final_prompt = _inject_knowledge_config(agent.system_prompt_template, agent.config)
 
+        # 6. Sanitize context/config (Fix Unicode Surrogates v7.3)
+        clean_config = sanitize_surrogates(agent.config or {})
+        clean_prompt = sanitize_surrogates(final_prompt)
+
         q = """
             UPDATE agents SET 
                 name = $1, role = $2, model_provider = $3, model_version = $4, temperature = $5,
@@ -4731,8 +4751,8 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
         await db.pool.execute(
             q,
             agent.name, agent.role, agent.model_provider, validated_model, agent.temperature,
-            final_prompt, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active,
-            agent.template_type, json.dumps(agent.config), agent_id
+            clean_prompt, json.dumps(agent.enabled_tools), json.dumps(agent.channels), agent.is_active,
+            agent.template_type, json.dumps(clean_config), agent_id
         )
         
         # Update knowledge_sources (CRITICAL: Do not suppress errors)
@@ -4820,12 +4840,15 @@ async def get_agent_config(agent_id: int):
     data = dict(agent)
     
     # Robust Parsing: Handle JSON strings if DB returns text (e.g. SQLite/Legacy PG)
-    for key in ['knowledge_sources', 'enabled_tools', 'channels']:
+    for key in ['config', 'knowledge_sources', 'enabled_tools', 'channels']:
         if isinstance(data.get(key), str):
             try: data[key] = json.loads(data[key])
-            except: data[key] = []
+            except: 
+                if key == 'config': data[key] = {}
+                else: data[key] = []
         elif not data.get(key):
-            data[key] = []
+            if key == 'config': data[key] = {}
+            else: data[key] = []
             
     # Ensure template_type exists (from DB column or config)
     if not data.get('template_type'):

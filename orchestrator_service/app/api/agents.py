@@ -9,8 +9,8 @@ router = APIRouter()
 # Nexus v5.25 - Multi-Objective Templates Config
 AGENT_TEMPLATES: Dict[str, Dict[str, Any]] = {
     "sales": {
-        "label": "Vendedor Maestro (Pointe Coach)",
-        "description": "Foco en conversión, catálogo, cierre de ventas y fitting especializado de danza.",
+        "label": "Vendedor Maestro",
+        "description": "Foco en conversión, catálogo, cierre de ventas y fitting especializado.",
         "icon": "Zap",
         "fields": {
             "store_name": "Pointe Coach",

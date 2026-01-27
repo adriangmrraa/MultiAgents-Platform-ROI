@@ -107,26 +107,25 @@ async def onboarding_generate(
     """
     # Use the extracted data to create a 'Sales' agent
     from sqlalchemy import text
-    
     # 1. Prepare JSON Config
-    # We map the flat extracted_data to the Wizard's 'config' structure
     wizard_config = {
-        "store_name": final_config.get("agent_name", "Nuevo Agente"), # Corrected key
-        "business_description": final_config.get("store_description", ""), # Corrected key
+        "store_name": final_config.get("agent_name", "Nuevo Agente"),
+        "business_description": final_config.get("store_description", ""),
         "agent_tone": final_config.get("agent_tone", ""),
         "business_rules": final_config.get("business_rules", ""),
         "synonym_dictionary": final_config.get("synonym_dictionary", ""),
-        "website_url": final_config.get("store_website", ""), # Corrected key
+        "website_url": final_config.get("store_website", ""),
         "store_address": final_config.get("store_address", ""),
         "shipping_partners": final_config.get("shipping_partners", ""),
         "catalog_knowledge": final_config.get("catalog_knowledge", ""),
+        "template_type": "sales",
     }
 
     # 2. Insert into DB
     # We follow the same pattern as get_or_create_sales_agent but forcing a new one
     q_insert = text("""
-        INSERT INTO agents (name, role, tenant_id, config, model_provider, model_version, is_active, enabled_tools, system_prompt_template)
-        VALUES (:name, :role, :tenant_id, :config :: jsonb, :provider, :version, :is_active, :tools :: jsonb, :prompt)
+        INSERT INTO agents (name, role, tenant_id, config, model_provider, model_version, is_active, enabled_tools, system_prompt_template, template_type)
+        VALUES (:name, :role, :tenant_id, :config :: jsonb, :provider, :version, :is_active, :tools :: jsonb, :prompt, :template_type)
         RETURNING id
     """)
 
@@ -140,7 +139,8 @@ async def onboarding_generate(
             "version": "gpt-4o",
             "is_active": True,
             "tools": json.dumps(["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"]), # Standard Suite
-            "prompt": "Eres un asistente virtual de ventas." # Pivot: Placeholder prompt to satisfy NotNull constraint. Wizard will overwrite.
+            "prompt": "Eres un asistente virtual de ventas.", # Pivot: Placeholder prompt to satisfy NotNull constraint. Wizard will overwrite.
+            "template_type": "sales"
         })
         await db.commit()
         new_id = result.scalar()
@@ -165,21 +165,22 @@ async def onboarding_draft(
     
     # 1. Prepare Wizard Config
     wizard_config = {
-        "store_name": final_config.get("agent_name", "Nuevo Agente (Borrador)"), # Corrected key
-        "business_description": final_config.get("store_description", ""), # Corrected key
+        "store_name": final_config.get("agent_name", "Nuevo Agente (Borrador)"),
+        "business_description": final_config.get("store_description", ""),
         "agent_tone": final_config.get("agent_tone", ""),
         "business_rules": final_config.get("business_rules", ""),
         "synonym_dictionary": final_config.get("synonym_dictionary", ""),
-        "website_url": final_config.get("store_website", ""), # Corrected key
+        "website_url": final_config.get("store_website", ""),
         "store_address": final_config.get("store_address", ""),
         "shipping_partners": final_config.get("shipping_partners", ""),
         "catalog_knowledge": final_config.get("catalog_knowledge", ""),
+        "template_type": "sales",
     }
 
     # 2. Insert into DB as INACTIVE
     q_insert = text("""
-        INSERT INTO agents (name, role, tenant_id, config, model_provider, model_version, is_active, enabled_tools, system_prompt_template)
-        VALUES (:name, :role, :tenant_id, :config :: jsonb, :provider, :version, :is_active, :tools :: jsonb, :prompt)
+        INSERT INTO agents (name, role, tenant_id, config, model_provider, model_version, is_active, enabled_tools, system_prompt_template, template_type)
+        VALUES (:name, :role, :tenant_id, :config :: jsonb, :provider, :version, :is_active, :tools :: jsonb, :prompt, :template_type)
         RETURNING id
     """)
 
@@ -193,7 +194,8 @@ async def onboarding_draft(
             "version": "gpt-4o",
             "is_active": False, # <--- DRAFT MODE
             "tools": json.dumps(["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"]),
-            "prompt": "[DRAFT] Pendiente de generacion." # Pivot: Placeholder for draft
+            "prompt": "[DRAFT] Pendiente de generacion.", # Pivot: Placeholder for draft
+            "template_type": "sales"
         })
         await db.commit()
         draft_id = result.scalar()
