@@ -364,7 +364,7 @@ def ready():
 @app.get("/health")
 def health(): return {"status": "ok"}
 
-@app.post("/webhook/ycloud")
+@app.post("/webhooks/ycloud")
 async def ycloud_webhook(request: Request):
     logger.info("webhook_hit", headers=str(request.headers))
     await verify_signature(request)
