@@ -80,32 +80,51 @@ async def ingest_message(event: SimpleEvent):
     if asset_info:
         source_identifier = asset_info['name']
 
-    # 3. Sync Conversation
+    # 3. Protocol Omega: Identity Link (Find or Create Customer)
+    customer_id = None
+    if event.platform == 'instagram':
+        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND instagram_psid = $2", tenant_id, event.sender_id)
+        if not customer_id:
+            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, instagram_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, event.sender_name)
+    elif event.platform == 'facebook':
+        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND facebook_psid = $2", tenant_id, event.sender_id)
+        if not customer_id:
+            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, facebook_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, event.sender_name)
+    else:
+        # Default WhatsApp (Phone)
+        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND phone_number = $2", tenant_id, event.sender_id)
+        if not customer_id:
+            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, phone_number, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, event.sender_name)
+
+    # 4. Sync Conversation
     conv_query = """
         SELECT id FROM chat_conversations 
-        WHERE tenant_id = $1 AND channel = $2 AND external_user_id = $3
+        WHERE tenant_id = $1 AND (
+            (channel = $2 AND external_user_id = $3) OR
+            (customer_id = $4 AND customer_id IS NOT NULL)
+        )
         LIMIT 1
     """
-    conv_row = await db.pool.fetchrow(conv_query, tenant_id, event.platform, event.sender_id)
+    conv_row = await db.pool.fetchrow(conv_query, tenant_id, event.platform, event.sender_id, customer_id)
     
     if conv_row:
         conversation_id = conv_row['id']
         # Update metadata
         await db.pool.execute("""
             UPDATE chat_conversations 
-            SET platform_origin = $1, source_identifier = $2, source_entity_id = $3, updated_at = NOW()
-            WHERE id = $4
-        """, event.platform, source_identifier, event.recipient_id, conversation_id)
+            SET platform_origin = $1, source_identifier = $2, source_entity_id = $3, customer_id = $4, updated_at = NOW()
+            WHERE id = $5
+        """, event.platform, source_identifier, event.recipient_id, customer_id, conversation_id)
     else:
         conversation_id = str(uuid.uuid4())
         await db.pool.execute("""
             INSERT INTO chat_conversations (
-                id, tenant_id, channel, external_user_id, status, provider, 
+                id, tenant_id, channel, external_user_id, customer_id, status, provider, 
                 platform_origin, source_identifier, source_entity_id, 
                 created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, 'open', 'meta_direct', $5, $6, $7, NOW(), NOW())
-        """, conversation_id, tenant_id, event.platform, event.sender_id, event.platform, source_identifier, event.recipient_id)
+            VALUES ($1, $2, $3, $4, $5, 'open', 'meta_direct', $6, $7, $8, NOW(), NOW())
+        """, conversation_id, tenant_id, event.platform, event.sender_id, customer_id, event.platform, source_identifier, event.recipient_id)
         
     # 4. Persist Message
     msg_id = str(uuid.uuid4())

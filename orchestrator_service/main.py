@@ -1484,7 +1484,7 @@ response_guides = {
 tools = [search_specific_products, search_by_category, browse_general_storefront, search_knowledge_base, cupones_list, orders, sendemail, derivhumano]
 
 # Register tools for Code Reflection (Nexus v3)
-from admin_routes import register_tools, SYSTEM_TOOL_INJECTIONS, SYSTEM_TOOL_RESPONSE_GUIDES
+from admin_routes import register_tools, SYSTEM_TOOL_INJECTIONS, SYSTEM_TOOL_RESPONSE_GUIDES, unified_message_delivery
 register_tools(tools, tactical_injections, response_guides)
 
 from langchain.output_parsers import PydanticOutputParser
@@ -1789,15 +1789,17 @@ async def chat_endpoint(
     channel = event.channel_source # Use real channel source
     
     # Try to find existing conversation using tenant_id from Protocol Omega
-    # Enhanced lookup: by PSID/Phone OR by Chatwoot ID
+    # Enhanced lookup: by PSID/Phone OR by Chatwoot ID OR by shared customer_id (v6.1 Omni-Grouping)
     conv = await db.pool.fetchrow("""
         SELECT id, tenant_id, status, human_override_until 
         FROM chat_conversations 
         WHERE tenant_id = $1 AND (
             (channel = $2 AND external_user_id = $3) OR
-            (external_chatwoot_id = $4 AND $4 IS NOT NULL)
+            (external_chatwoot_id = $4 AND $4 IS NOT NULL) OR
+            (customer_id = $5 AND $5 IS NOT NULL)
         )
-    """, tenant_id, channel, event.from_number, event.external_chatwoot_id)
+        LIMIT 1
+    """, tenant_id, channel, event.from_number, event.external_chatwoot_id, customer_id)
     
     conv_id = None
     is_locked = False
@@ -2218,24 +2220,19 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             # Nexus v5.32: Shadow RAG Ingestion (Agent Message)
             asyncio.create_task(ShadowIndexer.process_message(str(agent_msg_id), tenant_id))
             
-            # Deliver
-            conv_meta = await db.pool.fetchrow("SELECT provider, external_user_id, channel_source FROM chat_conversations WHERE id = $1", conv_id)
-            if not conv_meta: continue
-
-            if conv_meta['provider'] == 'meta_direct':
-                # Meta Logic (Simplified for brevity but functional)
-                token_row = await db.pool.fetchrow("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'meta_page_token'", tenant_id)
-                if token_row:
-                    async with httpx.AsyncClient() as c:
-                        await c.post(f"{os.getenv('META_SERVICE_URL', 'http://meta_service:8000')}/messages/send", json={
-                            "recipient_id": conv_meta['external_user_id'], "text": text_content, "access_token": token_row['value']
-                        })
-            else:
-                # WhatsApp Gateway
-                async with httpx.AsyncClient() as c:
-                    await c.post(f"{os.getenv('WH_SERVICE_URL', 'http://whatsapp_service:8002')}/messages/send", json={
-                        "to": conv_meta['external_user_id'], "text": text_content, "channel_source": conv_meta['channel_source']
-                    }, headers={"X-Internal-Token": str(INTERNAL_SECRET_KEY)})
+            # Unified Delivery Logic (Nexus v6.1 - Triangular Routing)
+            try:
+                await unified_message_delivery(
+                    tenant_id=tenant_id,
+                    conv_id=conv_id,
+                    phone=from_number,
+                    text=text_content,
+                    channel=channel_source,
+                    correlation_id=correlation_id
+                )
+            except Exception as e:
+                logger.error("agent_delivery_failed", error=str(e), conv_id=str(conv_id))
+                # We don't raise here to allow other parts to be sent if splitting by |||
 
         # Track Usage
         await db.pool.execute("UPDATE tenants SET total_tool_calls = total_tool_calls + 1 WHERE id = $1", tenant_id)
@@ -2318,7 +2315,9 @@ BEGIN
     CREATE TABLE IF NOT EXISTS customers (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
-        phone_number TEXT NOT NULL,
+        phone_number TEXT,
+        instagram_psid TEXT,
+        facebook_psid TEXT,
         name TEXT,
         email TEXT,
         notes TEXT,
@@ -2343,6 +2342,11 @@ BEGIN
                RAISE NOTICE 'Skipping Unique Constraint on customers due to duplicates';
            END;
        END IF;
+       -- Identity v6.1: PSIDs
+       ALTER TABLE customers ADD COLUMN IF NOT EXISTS instagram_psid TEXT;
+       ALTER TABLE customers ADD COLUMN IF NOT EXISTS facebook_psid TEXT;
+       -- Phone number shouldn't be NOT NULL since Social users might not have it yet
+       ALTER TABLE customers ALTER COLUMN phone_number DROP NOT NULL;
     END IF;
 
     -- Identity Link (Repair Roto)
