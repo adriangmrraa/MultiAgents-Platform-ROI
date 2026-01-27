@@ -48,7 +48,16 @@ AGENT_TEMPLATES: Dict[str, Dict[str, Any]] = {
                 "- Accesorios: Metatarsianas, Elásticos, Cintas, Punteras.\n"
                 "- Otros: Bolsos, Leotardos."
             ),
-            "store_website": "https://www.pointecoach.shop"
+            "store_website": "https://www.pointecoach.shop",
+            "store_address": "Av. Cabildo 2040, Belgrano, Buenos Aires",
+            "shipping_partners": "Andreani, Correo Argentino, Moto Mensajería (CABA)",
+            "visual_rules": (
+                "## PROTOCOLO DE FORMATO VISUAL (WHATSAPP PREMIUM)\n\n"
+                "* **Secuencia OBLIGATORIA:** Intro -> Prod 1 -> Prod 2 -> Prod 3 -> CTA.\n"
+                "* **Limpieza:** PROHIBIDO usar Markdown complejo (###, **, -). Usar solo texto plano y emojis medidos.\n"
+                "* **Fotos:** El campo `imageUrl` es la única forma de mandar fotos. NO pongas links de fotos en el texto.\n"
+                "* **Links:** URL limpia al final de cada ficha. Sin paréntesis."
+            )
         }
     },
     "support": {

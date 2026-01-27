@@ -57,9 +57,48 @@ You are the AI Assistant for {self.store_name}.
 {self.get_core_instructions()}
 """
 
+    def get_formatting_rules(self) -> str:
+        """Returns the visual formatting protocol (WhatsApp/Web)."""
+        return self.context.get("visual_rules", "")
+
+    def get_priorities(self) -> str:
+        """Returns the absolute order of priorities for the agent."""
+        return """
+## PRIORIDADES (ORDEN ABSOLUTO)
+1. **SALIDA:** tu respuesta final SIEMPRE debe cumplir el schema del Output Parser.
+2. **VERACIDAD:** para catálogo/pedidos/cupones/derivaciones usás tools; está prohibido inventar.
+3. **DERIVACIÓN OBLIGATORIA:** Primero ejecutá `derivhumano`, LUEGO avisá al usuario.
+4. **MAPEADO OBLIGATORIO:** Si el usuario usa un sinónimo del diccionario, traducilo a la CATEGORÍA BASE.
+5. **ANTI-REPETICIÓN:** No repitas productos que ya mostraste en los últimos 2 turnos.
+6. **ANTI-BUCLE:** Si ya hiciste una pregunta, el próximo turno debe avanzar.
+"""
+
     def filter_tools(self, all_tools: List[Any]) -> List[Any]:
         """Default: Allow all tools unless overridden."""
         return all_tools
+
+    def build_system_prompt(self) -> str:
+        """Constructs the full system prompt."""
+        return f"""
+{self.get_system_role()}
+{self.get_priorities()}
+
+## IDENTITY
+You are the AI Assistant for {self.store_name}. 
+{self.get_variable_injection()}
+
+## VISUAL PROTOCOL
+{self.get_formatting_rules()}
+
+## TOOL USAGE GUIDELINES
+1. **Product Queries**: If the user asks for products, prices, or categories, you MUST use the corresponding search tool (`search_specific_products` or `search_by_category`) BEFORE responding.
+2. **Knowledge Base**: If the user asks about policies, returns, or company info, use `search_knowledge_base`.
+3. **Sequence**: You may call multiple tools if needed. Always use the information returned by the tools to construct your final response.
+4. **Format**: Do NOT simulate JSON or tool outputs manually. Simply call the function and wait for the result.
+
+## CORE INSTRUCTIONS
+{self.get_core_instructions()}
+"""
 
 
 class SalesTemplate(BaseAgentTemplate):
@@ -67,12 +106,15 @@ class SalesTemplate(BaseAgentTemplate):
         return "You are a World-Class SALES EXPERT AI."
 
     def get_core_instructions(self) -> str:
-        return """
+        return f"""
 1. **Goal**: Sell, Cross-Sell, and Upsell. Always guide the user towards a purchase.
 2. **Product Knowledge**: Use `search_specific_products` or `search_by_category` frequently.
-3. **Closing**: If the user shows interest, suggest adding to cart or provide a direct link.
+3. **Closing Strategy**:
+    - **Caso 1 (Puntas):** SIEMPRE ofrecer Asesoría de Fitting personalizada.
+    - **Caso 2 (+3 Productos):** Ofrecer link a la web para ver más: {{store_website}}
+    - **Caso 3 (Pocos Productos):** Usar cierre de servicio ("¿Te ayudo con el talle?").
 4. **Scarcity**: If stock is low, mention it to create urgency (only if true).
-5. **RAG Usage**: Consult product manuals (RAG) for specific technical questions (size guides, materials).
+5. **RAG Usage**: Consult product manuals (RAG) for specific technical questions.
 """
 
     def filter_tools(self, all_tools: List[Any]) -> List[Any]:

@@ -15,6 +15,7 @@ import { Settings } from './views/Settings';
 import { Channels } from './views/Channels'; // v7.0 Channel Bindings
 import { Analytics } from './views/Analytics'; // v3.3 Analytics Module
 import { MagicOnboarding } from './views/MagicOnboarding'; // v3.4 Magic Module
+import { OnboardingChat } from './views/OnboardingChat'; // v7.2 Hyper-Onboarding
 import { BusinessForge } from './views/BusinessForge'; // Negrocio Module
 import { Agents } from './views/Agents'; // v3.5 Agents Module
 import { DynamicAgentWizard } from './views/DynamicAgentWizard'; // v5.15 Dynamic Wizard
@@ -98,6 +99,7 @@ function App() {
                     <Route path="/setup" element={<Setup />} />
                     <Route path="/nexus-setup" element={<SetupExperience />} />
                     <Route path="/magic" element={<MagicOnboarding />} />
+                    <Route path="/onboarding" element={<OnboardingChat />} /> {/* Hyper-Onboarding v7.2 */}
                     <Route path="/forge" element={<BusinessForge />} />
                     <Route path="/stores" element={<Stores />} />
                     <Route path="/agents" element={<Agents />} />

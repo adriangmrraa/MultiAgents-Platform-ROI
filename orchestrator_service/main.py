@@ -146,6 +146,8 @@ from admin_routes import router as admin_router, sync_environment
 from app.routes.auth_routes import router as auth_router
 from app.routes.platform_routes import router as platform_router
 from app.routes.ingest_routes import router as ingest_router # NEW
+from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
+from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
 
 
 from app.core.database import AsyncSessionLocal, engine
@@ -1305,6 +1307,7 @@ async def health_check():
 
 # --- Include Admin Router ---
 app.include_router(admin_router)
+app.include_router(onboarding_router, prefix="/admin/onboarding")
 
 # Metrics
 SERVICE_NAME = "orchestrator_service"
@@ -2614,12 +2617,26 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             temp_value = 0.3 # Safe fallback
 
 
-        # Variable Injection
+        # 🔍 Nexus v7.2: Polymorphic Context Priority
+        # We prioritize Wizard (agent_row.config) over Tenant (tenant_row) for business context
+        agent_conf_json = json.loads(agent_row['config']) if agent_row and agent_row['config'] else {}
+        
+        display_name = agent_conf_json.get('agent_name') or tenant_row['store_name']
+        display_description = agent_conf_json.get('store_description') or tenant_row['store_description'] or ""
+        display_catalog = agent_conf_json.get('catalog_knowledge') or tenant_row['store_catalog_knowledge'] or "Sin catálogo."
+        display_website = agent_conf_json.get('store_website') or tenant_row['store_website'] or ""
+        display_address = agent_conf_json.get('store_address') or tenant_row.get('store_location') or ""
+        display_shipping = agent_conf_json.get('shipping_partners') or "nuestros partners logísticos"
+        shadow_enabled = agent_conf_json.get('shadow_rag_enabled', False)
+
+        # Variable Injection (using prioritized context)
         sys_template = raw_prompt
-        sys_template = sys_template.replace("{STORE_NAME}", tenant_row['store_name'])
-        sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", tenant_row['store_catalog_knowledge'] or "Sin catálogo.")
-        sys_template = sys_template.replace("{STORE_DESCRIPTION}", tenant_row['store_description'] or "")
-        sys_template = raw_prompt.replace("{STORE_NAME}", tenant_row['store_name']).replace("{STORE_CATALOG_KNOWLEDGE}", tenant_row['store_catalog_knowledge'] or "Sin catálogo.").replace("{STORE_DESCRIPTION}", tenant_row['store_description'] or "")
+        sys_template = sys_template.replace("{STORE_NAME}", display_name)
+        sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", display_catalog)
+        sys_template = sys_template.replace("{STORE_DESCRIPTION}", display_description)
+        sys_template = sys_template.replace("{store_website}", display_website)
+        sys_template = sys_template.replace("{store_address}", display_address)
+        sys_template = sys_template.replace("{SHIPPING_PARTNERS}", display_shipping)
         
         # Gather Tool Instructions
         tool_instructions_list = []
@@ -2631,6 +2648,8 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             tactical = tenant_tool_config.get(t_name, {}).get('tactical') or db_tool_map.get(t_name, {}).get('prompt_injection') or SYSTEM_TOOL_INJECTIONS.get(t_name)
             response_g = tenant_tool_config.get(t_name, {}).get('response_guide') or db_tool_map.get(t_name, {}).get('response_guide') or SYSTEM_TOOL_RESPONSE_GUIDES.get(t_name)
             if tactical or response_g:
+                # Inject website into response guides if needed
+                if response_g: response_g = response_g.replace("{store_website}", display_website)
                 tool_instructions_list.append(f"[{t_name}]: TÁCTICA: {tactical or ''} RESPUESTA: {response_g or ''}")
 
         # Sovereign Credentials (Credential Architecture v2)
@@ -2638,7 +2657,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         tn_token = await get_tenant_credential_by_type(tenant_id, "TIENDANUBE_ACCESS_TOKEN")
         tn_store_id = str(tenant_row['tiendanube_store_id']) if tenant_row.get('tiendanube_store_id') else None
         
-        # 🔍 Diagnostic Logging (v7.1.2)
+        # 🔍 Diagnostic Logging (v7.2.0)
         logger.info(f"🔑 TN Credentials | tid={tenant_id} | token={'***' + tn_token[-4:] if tn_token and len(tn_token) >= 4 else 'NULL'} | store_id={tn_store_id or 'NULL'}")
 
         # 4. Agent Request
@@ -2647,11 +2666,11 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             "user_id": str(agent_row['user_id']) if agent_row and 'user_id' in agent_row else None,
             "message": content,
             "history": remote_history,
-            "context": {"store_name": tenant_row['store_name'], "system_prompt": sys_template, "current_channel": channel_source},
+            "context": {"store_name": display_name, "system_prompt": sys_template, "current_channel": channel_source},
             "credentials": {
                 "openai_api_key": openai_key or OPENAI_API_KEY, 
                 "tiendanube_store_id": tn_store_id, 
-                "tiendanube_access_token": tn_token,  # Force Vault-only (removed legacy fallback)
+                "tiendanube_access_token": tn_token,
                 "tiendanube_service_url": TIENDANUBE_SERVICE_URL
             },
             "agent_config": {
@@ -2659,9 +2678,10 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                 "tool_instructions": tool_instructions_list, 
                 "knowledge_sources": knowledge_sources, 
                 "model": model_config,
-                "temperature": temp_value, # Root-level Propagation
+                "temperature": temp_value,
                 "template_type": agent_row['template_type'] if agent_row else "sales",
-                "wizard_overrides": wizard_overrides if agent_row else {}
+                "wizard_overrides": wizard_overrides if agent_row else {},
+                "shadow_rag_enabled": shadow_enabled  # PROPACACIÓN EXITOSA (v7.2)
             }
         }
 
