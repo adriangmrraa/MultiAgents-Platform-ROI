@@ -248,6 +248,7 @@ export const Credentials: React.FC = () => {
                         <label>Tipo de Credencial *</label>
                         <select
                             required
+                            className="w-full bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 focus:border-accent outline-none"
                             value={formData.credential_type_id || ''}
                             onChange={e => {
                                 const typeId = parseInt(e.target.value);
@@ -260,9 +261,9 @@ export const Credentials: React.FC = () => {
                                 });
                             }}
                         >
-                            <option value="">Selecciona un tipo...</option>
+                            <option value="" className="bg-gray-800 text-white">Selecciona un tipo...</option>
                             {credentialTypes.map(type => (
-                                <option key={type.id} value={type.id}>
+                                <option key={type.id} value={type.id} className="bg-gray-800 text-white">
                                     {type.display_name} {type.is_required && '(Requerido)'}
                                 </option>
                             ))}
@@ -278,6 +279,7 @@ export const Credentials: React.FC = () => {
                     <div className="form-group">
                         <label>Etiqueta Personalizada (Opcional)</label>
                         <input
+                            className="w-full bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 focus:border-accent outline-none"
                             value={formData.user_label || ''}
                             onChange={e => setFormData({ ...formData, user_label: e.target.value })}
                             placeholder="Ej: Mi API Key de Pruebas"
@@ -317,6 +319,7 @@ export const Credentials: React.FC = () => {
                             <input
                                 required
                                 type="password"
+                                className="w-full bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 focus:border-accent outline-none"
                                 value={formData.value}
                                 onChange={e => setFormData({ ...formData, value: e.target.value })}
                                 placeholder="sk-..."
@@ -327,27 +330,29 @@ export const Credentials: React.FC = () => {
                         <div className="form-group">
                             <label>{t('credentials.category')}</label>
                             <select
+                                className="w-full bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 focus:border-accent outline-none"
                                 value={formData.category}
                                 onChange={e => setFormData({ ...formData, category: e.target.value })}
                             >
-                                <option value="openai">OpenAI</option>
-                                <option value="google">Google AI (Gemini)</option>
-                                <option value="whatsapp_cloud">WhatsApp Cloud API</option>
-                                <option value="tiendanube">Tienda Nube</option>
-                                <option value="chatwoot">Chatwoot</option>
-                                <option value="database">Database</option>
-                                <option value="smtp">SMTP (Email)</option>
-                                <option value="other">Otro</option>
+                                <option value="openai" className="bg-gray-800 text-white">OpenAI</option>
+                                <option value="google" className="bg-gray-800 text-white">Google AI (Gemini)</option>
+                                <option value="whatsapp_cloud" className="bg-gray-800 text-white">WhatsApp Cloud API</option>
+                                <option value="tiendanube" className="bg-gray-800 text-white">Tienda Nube</option>
+                                <option value="chatwoot" className="bg-gray-800 text-white">Chatwoot</option>
+                                <option value="database" className="bg-gray-800 text-white">Database</option>
+                                <option value="smtp" className="bg-gray-800 text-white">SMTP (Email)</option>
+                                <option value="other" className="bg-gray-800 text-white">Otro</option>
                             </select>
                         </div>
                         <div className="form-group">
                             <label>{t('credentials.scope')}</label>
                             <select
+                                className="w-full bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 focus:border-accent outline-none"
                                 value={formData.scope}
                                 onChange={e => setFormData({ ...formData, scope: e.target.value as 'global' | 'tenant' })}
                             >
-                                <option value="global">Global (Todas las tiendas)</option>
-                                <option value="tenant">Específico por Tienda</option>
+                                <option value="global" className="bg-gray-800 text-white">Global (Todas las tiendas)</option>
+                                <option value="tenant" className="bg-gray-800 text-white">Específico por Tienda</option>
                             </select>
                         </div>
                     </div>
@@ -357,12 +362,13 @@ export const Credentials: React.FC = () => {
                             <label>{t('credentials.assignToStore')}</label>
                             <select
                                 required
+                                className="w-full bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 focus:border-accent outline-none"
                                 value={formData.tenant_id?.toString() || ''}
                                 onChange={e => setFormData({ ...formData, tenant_id: parseInt(e.target.value) })}
                             >
-                                <option value="">Seleccionar Tienda...</option>
+                                <option value="" className="bg-gray-800 text-white">Seleccionar Tienda...</option>
                                 {tenants.map(t => (
-                                    <option key={t.id} value={t.id}>{t.store_name}</option>
+                                    <option key={t.id} value={t.id} className="bg-gray-800 text-white">{t.store_name}</option>
                                 ))}
                             </select>
                         </div>
@@ -371,6 +377,7 @@ export const Credentials: React.FC = () => {
                     <div className="form-group">
                         <label>{t('credentials.description')}</label>
                         <textarea
+                            className="w-full bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 focus:border-accent outline-none"
                             value={formData.description}
                             onChange={e => setFormData({ ...formData, description: e.target.value })}
                             rows={3}

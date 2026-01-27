@@ -16,13 +16,20 @@ export const YCloudSettings: React.FC = () => {
         const load = async () => {
             try {
                 // Determine API Base URL for Webhook display
-                // If VITE_API_BASE_URL is relative or empty, we construct it from window.location
-                // But typically for the user we want the PUBLIC domain.
-                // We'll trust the current hostname for now or what the backend reports.
+                // Logic updated for Easypanel: multiagents-frontend -> multiagents-whatsapp
                 const currentHost = window.location.protocol + '//' + window.location.hostname;
-                // Replace 'ui' with 'api' if needed, or append /api if running on same domain
-                let inferredApi = currentHost.replace('platform-ui', 'orchestrator-service').replace('ui.', 'api.');
-                if (window.location.hostname === 'localhost') inferredApi = 'http://localhost:8000';
+                let inferredApi = currentHost;
+
+                if (currentHost.includes('frontend')) {
+                    inferredApi = currentHost.replace('frontend', 'whatsapp');
+                } else if (currentHost.includes('ui')) {
+                    inferredApi = currentHost.replace('ui', 'whatsapp');
+                } else {
+                    // Fallback or local dev
+                    inferredApi = currentHost.replace('platform-ui', 'whatsapp-service').replace('orchestrator-service', 'whatsapp-service');
+                }
+
+                if (window.location.hostname === 'localhost') inferredApi = 'http://localhost:8002';
                 setApiBaseUrl(inferredApi);
 
                 // Fetch Credentials specifically for YCloud
@@ -101,7 +108,7 @@ export const YCloudSettings: React.FC = () => {
                             <label className="block text-sm font-medium mb-1">{t('ycloudSettings.apiKey')}</label>
                             <input
                                 type="password"
-                                className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-white focus:border-accent outline-none"
+                                className="w-full bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 focus:border-accent outline-none"
                                 value={apiKey}
                                 onChange={e => setApiKey(e.target.value)}
                                 placeholder={t('ycloudSettings.apiKeyPlaceholder')}
@@ -113,7 +120,7 @@ export const YCloudSettings: React.FC = () => {
                             <label className="block text-sm font-medium mb-1">{t('ycloudSettings.webhookSecret')}</label>
                             <input
                                 type="text"
-                                className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-white focus:border-accent outline-none"
+                                className="w-full bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 focus:border-accent outline-none"
                                 value={webhookSecret}
                                 onChange={e => setWebhookSecret(e.target.value)}
                                 placeholder={t('ycloudSettings.webhookSecretPlaceholder')}

@@ -292,6 +292,42 @@ async def list_tenants(limit: int = 100, current_user: User = Depends(get_curren
 # ============================================
 # Credential Types Catalog (Credential Architecture v2)
 # ============================================
+
+async def ensure_ycloud_credential_types():
+    """
+    Self-Healing: Ensures YCloud Webhook Secret type exists.
+    Fixes missing seed data issue in v6.2.23.
+    """
+    try:
+        # 1. Ensure Provider exists
+        await db.pool.execute("""
+            INSERT INTO oauth_providers (name, display_name, description, created_at, updated_at)
+            VALUES ('whatsapp_cloud', 'WhatsApp Cloud API', 'Integration with Official WhatsApp Cloud API', NOW(), NOW())
+            ON CONFLICT (name) DO NOTHING;
+        """)
+        
+        # 2. Get Provider ID
+        provider_id = await db.pool.fetchval("SELECT id FROM oauth_providers WHERE name = 'whatsapp_cloud'")
+        
+        if provider_id:
+            # 3. Ensure Types exist
+            # YCloud API Key (Already likely exists, but safe to ensure)
+            await db.pool.execute("""
+                INSERT INTO credential_types (provider_id, internal_key, display_name, description, is_required, field_type, placeholder)
+                VALUES ($1, 'YCLOUD_API_KEY', 'YCloud API Key', 'Main API Key for YCloud Integration', true, 'password', 'e3ce...')
+                ON CONFLICT (internal_key) DO NOTHING;
+            """, provider_id)
+            
+            # YCloud Webhook Secret (The missing one)
+            await db.pool.execute("""
+                INSERT INTO credential_types (provider_id, internal_key, display_name, description, is_required, field_type, placeholder)
+                VALUES ($1, 'YCLOUD_WEBHOOK_SECRET', 'YCloud Webhook Secret', 'Secret for verifying incoming webhooks from YCloud', true, 'password', 'whsec_...')
+                ON CONFLICT (internal_key) DO NOTHING;
+            """, provider_id)
+            
+    except Exception as e:
+        logger.error(f"ensure_ycloud_credential_types_failed: {e}")
+
 @router.get("/credential-types", dependencies=[Depends(verify_admin_token)])
 async def get_credential_types():
     """
@@ -316,7 +352,11 @@ async def get_credential_types():
             LEFT JOIN oauth_providers op ON ct.provider_id = op.id
             ORDER BY op.name, ct.display_name
         """
-        rows = await db.pool.fetch(query)
+        # Self-Healing: Ensure YCloud Webhook Secret exists (v6.2.23)
+        await ensure_ycloud_credential_types()
+
+        query = """
+            SELECT 
         
         # Group by provider
         providers = {}
