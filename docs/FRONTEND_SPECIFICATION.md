@@ -15,7 +15,7 @@
 | `/settings/credentials` | `Credentials.tsx` | **Sovereign Vault UI**: Manage OpenAI, Google, SMTP, and Cloud keys. |
 | `/magic-onboarding` | `MagicOnboarding.tsx` | **Protocol Omega Stream**: Real-time 7-agent ignition UI using Server-Sent Events (SSE). |
 | `/settings/integrations` | `MetaOnboardingWizard.tsx` | **Meta Diplomat UI**: Explicit asset selection (Pages/WA) after Sovereign Connection. |
-| `/chats` | `Chats.tsx` | Omnichannel HUD with human handoff controls. |
+| `/chats` | `Chats.tsx` | Omnichannel HUD with **Triangular Routing** (WA/IG/FB) and human handoff. |
 | `/platform` | `PlatformTower.tsx`| Global metrics and infrastructure health for SuperAdmin. |
 | `/knowledge` | `Knowledge.tsx` | **Sovereign Library**: Master-Detail view with Collections Sidebar. Implements **Hard Delete** and **Hero Identity** parsing. |
 

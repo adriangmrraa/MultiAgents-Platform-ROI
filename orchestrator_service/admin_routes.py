@@ -2304,8 +2304,8 @@ async def admin_send_message(request: Request):
     tenant_id = data.get("tenant_id") 
     channel = data.get("channel_source", "whatsapp")
     
-    if not phone or not text:
-        raise HTTPException(400, "Phone and message required")
+    # Validation deferred until after conversation resolution
+    # if not phone or not text: raise HTTPException...
 
     conv_id = data.get("conversation_id")
     
@@ -2326,7 +2326,11 @@ async def admin_send_message(request: Request):
     # 2. Resolve/Create Conversation
     conv_row = None
     if conv_id:
-        conv_row = await db.pool.fetchrow("SELECT id, meta, channel_source FROM chat_conversations WHERE id = $1", conv_id)
+        conv_row = await db.pool.fetchrow("SELECT id, meta, channel_source, external_user_id FROM chat_conversations WHERE id = $1", conv_id)
+        if conv_row and not phone:
+             phone = conv_row['external_user_id']
+             if not channel and conv_row['channel_source']:
+                 channel = conv_row['channel_source']
     
     if not conv_row and phone:
         conv_row = await db.pool.fetchrow("""
@@ -2344,6 +2348,10 @@ async def admin_send_message(request: Request):
          conv_id = conv_row['id']
          # If channel_source is missing in DB but present in payload, update it? 
          # Only if conv_row channel_source is null. For now trust DB.
+
+    # Post-Resolution Validation
+    if not phone or not text:
+         raise HTTPException(400, "Phone and message required (Could not resolve user from conversation)")
 
     # 2. Persist in DB as 'human_supervisor'
     await db.pool.execute(

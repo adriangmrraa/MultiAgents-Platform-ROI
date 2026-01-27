@@ -1,11 +1,11 @@
-# 🛸 Nexus v5.99: Sovereign SaaS Architecture
+# 🛸 Nexus v6.1: Sovereign SaaS Architecture
 
 > **Plataforma Multi-Agente de Alto ROI para E-Commerce (TiendaNube + WhatsApp + Meta + Web)**
 > *Arquitectura Soberana, Multi-Tenant y Zero-Dependency.*
 
 ---
 
-## 🔥 Pilares de la Evolución v5.99
+## 🔥 Pilares de la Evolución v6.1
 
 ### 🌐 1. Canal Web Widget (Nuevo)
 Nexus ahora incluye un chat web nativo y altamente configurable.
@@ -25,10 +25,16 @@ Extensión del motor de configuración dinámica.
 *   **Live Preview (Fixed):** Simulación corregida con soporte SSE para una respuesta fluida y realista en modo borrador.
 *   **Tenant Identity Context:** El chat de prueba hereda automáticamente las credenciales reales del inquilino logueado.
 
-### 🛡️ 4. Infraestructura v5.99
+### 🛡️ 4. Infraestructura v6.0
 *   **Deep Fetch Engine:** Las consultas al backend ahora cargan el 100% de las propiedades del agente (Modelos, Temperatura, Herramientas).
 *   **SSE Stream Parsing:** Procesamiento optimizado de respuestas de IA para evitar "burbujas vacías".
 *   **Cross-Tenant Isolation:** Seguridad reforzada tras la migración de UUID/Integer.
+
+### 🔺 5. Triangular Routing (Multi-Provider WhatsApp)
+Nexus v6.1 unifica la mensajería baja una estrategia de ruteo inteligente:
+*   **Meta Direct:** WhatsApp Cloud API + Graph API (FB/IG) nativos.
+*   **Chatwoot:** Integración humana transparente.
+*   **YCloud:** Gateway legado soportado.
 
 ---
 
