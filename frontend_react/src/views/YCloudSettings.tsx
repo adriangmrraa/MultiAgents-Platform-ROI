@@ -52,6 +52,8 @@ export const YCloudSettings: React.FC = () => {
                 body: {
                     credential_type_id: 10,  // YCLOUD_API_KEY
                     user_label: 'YCloud API Key',
+                    name: 'YCloud API Key', // REQUIRED by backend
+                    category: 'whatsapp_cloud', // REQUIRED by backend
                     value: apiKey,
                     description: 'Main API Key for YCloud Integration',
                     scope: 'global'
