@@ -45,6 +45,16 @@ export const Stores: React.FC = () => {
             const data = await fetchApi('/admin/tenants');
             console.log('[Stores] Loaded tenants:', data);
             if (Array.isArray(data)) {
+                // Log each tenant to see exact structure
+                data.forEach((t, i) => {
+                    console.log(`[Stores] Tenant ${i}:`, {
+                        id: t.id,
+                        store_name: t.store_name,
+                        bot_phone_number: t.bot_phone_number,
+                        tiendanube_store_id: t.tiendanube_store_id,
+                        owner_email: t.owner_email
+                    });
+                });
                 setTenants(data);
             } else {
                 console.error("Invalid tenants data received:", data);
