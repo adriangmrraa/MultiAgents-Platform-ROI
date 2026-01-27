@@ -199,22 +199,56 @@ async def verify_signature(request: Request):
     if not t or not s: raise HTTPException(status_code=401, detail="Missing timestamp or signature")
     if abs(time.time() - int(t)) > 300: raise HTTPException(status_code=401, detail="Timestamp out of tolerance")
     raw_body = await request.body()
-
-    # Dynamic Credential Loading (v6.2.24 Fix)
+    
+    # v7.0 Multi-Tenant Channel Resolution
+    # Parse body to extract channel identifier
+    try:
+        body = json.loads(raw_body.decode('utf-8'))
+        event = body[0] if isinstance(body, list) and body else body
+        
+        # Extract WABA ID from webhook (YCloud uses whatsappBusinessAccountId)
+        waba_id = (
+            event.get("whatsappBusinessAccountId") or 
+            event.get("whatsappInboundMessage", {}).get("wabaId") or
+            event.get("from")  # Fallback for older webhook versions
+        )
+        
+        if not waba_id:
+            logger.error("webhook_missing_channel_id", event=event)
+            raise HTTPException(400, detail="Cannot identify channel from webhook")
+    except json.JSONDecodeError:
+        raise HTTPException(400, detail="Invalid JSON in webhook body")
+    
+    # Resolve tenant from channel binding
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{ORCHESTRATOR_URL}/internal/routing/resolve",
+                params={"provider": "ycloud", "channel_id": waba_id},
+                headers={"X-Internal-Token": os.getenv("INTERNAL_SECRET_KEY", "secret")}
+            )
+            resp.raise_for_status()
+            tenant_info = resp.json()
+            tenant_id = tenant_info["tenant_id"]
+            logger.info("tenant_resolved", tenant_id=tenant_id, channel_id=waba_id)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            logger.warning("channel_not_bound", channel_id=waba_id)
+            raise HTTPException(404, detail="Channel not configured for any tenant")
+        logger.error("tenant_resolution_error", status=e.response.status_code)
+        raise HTTPException(503, detail="Failed to resolve tenant")
+    except Exception as e:
+        logger.error("tenant_resolution_exception", error=str(e))
+        raise HTTPException(503, detail="Tenant resolution service unavailable")
+    
+    # Fetch tenant-specific webhook secret
     global YCLOUD_WEBHOOK_SECRET
-    if not YCLOUD_WEBHOOK_SECRET:
-         logger.info("lazy_loading_ycloud_secret", source="orchestrator")
-         # 1. Try Global Scope
-         YCLOUD_WEBHOOK_SECRET = await get_config("YCLOUD_WEBHOOK_SECRET")
-         
-         # 2. Fallback to Default Tenant (v6.2.25 Fix for Self-Hosted)
-         if not YCLOUD_WEBHOOK_SECRET:
-             logger.info("lazy_loading_ycloud_secret_fallback", tenant_id=1)
-             YCLOUD_WEBHOOK_SECRET = await get_config("YCLOUD_WEBHOOK_SECRET", tenant_id=1)
+    YCLOUD_WEBHOOK_SECRET = await get_config("YCLOUD_WEBHOOK_SECRET", tenant_id=tenant_id)
     
     if not YCLOUD_WEBHOOK_SECRET:
-        logger.error("missing_ycloud_webhook_secret_critical")
-        raise HTTPException(status_code=503, detail="Configuration Missing: YCloud Webhook Secret")
+        logger.error("missing_tenant_webhook_secret", tenant_id=tenant_id)
+        raise HTTPException(503, detail=f"Webhook secret not configured for tenant {tenant_id}")
 
     signed_payload = f"{t}.{raw_body.decode('utf-8')}"
     expected = hmac.new(YCLOUD_WEBHOOK_SECRET.encode("utf-8"), signed_payload.encode("utf-8"), hashlib.sha256).hexdigest()

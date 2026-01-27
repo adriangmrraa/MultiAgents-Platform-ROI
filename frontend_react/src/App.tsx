@@ -12,6 +12,7 @@ import { Knowledge } from './views/Knowledge';
 import { Chats } from './views/Chats'; // v3.3 Chat Module
 
 import { Settings } from './views/Settings';
+import { Channels } from './views/Channels'; // v7.0 Channel Bindings
 import { Analytics } from './views/Analytics'; // v3.3 Analytics Module
 import { MagicOnboarding } from './views/MagicOnboarding'; // v3.4 Magic Module
 import { BusinessForge } from './views/BusinessForge'; // Negrocio Module
@@ -111,6 +112,7 @@ function App() {
                     <Route path="/chats" element={<Chats />} />
                     <Route path="/tools" element={<Tools />} />
                     <Route path="/knowledge" element={<Knowledge />} />
+                    <Route path="/channels" element={<Channels />} />
                     <Route path="/console" element={<Console />} />
                     <Route path="/handoff" element={<Handoff />} />
                     <Route path="/profile" element={<Profile />} />

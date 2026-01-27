@@ -254,6 +254,7 @@ export const DynamicAgentWizard = () => {
     const [selectedTools, setSelectedTools] = useState<string[]>(['search_specific_products', 'orders', 'derivhumano']); // Defaults
     const [selectedChannels, setSelectedChannels] = useState<string[]>(['whatsapp', 'web']); // Defaults
     const [channelStatus, setChannelStatus] = useState<Record<string, boolean>>({ whatsapp: false, instagram: false, facebook: false, web: true });
+    const [selectedTenantId, setSelectedTenantId] = useState<number>(user?.tenant_id || 1); // v7.0 Multi-tenant binding
 
     useEffect(() => {
         // Load Templates, Tools & Integration Status

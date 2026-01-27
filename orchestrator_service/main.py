@@ -934,6 +934,65 @@ CATALOGO:
         END IF;
 
     END $$;
+    """,
+    
+    # 31. Channel Bindings Table (Multi-Tenant Architecture v7.0)
+    """
+    CREATE TABLE IF NOT EXISTS channel_bindings (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+        provider VARCHAR(50) NOT NULL,
+        channel_id VARCHAR(100) NOT NULL,
+        label VARCHAR(100),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (provider, channel_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_channel_lookup ON channel_bindings(provider, channel_id);
+
+    -- Enable Row-Level Security
+    ALTER TABLE channel_bindings ENABLE ROW LEVEL SECURITY;
+
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_policies 
+            WHERE tablename = 'channel_bindings' AND policyname = 'tenant_isolation'
+        ) THEN
+            CREATE POLICY tenant_isolation ON channel_bindings
+              USING (tenant_id = current_setting('app.current_tenant_id', true)::int);
+        END IF;
+    END $$;
+    """,
+    
+    # 32. Auto-migrate existing channels (v7.0)
+    """
+    INSERT INTO channel_bindings (tenant_id, provider, channel_id, label, created_at)
+    SELECT 
+        id as tenant_id,
+        'ycloud' as provider,
+        bot_phone_number as channel_id,
+        'Legacy WhatsApp (' || bot_phone_number || ')' as label,
+        NOW() as created_at
+    FROM tenants
+    WHERE bot_phone_number IS NOT NULL
+    ON CONFLICT (provider, channel_id) DO NOTHING;
+    """,
+    
+    # 33. Verify Agent FK Constraint (v7.0)
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints 
+            WHERE constraint_name = 'agents_tenant_id_fkey'
+        ) THEN
+            ALTER TABLE agents 
+            ADD CONSTRAINT agents_tenant_id_fkey 
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+        END IF;
+    END $$;
     """
 ]
 
