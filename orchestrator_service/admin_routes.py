@@ -131,6 +131,7 @@ async def get_internal_credential_endpoint(name: str, tenant_id: Optional[int] =
             val = os.getenv(name)
             
         if val:
+            logger.info(f"✅ credential_fetched: {name} | source={'vault' if row else 'env'} | length={len(val) if val else 0}")
             return {"name": name, "value": val}
             
         # Return 200 with NULL value instead of 404 to avoid breaking the caller (v6.2.14)

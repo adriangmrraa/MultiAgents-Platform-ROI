@@ -2636,6 +2636,10 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         # Sovereign Credentials (Credential Architecture v2)
         openai_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
         tn_token = await get_tenant_credential_by_type(tenant_id, "TIENDANUBE_ACCESS_TOKEN")
+        tn_store_id = str(tenant_row['tiendanube_store_id']) if tenant_row.get('tiendanube_store_id') else None
+        
+        # 🔍 Diagnostic Logging (v7.1.2)
+        logger.info(f"🔑 TN Credentials | tid={tenant_id} | token={'***' + tn_token[-4:] if tn_token and len(tn_token) >= 4 else 'NULL'} | store_id={tn_store_id or 'NULL'}")
 
         # 4. Agent Request
         agent_request = {
@@ -2646,8 +2650,8 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             "context": {"store_name": tenant_row['store_name'], "system_prompt": sys_template, "current_channel": channel_source},
             "credentials": {
                 "openai_api_key": openai_key or OPENAI_API_KEY, 
-                "tiendanube_store_id": str(tenant_row['tiendanube_store_id']) if tenant_row.get('tiendanube_store_id') else None, 
-                "tiendanube_access_token": tn_token or tenant_row.get('tiendanube_access_token'), 
+                "tiendanube_store_id": tn_store_id, 
+                "tiendanube_access_token": tn_token,  # Force Vault-only (removed legacy fallback)
                 "tiendanube_service_url": TIENDANUBE_SERVICE_URL
             },
             "agent_config": {
