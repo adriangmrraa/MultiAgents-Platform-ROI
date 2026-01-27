@@ -3209,15 +3209,27 @@ async def create_tenant(tenant: TenantModel, current_user: User = Depends(get_cu
 @router.put("/tenants/{tenant_id}", dependencies=[Depends(verify_admin_token)])
 async def update_tenant(tenant_id: int, request: Request, current_user: User = Depends(get_current_user)):
     """
-    v7.0.4: Update tenant by ID.
-    Simplified to only update essential store metadata (no catalog/description/website here).
+    v7.0.4.1: Update tenant by ID.
+    Fixed bot_phone_number UNIQUE constraint handling.
     """
     body = await request.json()
     
     # Verify ownership or admin
-    existing = await db.pool.fetchrow("SELECT id, tenant_id FROM tenants WHERE id = $1", tenant_id)
+    existing = await db.pool.fetchrow("SELECT id, bot_phone_number FROM tenants WHERE id = $1", tenant_id)
     if not existing:
         raise HTTPException(404, "Tenant not found")
+    
+    # Check if trying to change phone number to one already in use
+    new_phone = body.get("bot_phone_number")
+    if new_phone and new_phone != existing['bot_phone_number']:
+        duplicate = await db.pool.fetchval(
+            "SELECT id FROM tenants WHERE bot_phone_number = $1 AND id != $2", 
+            new_phone, tenant_id
+        )
+        if duplicate:
+            raise HTTPException(400, f"Phone number {new_phone} is already in use by another store")
+    
+    logger.info("tenant_update_request", tenant_id=tenant_id, body=body)
     
     # Update only allowed fields
     await db.pool.execute("""
@@ -3241,6 +3253,14 @@ async def update_tenant(tenant_id: int, request: Request, current_user: User = D
         body.get("handoff_target_email"),
         tenant_id
     )
+    
+    # Verify update
+    updated = await db.pool.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
+    logger.info("tenant_updated", 
+                tenant_id=tenant_id, 
+                new_phone=updated['bot_phone_number'], 
+                handoff_email=updated['handoff_target_email'],
+                handoff_enabled=updated['handoff_enabled'])
     
     return {"status": "updated", "tenant_id": tenant_id}
 
