@@ -5037,58 +5037,64 @@ async def receive_chatwoot_webhook(
     conv_query = """
         SELECT id FROM chat_conversations 
         WHERE tenant_id = $1 AND (
-            external_chatwoot_id = $2 OR
-            meta->>'chatwoot_conversation_id' = $3 OR 
-            external_user_id = $4
-        ) LIMIT 1
+            (channel = $2 AND external_user_id = $3) OR
+            external_chatwoot_id = $4 OR
+            meta->>'chatwoot_conversation_id' = $5
+        ) 
+        ORDER BY (external_user_id = $3 AND channel = $2) DESC, created_at DESC
+        LIMIT 1
     """
-    conv_row = await db.pool.fetchrow(conv_query, tenant_id, chatwoot_conv_id, str(chatwoot_conv_id), identifier)
+    conv_row = await db.pool.fetchrow(conv_query, tenant_id, nexus_channel, identifier, chatwoot_conv_id, str(chatwoot_conv_id))
     
     # helper: better avatar extraction
     avatar_url = customer_map.get("thumbnail") or customer_map.get("avatar_url")
     if not avatar_url and nexus_channel == "facebook":
          avatar_url = customer_map.get("additional_attributes", {}).get("profile_pic")
     
-    if conv_row:
-        conversation_id = conv_row['id']
-        # Update existing conversation
-        # IF IT'S OUTGOING (Echo), we do NOT overwrite the general 'sender_name' 
-        # unless it was previously null, keeping the customer's identity in the UI list.
-        await db.pool.execute("""
-            UPDATE chat_conversations 
-            SET channel = $1, 
-                external_user_id = $2, 
-                provider = 'chatwoot',
-                external_chatwoot_id = $3,
-                external_account_id = $4,
-                meta =  meta || $5::jsonb,
-                updated_at = NOW()
-            WHERE id = $6
-        """, nexus_channel, identifier, chatwoot_conv_id, chatwoot_account_id, json.dumps({
-            "chatwoot_conversation_id": chatwoot_conv_id, 
-            "chatwoot_contact_id": chatwoot_contact_id,
-            "chatwoot_account_id": chatwoot_account_id,
-            "customer_name": customer_map.get("name"),
-            "customer_avatar": avatar_url,
-            "last_sender_type": msg_type
-        }), conversation_id)
-    else:
-        # Create new conversation (Synced from Chatwoot)
-        conversation_id = str(uuid.uuid4())
-        await db.pool.execute("""
-            INSERT INTO chat_conversations (
-                id, tenant_id, channel, external_user_id, status, provider, 
-                external_chatwoot_id, external_account_id, meta, 
-                created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, 'open', 'chatwoot', $5, $6, $7, NOW(), NOW())
-        """, conversation_id, tenant_id, nexus_channel, identifier, chatwoot_conv_id, chatwoot_account_id, json.dumps({
-            "chatwoot_conversation_id": chatwoot_conv_id, 
-            "chatwoot_contact_id": chatwoot_contact_id,
-            "chatwoot_account_id": chatwoot_account_id,
-            "customer_name": customer_map.get("name"),
-            "customer_avatar": avatar_url
-        }))
+    # 3. Atomic Upsert: Resolve or Create Conversation
+    # Priority: channel + external_user_id (The Nexus Identity Anchor)
+    # This prevents the UniqueViolationError during high concurrency/bursts.
+    upsert_query = """
+        INSERT INTO chat_conversations (
+            id, tenant_id, channel, external_user_id, status, provider, 
+            external_chatwoot_id, external_account_id, meta, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, 'open', 'chatwoot', $5, $6, $7, NOW(), NOW())
+        ON CONFLICT (channel, external_user_id) 
+        DO UPDATE SET 
+            external_chatwoot_id = EXCLUDED.external_chatwoot_id,
+            external_account_id = EXCLUDED.external_account_id,
+            meta = chat_conversations.meta || EXCLUDED.meta,
+            updated_at = NOW()
+        RETURNING id
+    """
+    
+    meta_data = {
+        "chatwoot_conversation_id": chatwoot_conv_id, 
+        "chatwoot_contact_id": chatwoot_contact_id,
+        "chatwoot_account_id": chatwoot_account_id,
+        "customer_name": customer_map.get("name"),
+        "customer_avatar": avatar_url,
+        "last_sender_type": msg_type
+    }
+
+    try:
+        conversation_id = await db.pool.fetchval(upsert_query, 
+            str(uuid.uuid4()), tenant_id, nexus_channel, identifier, 
+            chatwoot_conv_id, chatwoot_account_id, json.dumps(meta_data))
+    except Exception as e:
+        logger.warning(f"⚠️ UPSERT: Primary conflict, falling back to ordered resolution | error={str(e)}")
+        # If ON CONFLICT (channel, external_user_id) fails (e.g. if the constraint is different),
+        # we fall back to our improved ordered select.
+        conv_row_fallback = await db.pool.fetchrow(conv_query, tenant_id, nexus_channel, identifier, chatwoot_conv_id, str(chatwoot_conv_id))
+        if conv_row_fallback:
+            conversation_id = conv_row_fallback['id']
+            # Manual update as last resort
+            await db.pool.execute("UPDATE chat_conversations SET meta = meta || $1::jsonb, updated_at = NOW() WHERE id = $2", 
+                                json.dumps(meta_data), conversation_id)
+        else:
+            # Re-raise if we really can't find or create it
+            raise e
 
     # 4. Attachments (Phase 8: Media Support)
     raw_attachments = payload.get("attachments", [])
