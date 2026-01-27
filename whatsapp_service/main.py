@@ -462,14 +462,23 @@ async def chatwoot_webhook(request: Request):
     sender_data = event.get("sender", {})
     content = event.get("content")
     
-    # Protocol Omega: Anti-Loop & Echo Filter
-    # Only process incoming messages from real users. Ignore bot/system/outgoing echoes.
     is_private = event.get("private", False)
     message_type = event.get("message_type") # incoming/outgoing
     sender_type = sender_data.get("type") # contact/user/bot
     
-    if is_private or message_type == "outgoing" or sender_type == "bot":
-        return {"status": "ignored_echo", "reason": f"type_{message_type}_sender_{sender_type}"}
+    is_echo = False
+    if message_type == "outgoing":
+        is_echo = True
+        # AI/Bot messages should be ignored to avoid loops
+        if sender_type == "bot":
+            return {"status": "ignored_bot_echo", "reason": "ai_message_ignore"}
+    
+    if is_private:
+        return {"status": "ignored_private", "reason": "private_note"}
+    
+    # Protocol Omega: Human Echo detection
+    # If it's outgoing and from a human agent, it's an echo.
+    # We forward it to Orchestrator to trigger AI pause/handoff sync.
     
     # Detect Channel
     raw_channel = message_data.get("channel", "")
@@ -504,6 +513,7 @@ async def chatwoot_webhook(request: Request):
         "external_chatwoot_id": chatwoot_conversation_id,
         "external_account_id": chatwoot_account_id,
         "tenant_id": tenant_id,
+        "message_type": message_type, # Forwarding original type for echo detection
         "meta": {
              "chatwoot_inbox_id": message_data.get("inbox_id"),
              "channel_type": raw_channel

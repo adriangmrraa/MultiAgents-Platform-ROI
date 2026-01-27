@@ -121,12 +121,12 @@ class MediaObject:
         self.file_name = filename
 
 class SimpleEvent:
-    def __init__(self, from_num, text, msg_id, channel_source='whatsapp', external_cw_id=None, external_acc_id=None, tenant_id=None, media=None):
+    def __init__(self, from_num, text, msg_id, channel_source='whatsapp', external_cw_id=None, external_acc_id=None, tenant_id=None, media=None, event_type="message"):
         self.from_number = str(from_num) if from_num is not None else None
         self.text = str(text) if text is not None else ""
         self.event_id = str(msg_id) if msg_id is not None else None
         self.customer_name = from_num # Fallback
-        self.event_type = "message"
+        self.event_type = event_type
         self.media = media or []
         self.correlation_id = str(uuid.uuid4())
         self.channel_source = channel_source
@@ -1733,7 +1733,8 @@ async def chat_endpoint(
                 external_cw_id=payload.get("external_chatwoot_id"),
                 external_acc_id=payload.get("external_account_id"),
                 tenant_id=tid,
-                media=media_list
+                media=media_list,
+                event_type=payload.get("event_type", "message")
             )
             
             # Map Chatwoot Message Type to Role
@@ -1835,7 +1836,10 @@ async def chat_endpoint(
 
     # --- 2. Handle Echoes (Human Messages from App) ---
     is_echo = False
+    # Standard WhatsApp echoes or Outgoing Chatwoot messages from real agents
     if event.event_type in ["whatsapp.message.echo", "whatsapp.smb.message.echoes", "message_echo"]:
+         is_echo = True
+    elif event.event_type == "chatwoot.message_created" and event.role == 'assistant':
          is_echo = True
     
     if is_echo:

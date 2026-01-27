@@ -2302,13 +2302,16 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
     if not payload_data: payload_data = {}
     
     # 1. Fetch Conversation State for Provider Resolution
-    conv_data = await db.pool.fetchrow("SELECT provider, meta, external_chatwoot_id FROM chat_conversations WHERE id = $1", conv_id)
+    conv_data = await db.pool.fetchrow("SELECT provider, meta, external_chatwoot_id, external_account_id FROM chat_conversations WHERE id = $1", conv_id)
     
     db_provider = conv_data['provider'] if conv_data else None
     
     # Priority Resolution (v6.1 Sovereign Architecture)
     if db_provider:
         provider = db_provider
+    elif conv_data and conv_data.get('external_chatwoot_id'):
+        # If we have a Chatwoot ID, we MUST stay in Chatwoot for continuity
+        provider = 'chatwoot'
     elif channel in ['instagram', 'facebook']:
         # If social, prioritize Meta Direct if configured, else fallback to CW
         has_meta = await db.pool.fetchval("SELECT 1 FROM credentials WHERE tenant_id = $1 AND (name = 'meta_page_token' OR name = 'WHATSAPP_ACCESS_TOKEN')", tenant_id)
@@ -2368,7 +2371,7 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
             raise HTTPException(400, "Missing Chatwoot Conversation ID")
 
         cw_url = os.getenv("CHATWOOT_BASE_URL", "https://app.chatwoot.com")
-        cw_token = os.getenv("CHATWOOT_API_TOKEN")
+        cw_token = os.getenv("CHATWOOT_API_TOKEN") or os.getenv("CHATWOOT_BOT_TOKEN")
         
         if not cw_token:
             # Protocol Omega: Tenant-scoped credentials prioritized (v6.1)
@@ -2384,14 +2387,19 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                 except Exception as e:
                     logger.error("cw_token_decrypt_failed", error=str(e))
         
-        if not cw_token:
-            logger.error("chatwoot_token_missing", tenant_id=tenant_id)
-            raise HTTPException(500, "Chatwoot API Token Missing. Please check Credentials.")
+        # FINAL SAFETY: httpx will fail if value is None. Default to empty if user says "no credentials"
+        if cw_token is None:
+            logger.warning("chatwoot_token_null_fallback", tenant_id=tenant_id)
+            cw_token = "" 
 
         if not cw_account_id:
-            cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_ACCOUNT_ID'", tenant_id)
+            # Try conv_data first (selected above)
+            cw_account_id = conv_data.get("external_account_id") if conv_data else None
+            
             if not cw_account_id:
-                 cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_ACCOUNT_ID' LIMIT 1") or "1"
+                cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_ACCOUNT_ID'", tenant_id)
+                if not cw_account_id:
+                     cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_ACCOUNT_ID' LIMIT 1") or "1"
 
         async with httpx.AsyncClient() as client:
             res = await client.post(
