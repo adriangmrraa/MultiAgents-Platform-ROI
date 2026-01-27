@@ -116,6 +116,17 @@ async def get_internal_credential_endpoint(name: str, tenant_id: Optional[int] =
             from utils import decrypt_password
             val = decrypt_password(val_enc) if val_enc else None
             
+        # Global Fallback (v6.2.18)
+        if not val and tenant_id:
+             try:
+                 query_global = "SELECT value FROM credentials WHERE name = $1 AND scope = 'global' LIMIT 1"
+                 val_enc_global = await db.pool.fetchval(query_global, name)
+                 if val_enc_global:
+                     from utils import decrypt_password
+                     val = decrypt_password(val_enc_global)
+             except Exception as e:
+                 logger.warning(f"Global fallback decrypt failed: {e}")
+
         if not val:
             val = os.getenv(name)
             
@@ -661,7 +672,7 @@ async def save_credential(cred: CredentialModel, current_user: User = Depends(ge
              # SAFE UPSERT (Select First)
              existing = await db.pool.fetchval("SELECT id_uuid FROM credentials WHERE name=$1 AND tenant_id=$2 AND scope='tenant'", cred.name, cred.tenant_id)
              if existing:
-                 await db.pool.execute("UPDATE credentials SET value=$1, category=$2, description=$3, updated_at=NOW() WHERE id_uuid=$2", final_value, cred.category, cred.description, existing)
+                 await db.pool.execute("UPDATE credentials SET value=$1, category=$2, description=$3, updated_at=NOW() WHERE id_uuid=$4", final_value, cred.category, cred.description, existing)
                  res = {"status": "ok", "id": str(existing), "action": "updated"}
              else:
                  row = await db.pool.fetchrow("""

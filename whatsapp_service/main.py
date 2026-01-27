@@ -685,11 +685,22 @@ async def relay_message(msg: RelayMessage, request: Request):
                 if cw_url.endswith("/"): cw_url = cw_url[:-1]
                 
                 cw_token = await get_config("CHATWOOT_API_TOKEN", tenant_id=msg.tenant_id)
+                if not cw_token:
+                     # Alias fallback (Nexus v6.2.17)
+                     cw_token = await get_config("CHATWOOT_BOT_TOKEN", tenant_id=msg.tenant_id)
+                if not cw_token:
+                     cw_token = await get_config("CHATWOOT_ACCESS_TOKEN", tenant_id=msg.tenant_id)
+
                 cw_account_id = msg.external_account_id or await get_config("CHATWOOT_ACCOUNT_ID", "1", tenant_id=msg.tenant_id)
                 cw_conversation_id = msg.external_chatwoot_id
                 
                 if not cw_conversation_id or not cw_token:
-                    logger.error("❌ RELAY: Missing Chatwoot Context", conv_id=cw_conversation_id, has_token=bool(cw_token))
+                    # Enhanced Logging for v6.2.17
+                    logger.error("❌ RELAY: Missing Chatwoot Context", 
+                        conv_id=cw_conversation_id, 
+                        has_token=bool(cw_token),
+                        tenant=msg.tenant_id
+                    )
                     raise Exception("Missing Chatwoot Context (Conv/Token)")
 
                 async with httpx.AsyncClient() as client:
