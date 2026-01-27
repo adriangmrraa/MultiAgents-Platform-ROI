@@ -2288,7 +2288,11 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             "message": content,
             "history": remote_history,
             "context": {"store_name": tenant_row['store_name'], "system_prompt": sys_template, "current_channel": channel_source},
-
+            "credentials": {
+                "openai_api_key": openai_key,
+                "tiendanube_access_token": tn_token,
+                "tiendanube_store_id": str(tenant_row['tiendanube_store_id']) if tenant_row.get('tiendanube_store_id') else None
+            },
             "agent_config": {
                 "tools": enabled_tools, 
                 "tool_instructions": tool_instructions_list, 
