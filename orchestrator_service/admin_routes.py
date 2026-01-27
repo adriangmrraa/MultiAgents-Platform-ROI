@@ -5188,8 +5188,8 @@ async def receive_chatwoot_webhook(
     redis_payload = {
         "event": "message",
         "data": {
-            "id": msg_id,
-            "conversation_id": conversation_id,
+            "id": str(msg_id),
+            "conversation_id": str(conversation_id),
             "role": role,
             "content": data,
             "attachments": parsed_attachments, # Add to stream

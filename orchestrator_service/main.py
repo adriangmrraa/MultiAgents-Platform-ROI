@@ -2140,7 +2140,8 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
             await redis_client.delete(buffer_key)
             await redis_client.delete(pending_key)
             
-            combined_text = "\n".join([m.decode('utf-8') for m in messages_raw])
+            # Fix: messages_raw already contains strings because of decode_responses=True in db.py
+            combined_text = "\n".join([m if isinstance(m, str) else m.decode('utf-8') for m in messages_raw])
             logger.info(f"📥 BUFFER: Consuming batch | identifier={from_num} | count={len(messages_raw)} | text_length={len(combined_text)}")
             
             # Execute agent (Synchronous sink to ensure one task at a time per user)
