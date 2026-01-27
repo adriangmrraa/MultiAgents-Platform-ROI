@@ -264,6 +264,7 @@ export const Credentials: React.FC = () => {
                                 <option value="google">Google AI (Gemini)</option>
                                 <option value="whatsapp_cloud">WhatsApp Cloud API</option>
                                 <option value="tiendanube">Tienda Nube</option>
+                                <option value="chatwoot">Chatwoot</option>
                                 <option value="database">Database</option>
                                 <option value="smtp">SMTP (Email)</option>
                                 <option value="other">Otro</option>

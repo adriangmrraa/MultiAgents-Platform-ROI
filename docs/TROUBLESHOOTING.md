@@ -95,16 +95,17 @@ Este documento recopila los errores más comunes encontrados durante el desplieg
 
 ## 9. Errores de Integración Multicanal
 
-### Error: `404 Not Found` en `meta_service` al enviar WhatsApp
-*   **Causa**: El Orchestrator intenta enviar un mensaje de WhatsApp via `meta_direct` pero el `meta_service` no tiene el endpoint `/whatsapp/send` (Versiones < 6.1).
-*   **Solución**: Actualizar `meta_service` a la última versión que incluye el proxy dedicado a WhatsApp Cloud API.
-
-### Error: `Missing Chatwoot Conversation ID`
-*   **Causa**: La base de datos no tiene el `external_chatwoot_id` vinculado.
-*   **Diagnóstico**: El sistema intenta responder via Chatwoot pero no sabe a qué conversación apuntar.
+### Error: `404 Not Found` al enviar manual desde el panel
+*   **Causa**: El ID de conversación o el ID de cuenta de Chatwoot son incorrectos o el `CHATWOOT_BASE_URL` no es el adecuado para el inquilino.
+*   **Diagnóstico**: Revisa los logs de `chatwoot_delivery_attempt`. Si el `account_id` es `"1"` y el inquilino es externo, es probable que falte la credencial `CHATWOOT_ACCOUNT_ID`.
 *   **Solución**: 
-    1. Verifica que la tabla `chat_conversations` tenga poblada la columna `external_chatwoot_id` y `external_account_id`.
-    2. A partir de v6.1, el Orchestrator auto-descubre y persiste estos IDs desde el primer mensaje entrante. Si el chat es legacy, intenta enviar un mensaje desde el panel de Chatwoot para sincronizar la identidad.
+    1. Asegúrate de que la tabla `chat_conversations` tenga poblada la columna `external_chatwoot_id` y `external_account_id`.
+    2. A partir de v6.1, el Orchestrator auto-descubre y persiste estos IDs desde el primer mensaje entrante.
+    3. Verifica las credenciales `CHATWOOT_ACCOUNT_ID` y `CHATWOOT_BASE_URL` en la tabla `credentials` para el `tenant_id` correspondiente.
+
+### Error: `TypeError: error() got an unexpected keyword argument`
+*   **Causa**: Uso de argumentos de palabra clave no soportados por el logger estándar de Python (ej. `url=...`, `account_id=...`).
+*   **Solución**: Usa f-strings para incluir la información directamente en el mensaje del log: `logger.error(f"Mensaje | URL: {url}")`.
 
 ## 10. Errores de Sincronización Humana
 *   **Síntoma**: El bot responde aunque yo esté hablando por Chatwoot.

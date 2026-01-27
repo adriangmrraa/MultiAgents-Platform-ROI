@@ -231,6 +231,25 @@ export const translations = {
             requiredEvents: 'Eventos requeridos:',
             saveSuccess: 'Configuración guardada correctamente',
             saveError: 'Error al guardar'
+        },
+        chatwootSettings: {
+            title: 'Nodo de Enlace Chatwoot',
+            credentials: 'Credenciales Chatwoot',
+            credentialsDesc: 'Configura el acceso a tu instancia de Chatwoot',
+            apiToken: 'API Token',
+            apiTokenPlaceholder: 'Tu Personal Access Token...',
+            accountId: 'Account ID',
+            accountIdPlaceholder: 'Ej: 1',
+            baseUrl: 'Base URL (Opcional)',
+            baseUrlPlaceholder: 'https://app.chatwoot.com',
+            saveConfig: 'Guardar Configuración',
+            statusTitle: 'Estado de Integración',
+            statusConfigured: 'Configurado y listo para ruteo.',
+            statusMissing: 'Faltan credenciales. Se usarán valores globales si existen.',
+            webhookConfigTitle: 'Enlace de Webhook',
+            webhookConfigDesc: 'Configura esta URL en el panel de Chatwoot (Ajustes -> Inboxes -> Editar -> Webhooks).',
+            saveSuccess: 'Credenciales de Chatwoot guardadas correctamente',
+            saveError: 'Error al guardar credenciales'
         }
     },
     en: {
@@ -465,6 +484,25 @@ export const translations = {
             requiredEvents: 'Required events:',
             saveSuccess: 'Configuration saved successfully',
             saveError: 'Error saving'
+        },
+        chatwootSettings: {
+            title: 'Chatwoot Link Node',
+            credentials: 'Chatwoot Credentials',
+            credentialsDesc: 'Configure access to your Chatwoot instance',
+            apiToken: 'API Token',
+            apiTokenPlaceholder: 'Your Personal Access Token...',
+            accountId: 'Account ID',
+            accountIdPlaceholder: 'e.g., 1',
+            baseUrl: 'Base URL (Optional)',
+            baseUrlPlaceholder: 'https://app.chatwoot.com',
+            saveConfig: 'Save Configuration',
+            statusTitle: 'Integration Status',
+            statusConfigured: 'Configured and ready for routing.',
+            statusMissing: 'Missing credentials. Global values will be used if available.',
+            webhookConfigTitle: 'Webhook Link',
+            webhookConfigDesc: 'Set this URL in your Chatwoot panel (Settings -> Inboxes -> Edit -> Webhooks).',
+            saveSuccess: 'Chatwoot credentials saved successfully',
+            saveError: 'Error saving credentials'
         }
     }
 };

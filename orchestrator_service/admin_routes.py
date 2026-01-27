@@ -450,7 +450,7 @@ async def save_credential(cred: CredentialModel, current_user: User = Depends(ge
 
         # Security: Encrypt sensitive categories
         final_value = cred.value
-        sensitive_categories = ['whatsapp_cloud', 'meta_whatsapp', 'tiendanube', 'openai', 'security', 'google', 'smtp']
+        sensitive_categories = ['whatsapp_cloud', 'meta_whatsapp', 'tiendanube', 'openai', 'security', 'google', 'smtp', 'chatwoot']
         if cred.category in sensitive_categories:
             from utils import encrypt_password
             final_value = encrypt_password(cred.value)
@@ -2370,7 +2370,9 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
         if not cw_conversation_id:
             raise HTTPException(400, "Missing Chatwoot Conversation ID")
 
-        cw_url = os.getenv("CHATWOOT_BASE_URL", "https://app.chatwoot.com")
+        cw_url = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_BASE_URL'", tenant_id)
+        if not cw_url:
+            cw_url = os.getenv("CHATWOOT_BASE_URL", "https://app.chatwoot.com")
         cw_token = os.getenv("CHATWOOT_API_TOKEN") or os.getenv("CHATWOOT_BOT_TOKEN")
         
         if not cw_token:
@@ -2385,25 +2387,25 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                     from utils import decrypt_password
                     cw_token = decrypt_password(token_encrypted)
                 except Exception as e:
-                    logger.error("cw_token_decrypt_failed", error=str(e))
+                    logger.error(f"cw_token_decrypt_failed: {str(e)}")
         
         # FINAL SAFETY: httpx will fail if value is None. Default to empty if user says "no credentials"
         if cw_token is None:
-            logger.warning("chatwoot_token_null_fallback", tenant_id=tenant_id)
+            logger.warning(f"chatwoot_token_null_fallback for tenant_id={tenant_id}")
             cw_token = "" 
 
         if not cw_account_id:
-            # Try conv_data first (selected above)
-            cw_account_id = conv_data['external_account_id'] if conv_data else None
-            
+            cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_ACCOUNT_ID'", tenant_id)
             if not cw_account_id:
-                cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_ACCOUNT_ID'", tenant_id)
-                if not cw_account_id:
-                     cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_ACCOUNT_ID' LIMIT 1") or "1"
+                 # Legacy fallback
+                 cw_account_id = await db.pool.fetchval("SELECT value FROM credentials WHERE name = 'CHATWOOT_ACCOUNT_ID' LIMIT 1")
+                 if not cw_account_id:
+                     logger.warning(f"chatwoot_account_id_missing_fallback_to_1 for tenant_id={tenant_id}")
+                     cw_account_id = "1"
 
         async with httpx.AsyncClient() as client:
             cw_msg_url = f"{cw_url}/api/v1/accounts/{cw_account_id}/conversations/{cw_conversation_id}/messages"
-            logger.info("chatwoot_delivery_attempt", url=cw_msg_url, account_id=cw_account_id, conv_id=cw_conversation_id)
+            logger.info(f"chatwoot_delivery_attempt: url={cw_msg_url}, account_id={cw_account_id}, conv_id={cw_conversation_id}")
             
             res = await client.post(
                 cw_msg_url,
@@ -2412,7 +2414,7 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
                 timeout=10.0
             )
             if res.status_code not in [200, 201]:
-                logger.error(f"Chatwoot Error {res.status_code}: {res.text}", url=cw_msg_url)
+                logger.error(f"Chatwoot Error {res.status_code}: {res.text} | URL: {cw_msg_url}")
                 raise HTTPException(res.status_code, f"Chatwoot Error: {res.text}")
 
     else:
@@ -4760,9 +4762,11 @@ async def receive_chatwoot_webhook(
 
     conversation_map = payload.get("conversation", {})
     contact_map = payload.get("sender", {})
+    account_map = payload.get("account", {})
     
     chatwoot_conv_id = conversation_map.get("id")
     chatwoot_contact_id = contact_map.get("id")
+    chatwoot_account_id = account_map.get("id")
     # Phone or Email or ID
     # 3. Resolve Native Conversation
     
@@ -4802,11 +4806,12 @@ async def receive_chatwoot_webhook(
     conv_query = """
         SELECT id FROM chat_conversations 
         WHERE tenant_id = $1 AND (
-            meta->>'chatwoot_conversation_id' = $2 OR 
-            external_user_id = $3
+            external_chatwoot_id = $2 OR
+            meta->>'chatwoot_conversation_id' = $3 OR 
+            external_user_id = $4
         ) LIMIT 1
     """
-    conv_row = await db.pool.fetchrow(conv_query, tenant_id, str(chatwoot_conv_id), identifier)
+    conv_row = await db.pool.fetchrow(conv_query, tenant_id, chatwoot_conv_id, str(chatwoot_conv_id), identifier)
     
     # helper: better avatar extraction
     avatar_url = contact_map.get("thumbnail") or contact_map.get("avatar_url")
@@ -4822,12 +4827,15 @@ async def receive_chatwoot_webhook(
             SET channel = $1, 
                 external_user_id = $2, 
                 provider = 'chatwoot',
-                meta =  meta || $3::jsonb,
+                external_chatwoot_id = $3,
+                external_account_id = $4,
+                meta =  meta || $5::jsonb,
                 updated_at = NOW()
-            WHERE id = $4
-        """, nexus_channel, identifier, json.dumps({
+            WHERE id = $6
+        """, nexus_channel, identifier, chatwoot_conv_id, chatwoot_account_id, json.dumps({
             "chatwoot_conversation_id": chatwoot_conv_id, 
             "chatwoot_contact_id": chatwoot_contact_id,
+            "chatwoot_account_id": chatwoot_account_id,
             "sender_name": contact_map.get("name"),
             "sender_avatar": avatar_url
         }), conversation_id)
@@ -4835,11 +4843,16 @@ async def receive_chatwoot_webhook(
         # Create new conversation (Synced from Chatwoot)
         conversation_id = str(uuid.uuid4())
         await db.pool.execute("""
-            INSERT INTO chat_conversations (id, tenant_id, channel, external_user_id, status, provider, meta, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, 'open', 'chatwoot', $5, NOW(), NOW())
-        """, conversation_id, tenant_id, nexus_channel, identifier, json.dumps({
+            INSERT INTO chat_conversations (
+                id, tenant_id, channel, external_user_id, status, provider, 
+                external_chatwoot_id, external_account_id, meta, 
+                created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, 'open', 'chatwoot', $5, $6, $7, NOW(), NOW())
+        """, conversation_id, tenant_id, nexus_channel, identifier, chatwoot_conv_id, chatwoot_account_id, json.dumps({
             "chatwoot_conversation_id": chatwoot_conv_id, 
             "chatwoot_contact_id": chatwoot_contact_id,
+            "chatwoot_account_id": chatwoot_account_id,
             "sender_name": contact_map.get("name"),
             "sender_avatar": avatar_url
         }))
