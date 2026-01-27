@@ -24,32 +24,36 @@ load_dotenv()
 # Config handling
 _config_cache = {}
 
-async def get_config(name: str, default: str = None) -> str:
+async def get_config(name: str, default: str = None, tenant_id: int = None) -> str:
     # 1. Check local cache
-    if name in _config_cache:
-        return _config_cache[name]
+    cache_key = f"{name}_{tenant_id}" if tenant_id else name
+    if cache_key in _config_cache:
+        return _config_cache[cache_key]
     
-    # 2. Check local Environment
-    val = os.getenv(name)
-    if val:
-        _config_cache[name] = val
-        return val
+    # 2. Check local Environment (only if no tenant_id)
+    if not tenant_id:
+        val = os.getenv(name)
+        if val:
+            _config_cache[cache_key] = val
+            return val
         
     # 3. Query Orchestrator
     try:
         async with httpx.AsyncClient() as client:
+            params = {"tenant_id": tenant_id} if tenant_id else {}
             resp = await client.get(
                 f"{ORCHESTRATOR_URL}/admin/internal/credentials/{name}",
                 headers={"X-Internal-Token": INTERNAL_SECRET_KEY or "internal-secret"},
+                params=params,
                 timeout=5.0
             )
             if resp.status_code == 200:
                 val = resp.json().get("value")
                 if val:
-                    _config_cache[name] = val
+                    _config_cache[cache_key] = val
                     return val
     except Exception as e:
-        logger.warning("config_fetch_failed", name=name, error=str(e))
+        logger.warning("config_fetch_failed", name=name, tenant_id=tenant_id, error=str(e))
         
     return default
 
@@ -91,6 +95,16 @@ class OrchestratorResult(BaseModel):
     send: bool
     text: Optional[str] = None
     messages: List[OrchestratorMessage] = Field(default_factory=list)
+
+class RelayMessage(BaseModel):
+    to: str
+    text: str
+    provider: str # ycloud, meta_direct, chatwoot
+    channel_source: str # whatsapp, instagram, facebook
+    tenant_id: int
+    conversation_id: str
+    external_chatwoot_id: Optional[int] = None
+    external_account_id: Optional[int] = None
 
 class SendMessage(BaseModel):
     to: str
@@ -534,9 +548,90 @@ async def chatwoot_webhook(request: Request):
         logger.error("chatwoot_forward_failed", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to reach orchestrator")
 
+@app.post("/messages/relay")
+async def relay_message(msg: RelayMessage, request: Request):
+    """
+    Universal Relay Endpoint (Nexus v6.2.9).
+    Centralizes all outbound communication for multi-channel stability.
+    """
+    token = request.headers.get("X-Internal-Token")
+    if token != (INTERNAL_SECRET_KEY or "internal-secret"):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    correlation_id = request.headers.get("X-Correlation-Id") or str(uuid.uuid4())
+    logger.info("📡 RELAY: Received message", provider=msg.provider, channel=msg.channel_source, to=msg.to)
+
+    try:
+        if msg.provider == 'meta_direct':
+            # 1. Fetch Page Token / Phone ID from Orchestrator (Credential Architecture v2)
+            meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
+            
+            async with httpx.AsyncClient() as client:
+                if msg.channel_source == 'whatsapp':
+                    phone_id = await get_config("WHATSAPP_PHONE_NUMBER_ID", tenant_id=msg.tenant_id)
+                    token_wa = await get_config("WHATSAPP_ACCESS_TOKEN", tenant_id=msg.tenant_id)
+                    
+                    if not phone_id or not token_wa:
+                        raise Exception("Meta WhatsApp Credentials Missing")
+                    
+                    res = await client.post(f"{meta_service_url}/whatsapp/send", json={
+                        "recipient_id": msg.to, "text": msg.text, 
+                        "access_token": token_wa, "phone_number_id": phone_id
+                    }, timeout=10.0)
+                else:
+                    page_token = await get_config("meta_page_token", tenant_id=msg.tenant_id)
+                    if not page_token:
+                        raise Exception("Meta Page Token Missing")
+                    
+                    res = await client.post(f"{meta_service_url}/messages/send", json={
+                        "recipient_id": msg.to, "text": msg.text, "access_token": page_token
+                    }, timeout=10.0)
+                
+                if res.status_code not in [200, 201]:
+                    raise Exception(f"Meta Service Error: {res.text}")
+
+        elif msg.provider == 'chatwoot':
+            cw_url = await get_config("CHATWOOT_BASE_URL", "https://app.chatwoot.com", tenant_id=msg.tenant_id)
+            if cw_url.endswith("/"): cw_url = cw_url[:-1]
+            
+            cw_token = await get_config("CHATWOOT_API_TOKEN", tenant_id=msg.tenant_id)
+            cw_account_id = msg.external_account_id or await get_config("CHATWOOT_ACCOUNT_ID", "1", tenant_id=msg.tenant_id)
+            cw_conversation_id = msg.external_chatwoot_id
+            
+            if not cw_conversation_id or not cw_token:
+                raise Exception("Missing Chatwoot Context (Conv/Token)")
+
+            async with httpx.AsyncClient() as client:
+                cw_msg_url = f"{cw_url}/api/v1/accounts/{cw_account_id}/conversations/{cw_conversation_id}/messages"
+                res = await client.post(
+                    cw_msg_url,
+                    json={"content": msg.text, "message_type": "outgoing"},
+                    headers={"api_access_token": cw_token},
+                    timeout=10.0
+                )
+                if res.status_code not in [200, 201]:
+                    raise Exception(f"Chatwoot Error: {res.text}")
+
+        else:
+            # Default: YCloud (WhatsApp Business API)
+            v_ycloud = await get_config("YCLOUD_API_KEY", YCLOUD_API_KEY)
+            business_number = await get_config(f"WHATSAPP_PHONE_NUMBER_ID_{msg.tenant_id}") or "default"
+            
+            client_yc = YCloudClient(v_ycloud, business_number)
+            await client_yc.send_text(msg.to, msg.text, correlation_id)
+
+        return {"status": "sent", "correlation_id": correlation_id}
+
+    except Exception as e:
+        logger.error("relay_failed", error=str(e), correlation_id=correlation_id)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/messages/send")
 async def send_message(message: SendMessage, request: Request):
-    """Internal endpoint for sending manual messages from orchestrator."""
+    """
+    Internal endpoint for sending manual messages from orchestrator.
+    Left for legacy compatibility during migration.
+    """
     token = request.headers.get("X-Internal-Token")
     if token != (INTERNAL_SECRET_KEY or "internal-secret"):
         raise HTTPException(status_code=401, detail="Unauthorized")

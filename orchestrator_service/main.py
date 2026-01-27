@@ -2120,7 +2120,7 @@ def extract_response_from_agent_output(agent_output: str) -> str:
 
 async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_source):
     buffer_key = f"buffer:{from_num}"
-    pending_key = f"pending:{from_num}"
+    timer_key = f"timer:{from_num}"
     lock_key = f"active_task:{from_num}"
     
     logger.info(f"⏳ BUFFER: Starting process_buffer_task loop | identifier={from_num}")
@@ -2128,8 +2128,14 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
     try:
         # Loop until buffer is empty
         while True:
-            # Debounce: wait a bit for more messages to group
-            await asyncio.sleep(2)
+            # Debounce: wait for 16s silence (matching whatsapp_service logic)
+            # We check the TTL of the timer_key. If it's 0 or doesn't exist, the silence period is over.
+            while True:
+                await asyncio.sleep(2)
+                ttl = await redis_client.ttl(timer_key)
+                if ttl <= 0:
+                    break
+                logger.info(f"⏸️ BUFFER: Waiting for silence... | ttl={ttl}s | identifier={from_num}")
             
             messages_raw = await redis_client.lrange(buffer_key, 0, -1)
             if not messages_raw:
@@ -2138,7 +2144,6 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
                 
             # Consume the messages we just read
             await redis_client.delete(buffer_key)
-            await redis_client.delete(pending_key)
             
             # Fix: messages_raw already contains strings because of decode_responses=True in db.py
             combined_text = "\n".join([m if isinstance(m, str) else m.decode('utf-8') for m in messages_raw])
@@ -2153,6 +2158,7 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
     finally:
         # Always release the lock
         await redis_client.delete(lock_key)
+        await redis_client.delete(timer_key)
         logger.info(f"🔓 LOCK: Released | identifier={from_num}")
 
 async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id, content, customer_name, channel_source='whatsapp'):
@@ -2339,16 +2345,20 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         
         logger.info(f"🤖 AGENT: Raw response received | from={from_number} | length={len(full_text_accumulated)} | preview={full_text_accumulated[:100]}...")
 
-        parts = full_text_accumulated.split("|||")
+        # FIRST: Extract response from (potentially JSON) output
+        clean_response_full = extract_response_from_agent_output(full_text_accumulated)
+        
+        # SECOND: Split by '|||' only if the agent intended separate bubbles INSIDE the response
+        parts = clean_response_full.split("|||")
+        
         for text_content in [p.strip() for p in parts if p.strip()]:
             if "HUMAN_HANDOFF_REQUESTED:" in text_content:
                 reason = text_content.split("HUMAN_HANDOFF_REQUESTED:")[1].strip()
                 await trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, customer_name)
                 continue
             
-            # CRITICAL FIX: Extract only 'response' field from JSON
-            clean_response = extract_response_from_agent_output(text_content)
-            logger.info(f"✅ AGENT: Response extracted | from={from_number} | clean_length={len(clean_response)} | preview={clean_response[:100]}...")
+            clean_response = text_content # Already clean
+            logger.info(f"✅ AGENT: Bubble prepared | from={from_number} | length={len(clean_response)} | preview={clean_response[:100]}...")
 
             # Persist
             agent_msg_id = str(uuid.uuid4())
@@ -2381,6 +2391,12 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             # Unified Delivery Logic (Nexus v6.1 - Triangular Routing)
             logger.info(f"📤 CHATWOOT: Sending response | conv={conv_id} | channel={channel_source} | length={len(clean_response)}")
             try:
+                # Spacing Fix: If there were multiple parts, add a delay between bubbles
+                # to prevent Meta from dropping rapid-fire messages.
+                if parts.index(text_content) > 0:
+                     logger.info(f"⏳ SPACING: Waiting 4s before next bubble | from={from_number}")
+                     await asyncio.sleep(4)
+
                 await unified_message_delivery(
                     tenant_id=tenant_id,
                     conv_id=conv_id,
