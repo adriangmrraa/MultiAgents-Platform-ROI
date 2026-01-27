@@ -271,7 +271,7 @@ async def list_tenants(limit: int = 100, current_user: User = Depends(get_curren
         
         results.append(r)
     
-    return {"tenants": results}
+    return results
 
 
 # ============================================
