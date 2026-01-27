@@ -273,6 +273,79 @@ const TenantSelector = ({ selectedTenantId, onChange }: { selectedTenantId: numb
     );
 };
 
+// === Nexus v7.2: Invisible Architecture Context Panel ===
+const ContextEngineeringPanel = () => {
+    const navigate = useNavigate();
+
+    return (
+        <div className="bg-gradient-to-br from-indigo-900/30 to-purple-900/30 border border-indigo-500/20 p-6 rounded-3xl mb-10 relative overflow-hidden group">
+            {/* Background Decor */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+
+            <div className="flex items-start gap-5 relative z-10">
+                <div className="bg-indigo-500/20 p-3 rounded-2xl text-indigo-300 shrink-0">
+                    <ShieldCheck size={32} />
+                </div>
+                <div className="flex-1">
+                    <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                        Arquitectura Invisible de Nexus
+                        <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full uppercase tracking-wider">System Core v7.2</span>
+                    </h3>
+                    <p className="text-sm text-gray-300 leading-relaxed mb-4">
+                        No necesitas escribir todo. Nexus inyecta automáticamente una capa de **Seguridad Cognitiva** y **Directrices Operativas** antes de que tu agente hable.
+                        Lo que configures abajo (Tono, Reglas) se fusiona con esta base indestructible.
+                    </p>
+
+                    <div className="grid md:grid-cols-3 gap-4 mb-6">
+                        <div className="bg-black/20 border border-white/5 p-3 rounded-xl">
+                            <div className="flex items-center gap-2 text-xs font-bold text-gray-200 mb-1">
+                                <ShieldCheck size={14} className="text-green-400" />
+                                <span>Anti-Alucinación</span>
+                            </div>
+                            <p className="text-[10px] text-gray-500">Bloqueo de respuestas inventadas y datos falsos.</p>
+                        </div>
+                        <div className="bg-black/20 border border-white/5 p-3 rounded-xl">
+                            <div className="flex items-center gap-2 text-xs font-bold text-gray-200 mb-1">
+                                <Wrench size={14} className="text-cyan-400" />
+                                <span>Inyección de Tools</span>
+                            </div>
+                            <p className="text-[10px] text-gray-500">Instrucciones precisas para usar el catálogo y stock.</p>
+                        </div>
+                        <div className="bg-black/20 border border-white/5 p-3 rounded-xl">
+                            <div className="flex items-center gap-2 text-xs font-bold text-gray-200 mb-1">
+                                <Bot size={14} className="text-purple-400" />
+                                <span>Personalidad Base</span>
+                            </div>
+                            <p className="text-[10px] text-gray-500">Empatía, manejo de objeciones y cierre de ventas.</p>
+                        </div>
+                    </div>
+
+                    {/* Hyper-Onboarding Launcher */}
+                    <div className="bg-indigo-600/20 border border-indigo-500/30 p-4 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-white/10 p-2 rounded-full animate-pulse-slow">
+                                <Sparkles size={20} className="text-yellow-300" />
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-bold text-white">¿Quieres que lo hagamos por ti?</h4>
+                                <p className="text-xs text-indigo-200">El <span className="font-bold">Arquitecto IA</span> puede entrevistarte y completar toda la configuración técnica.</p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => navigate('/onboarding')}
+                            className="bg-white text-indigo-900 hover:bg-indigo-50 px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg shadow-black/20 hover:scale-105 transition-all whitespace-nowrap"
+                        >
+                            <MessageSquare size={16} />
+                            Entrevista con el Arquitecto
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const DynamicAgentWizard = () => {
     const { fetchApi, loading } = useApi();
     const { user } = useAuth();
@@ -892,7 +965,6 @@ export const DynamicAgentWizard = () => {
                         </p>
                     </div>
 
-                    {/* Template Selector */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
                         {Object.entries(templates).map(([key, tpl]: [string, any]) => (
                             <button
@@ -918,6 +990,9 @@ export const DynamicAgentWizard = () => {
                             </button>
                         ))}
                     </div>
+
+                    {/* Nexus v7.2: Context Engineering Panel */}
+                    <ContextEngineeringPanel />
 
                     <form onSubmit={handleSubmit} className="space-y-8">
                         {/* v7.0: Tenant Selection */}

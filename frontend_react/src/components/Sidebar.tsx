@@ -78,6 +78,7 @@ export const Sidebar: React.FC = () => {
                     <NavItem to="/settings/ycloud" icon={<Mail size={20} />} label={t('sidebar.ycloud')} desc={t('sidebar.ycloudDesc')} />
                     <NavItem to="/nexus-setup" icon={<Zap size={20} />} label={t('sidebar.nexusEngine')} desc={t('sidebar.nexusEngineDesc')} />
                     <NavItem to="/magic" icon={<Sparkles size={20} />} label={t('sidebar.magic')} desc={t('sidebar.magicDesc')} />
+                    <NavItem to="/onboarding" icon={<MessageCircle size={20} />} label="Hyper Onboarding" desc="Entrevista IA para crear Agentes" />
 
                     <div className="h-px bg-white/5 w-8 mx-auto my-4" />
                     <NavItem to="/settings" icon={<Settings size={20} />} label={t('sidebar.settings')} desc={t('sidebar.settingsDesc')} />
