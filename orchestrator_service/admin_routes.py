@@ -403,9 +403,7 @@ async def update_tenant(tenant_id: int, data: dict, current_user: User = Depends
         raise HTTPException(404, detail="Tenant not found")
     
     return {"status": "ok", "tenant_id": result}
-        results.append(r)
-        
-    return results
+
 
 @router.put("/tenants/{tenant_id}", dependencies=[Depends(verify_admin_token)])
 @require_role("SuperAdmin")
