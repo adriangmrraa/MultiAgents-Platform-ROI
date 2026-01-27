@@ -422,7 +422,7 @@ async def get_tenant_by_id(tenant_id: int, current_user: User = Depends(get_curr
 @safe_db_call
 async def update_tenant(tenant_id: int, data: dict, current_user: User = Depends(get_current_user)):
     """
-    Updates a tenant's configuration.
+    Updates a tenant configuration.
     """
     # Security: Only SuperAdmin or the owner can update tenant
     if current_user.role != "SuperAdmin":

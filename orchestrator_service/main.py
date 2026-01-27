@@ -842,6 +842,98 @@ CATALOGO:
     # 26. Cleanup: Ensure is_verified exists in repair logic too
     """
     ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+    """,
+    # 27. OAuth Providers (Credential Architecture v2)
+    """
+    CREATE TABLE IF NOT EXISTS oauth_providers (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(50) UNIQUE NOT NULL,
+        display_name VARCHAR(100) NOT NULL,
+        description TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    """,
+    # 28. Seed OAuth Providers (v6.2.24 Update)
+    """
+    INSERT INTO oauth_providers (name, display_name, description, created_at, updated_at) VALUES 
+    ('openai', 'OpenAI', 'AI Model Provider', NOW(), NOW()),
+    ('google', 'Google Gemini', 'AI Model Provider', NOW(), NOW()),
+    ('meta', 'Meta (Facebook/Instagram)', 'Social Media Integration', NOW(), NOW()),
+    ('whatsapp_cloud', 'WhatsApp Cloud API', 'Official WhatsApp Business API', NOW(), NOW()),
+    ('tiendanube', 'TiendaNube', 'E-commerce Platform', NOW(), NOW()),
+    ('ycloud', 'YCloud', 'WhatsApp BSP', NOW(), NOW())
+    ON CONFLICT (name) DO NOTHING;
+    """,
+    # 29. Credential Types (Credential Architecture v2)
+    """
+    CREATE TABLE IF NOT EXISTS credential_types (
+        id SERIAL PRIMARY KEY,
+        provider_id INTEGER REFERENCES oauth_providers(id) ON DELETE CASCADE,
+        internal_key VARCHAR(100) UNIQUE NOT NULL,
+        display_name VARCHAR(100) NOT NULL,
+        description TEXT,
+        is_required BOOLEAN DEFAULT TRUE,
+        field_type VARCHAR(50) DEFAULT 'text', -- text, password, textarea, file
+        placeholder VARCHAR(255),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    """,
+    # 30. Seed Credential Types (v6.2.24 Update - YCloud Webhook Fix Included)
+    """
+    DO $$
+    DECLARE
+        openai_id INT;
+        ycloud_id INT;
+        tn_id INT;
+        meta_id INT;
+        google_id INT;
+    BEGIN
+        SELECT id INTO openai_id FROM oauth_providers WHERE name = 'openai';
+        SELECT id INTO ycloud_id FROM oauth_providers WHERE name = 'whatsapp_cloud';
+        SELECT id INTO tn_id FROM oauth_providers WHERE name = 'tiendanube';
+        SELECT id INTO meta_id FROM oauth_providers WHERE name = 'meta';
+        SELECT id INTO google_id FROM oauth_providers WHERE name = 'google';
+
+        -- OpenAI
+        IF openai_id IS NOT NULL THEN
+            INSERT INTO credential_types (provider_id, internal_key, display_name, description, is_required, field_type, placeholder)
+            VALUES (openai_id, 'OPENAI_API_KEY', 'OpenAI API Key', 'Main API Key for GPT Models', true, 'password', 'sk-...')
+            ON CONFLICT (internal_key) DO NOTHING;
+        END IF;
+
+        -- Google
+        IF google_id IS NOT NULL THEN
+            INSERT INTO credential_types (provider_id, internal_key, display_name, description, is_required, field_type, placeholder)
+            VALUES (google_id, 'GOOGLE_API_KEY', 'Google Gemini API Key', 'API Key for Gemini Models', true, 'password', 'AIza...')
+            ON CONFLICT (internal_key) DO NOTHING;
+        END IF;
+
+        -- TiendaNube
+        IF tn_id IS NOT NULL THEN
+            INSERT INTO credential_types (provider_id, internal_key, display_name, description, is_required, field_type, placeholder)
+            VALUES (tn_id, 'TIENDANUBE_ACCESS_TOKEN', 'TiendaNube Access Token', 'OAuth Access Token', true, 'password', 'bearer_token')
+            ON CONFLICT (internal_key) DO NOTHING;
+        END IF;
+
+        -- YCloud (WhatsApp)
+        IF ycloud_id IS NOT NULL THEN
+             INSERT INTO credential_types (provider_id, internal_key, display_name, description, is_required, field_type, placeholder)
+            VALUES 
+            (ycloud_id, 'YCLOUD_API_KEY', 'YCloud API Key', 'Main API Key for YCloud Integration', true, 'password', 'e3ce...'),
+            (ycloud_id, 'YCLOUD_WEBHOOK_SECRET', 'YCloud Webhook Secret', 'Secret for verifying incoming webhooks from YCloud', true, 'password', 'whsec_...')
+            ON CONFLICT (internal_key) DO NOTHING;
+        END IF;
+        
+        -- Meta (Generic)
+        IF meta_id IS NOT NULL THEN
+            INSERT INTO credential_types (provider_id, internal_key, display_name, description, is_required, field_type, placeholder)
+            VALUES (meta_id, 'META_ACCESS_TOKEN', 'Meta Access Token (EAAG...)', 'Long-lived User/System Token', true, 'password', 'EAAG...')
+            ON CONFLICT (internal_key) DO NOTHING;
+        END IF;
+
+    END $$;
     """
 ]
 
