@@ -1,59 +1,75 @@
-# 🛸 Nexus v6.1: Sovereign SaaS Architecture
+# 🛸 Nexus v7.6: Sovereign Platinum SaaS
 
-> **Plataforma Multi-Agente de Alto ROI para E-Commerce (TiendaNube + WhatsApp + Meta + Web)**
-> *Arquitectura Soberana, Multi-Tenant y Zero-Dependency.*
-
----
-
-## 🔥 Pilares de la Evolución v6.1
-
-### 🌐 1. Canal Web Widget (Nuevo)
-Nexus ahora incluye un chat web nativo y altamente configurable.
-*   **Visual Configurator:** Cambia colores, mensajes de bienvenida y radio de bordes en tiempo real.
-*   **Script Generator:** Genera un fragmento de código listo para pegar en cualquier sitio web o TiendaNube.
-*   **Zero-Config Bundle:** El widget se conecta automáticamente al cerebro del agente asignado.
-
-### 🎛️ 2. Gestión de Canales Centralizada
-El Wizard del Agente ahora es el centro de mando real.
-*   **Multi-Channel Control:** Activa o desactiva WhatsApp, Instagram, Facebook y Web para cada agente con un solo clic.
-*   **Sync Aware:** El sistema detecta automáticamente qué integraciones están conectadas antes de permitir su activación.
-*   **Persistencia Robusta:** Tus selecciones se sincronizan entre el modal de activación y el wizard profundo.
-
-### 🪄 3. Dynamic Agent Wizard v2
-Extensión del motor de configuración dinámica.
-*   **Sincronización Total:** Cada campo (URL Web, Tono, Reglas) es ahora 100% persistente gracias al sistema de hidratación profunda.
-*   **Live Preview (Fixed):** Simulación corregida con soporte SSE para una respuesta fluida y realista en modo borrador.
-*   **Tenant Identity Context:** El chat de prueba hereda automáticamente las credenciales reales del inquilino logueado.
-
-### 🛡️ 4. Infraestructura v6.0
-*   **Deep Fetch Engine:** Las consultas al backend ahora cargan el 100% de las propiedades del agente (Modelos, Temperatura, Herramientas).
-*   **SSE Stream Parsing:** Procesamiento optimizado de respuestas de IA para evitar "burbujas vacías".
-*   **Cross-Tenant Isolation:** Seguridad reforzada tras la migración de UUID/Integer.
-
-### 🔺 5. Triangular Routing (Multi-Provider WhatsApp)
-Nexus v6.1 unifica la mensajería baja una estrategia de ruteo inteligente:
-*   **Meta Direct:** WhatsApp Cloud API + Graph API (FB/IG) nativos.
-*   **Chatwoot:** Integración humana transparente.
-*   **YCloud:** Gateway legado soportado.
+> **The Ultimate AI-Driven OS for E-Commerce Excellence.**
+> *Omnichannel Orchestration, Sovereign Data Privacy, and Real-Time ROI Quantification.*
 
 ---
 
-## 🚀 Despliegue en EasyPanel
-/* ... same as before ... */
-### Quick Start
-1.  Configura las variables críticas en tu servicio (Ver `.env.example`).
-2.  Despliega la imagen Docker.
-3.  **Git Push:** Asegúrate de subir los cambios más recientes para activar el Web Widget y las correcciones del Wizard.
+## 🌟 Vision & Value Proposition
+
+Nexus is more than just a chatbot; it's a **Digital Workforce** designed for high-impact E-Commerce operations. Built on the pillars of **Sovereignty, Scalability, and Value**, Nexus v7.6 "Platinum" introduces the industry's first self-auditing AI engine.
+
+### 💰 Direct ROI Quantification
+Through the **Assist Score Sovereign Protocol**, Nexus actively monitors its own performance. Every assistance provided is categorized and valued (Sales vs. Support), allowing store owners to see real-time operational savings and conversion impact directly on their dashboard.
+
+### 🛡️ Sovereign Privacy (Vault-First)
+Your data, your keys, your intelligence. Nexus uses a **Zero-Dependency Credential Vault (AES-256)**. Identity and API keys are injected dynamically at runtime, ensuring complete isolation in multi-tenant environments. No more `.env` leaks or shared global keys.
+
+### 🌐 True Omnichannel Reach
+Nexus lives where your customers are. A single AI brain can manage:
+*   **WhatsApp Cloud API** (Direct Meta Integration)
+*   **Instagram Direct & Facebook Messenger**
+*   **Nexus Web Widget** (Zero-Config, fully customizable)
+*   **Human Handoff** (Seamless transition via Chatwoot bridge)
 
 ---
 
-## 📚 Documentación Oficial
+## 🏗️ Architectural Foundations
 
-*   **[Manual de Vuelo v5.99](./docs/Manual%20de%20Vuelo%20Nexus%20v5.md)**: Guía operativa actualizada.
-*   **[Canal Web & Configuración](./docs/SETTINGS_LOGIC_DEEP_DIVE.md)**: Cómo gestionar el Web Widget.
-*   **[Gestión de Agentes](./docs/AGENTS_LOGIC_DEEP_DIVE.md)**: Detalles sobre el nuevo selector de canales.
-/* ... rest of links ... */
+### 🧠 Sovereign Agentic Engine
+Powered by **SOTA Models (GPT-4o, Claude 3.5, Gemini 1.5 Pro)**, our agents don't just reply; they use tools. From searching TiendaNube catalogs to analyzing PDF manuals (RAG) and checking orders, Nexus agents act as specialized employees.
+
+### ⚡ Atomic Buffering & Reliability
+Built with a **Universal Delivery Relay**, Nexus handles message bursts with surgical precision. Our **Atomic Buffer** ensures that interruptions or multiple messages are consolidated into coherent, context-aware responses, avoiding "message spam" from the IA.
+
+### 🧬 Dynamic Knowledge (RAG)
+Isolation is paramount. Each tenant has their own vector space. Knowledge is ingested securely, allowing the AI to answer with 100% accuracy based on specific store policies, materials, and internal guides.
 
 ---
 
-**© 2026 Platform AI Solutions - Nexus Core Team**
+## 🚀 Quick Start (Deployment)
+
+Nexus is designed to run in **Dockerized environments** like EasyPanel or Render.
+
+1.  **Clone & Configure**: Copy `.env.example` (Only for master credentials).
+2.  **Spin Up**: `docker-compose up -d`.
+3.  **Magic Onboarding**: Log in to the Dashboard and use the **"Hacer Magia"** wizard to generate your first agent and sync your store in seconds.
+
+---
+
+## 📚 Documentation Hub
+
+Explore the deep logic behind the Sovereign Platinum engine:
+
+### 🚀 Getting Started & Status
+*   [**PROJECT_STATUS.md**](docs/PROJECT_STATUS.md) - **(Read First)** Current milestone progress and active roadmap.
+*   [**STABILITY_REPORT.md**](docs/STABILITY_REPORT.md) - Official certification of v7.6 platinum standards.
+*   [**TROUBLESHOOTING.md**](docs/TROUBLESHOOTING.md) - Known edge cases and surgical fixes.
+
+### 🛡️ Architecture Deep Dives
+*   [**NEXUS_ARCHITECTURAL_BLUEPRINT.md**](docs/NEXUS_ARCHITECTURAL_BLUEPRINT.md) - The 5 Pillars of our Sovereign design.
+*   [**INTEGRATIONS_LOGIC_DEEP_DIVE.md**](docs/INTEGRATIONS_LOGIC_DEEP_DIVE.md) - Assist Score, Meta OAuth, and Multi-Tenant Routing.
+*   [**AGENTS_LOGIC_DEEP_DIVE.md**](docs/AGENTS_LOGIC_DEEP_DIVE.md) - Neural logic, tool usage, and auditing ticks.
+*   [**CHATS_LOGIC_DEEP_DIVE.md**](docs/CHATS_LOGIC_DEEP_DIVE.md) - Unified messaging flow and Atomic Buffers.
+
+### 🛠️ Developer & Setup Guides
+*   [**API_REFERENCE.md**](docs/API_REFERENCE.md) - Comprehensive list of Sovereign Endpoints.
+*   [**DEPLOYMENT_GUIDE_EASYPANEL.md**](docs/DEPLOYMENT_GUIDE_EASYPANEL.md) - Step-by-step production setup.
+*   [**EXTENSION_GUIDE.md**](docs/EXTENSION_GUIDE.md) - How to build new tools and agent templates.
+
+---
+
+## ⚖️ License & Ethics
+Platform AI Solutions is built under the **Sovereignty Protocol**. We prioritize data ownership and ethical AI usage above all else.
+
+**© 2026 Platform AI Solutions - Sovereign Systems Division**
