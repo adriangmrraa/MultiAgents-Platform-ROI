@@ -7,15 +7,24 @@ interface ChannelBinding {
     provider: string;
     channel_id: string;
     label: string;
+    tenant_id: number;
+    tenant_name?: string;
+    external_account_id?: string;
     created_at: string;
+}
+
+interface Tenant {
+    id: number;
+    store_name: string;
 }
 
 export const Channels = () => {
     const { fetchApi } = useApi();
     const [bindings, setBindings] = useState<ChannelBinding[]>([]);
+    const [tenants, setTenants] = useState<Tenant[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [editingBinding, setEditingBinding] = useState<ChannelBinding | null>(null);
-    const [formData, setFormData] = useState({ provider: 'ycloud', channel_id: '', label: '' });
+    const [formData, setFormData] = useState({ provider: 'ycloud', channel_id: '', label: '', tenant_id: 0, external_account_id: '' });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -28,8 +37,22 @@ export const Channels = () => {
         }
     };
 
+    const loadTenants = async () => {
+        try {
+            const data = await fetchApi('/admin/tenants');
+            const list = Array.isArray(data) ? data : (data.tenants || []);
+            setTenants(list);
+            if (list.length > 0 && formData.tenant_id === 0) {
+                setFormData(prev => ({ ...prev, tenant_id: list[0].id }));
+            }
+        } catch (err: any) {
+            console.error("Error loading tenants", err);
+        }
+    };
+
     useEffect(() => {
         loadBindings();
+        loadTenants();
     }, []);
 
     const handleBind = async (e: React.FormEvent) => {
@@ -41,7 +64,12 @@ export const Channels = () => {
                 // Edit mode
                 await fetchApi(`/admin/channels/edit/${editingBinding.id}`, {
                     method: 'PUT',
-                    body: { channel_id: formData.channel_id, label: formData.label }
+                    body: {
+                        channel_id: formData.channel_id,
+                        label: formData.label,
+                        tenant_id: formData.tenant_id,
+                        external_account_id: formData.external_account_id
+                    }
                 });
             } else {
                 // Create mode
@@ -49,7 +77,7 @@ export const Channels = () => {
             }
             setShowModal(false);
             setEditingBinding(null);
-            setFormData({ provider: 'ycloud', channel_id: '', label: '' });
+            setFormData({ provider: 'ycloud', channel_id: '', label: '', tenant_id: tenants[0]?.id || 0, external_account_id: '' });
             loadBindings();
         } catch (err: any) {
             setError(err.message || 'Error al vincular canal');
@@ -70,13 +98,25 @@ export const Channels = () => {
 
     const openEditModal = (binding: ChannelBinding) => {
         setEditingBinding(binding);
-        setFormData({ provider: binding.provider, channel_id: binding.channel_id, label: binding.label });
+        setFormData({
+            provider: binding.provider,
+            channel_id: binding.channel_id,
+            label: binding.label,
+            tenant_id: binding.tenant_id,
+            external_account_id: binding.external_account_id || ''
+        });
         setShowModal(true);
     };
 
     const openCreateModal = () => {
         setEditingBinding(null);
-        setFormData({ provider: 'ycloud', channel_id: '', label: '' });
+        setFormData({
+            provider: 'ycloud',
+            channel_id: '',
+            label: '',
+            tenant_id: tenants[0]?.id || 0,
+            external_account_id: ''
+        });
         setShowModal(true);
     };
 
@@ -142,9 +182,19 @@ export const Channels = () => {
                                         <span className="px-2 py-0.5 bg-white/10 rounded-full text-[10px] text-white/60 uppercase font-bold">
                                             {b.provider}
                                         </span>
+                                        {b.tenant_name && (
+                                            <span className="px-2 py-0.5 bg-accent/20 rounded-full text-[10px] text-accent font-bold">
+                                                Tienda: {b.tenant_name}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="text-xs text-gray-400 font-mono">
                                         Channel ID: <span className="text-white">{b.channel_id}</span>
+                                        {b.external_account_id && (
+                                            <span className="ml-3">
+                                                Account ID: <span className="text-white">{b.external_account_id}</span>
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="text-[10px] text-gray-500 mt-1">
                                         Creado: {new Date(b.created_at).toLocaleDateString('es-AR', {
@@ -192,23 +242,51 @@ export const Channels = () => {
                         </h2>
                         <form onSubmit={handleBind} className="space-y-4">
                             {!editingBinding && (
-                                <div>
-                                    <label className="block text-sm text-gray-400 mb-2">Proveedor</label>
-                                    <select
-                                        value={formData.provider}
-                                        onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white"
-                                    >
-                                        <option value="ycloud">YCloud (WhatsApp)</option>
-                                        <option value="chatwoot">Chatwoot</option>
-                                        <option value="meta">Meta (IG/FB)</option>
-                                    </select>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-sm text-gray-400 mb-2">Proveedor</label>
+                                        <select
+                                            value={formData.provider}
+                                            onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+                                        >
+                                            <option value="ycloud">YCloud (WhatsApp)</option>
+                                            <option value="chatwoot">Chatwoot</option>
+                                            <option value="meta">Meta (IG/FB)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-gray-400 mb-2">Tienda Destino</label>
+                                        <select
+                                            value={formData.tenant_id}
+                                            onChange={(e) => setFormData({ ...formData, tenant_id: parseInt(e.target.value) })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+                                        >
+                                            {tenants.map(t => (
+                                                <option key={t.id} value={t.id}>{t.store_name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
                             )}
 
                             {editingBinding && (
-                                <div className="bg-blue-500/10 border border-blue-500/30 px-4 py-3 rounded-xl text-sm text-blue-300">
-                                    Provider: <strong>{editingBinding.provider.toUpperCase()}</strong> (no editable)
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-blue-500/10 border border-blue-500/30 px-4 py-3 rounded-xl text-xs text-blue-300">
+                                        Provider: <strong>{editingBinding.provider.toUpperCase()}</strong>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-gray-400 mb-1">Tienda Destino</label>
+                                        <select
+                                            value={formData.tenant_id}
+                                            onChange={(e) => setFormData({ ...formData, tenant_id: parseInt(e.target.value) })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-sm"
+                                        >
+                                            {tenants.map(t => (
+                                                <option key={t.id} value={t.id}>{t.store_name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
                             )}
 
@@ -227,9 +305,22 @@ export const Channels = () => {
                                                 'Ej: 123456'
                                     }
                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono"
-                                    required
                                 />
                             </div>
+
+                            {formData.provider === 'chatwoot' && (
+                                <div>
+                                    <label className="block text-sm text-gray-400 mb-2">Account ID (Chatwoot)</label>
+                                    <input
+                                        type="text"
+                                        value={formData.external_account_id}
+                                        onChange={(e) => setFormData({ ...formData, external_account_id: e.target.value })}
+                                        placeholder="Ej: 1"
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono"
+                                        required
+                                    />
+                                </div>
+                            )}
 
                             <div>
                                 <label className="block text-sm text-gray-400 mb-2">Etiqueta (Opcional)</label>

@@ -65,52 +65,64 @@ async def get_current_tenant_webhook(request: Request, db: AsyncSession = Depend
         except ValueError:
             pass
 
-    target_phone = None
+    # 3. Strategy: Universal Channel Resolver (Nexus v7.5)
+    raw_channel_id = None
+    external_account_id = body.get("external_account_id")
     
-    # 3. Strategy: Extract Bot Phone Number (Fallback)
-    # Note: Structure depends on YCloud/Meta. We look for commonly used fields.
-    try:
-        # Meta Standard
-        entry = body.get("entry", [])
-        if entry:
-            changes = entry[0].get("changes", [])
-            if changes:
-                value = changes[0].get("value", {})
-                metadata = value.get("metadata", {})
-                target_phone = metadata.get("display_phone_number")
-                
-                # Fallback: YCloud specific 'to' field? 
-                # If usage is 'messages', 'to' might be the user, 'from' the bot?
-                # No, in inbound message: 'from' is user, 'metadata.display_phone_number' is bot.
-                # However, some wrappers use headers or root level fields.
-                # We adhere to the user requirement: "verificar coincidencia con el campo to"
-                
-    except Exception as e:
-        logger.warning("webhook_payload_parsing_error", error=str(e))
+    # Extraction Logic
+    if body.get("provider") == "chatwoot":
+        raw_channel_id = str(body.get("meta", {}).get("chatwoot_inbox_id") or body.get("inbox_id") or "")
+    
+    if not raw_channel_id:
+        try:
+            entry = body.get("entry", [])
+            if entry:
+                changes = entry[0].get("changes", [])
+                if changes:
+                    metadata = changes[0].get("value", {}).get("metadata", {})
+                    raw_channel_id = metadata.get("display_phone_number")
+        except: pass
 
-    # Fallback/Direct
-    if not target_phone:
-        # Maybe it's a flat structure?
-        target_phone = body.get("to") or body.get("recipient_id")
+    if not raw_channel_id:
+        raw_channel_id = body.get("to") or body.get("recipient_id")
 
-    if not target_phone:
-        logger.error("tenant_resolution_failed", reason="no_phone_in_payload")
-        raise HTTPException(status_code=400, detail="Could not identify target bot phone number")
+    # Step A: Check Channel Bindings (ID-Centric)
+    if raw_channel_id:
+        from sqlalchemy import text
+        # If it's a Chatwoot message, try to match account_id if we have it
+        if external_account_id:
+            query = text("SELECT tenant_id FROM channel_bindings WHERE channel_id = :cid AND (external_account_id = :aid OR external_account_id IS NULL) LIMIT 1")
+            res = await db.execute(query, {"cid": str(raw_channel_id), "aid": str(external_account_id)})
+        else:
+            query = text("SELECT tenant_id FROM channel_bindings WHERE channel_id = :cid LIMIT 1")
+            res = await db.execute(query, {"cid": str(raw_channel_id)})
+            
+        tid = res.scalar()
+        if tid:
+            result = await db.execute(select(Tenant).where(Tenant.id == tid))
+            tenant_orm = result.scalar_one_or_none()
+            if tenant_orm and tenant_orm.is_active:
+                tenant_data = TenantInternal.model_validate(tenant_orm)
+                tenant_context.set(tenant_data)
+                logger.info("tenant_resolved_via_binding", tenant_id=tid, channel_id=raw_channel_id)
+                return tenant_data
 
-    # 3. Normalize
-    clean_phone = "".join(filter(str.isdigit, str(target_phone)))
+    # Step B: Fallback Legacy Phone Lookup
+    if not raw_channel_id:
+        logger.error("tenant_resolution_failed", reason="no_identifier_in_payload")
+        raise HTTPException(status_code=400, detail="Could not identify target channel")
 
-    # 4. DB Lookup
-    result = await db.execute(select(Tenant).where(Tenant.bot_phone_number == clean_phone))
-    tenant_orm = result.scalar_one_or_none()
+    clean_phone = "".join(filter(str.isdigit, str(raw_channel_id)))
+    if clean_phone:
+        result = await db.execute(select(Tenant).where(Tenant.bot_phone_number == clean_phone))
+        tenant_orm = result.scalar_one_or_none()
 
     if not tenant_orm:
-        logger.error("tenant_resolution_failed", reason="tenant_not_found_for_phone", phone=clean_phone)
-        # Fail-Fast
-        raise HTTPException(status_code=404, detail=f"Tenant not found for phone {clean_phone}")
+        logger.error("tenant_resolution_failed", reason="tenant_not_found", identifier=raw_channel_id)
+        raise HTTPException(status_code=404, detail=f"Tenant not found for identifier {raw_channel_id}")
 
     if not tenant_orm.is_active:
-        logger.warning("tenant_resolution_failed", reason="tenant_inactive", phone=clean_phone)
+        logger.warning("tenant_resolution_failed", reason="tenant_inactive", identifier=raw_channel_id)
         raise HTTPException(status_code=403, detail="Tenant is inactive")
 
     # 5. Set Context

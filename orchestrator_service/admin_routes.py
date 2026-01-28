@@ -558,14 +558,31 @@ async def list_channel_bindings(current_user: User = Depends(get_current_user)):
     Returns all channel bindings for the current tenant.
     Multi-Tenant Architecture v7.0
     """
+    email = getattr(current_user, "email", None)
     tenant_id = current_user.tenant_id
-    query = """
-        SELECT id, provider, channel_id, label, created_at, updated_at
-        FROM channel_bindings
-        WHERE tenant_id = $1
-        ORDER BY created_at DESC
-    """
-    rows = await db.pool.fetch(query, tenant_id)
+    
+    # Nexus v7.5: Visibility for multi-store owners
+    if email:
+        query = """
+            SELECT b.id, b.provider, b.channel_id, b.label, b.created_at, b.updated_at,
+                   t.store_name as tenant_name, b.tenant_id
+            FROM channel_bindings b
+            JOIN tenants t ON b.tenant_id = t.id
+            WHERE t.owner_email = $1
+            ORDER BY b.created_at DESC
+        """
+        rows = await db.pool.fetch(query, email)
+    else:
+        query = """
+            SELECT b.id, b.provider, b.channel_id, b.label, b.created_at, b.updated_at,
+                   t.store_name as tenant_name, b.tenant_id
+            FROM channel_bindings b
+            JOIN tenants t ON b.tenant_id = t.id
+            WHERE b.tenant_id = $1
+            ORDER BY b.created_at DESC
+        """
+        rows = await db.pool.fetch(query, tenant_id)
+        
     return {"bindings": [dict(r) for r in rows]}
 
 @router.post("/channels/bind", dependencies=[Depends(verify_admin_token)])
@@ -574,7 +591,8 @@ async def bind_channel(payload: dict, current_user: User = Depends(get_current_u
     Binds a new channel to the current tenant.
     Validates uniqueness to prevent channel conflicts.
     """
-    tenant_id = current_user.tenant_id
+    # v7.5 Multi-tenant binding: Use provided tenant_id or default to current user
+    tenant_id = payload.get("tenant_id", current_user.tenant_id)
     provider = payload.get("provider")
     channel_id = payload.get("channel_id")
     label = payload.get("label", f"{provider} {channel_id}")
@@ -590,7 +608,7 @@ async def bind_channel(payload: dict, current_user: User = Depends(get_current_u
     if existing:
         raise HTTPException(409, detail=f"Channel already bound to tenant {existing['tenant_id']}")
     
-    # v7.0.1: Enforce 1 channel per provider limit
+    # v7.0.1: Enforce 1 channel per provider limit (scoping to targeted tenant_id)
     provider_count = await db.pool.fetchval(
         "SELECT COUNT(*) FROM channel_bindings WHERE tenant_id = $1 AND provider = $2",
         tenant_id, provider
@@ -598,14 +616,14 @@ async def bind_channel(payload: dict, current_user: User = Depends(get_current_u
     if provider_count >= 1:
         raise HTTPException(
             409, 
-            detail=f"Ya tienes un canal {provider.upper()} configurado. Desvincúlalo primero antes de agregar uno nuevo."
+            detail=f"Esa tienda ya tiene un canal {provider.upper()} configurado. Desvincúlalo primero."
         )
     
     # Create binding
     await db.pool.execute(
-        """INSERT INTO channel_bindings (tenant_id, provider, channel_id, label) 
-           VALUES ($1, $2, $3, $4)""",
-        tenant_id, provider, channel_id, label
+        """INSERT INTO channel_bindings (tenant_id, provider, channel_id, label, external_account_id) 
+           VALUES ($1, $2, $3, $4, $5)""",
+        tenant_id, provider, channel_id, label, payload.get("external_account_id")
     )
     
     # Audit log
@@ -655,10 +673,11 @@ async def edit_channel(
     
     new_channel_id = body.get("channel_id")
     new_label = body.get("label", "")
+    new_tenant_id = body.get("tenant_id") # v7.5 Support
     
-    # Verify ownership
+    # Verify ownership (or superadmin)
     binding = await db.pool.fetchrow(
-        "SELECT provider FROM channel_bindings WHERE id = $1 AND tenant_id = $2",
+        "SELECT provider, tenant_id FROM channel_bindings WHERE id = $1 AND tenant_id = $2",
         binding_id, tenant_id
     )
     if not binding:
@@ -675,16 +694,20 @@ async def edit_channel(
         if conflict:
             raise HTTPException(409, detail=f"Channel ID {new_channel_id} is already bound")
     
-    # Update
+    # Update logic (Nexus v7.5: dynamic tenant association)
+    update_val_tenant = new_tenant_id if new_tenant_id else binding["tenant_id"]
+    
     if new_channel_id:
         await db.pool.execute(
-            "UPDATE channel_bindings SET channel_id = $1, label = $2, updated_at = NOW() WHERE id = $3",
-            new_channel_id, new_label, binding_id
+            """UPDATE channel_bindings 
+               SET channel_id = $1, label = $2, tenant_id = $3, external_account_id = $4, updated_at = NOW() 
+               WHERE id = $5""",
+            new_channel_id, new_label, update_val_tenant, body.get("external_account_id"), binding_id
         )
     else:
         await db.pool.execute(
-            "UPDATE channel_bindings SET label = $1, updated_at = NOW() WHERE id = $2",
-            new_label, binding_id
+            "UPDATE channel_bindings SET label = $1, tenant_id = $2, external_account_id = $3, updated_at = NOW() WHERE id = $4",
+            new_label, update_val_tenant, body.get("external_account_id"), binding_id
         )
     
     # Audit log

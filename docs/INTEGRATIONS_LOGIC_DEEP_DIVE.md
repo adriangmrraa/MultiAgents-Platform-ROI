@@ -37,6 +37,25 @@ Nexus v6.2.9 evoluciona la entrega de mensajes. Ya no se trata de ruteo disperso
 
 ---
 
+## 🔗 1B. Multi-Tenant Channel Routing (v7.5 Architecture)
+
+Nexus v7.5 introduce la capacidad de desacoplar los canales de los tenants fijos. Ahora, un solo número de teléfono o ID de inbox puede ser re-asignado dinámicamente entre tiendas.
+
+### El Corazón del Ruteo: `channel_bindings`
+La tabla `channel_bindings` reemplaza la dependencia del `bot_phone_number` en la tabla `tenants`. Cada entrada en esta tabla mapea un `channel_id` a un `tenant_id`.
+
+**Beneficios de esta arquitectura:**
+- **Asociación Dinámica**: Un administrador puede mover un canal de YCloud de la tienda "A" a la tienda "B" desde la UI sin tocar código.
+- **Identidad de Dueño (Owner-Centric)**: Los usuarios que poseen múltiples tiendas (ej. Adrian) pueden ver y gestionar todos sus canales en una lista unificada basada en su email.
+- **Persistencia Anti-Zombie**: Se ha eliminado la migración automática heredada que recreaba canales borrados. Ahora, el sistema solo autogestiona canales si la tabla de vinculaciones está vacía.
+
+### Flujo de Resolución Híbrido v7.5.2
+1.  **Prioridad 1 (Binding)**: El sistema busca el `channel_id` en `channel_bindings`. Si el proveedor es 'chatwoot', requiere además coincidencia con el `external_account_id` enviado en el webhook.
+2.  **Prioridad 2 (Legacy)**: Si no hay binding, se limpia el ID (solo dígitos) y se busca en `tenants.bot_phone_number`.
+3.  **Contexto**: Una vez identificado el `tenant_id`, se carga la personalidad del agente y las reglas específicas de la tienda.
+
+---
+
 ## 🔄 Flujo de Conexión (Paso a Paso)
 
 ### 1. Inicialización (Frontend)

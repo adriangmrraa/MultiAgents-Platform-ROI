@@ -96,10 +96,56 @@ Disparador manual para el bootstrapper de Supabase/pgvector.
     ]
     ```
 *   **Seguridad**: El campo `tiendanube_access_token` siempre se devuelve como `null` por razones de seguridad.
+*   **Deprecación v7.5**: El campo `bot_phone_number` está en proceso de deprecación. Para ruteo de mensajes, el sistema ahora utiliza la tabla `channel_bindings`.
 *   **Breaking Change v6.2**: La respuesta ahora es un array directo en lugar de `{"tenants": [...]}` para consistencia con otros endpoints.
 
 
-## Gestión de Conocimiento (Knowledge v6.0)
+## Canales Multi-Tenant (v7.5)
+
+Gestión de vinculaciones de canales (WhatsApp, Meta, Chatwoot) a tiendas.
+
+### 📋 Listar Vinculaciones
+`GET /admin/channels/bindings`
+*   **Auth**: Requiere autenticación de usuario.
+*   **Respuesta**:
+    ```json
+    {
+      "bindings": [
+        {
+          "id": 1,
+          "provider": "ycloud",
+          "channel_id": "109283746",
+          "label": "WhatsApp Principal",
+          "tenant_id": 37,
+          "tenant_name": "Urban Roots",
+          "created_at": "...",
+          "updated_at": "..."
+        }
+      ]
+    }
+    ```
+
+### 🔗 Vincular Canal
+`POST /admin/channels/bind`
+*   **Payload**:
+    ```json
+    {
+      "provider": "ycloud",
+      "channel_id": "ID_DEL_CANAL",
+      "label": "Mi Canal",
+      "tenant_id": 37
+    }
+    ```
+*   **Nota**: `tenant_id` es opcional; si no se envía, se asocia al tenant del usuario actual.
+
+### 🔄 Editar Canal
+`PUT /admin/channels/edit/{id}`
+*   **Payload**: Permite cambiar el `channel_id`, `label` y `tenant_id` (para re-asociar el canal a otra tienda).
+
+### 🗑️ Desvincular Canal
+`DELETE /admin/channels/unbind/{id}`
+
+---
 
 ### 📤 Upload Document (RAG)
 `POST /admin/knowledge/upload`

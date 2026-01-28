@@ -970,7 +970,7 @@ CATALOGO:
     END $$;
     """,
     
-    # 32. Auto-migrate existing channels (v7.0)
+    # 32. Auto-migrate existing channels (v7.0 - Only if empty)
     """
     INSERT INTO channel_bindings (tenant_id, provider, channel_id, label, created_at)
     SELECT 
@@ -981,6 +981,7 @@ CATALOGO:
         NOW() as created_at
     FROM tenants
     WHERE bot_phone_number IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM channel_bindings)
     ON CONFLICT (provider, channel_id) DO NOTHING;
     """,
     
@@ -1103,6 +1104,16 @@ CATALOGO:
         ALTER TABLE agents ALTER COLUMN tenant_id DROP NOT NULL;
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Failed to evolve agents table for global templates';
+    END $$;
+    """,
+    # 38. Universal ID Routing (v7.5.2)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE channel_bindings ADD COLUMN IF NOT EXISTS external_account_id VARCHAR(50);
+        CREATE INDEX IF NOT EXISTS idx_channel_account_lookup ON channel_bindings(channel_id, external_account_id);
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Migration 38 (Universal ID) failed: %', SQLERRM;
     END $$;
     """
 ]
