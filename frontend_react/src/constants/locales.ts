@@ -205,7 +205,14 @@ export const translations = {
             efficiency: 'Eficiencia de Automatización',
             interactions: 'Interacciones Totales',
             successRate: 'Tasa de Éxito',
-            systemHealth: 'Estado del Sistema'
+            successRate: 'Tasa de Éxito',
+            systemHealth: 'Estado del Sistema',
+            directImpact: 'Impacto Directo IA',
+            supportValue: 'Ahorro Operativo',
+            salesValue: 'Contribución de Ventas',
+            deepDive: 'Ver Análisis ROI',
+            points: 'puntos',
+            estimatedSavings: 'Ahorro Estimado'
         },
         userProfile: {
             commander: 'Usuario',
@@ -458,7 +465,14 @@ export const translations = {
             efficiency: 'Automation Efficiency',
             interactions: 'Total Interactions',
             successRate: 'Success Rate',
-            systemHealth: 'System Health'
+            successRate: 'Success Rate',
+            systemHealth: 'System Health',
+            directImpact: 'Direct AI Impact',
+            supportValue: 'Operational Savings',
+            salesValue: 'Sales Contribution',
+            deepDive: 'View ROI Analysis',
+            points: 'points',
+            estimatedSavings: 'Estimated Savings'
         },
         userProfile: {
             commander: 'User',

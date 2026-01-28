@@ -1874,11 +1874,31 @@ async def get_stats(current_user: User = Depends(get_current_user)):
         )
     """
     
+    # Assist Metrics (v7.6)
+    q_assist = """
+        SELECT 
+            SUM(assist_sales_score) as sales_score, 
+            SUM(assist_support_score) as support_score,
+            SUM(assist_checkpoints) as total_checkpoints
+        FROM chat_conversations 
+        WHERE tenant_id = $1
+    """
+    
     try:
         total_messages = await db.pool.fetchval(q_msgs, tenant_id) or 0
         processed_messages = await db.pool.fetchval(q_proc, tenant_id) or 0
         conversions = await db.pool.fetchval(q_conversions, tenant_id, date_limit) or 0
         gmv = conversions * avg_ticket
+        
+        assist_row = await db.pool.fetchrow(q_assist, tenant_id)
+        sales_score = float(assist_row['sales_score'] or 0.0)
+        support_score = float(assist_row['support_score'] or 0.0)
+        checkpoints = int(assist_row['total_checkpoints'] or 0)
+
+        # Estimated Value (v7.6 Calculation)
+        # 1 Support Point = Save 1000 ARS of human time
+        # 1 Sales Point = Contributed to decision (already factored in GMV, but shown as score)
+        estimated_savings = support_score * 1000 
         
         active_tenants = 1
         if current_user.role == "SuperAdmin":
@@ -1893,6 +1913,12 @@ async def get_stats(current_user: User = Depends(get_current_user)):
                 "conversions": conversions,
                 "last_30_days": gmv,
                 "formatted_gmv": f"${gmv:,.0f}"
+            },
+            "assist_metrics": {
+                "sales_score": round(sales_score, 1),
+                "support_score": round(support_score, 1),
+                "checkpoints": checkpoints,
+                "estimated_savings": f"${estimated_savings:,.0f}"
             },
             "cached_at": datetime.utcnow().isoformat()
         }
@@ -4136,6 +4162,75 @@ async def get_rag_galaxy(tenant_id: str):
 
     except Exception as e:
         logger.error(f"RAG_GALAXY_FAIL: {e}")
+        return []
+
+class ReportAssistanceRequest(BaseModel):
+    tenant_id: int
+    conversation_id: str
+    type: str # 'sales' or 'support'
+    score: float
+    reasoning: str
+
+@router.post("/tools/report_assistance", dependencies=[Depends(verify_internal_token)])
+async def report_assistance_endpoint(req: ReportAssistanceRequest):
+    """
+    Internal API for Agent Service to report assistance scores.
+    Updates chat_conversations with the new scores.
+    """
+    try:
+        # 1. Update DB
+        await db.pool.execute("""
+            UPDATE chat_conversations SET 
+                assist_sales_score = assist_sales_score + $1,
+                assist_support_score = assist_support_score + $2,
+                assist_checkpoints = assist_checkpoints + 1,
+                last_assist_analysis = $3,
+                updated_at = NOW()
+            WHERE id = $4 AND tenant_id = $5
+        """, 
+        (req.score if req.type == 'sales' else 0.0),
+        (req.score if req.type == 'support' else 0.0),
+        json.dumps({'reasoning': req.reasoning, 'timestamp': datetime.now().isoformat()}),
+        uuid.UUID(req.conversation_id), req.tenant_id)
+        
+        logger.info("assistance_reported_endpoint", tenant_id=req.tenant_id, conversation_id=req.conversation_id, type=req.type, score=req.score)
+        return {"ok": True, "message": "Assistance reported successfully"}
+    except Exception as e:
+        logger.error(f"report_assistance_endpoint_failed: {str(e)}")
+        return {"ok": False, "error": str(e)}
+
+@router.get("/analytics/assist-audits", dependencies=[Depends(verify_internal_token)])
+async def get_assist_audits(current_user: Optional[User] = Depends(get_current_user)):
+    """
+    Returns the latest assistance audits for the tenant.
+    """
+    tenant_id = current_user.tenant_id if current_user else None
+    if not tenant_id:
+        return []
+        
+    try:
+        rows = await db.pool.fetch("""
+            SELECT id as conversation_id, assist_sales_score, assist_support_score, last_assist_analysis
+            FROM chat_conversations
+            WHERE tenant_id = $1 AND assist_checkpoints > 0
+            ORDER BY updated_at DESC
+            LIMIT 20
+        """, tenant_id)
+        
+        audits = []
+        for r in rows:
+            analysis = json.loads(r['last_assist_analysis']) if r['last_assist_analysis'] else {}
+            # We determine the "dominant" type of the last audit or just show the summary from JSON
+            audits.append({
+                "conversation_id": str(r['conversation_id']),
+                "type": "sales" if r['assist_sales_score'] > 0 else "support",
+                "score": max(r['assist_sales_score'], r['assist_support_score']),
+                "reasoning": analysis.get('reasoning', "Sin detalle"),
+                "timestamp": analysis.get('timestamp', datetime.now().isoformat())
+            })
+        return audits
+    except Exception as e:
+        logger.error(f"assist_audits_failed: {str(e)}")
         return []
 
 @router.get("/rag/search", dependencies=[Depends(verify_internal_token)]) # Allow internal/admin

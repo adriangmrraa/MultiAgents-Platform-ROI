@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
-import { Activity, MessageSquare } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Activity, MessageSquare, Target, TrendingUp, Coins, ArrowRight } from 'lucide-react';
 import { GlobalStreamLog } from '../components/GlobalStreamLog';
 import { RagGalaxy } from '../components/RagGalaxy';
 import { SystemStatus } from '../components/SystemStatus';
@@ -14,6 +15,12 @@ interface Stats {
         conversions: number;
         last_30_days: number;
         formatted_gmv: string;
+    };
+    assist_metrics?: {
+        sales_score: number;
+        support_score: number;
+        checkpoints: number;
+        estimated_savings: string;
     };
 }
 
@@ -63,7 +70,8 @@ export const Dashboard: React.FC = () => {
 
             {/* CEO View: Value Generation (Hero Section) */}
             {stats?.roi_metrics && (
-                <div className="mb-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    {/* Hero: GMV */}
                     <div className="bg-white/5 backdrop-blur-xl p-8 rounded-[24px] border border-white/10 relative overflow-hidden group hover:border-red-500/20 transition-colors">
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                             <Activity size={120} className="text-red-600" />
@@ -80,6 +88,53 @@ export const Dashboard: React.FC = () => {
                         <p className="text-gray-500 mt-4 text-sm max-w-md font-medium">
                             {t('dashboard.heroDesc')}
                         </p>
+                    </div>
+
+                    {/* Direct Impact Sovereign Card (v7.6) */}
+                    <div className="bg-gradient-to-br from-zinc-900 to-black p-8 rounded-[24px] border border-white/5 relative overflow-hidden group hover:border-emerald-500/20 transition-all">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Target size={120} className="text-emerald-500" />
+                        </div>
+
+                        <div className="flex justify-between items-start mb-6">
+                            <div>
+                                <h2 className="text-xs font-black text-emerald-500/70 uppercase tracking-[0.2em] mb-1">{t('dashboard.directImpact')}</h2>
+                                <div className="text-3xl font-black text-white tracking-tight">Protocolo Assist Score</div>
+                            </div>
+                            <div className="bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] font-bold text-emerald-400 uppercase tracking-widest">
+                                LIVE AUDIT
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 relative z-10">
+                            <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <TrendingUp size={14} className="text-emerald-400" />
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">{t('dashboard.salesValue')}</span>
+                                </div>
+                                <div className="text-2xl font-black text-white">
+                                    {stats.assist_metrics?.sales_score || 0} <span className="text-xs text-gray-500">{t('dashboard.points')}</span>
+                                </div>
+                            </div>
+                            <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Coins size={14} className="text-emerald-400" />
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">{t('dashboard.supportValue')}</span>
+                                </div>
+                                <div className="text-2xl font-black text-white">
+                                    {stats.assist_metrics?.estimated_savings || '$0'}
+                                </div>
+                                <div className="text-[9px] text-emerald-500/70 font-bold">{t('dashboard.estimatedSavings')}</div>
+                            </div>
+                        </div>
+
+                        <Link
+                            to="/analytics/assist"
+                            className="mt-6 flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-white transition-colors group/btn"
+                        >
+                            {t('dashboard.deepDive')}
+                            <ArrowRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
+                        </Link>
                     </div>
                 </div>
             )}

@@ -58,6 +58,7 @@ class AgentContext(BaseModel):
     store_name: str
     system_prompt: str
     current_channel: Optional[str] = "unknown"
+    conversation_id: Optional[str] = None
     
     class Config:
         extra = "allow" # Robustness: Allow extra metadata from orchestrator
@@ -97,6 +98,8 @@ ctx_service_url: ContextVar[str] = ContextVar("ctx_service_url", default="")
 ctx_internal_token: ContextVar[str] = ContextVar("ctx_internal_token", default="")
 ctx_knowledge_sources: ContextVar[List[str]] = ContextVar("ctx_knowledge_sources", default=[])
 ctx_user_id: ContextVar[str] = ContextVar("ctx_user_id", default="") # Strict Isolation (v5.10)
+ctx_conversation_id: ContextVar[str] = ContextVar("ctx_conversation_id", default="")
+ctx_tenant_id: ContextVar[int] = ContextVar("ctx_tenant_id", default=0)
 
 parser = PydanticOutputParser(pydantic_object=OrchestratorResponse)
 
@@ -263,6 +266,35 @@ async def search_knowledge_base(q: str):
             return f"Excepción en herramienta RAG: {str(e)}"
 
 @tool
+async def report_assistance(type: str, score: float, reasoning: str):
+    """
+    LOG the level of assistance provided to the user. 
+    Use 'sales' if you helped make a purchase decision or provided payment/stock info.
+    Use 'support' if you resolved a technical or shipping doubt without human handoff.
+    Score: value from 0.0 to 1.0. 
+    Reasoning: brief 1-line explanation.
+    """
+    orch_url = os.getenv("ORCHESTRATOR_URL", "http://orchestrator_service:8000")
+    headers = {"X-Internal-Token": ctx_internal_token.get(), "Content-Type": "application/json"}
+    
+    payload = {
+        "tenant_id": ctx_tenant_id.get(),
+        "conversation_id": ctx_conversation_id.get(),
+        "type": type.lower(),
+        "score": score,
+        "reasoning": reasoning
+    }
+    
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            resp = await client.post(f"{orch_url}/admin/tools/report_assistance", json=payload, headers=headers)
+            if resp.status_code == 200:
+                return "Assistance metric reported successfully."
+            return f"Error reporting assistance: {resp.text}"
+        except Exception as e:
+            return f"Exception in report_assistance tool: {str(e)}"
+
+@tool
 async def derivhumano(reason: str):
     """ACTIVATE human handoff. Use when the user specifically asks for a person or is frustrated."""
     return f"HUMAN_HANDOFF_REQUESTED: {reason}"
@@ -359,6 +391,8 @@ async def execute_agent(
     ctx_internal_token.set(x_internal_secret or "")
     ctx_knowledge_sources.set(request.agent_config.knowledge_sources if request.agent_config else [])
     ctx_user_id.set(request.user_id or "")
+    ctx_conversation_id.set(request.context.conversation_id or "")
+    ctx_tenant_id.set(request.tenant_id)
     
     # 🔍 Diagnostic Logging (v7.1.2)
     logger.info(f"🔧 Tools Context | store_id={ctx_store_id.get() or 'EMPTY'} | token={'***' if ctx_token.get() else 'EMPTY'} | service_url={ctx_service_url.get()}")

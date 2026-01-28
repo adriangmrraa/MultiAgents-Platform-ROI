@@ -1115,6 +1115,19 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Migration 38 (Universal ID) failed: %', SQLERRM;
     END $$;
+    """,
+    # 39. Assist Score Sovereign Protocol (v7.6)
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE chat_conversations 
+        ADD COLUMN IF NOT EXISTS assist_sales_score FLOAT DEFAULT 0.0,
+        ADD COLUMN IF NOT EXISTS assist_support_score FLOAT DEFAULT 0.0,
+        ADD COLUMN IF NOT EXISTS assist_checkpoints INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS last_assist_analysis JSONB DEFAULT '{}';
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Migration 39 (Assist Score) failed: %', SQLERRM;
+    END $$;
     """
 ]
 
@@ -1605,6 +1618,41 @@ async def sendemail(subject: str, text: str):
 from app.core.rag import RAGCore # Nexus v5.93
 
 @tool
+async def report_assistance(type: str, score: float, reasoning: str):
+    """
+    Registra el nivel de ayuda proporcionada al usuario. 
+    Usa 'sales' si ayudaste a decidir una compra o diste datos de pago/stock.
+    Usa 'support' si resolviste una duda técnica o de envío sin pedir ayuda humana.
+    Input reasoning: breve explicación del puntaje.
+    """
+    tid = current_tenant_id.get()
+    cid = current_conversation_id.get()
+    
+    if not tid or not cid:
+        return "Error: Contexto no inicializado para reporte de asistencia."
+
+    try:
+        await db.pool.execute("""
+            UPDATE chat_conversations SET 
+                assist_sales_score = assist_sales_score + $1,
+                assist_support_score = assist_support_score + $2,
+                assist_checkpoints = assist_checkpoints + 1,
+                last_assist_analysis = $3,
+                updated_at = NOW()
+            WHERE id = $4 AND tenant_id = $5
+        """, 
+        (score if type == 'sales' else 0.0),
+        (score if type == 'support' else 0.0),
+        json.dumps({'reasoning': reasoning, 'timestamp': datetime.now().isoformat()}),
+        cid, tid)
+        
+        logger.info("assistance_reported", tenant_id=tid, conversation_id=str(cid), type=type, score=score)
+        return "Métrica de asistencia registrada con éxito."
+    except Exception as e:
+        logger.error("report_assistance_failed", error=str(e), tenant_id=tid)
+        return f"Error al registrar asistencia: {str(e)}"
+
+@tool
 async def search_knowledge_base(query: str, collection_filter: Optional[str] = None):
     """
     Search for information in the database. 
@@ -1850,7 +1898,13 @@ Gatillos:
 
 PROHIBIDO inventar cupones que no existen en la tool response.""",
     
-    "sendemail": """Usar junto a derivhumano cuando se necesita notificar al equipo por email. Esta tool complementa la derivación."""
+    "sendemail": """Usar junto a derivhumano cuando se necesita notificar al equipo por email. Esta tool complementa la derivación.""",
+    
+    "report_assistance": """PROTOCOLO DE AUTO-AUDITORÍA (CRÍTICO): 
+1. Cada 3 mensajes del usuario, DEBES evaluar tu desempeño.
+2. Si ayudaste con stock, precios o métodos de pago: usa 'sales' con score 1.0.
+3. Si resolviste una duda técnica o de envío sin pedir ayuda humana: usa 'support' con score 1.0.
+4. Esta ejecución es SILENCIOSA (no la menciones al usuario)."""
 }
 
 # --- Response Extraction Guides (Pointe Coach Textual Instructions) ---
@@ -1901,10 +1955,12 @@ Formato: "🎟️ Tengo un cupón para vos: **[CÓDIGO]** - [%] OFF en [CONDICI�
 
 (3) Para OTROS (ayuda general, quejas, pedido de humano): Usá un mensaje cálido y coherente con lo que pidió el usuario.""",
     
-    "sendemail": """Confirma que se envió la notificación al equipo. "Listo, ya notifiqué al equipo. Te van a contactar por email o WhatsApp en las próximas horas." """
+    "sendemail": """Confirma que se envió la notificación al equipo. "Listo, ya notifiqué al equipo. Te van a contactar por email o WhatsApp en las próximas horas." """,
+    
+    "report_assistance": """SILENCIO: Nunca confirmes al usuario que registraste métricas. Solo ejecuta y continúa la charla."""
 }
 
-tools = [search_specific_products, search_by_category, browse_general_storefront, search_knowledge_base, cupones_list, orders, sendemail, derivhumano]
+tools = [search_specific_products, search_by_category, browse_general_storefront, search_knowledge_base, cupones_list, orders, sendemail, derivhumano, report_assistance]
 
 # Register tools for Code Reflection (Nexus v3)
 from admin_routes import register_tools, SYSTEM_TOOL_INJECTIONS, SYSTEM_TOOL_RESPONSE_GUIDES, unified_message_delivery
@@ -2688,7 +2744,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             "user_id": str(agent_row['user_id']) if agent_row and 'user_id' in agent_row else None,
             "message": content,
             "history": remote_history,
-            "context": {"store_name": display_name, "system_prompt": sys_template, "current_channel": channel_source},
+            "context": {"store_name": display_name, "system_prompt": sys_template, "current_channel": channel_source, "conversation_id": str(conv_id)},
             "credentials": {
                 "openai_api_key": openai_key or OPENAI_API_KEY, 
                 "tiendanube_store_id": tn_store_id, 

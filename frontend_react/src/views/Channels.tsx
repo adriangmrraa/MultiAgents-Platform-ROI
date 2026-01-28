@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApi } from '../hooks/useApi';
-import { Plus, Trash2, Edit2, Link as LinkIcon, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Link as LinkIcon, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
 
 interface ChannelBinding {
     id: number;
@@ -306,6 +306,13 @@ export const Channels = () => {
                                     }
                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono"
                                 />
+                                <HelpText
+                                    text={
+                                        formData.provider === 'chatwoot' ? 'ID de la bandeja de entrada. Lo encuentras en la URL de Chatwoot después de /inboxes/.' :
+                                            formData.provider === 'ycloud' ? 'ID de tu cuenta de WhatsApp Business en YCloud.' :
+                                                'ID de la Página de Facebook o de la Cuenta de Instagram Business.'
+                                    }
+                                />
                             </div>
 
                             {formData.provider === 'chatwoot' && (
@@ -319,6 +326,7 @@ export const Channels = () => {
                                         className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-mono"
                                         required
                                     />
+                                    <HelpText text="ID de tu organización. Lo encuentras en la URL de Chatwoot justo después de /accounts/." />
                                 </div>
                             )}
 
@@ -333,18 +341,41 @@ export const Channels = () => {
                                 />
                             </div>
 
-                            <div className="flex gap-3">
+                            <div className="bg-accent/5 border border-accent/10 p-3 rounded-xl mt-4">
+                                <h4 className="text-[10px] font-bold text-accent uppercase mb-1">💡 Tips de Configuración</h4>
+                                <ul className="text-[10px] text-gray-400 space-y-1 list-disc ml-3 leading-tight">
+                                    {formData.provider === 'chatwoot' && (
+                                        <>
+                                            <li>Asegúrate de configurar el Webhook en Chatwoot apuntando a tu URL base + <code>/chat</code>.</li>
+                                            <li>El Account ID es global para todas tus tiendas en esa cuenta.</li>
+                                        </>
+                                    )}
+                                    {formData.provider === 'ycloud' && (
+                                        <>
+                                            <li>Configura el Webhook URL en YCloud a <code>.../webhooks/ycloud</code>.</li>
+                                            <li>El API Key debe estar en la "Bóveda" con categoría <code>PLATFORM_WHATSAPP</code>.</li>
+                                        </>
+                                    )}
+                                    {formData.provider === 'meta' && (
+                                        <>
+                                            <li>Usa el ID numérico de la Página o de Instagram Business.</li>
+                                            <li>Verifica que el Token de Meta tenga permisos de <code>instagram_manage_messages</code>.</li>
+                                        </>
+                                    )}
+                                </ul>
+                            </div>
+                            <div className="flex gap-3 mt-6">
                                 <button
                                     type="button"
                                     onClick={() => setShowModal(false)}
-                                    className="flex-1 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl transition-colors"
+                                    className="flex-1 bg-white/10 hover:bg-white/20 text-white px-4 py-3 rounded-xl transition-colors"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="flex-1 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-xl transition-colors disabled:opacity-50"
+                                    className="flex-1 bg-accent hover:bg-accent-hover text-white px-4 py-3 rounded-xl transition-colors disabled:opacity-50"
                                 >
                                     {loading ? 'Procesando...' : editingBinding ? 'Guardar Cambios' : 'Vincular'}
                                 </button>
@@ -356,6 +387,15 @@ export const Channels = () => {
         </div>
     );
 };
+
+const HelpText = ({ text }: { text: string }) => (
+    <div className="flex gap-2 mt-2 bg-blue-500/5 border border-blue-500/10 p-2 rounded-lg items-start">
+        <HelpCircle size={14} className="text-blue-400 mt-0.5 shrink-0" />
+        <p className="text-[10px] text-blue-300 leading-tight">
+            {text}
+        </p>
+    </div>
+);
 
 // Status Card Component
 const StatusCard = ({ provider, status, channelId }: { provider: string, status: 'configured' | 'pending', channelId?: string }) => (
