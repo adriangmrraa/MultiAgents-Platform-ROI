@@ -1,0 +1,371 @@
+{
+    "services": [
+        {
+            "type": "app",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "agent-service",
+                "source": {
+                    "type": "git",
+                    "repo": "https://github.com/adriangmrraa/MultiAgents-Platform-ROI",
+                    "ref": "master",
+                    "path": "/agent_service"
+                },
+                "build": {
+                    "type": "dockerfile"
+                },
+                "env": "TIENDANUBE_SERVICE_URL=http://tiendanube-service:8003\r\nINTERNAL_SECRET_KEY=REDACTED_INTERNAL_SECRET\r\nENCRYPTION_KEY=REDACTED_FERNET_KEY\r\nOPENAI_API_KEY=sk-REDACTED",
+                "deploy": {
+                    "replicas": 1,
+                    "command": null,
+                    "zeroDowntime": true
+                },
+                "domains": [
+                    {
+                        "host": "$(PROJECT_NAME)-agent-service.yn8wow.easypanel.host",
+                        "https": true,
+                        "port": 8001,
+                        "path": "/",
+                        "middlewares": [],
+                        "certificateResolver": "",
+                        "wildcard": false,
+                        "internalProtocol": "http"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "app",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "bff",
+                "source": {
+                    "type": "git",
+                    "repo": "https://github.com/adriangmrraa/MultiAgents-Platform-ROI",
+                    "ref": "master",
+                    "path": "/bff_service"
+                },
+                "build": {
+                    "type": "dockerfile"
+                },
+                "env": "ADMIN_TOKEN=REDACTED_ADMIN_TOKEN\r\nORCHESTRATOR_URL=http://$(PROJECT_NAME)-orchestrator:8000\r\n",
+                "deploy": {
+                    "replicas": 1,
+                    "command": null,
+                    "zeroDowntime": true
+                },
+                "domains": [
+                    {
+                        "host": "$(PROJECT_NAME)-bff.yn8wow.easypanel.host",
+                        "https": true,
+                        "port": 3000,
+                        "path": "/",
+                        "middlewares": [],
+                        "certificateResolver": "",
+                        "wildcard": false,
+                        "internalProtocol": "http"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "app",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "chatwoot",
+                "source": {
+                    "type": "image",
+                    "image": "chatwoot/chatwoot:v4.8.0"
+                },
+                "env": "FRONTEND_URL=https://$(PROJECT_NAME)-chatwoot.yn8wow.easypanel.host\nSECRET_KEY_BASE=REDACTED_SECRET\nDEFAULT_LOCALE=en\nFORCE_SSL=false\nENABLE_ACCOUNT_SIGNUP=true\nREDIS_URL=redis://default@$(PROJECT_NAME)_chatwoot-redis:6379\nREDIS_PASSWORD=REDACTED_PASSWORD\nREDIS_OPENSSL_VERIFY_MODE=none\nPOSTGRES_DATABASE=$(PROJECT_NAME)\nPOSTGRES_HOST=$(PROJECT_NAME)_chatwoot-db\nPOSTGRES_USERNAME=postgres\nPOSTGRES_PASSWORD=REDACTED_PASSWORD\nRAILS_MAX_THREADS=5\nNODE_ENV=production\nRAILS_ENV=production\nINSTALLATION_ENV=docker\nTRUSTED_PROXIES=*",
+                "deploy": {
+                    "replicas": 1,
+                    "command": "bundle exec rails db:chatwoot_prepare && bundle exec rails s -p 3000 -b 0.0.0.0",
+                    "zeroDowntime": true
+                },
+                "domains": [
+                    {
+                        "host": "$(PROJECT_NAME)-chatwoot.yn8wow.easypanel.host",
+                        "https": true,
+                        "port": 3000,
+                        "path": "/",
+                        "middlewares": [],
+                        "certificateResolver": "",
+                        "wildcard": false,
+                        "internalProtocol": "http"
+                    }
+                ],
+                "mounts": [
+                    {
+                        "type": "volume",
+                        "name": "data",
+                        "mountPath": "/data/storage"
+                    },
+                    {
+                        "type": "volume",
+                        "name": "app",
+                        "mountPath": "/app/storage"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "postgres",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "chatwoot-db",
+                "image": "pgvector/pgvector:pg17",
+                "password": "REDACTED_PASSWORD"
+            }
+        },
+        {
+            "type": "redis",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "chatwoot-redis",
+                "image": "redis:7",
+                "password": "REDACTED_PASSWORD"
+            }
+        },
+        {
+            "type": "app",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "chatwoot-sidekiq",
+                "source": {
+                    "type": "image",
+                    "image": "chatwoot/chatwoot:v4.8.0"
+                },
+                "env": "FRONTEND_URL=https://$(PROJECT_NAME)-chatwoot.yn8wow.easypanel.host\nSECRET_KEY_BASE=REDACTED_SECRET\nDEFAULT_LOCALE=en\nFORCE_SSL=false\nENABLE_ACCOUNT_SIGNUP=true\nREDIS_URL=redis://default@$(PROJECT_NAME)_chatwoot-redis:6379\nREDIS_PASSWORD=REDACTED_PASSWORD\nREDIS_OPENSSL_VERIFY_MODE=none\nPOSTGRES_DATABASE=$(PROJECT_NAME)\nPOSTGRES_HOST=$(PROJECT_NAME)_chatwoot-db\nPOSTGRES_USERNAME=postgres\nPOSTGRES_PASSWORD=REDACTED_PASSWORD\nRAILS_MAX_THREADS=5\nNODE_ENV=production\nRAILS_ENV=production\nINSTALLATION_ENV=docker\nTRUSTED_PROXIES=*",
+                "deploy": {
+                    "replicas": 1,
+                    "command": "bundle exec sidekiq -C config/sidekiq.yml",
+                    "zeroDowntime": true
+                },
+                "mounts": [
+                    {
+                        "type": "bind",
+                        "hostPath": "/etc/easypanel/projects/$(PROJECT_NAME)/chatwoot/volumes/app",
+                        "mountPath": "/app/storage"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "app",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "frontend",
+                "source": {
+                    "type": "git",
+                    "repo": "https://github.com/adriangmrraa/MultiAgents-Platform-ROI",
+                    "ref": "master",
+                    "path": "/frontend_react"
+                },
+                "build": {
+                    "type": "dockerfile"
+                },
+                "env": "API_BASEL=https://$(PROJECT_NAME)-orchestrator.yn8wow.easypanel.host\r\nADMIN_TOKEN=REDACTED_ADMIN_TOKEN\r\nVITE_ADMIN_TOKEN=REDACTED_ADMIN_TOKEN\r\nVITE_API_BASE_URL=https://$(PROJECT_NAME)-orchestrator.yn8wow.easypanel.host\r\nVITE_FACEBOOK_APP_ID=REDACTED_APP_ID\r\nVITE_FACEBOOK_API_VERSION=v20.0\r\nVITE_META_CONFIG_ID=REDACTED_CONFIG_ID\r\nVITE_META_EMBEDDED_SIGNUP=false",
+                "deploy": {
+                    "replicas": 1,
+                    "command": null,
+                    "zeroDowntime": true
+                },
+                "domains": [
+                    {
+                        "host": "$(PROJECT_NAME)-frontend.yn8wow.easypanel.host",
+                        "https": true,
+                        "port": 80,
+                        "path": "/",
+                        "middlewares": [],
+                        "certificateResolver": "",
+                        "wildcard": false,
+                        "internalProtocol": "http"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "app",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "metaservice",
+                "source": {
+                    "type": "git",
+                    "repo": "https://github.com/adriangmrraa/MultiAgents-Platform-ROI",
+                    "ref": "master",
+                    "path": "/meta_service"
+                },
+                "build": {
+                    "type": "dockerfile"
+                },
+                "env": "META_APP_ID=REDACTED_APP_ID\r\nMETA_APP_SECRET=REDACTED_META_SECRET\r\nMETA_VERIFY_TOKEN=REDACTED_TOKEN\r\nORCHESTRATOR_URL=http://orchestrator:8000\r\nINTERNAL_SECRET_KEY=REDACTED_INTERNAL_SECRET\r\nPORT=8000\r\nENVIRONMENT=production\r\nFRONTEND_URL=https://$(PROJECT_NAME)-frontend.yn8wow.easypanel.host",
+                "deploy": {
+                    "replicas": 1,
+                    "command": null,
+                    "zeroDowntime": true
+                },
+                "domains": [
+                    {
+                        "host": "$(PROJECT_NAME)-metaservice.yn8wow.easypanel.host",
+                        "https": true,
+                        "port": 8000,
+                        "path": "/",
+                        "middlewares": [],
+                        "certificateResolver": "",
+                        "wildcard": false,
+                        "internalProtocol": "http"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "app",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "orchestrator",
+                "source": {
+                    "type": "git",
+                    "repo": "https://github.com/adriangmrraa/MultiAgents-Platform-ROI",
+                    "ref": "master",
+                    "path": "/orchestrator_service"
+                },
+                "build": {
+                    "type": "dockerfile"
+                },
+                "env": "SUPABASE_URL=https://$(PROJECT_NAME)-supabase.yn8wow.easypanel.host\r\nSUPABASE_DB_URL=postgresql://postgres:REDACTED_PASSWORD@SERVER_IP:5432/postgres?sslmode=disable\r\nSUPABASE_SERVICE_KEY=REDACTED_SUPABASE_KEY\r\nREDIS_URL=redis://default:REDACTED_PASSWORD@$(PROJECT_NAME)_redis:6379\r\nFRONTEND_URL=https://$(PROJECT_NAME)-frontend.yn8wow.easypanel.host\r\nPOSTGRES_DSN=postgresql://postgres:REDACTED_PASSWORD@$(PROJECT_NAME)_postgres:5432/postgres\r\nADMIN_TOKEN=REDACTED_ADMIN_TOKEN\r\nAGENT_SERVICE_URL=http://agent-service:8001\r\nTIENDANUBE_SERVICE_URL=http://tiendanube-service:8003\r\nALLOWED_ORIGINS=https://$(PROJECT_NAME)-frontend.yn8wow.easypanel.host\r\nENCRYPTION_KEY=REDACTED_FERNET_KEY\r\nINTERNAL_SECRET_KEY=REDACTED_INTERNAL_SECRET\r\nNEXUS_V3_ENABLED=true\r\nCHATWOOT_BASE_URL=https://$(PROJECT_NAME)-chatwoot.yn8wow.easypanel.host\r\nCHATWOOT_BOT_TOKEN=REDACTED_TOKEN\r\nWHATSAPP_SERVICE_URL=http://whatsapp:8002\r\nGOOGLE_API_KEY=REDACTED_GOOGLE_KEY\r\nSMTP_HOST=smtp-relay.brevo.com\r\nSMTP_PORT=587\r\nSMTP_USER=REDACTED_USER\r\nSMTP_PASS=REDACTED_PASS\r\nSMTP_SECURITY=SSL\r\nEMAILS_FROM_EMAIL=platformaisolutions@codexyoficial.com\r\nMETA_SERVICE_URL=http://metaservice:8000",
+                "deploy": {
+                    "replicas": 1,
+                    "command": null,
+                    "zeroDowntime": true
+                },
+                "domains": [
+                    {
+                        "host": "$(PROJECT_NAME)-orchestrator.yn8wow.easypanel.host",
+                        "https": true,
+                        "port": 8000,
+                        "path": "/",
+                        "middlewares": [],
+                        "certificateResolver": "",
+                        "wildcard": false,
+                        "internalProtocol": "http"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "postgres",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "postgres",
+                "image": "postgres:17",
+                "password": "REDACTED_PASSWORD"
+            }
+        },
+        {
+            "type": "redis",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "redis",
+                "image": "redis:7",
+                "password": "REDACTED_PASSWORD"
+            }
+        },
+        {
+            "type": "compose",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "supabase",
+                "source": {
+                    "type": "git",
+                    "repo": "https://github.com/easypanel-io/compose.git",
+                    "ref": "28-08-2025",
+                    "rootPath": "/supabase/code",
+                    "composeFile": "docker-compose.yml"
+                },
+                "env": "############\n# Secrets\n# YOU MUST CHANGE THESE BEFORE GOING INTO PRODUCTION\n############\n\nPOSTGRES_PASSWORD=REDACTED_PASSWORD\nJWT_SECRET=REDACTED_SECRET\nANON_KEY=REDACTED_ANON_KEY\nSERVICE_ROLE_KEY=REDACTED_SERVICE_KEY\nDASHBOARD_USERNAME=supabase\nDASHBOARD_PASSWORD=REDACTED_PASSWORD\nSECRET_KEY_BASE=REDACTED_SECRET\nVAULT_ENC_KEY=REDACTED_ENCRYPTION_KEY\n\n\n############\n# Database - You can change these to any PostgreSQL database that has logical replication enabled.\n############\n\nPOSTGRES_HOST=db\nPOSTGRES_DB=postgres\nPOSTGRES_PORT=5432\n# default user is postgres\n\n\n############\n# Supavisor -- Database pooler\n############\n# Port Supavisor listens on for transaction pooling connections\nPOOLER_PROXY_PORT_TRANSACTION=6543\n# Maximum number of PostgreSQL connections Supavisor opens per pool\nPOOLER_DEFAULT_POOL_SIZE=20\n# Maximum number of client connections Supavisor accepts per pool\nPOOLER_MAX_CLIENT_CONN=100\n# Unique tenant identifier\nPOOLER_TENANT_ID=your-tenant-id\n# Pool size for internal metadata storage used by Supavisor\n# This is separate from client connections and used only by Supavisor itself\nPOOLER_DB_POOL_SIZE=5\n\n\n############\n# API Proxy - Configuration for the Kong Reverse proxy.\n############\n\nKONG_HTTP_PORT=8000\nKONG_HTTPS_PORT=8443\n\n\n############\n# API - Configuration for PostgREST.\n############\n\nPGRST_DB_SCHEMAS=public,storage,graphql_public\n\n\n############\n# Auth - Configuration for the GoTrue authentication server.\n############\n\n## General\nSITE_URL=https://$(PRIMARY_DOMAIN)\nADDITIONAL_REDIRECT_URLS=\nJWT_EXPIRY=3600\nDISABLE_SIGNUP=false\nAPI_EXTERNAL_URL=http://localhost:8000\n\n## Mailer Config\nMAILER_URLPATHS_CONFIRMATION=\"/auth/v1/verify\"\nMAILER_URLPATHS_INVITE=\"/auth/v1/verify\"\nMAILER_URLPATHS_RECOVERY=\"/auth/v1/verify\"\nMAILER_URLPATHS_EMAIL_CHANGE=\"/auth/v1/verify\"\n\n## Email auth\nENABLE_EMAIL_SIGNUP=true\nENABLE_EMAIL_AUTOCONFIRM=true\nSMTP_ADMIN_EMAIL=admin@example.com\nSMTP_HOST=supabase-mail\nSMTP_PORT=2500\nSMTP_USER=fake_mail_user\nSMTP_PASS=fake_mail_password\nSMTP_SENDER_NAME=fake_sender\nENABLE_ANONYMOUS_USERS=false\n\n## Phone auth\nENABLE_PHONE_SIGNUP=true\nENABLE_PHONE_AUTOCONFIRM=true\n\n\n############\n# Studio - Configuration for the Dashboard\n############\n\nSTUDIO_DEFAULT_ORGANIZATION=Default Organization\nSTUDIO_DEFAULT_PROJECT=Default Project\n\nSTUDIO_PORT=3000\n# replace if you intend to use Studio outside of localhost\nSUPABASE_PUBLIC_URL=http://localhost:8000\n\n# Enable webp support\nIMGPROXY_ENABLE_WEBP_DETECTION=true\n\n# Add your OpenAI API key to enable SQL Editor Assistant\nOPENAI_API_KEY=\n\n\n############\n# Functions - Configuration for Functions\n############\n# NOTE: VERIFY_JWT applies to all functions. Per-function VERIFY_JWT is not supported yet.\nFUNCTIONS_VERIFY_JWT=false\n\n\n############\n# Logs - Configuration for Analytics\n# Please refer to https://supabase.com/docs/reference/self-hosting-analytics/introduction\n############\n\n# Change vector.toml sinks to reflect this change\n# these cannot be the same value\nLOGFLARE_PUBLIC_ACCESS_TOKEN=your-super-secret-and-long-logflare-key-public\nLOGFLARE_PRIVATE_ACCESS_TOKEN=your-super-secret-and-long-logflare-key-private\n\n# Docker socket location - this value will differ depending on your OS\nDOCKER_SOCKET_LOCATION=/var/run/docker.sock\n\n# Google Cloud Project details\nGOOGLE_PROJECT_ID=GOOGLE_PROJECT_ID\nGOOGLE_PROJECT_NUMBER=GOOGLE_PROJECT_NUMBER\n",
+                "domains": [
+                    {
+                        "host": "$(PROJECT_NAME)-supabase.yn8wow.easypanel.host",
+                        "https": true,
+                        "port": 8000,
+                        "service": "kong",
+                        "path": "/",
+                        "middlewares": [],
+                        "certificateResolver": "",
+                        "wildcard": false,
+                        "internalProtocol": "http"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "app",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "tiendanube-service",
+                "source": {
+                    "type": "git",
+                    "repo": "https://github.com/adriangmrraa/MultiAgents-Platform-ROI",
+                    "ref": "master",
+                    "path": "/tiendanube_service"
+                },
+                "build": {
+                    "type": "dockerfile"
+                },
+                "env": "ENCRYPTION_KEY=REDACTED_FERNET_KEY\r\nINTERNAL_SECRET_KEY=REDACTED_INTERNAL_SECRET\r\nTN_CLIENT_ID=REDACTED_CLIENT_ID\r\nTN_CLIENT_SECRET=REDACTED_CLIENT_SECRET\r\nTIENDANUBE_USER_AGENT=REDACTED_USER_AGENT\r\nTN_REDIRECT_URI=https://$(PROJECT_NAME)-tiendanube-service.yn8wow.easypanel.host/auth/callback",
+                "deploy": {
+                    "replicas": 1,
+                    "command": null,
+                    "zeroDowntime": true
+                },
+                "domains": [
+                    {
+                        "host": "$(PROJECT_NAME)-tiendanube-service.yn8wow.easypanel.host",
+                        "https": true,
+                        "port": 8003,
+                        "path": "/",
+                        "middlewares": [],
+                        "certificateResolver": "",
+                        "wildcard": false,
+                        "internalProtocol": "http"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "app",
+            "data": {
+                "projectName": "$(PROJECT_NAME)",
+                "serviceName": "whatsapp",
+                "source": {
+                    "type": "git",
+                    "repo": "https://github.com/adriangmrraa/MultiAgents-Platform-ROI",
+                    "ref": "master",
+                    "path": "/whatsapp_service"
+                },
+                "build": {
+                    "type": "dockerfile"
+                },
+                "env": "ORCHESTRATOR_SERVICE_URL=https://$(PROJECT_NAME)-orchestrator.yn8wow.easypanel.host\r\nENCRYPTION_KEY=REDACTED_FERNET_KEY\r\nREDIS_URL=redis://default:REDACTED_PASSWORD@$(PROJECT_NAME)_redis:6379\r\nMETA_SERVICE_URL=https://$(PROJECT_NAME)-metaservice.yn8wow.easypanel.host\r\nINTERNAL_SECRET_KEY=REDACTED_INTERNAL_SECRET\r\nADMIN_TOKEN=REDACTED_ADMIN_TOKEN",
+                "deploy": {
+                    "replicas": 1,
+                    "command": null,
+                    "zeroDowntime": true
+                },
+                "domains": [
+                    {
+                        "host": "$(PROJECT_NAME)-whatsapp.yn8wow.easypanel.host",
+                        "https": true,
+                        "port": 8002,
+                        "path": "/",
+                        "middlewares": [],
+                        "certificateResolver": "",
+                        "wildcard": false,
+                        "internalProtocol": "http"
+                    }
+                ]
+            }
+        }
+    ]
+}
