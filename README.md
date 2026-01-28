@@ -5,6 +5,84 @@
 
 ---
 
+## 🛠️ Stack Tecnológico & Arquitectura
+
+Nexus v7.6 utiliza una **Arquitectura de Microservicios Soberana**, diseñada para escalar horizontalmente manteniendo la privacidad estricta de cada inquilino.
+
+### 🎨 Frontend (Interfaz Soberana)
+-   **Framework**: [React 18](https://react.dev/) + [Vite](https://vitejs.dev/) (Build ultra-rápido).
+-   **Estilos**: [Tailwind CSS](https://tailwindcss.com/) + [Lucide React](https://lucide.dev/) (Iconografía).
+-   **Estado**: React Router DOM + Fetch API (Sin Redux, estado atómico).
+-   **Despliegue**: Docker Nginx (SPA Mode).
+
+### ⚙️ Backend (El Núcleo)
+-   **Orquestador**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.10+) - Cerebro central asíncrono.
+-   **Microservicios**:
+    -   `agent_service`: Fábrica de Agentes Polimórficos (LangChain).
+    -   `whatsapp_service`: Gateway de Entrega Universal (Meta/YCloud/Chatwoot).
+    -   `meta_service`: Diplomático OAuth para Facebook/Instagram.
+    -   `tiendanube_service`: Broker de sincronización E-commerce.
+    -   `bff_service`: Backend-for-Frontend (Node.js/Express) para optimización.
+
+### 🗄️ Infraestructura y Persistencia
+-   **Base de Datos**: [PostgreSQL 13](https://www.postgresql.org/) (Relacional).
+-   **Memoria Vectorial**: Extension `pgvector` para RAG (Búsqueda Semántica).
+-   **Cache & Eventos**: [Redis 7](https://redis.io/) (Buffers Atómicos y PubSub en tiempo real).
+-   **Contenedores**: Docker & Docker Compose (Estándar de industria).
+
+### 🤖 Capa de Inteligencia Artificial
+-   **Orquestación LLM**: [LangChain](https://www.langchain.com/) + Factory propia.
+-   **Modelos Soportados**: GPT-4o, GPT-3.5-Turbo, Gemini 1.5 Pro.
+-   **RAG Engine**: "Shadow RAG" (Aprendizaje Pasivo) + Colecciones por Tenant.
+
+---
+
+## 🚀 Guía de Despliegue (Quick Start)
+
+Nexus está diseñado bajo la filosofía "Clone & Run". No necesitas instalar Python o Node.js localmente si usas Docker.
+
+### Pre-requisitos
+-   [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/Mac) o Docker Engine (Linux).
+-   [Git](https://git-scm.com/).
+
+### Despliegue Estándar (Recomendado)
+
+1.  **Clonar el Repositorio**:
+    ```bash
+    git clone https://github.com/adriangmrraa/MultiAgents-Platform-ROI.git
+    cd MultiAgents-Platform-ROI
+    ```
+
+2.  **Configuración de Entorno**:
+    Nexus usa una "Bóveda Soberana", así que solo necesitas las credenciales maestras de arranque.
+    ```bash
+    cp .env.example .env
+    # Edita .env con tus Keys Maestras (OPENAI_API_KEY, etc.) si es necesario
+    ```
+
+3.  **Encender Motores**:
+    ```bash
+    docker-compose up -d --build
+    ```
+    *Esto levantará Postgres, Redis, el Frontend y los 5 microservicios automáticamente.*
+
+4.  **Acceder a la Plataforma**:
+    -   **Frontend**: `http://localhost:80` (o simplemente `http://localhost`)
+    -   **Documentación API**: `http://localhost:8000/docs`
+
+### 🔧 Modo Desarrollo (Híbrido)
+
+Si deseas editar el Frontend sin reconstruir contenedores:
+
+```bash
+cd frontend_react
+npm install
+npm run dev
+# Acceso en http://localhost:5173
+```
+
+---
+
 ## 🌟 Vision & Value Proposition
 
 Nexus is more than just a chatbot; it's a **Digital Workforce** designed for high-impact E-Commerce operations. Built on the pillars of **Sovereignty, Scalability, and Value**, Nexus v7.6 "Platinum" introduces the industry's first self-auditing AI engine.
