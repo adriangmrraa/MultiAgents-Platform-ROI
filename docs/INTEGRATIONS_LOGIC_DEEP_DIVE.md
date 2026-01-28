@@ -348,5 +348,32 @@ SMTP_PASS=app_password_here
 
 ---
 
+
+---
+
+# 🧠 Protocolo Sovereign Assist Score (v7.6)
+
+Nexus v7.6 introduce un mecanismo de **Auto-Auditoría Soberana** para cuantificar el valor real que la IA aporta a cada tienda.
+
+## 🏗️ Lógica de Auto-Auditoría
+A diferencia de sistemas de analytics pasivos, Nexus utiliza un modelo de auditoría activa inyectado en el ciclo de pensamiento del agente.
+
+1.  **Frecuencia (Tick de 3 Turnos)**: El agente tiene instrucciones tácticas para evaluar su propio desempeño cada 3 mensajes recibidos del usuario.
+2.  **Clasificación de Impacto**:
+    *   **Sales Score**: Ayuda directa en la conversión (stock, precios, variantes, links de pago).
+    - **Support Score**: Resolución de dudas técnicas, envíos o políticas sin intervención humana.
+3.  **Herramienta `report_assistance`**: El agente llama a esta tool de forma silenciosa. El Orquestador persiste el score y el **razonamiento (reasoning)** en la tabla `chat_conversations`.
+
+## 📈 Cálculo de ROI Estratégico
+El sistema traduce estos puntos en métricas de negocio tangibles:
+
+*   **Ahorro Operativo**: `Puntos de Soporte * $1000 ARS`. Representa el costo de oportunidad del tiempo de un agente humano.
+*   **Tracción Comercial**: Puntos de Ventas acumulados que indican la efectividad de la IA como cerradora.
+
+> [!TIP]
+> Puedes ver el log de razonamiento de cada punto en la vista **ROI Deep Dive**, permitiendo auditar por qué la IA se asignó un puntaje determinado.
+
+---
+
 **© 2026 Platform AI Solutions - Sovereign Integration Division**
 

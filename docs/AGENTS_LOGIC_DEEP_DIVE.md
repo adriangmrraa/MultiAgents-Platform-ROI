@@ -137,6 +137,27 @@ La simulación de chat ha sido re-diseñada para mayor robustez bajo el Protocol
     *   Verificar que `enabled` sea `true` en DB.
     *   Verificar que el `tenant_id` del mensaje entrante coincida con el del agente.
     *   Verificar que las `credentials` (OpenAI Key) del tenant sean válidas.
-*   **Tool Call Error**:
-    *   Si el log muestra `Tool not found`, es porque el nombre en `enabled_tools` no coincide con el registro del backend.
+
+---
+
+## 🧠 Evolución v7.6: Protocolo Assist Score
+
+Nexus v7.6 evoluciona de ser un motor de respuesta a un sistema de **Generación de Valor Probable**.
+
+### 1. Auto-Auditoría Neuronal
+El sistema inyecta una regla de sistema (Core Rule) que obliga al agente a auditar su propio desempeño:
+- **Tick de Evaluación**: Cada 3 mensajes recibidos del usuario, el agente debe detenerse internamente y calificar su ayuda.
+- **Reasoning**: Debe justificar por qué se asigna puntos de `sales` (ayuda a conversión) o `support` (resolución de dudas).
+
+### 2. Handshake Silencioso (`report_assistance`)
+La comunicación de métricas no es visible para el usuario.
+- **Tool Logic**: El agente llama a `report_assistance` de forma transparente.
+- **Persistencia**: El Orquestador traduce el score en métricas ROI que alimentan el Dashboard CEO.
+
+### 3. Aislamiento de Valor
+Al igual que las credenciales, los scores están estrictamente ligados al `tenant_id`, asegurando que el ROI de una tienda no se mezcle con otra en los reportes globales.
+
+---
+
+**© 2026 Platform AI Solutions - Intelligence Division**
 

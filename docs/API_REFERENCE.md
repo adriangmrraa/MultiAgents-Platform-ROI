@@ -1,4 +1,4 @@
-# API Reference: System & Management (Nexus v6.0)
+# API Reference: System & Management (Nexus v7.6)
 
 ## Infraestructura y Control
 
@@ -245,6 +245,55 @@ Receiver central para eventos de Chatwoot (Instagram, Facebook, WebChat).
     - **Identity Fix**: Resuelve al cliente real ignorando ecos de agentes.
     - **Atomic Buffer**: Debouncing de mensajes en Redis (16s).
     - **AI Trigger**: Despierta al Orquestador automáticamente.
+
+---
+
+
+## Métricas de Valor y ROI (v7.6)
+
+El sistema ahora audita y cuantifica el impacto directo de la IA en el negocio a través del Protocolo Assist Score.
+
+### 📈 Estadísticas Maestras (Dashboard)
+`GET /admin/stats`
+*   **Añadido en v7.6**: Objeto `assist_metrics`.
+*   **Estructura**:
+    ```json
+    {
+      "assist_metrics": {
+        "sales_score": 15.5,
+        "support_score": 42.0,
+        "checkpoints": 128,
+        "estimated_savings": "$42,000"
+      }
+    }
+    ```
+*   **Lógica de Valor**:
+    - `sales_score`: Puntos acumulados por asistencia en el funnel de compra.
+    - `support_score`: Puntos por resolución autónoma de dudas técnicas/logísticas.
+    - `estimated_savings`: Cálculo monetario basado en el ahorro de tiempo humano ($1000 ARS por punto de soporte).
+
+### 🕵️‍♂️ Log de Auditoría ROI
+`GET /admin/analytics/assist-audits`
+*   **Propósito**: Recupera el desglose de las últimas evaluaciones realizadas por los agentes.
+*   **Auth**: Requiere autenticación de usuario.
+*   **Respuesta**: Array de objetos con el razonamiento de la IA.
+    ```json
+    [
+      {
+        "conversation_id": "uuid",
+        "type": "sales",
+        "score": 1.0,
+        "reasoning": "El cliente confirmó el método de pago tras mi explicación de las cuotas.",
+        "timestamp": "2026-01-28T15:00:00Z"
+      }
+    ]
+    ```
+
+### 🧠 Herramienta de Reporte (Internal)
+`POST /admin/tools/report_assistance`
+*   **Uso**: Endpoint seguro utilizado por el `agent_service` para registrar métricas tras la auto-auditoría.
+*   **Auth**: Requiere `X-Internal-Token`.
+*   **Payload**: `{"conversation_id": "...", "tenant_id": 1, "type": "sales|support", "score": 1.0, "reasoning": "..."}`
 
 ---
 

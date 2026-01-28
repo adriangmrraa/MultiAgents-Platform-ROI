@@ -20,3 +20,9 @@ auto-invoke: true
 
 3. **Manejo de Alucinaciones RAG:**
    - Instrucción obligatoria: "Si la información no está en el contexto recuperado, di 'No tengo esa información en este momento' y ofrece derivar a un humano."
+
+4. **Protocolo Assist Score (v7.6):**
+   - **Auto-Auditoría:** Instruye al agente para evaluar su desempeño cada 3 mensajes del usuario.
+   - **Herramienta:** Uso obligatorio de `report_assistance(type, score, reasoning)`.
+   - **Silencio:** La auditoría debe ser invisible para el usuario final.
+   - *Criterio:* 'sales' para hitos de compra (precio, stock), 'support' para resolución de dudas sin humano.

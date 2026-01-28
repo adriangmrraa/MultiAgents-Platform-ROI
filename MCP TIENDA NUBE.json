@@ -54,8 +54,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.3,
       "position": [
-        64,
-        240
+        80,
+        256
       ],
       "id": "85cabfe3-6ed3-4af0-a260-4c10542988f6",
       "name": "productsq"
@@ -233,33 +233,6 @@
       ],
       "id": "a9187ae3-a60f-4265-a011-01519ae4884a",
       "name": "orders"
-    },
-    {
-      "parameters": {
-        "fromEmail": "notifications@platform-ai.solutions",
-        "toEmail": "platformaisolutions@gmail.com",
-        "subject": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Subject', ``, 'string') }}",
-        "emailFormat": "text",
-        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Text', ``, 'string') }}",
-        "options": {
-          "appendAttribution": false
-        }
-      },
-      "type": "n8n-nodes-base.emailSendTool",
-      "typeVersion": 2.1,
-      "position": [
-        512,
-        80
-      ],
-      "id": "010135e3-6609-4162-9ae3-ee85f5b6fefe",
-      "name": "sendemail",
-      "webhookId": "4a3c3362-3361-4880-9c5a-8639ec9473e7",
-      "credentials": {
-        "smtp": {
-          "id": "wxYOnroJrmsqchuB",
-          "name": "SMTP account"
-        }
-      }
     }
   ],
   "pinData": {},
@@ -309,17 +282,6 @@
       ]
     },
     "orders": {
-      "ai_tool": [
-        [
-          {
-            "node": "MCP Server Trigger",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "sendemail": {
       "ai_tool": [
         [
           {

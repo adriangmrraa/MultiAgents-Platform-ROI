@@ -202,6 +202,13 @@ def search_products(query: str, tenant_id: int) -> dict:
         params={"q": query}
     )
     return response.json()
+
+@tool
+async def report_assistance(type: str, score: float, reasoning: str):
+    """Registra métricas de ayuda (sales/support) en la DB."""
+    # Implementado en admin_routes.py (/tools/report_assistance)
+    # y reflejado en el Dashboard v7.6
+    pass
 ```
 
 ### Registro en Base de Datos

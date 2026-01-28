@@ -299,5 +299,20 @@ El sistema ha sido blindado mediante dos mecanismos de latencia controlada:
 
 ---
 
+
+---
+
+## 16. ROI Deep Dive & Analytics (v7.6)
+
+### Error: `401 Unauthorized` al ver Análisis ROI
+*   **Síntoma**: Al hacer clic en "Ver Análisis ROI", el sistema te redirige inmediatamente a la página de Login, aunque tu sesión sea válida.
+*   **Causa**: El endpoint `/analytics/assist-audits` exigía erróneamente el header `X-Internal-Token` (destinado a microservicios) en lugar de permitir la autenticación de usuario estándar del frontend.
+*   **Diagnóstico**: Revisa la consola del navegador. Si ves un error `Failed to load resource: the server responded with a status of 401` apuntando a `assist-audits`, es este issue.
+*   **Solución**: 
+    1. En `admin_routes.py`, asegúrate de que el endpoint no tenga la dependencia `dependencies=[Depends(verify_internal_token)]`.
+    2. Debe usar únicamente `current_user: User = Depends(get_current_user)` para permitir el acceso desde el frontend autenticado.
+
+---
+
 **© 2026 Platform AI Solutions - Sovereign Troubleshooting Division**
 
