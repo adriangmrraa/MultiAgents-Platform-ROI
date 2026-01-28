@@ -412,20 +412,27 @@ export const DynamicAgentWizard = () => {
             try {
                 const data = await fetchApi(`/admin/agents/${idToLoad}/config`);
                 if (data) {
-                    const cfg = data.config || {};
+                    // 1. Defensive Parsing (Nexus v7.4)
+                    let cfg = data.config || {};
+                    if (typeof cfg === 'string') {
+                        try { cfg = JSON.parse(cfg); } catch { cfg = {}; }
+                    }
+                    if (typeof cfg === 'string') { // Double parse for safety
+                        try { cfg = JSON.parse(cfg); } catch { }
+                    }
+
                     const getDef = (k: string) => AGENT_CONFIG_SCHEMA.find(f => f.key === k)?.defaultValue || '';
 
-                    // 1. Hydrate Form State
+                    // 2. Hydrate Form State
                     setFormData(prev => ({
                         ...prev,
                         ...data,
                         ...cfg,
                         temperature: data.temperature?.toString() || '0.7',
-                        // Name logic: Remove [DRAFT] prefix if present, fallback to store_name or server name
-                        store_name: cfg.store_name || (data.name ? data.name.replace("[DRAFT] ", "") : getDef('store_name')),
-                        // Tone: fallback to template or default
+                        // Name logic: Remove [DRAFT] prefix if present, prioritize config.store_name
+                        store_name: cfg.store_name || (data.name ? data.name.replace(/\[DRAFT\]\s*/, "") : getDef('store_name')),
+                        // Tone: prioritize config, then system_prompt (backwards compat), then default
                         agent_tone: cfg.agent_tone || data.system_prompt_template || getDef('agent_tone'),
-                        // Other core fields
                         business_rules: cfg.business_rules || getDef('business_rules'),
                         synonym_dictionary: cfg.synonym_dictionary || getDef('synonym_dictionary'),
                         business_description: cfg.business_description || cfg.store_description || getDef('business_description'),

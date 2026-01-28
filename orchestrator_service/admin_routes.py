@@ -4840,14 +4840,23 @@ async def get_agent_config(agent_id: int):
     data = dict(agent)
     
     # Robust Parsing: Handle JSON strings if DB returns text (e.g. SQLite/Legacy PG)
+    # Nexus v7.4: Enhanced double-parsing for extreme resilience
     for key in ['config', 'knowledge_sources', 'enabled_tools', 'channels']:
-        if isinstance(data.get(key), str):
-            try: data[key] = json.loads(data[key])
+        val = data.get(key)
+        if isinstance(val, str):
+            try:
+                parsed = json.loads(val)
+                # Double parse check (if it was stored as a JSON-stringified string)
+                if isinstance(parsed, str):
+                    try: parsed = json.loads(parsed)
+                    except: pass
+                data[key] = parsed
             except: 
                 if key == 'config': data[key] = {}
                 else: data[key] = []
-        elif not data.get(key):
+        elif not val:
             if key == 'config': data[key] = {}
+            else: data[key] = []
             else: data[key] = []
             
     # Ensure template_type exists (from DB column or config)
