@@ -4857,7 +4857,6 @@ async def get_agent_config(agent_id: int):
         elif not val:
             if key == 'config': data[key] = {}
             else: data[key] = []
-            else: data[key] = []
             
     # Ensure template_type exists (from DB column or config)
     if not data.get('template_type'):
