@@ -7,7 +7,7 @@ Este documento explica la lógica detrás de la vista `Agents.tsx`, donde se con
 ## 🏗️ Concepto: La Fábrica de Agentes
 
 Nexus no tiene un solo "Bot". Tiene una **Fuerza Laboral Digital**. Esta vista permite al administrador crear, editar y eliminar "empleados digitales" (Agentes) y asignarlos a tiendas específicas.
-
+  
 ### Componentes Clave
 1.  **CRUD API**: Gestión completa (`POST`, `PUT`, `DELETE`) contra la tabla `agents`.
 2.  **Tool Selector**: Carga dinámica de herramientas disponibles.
