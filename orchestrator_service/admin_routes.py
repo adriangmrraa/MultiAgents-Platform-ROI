@@ -4199,8 +4199,8 @@ async def report_assistance_endpoint(req: ReportAssistanceRequest):
         logger.error(f"report_assistance_endpoint_failed: {str(e)}")
         return {"ok": False, "error": str(e)}
 
-@router.get("/analytics/assist-audits", dependencies=[Depends(verify_internal_token)])
-async def get_assist_audits(current_user: Optional[User] = Depends(get_current_user)):
+@router.get("/analytics/assist-audits")
+async def get_assist_audits(current_user: User = Depends(get_current_user)):
     """
     Returns the latest assistance audits for the tenant.
     """
