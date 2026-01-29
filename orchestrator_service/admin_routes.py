@@ -4622,7 +4622,7 @@ class AgentModel(BaseModel):
     model_provider: str
     model_version: str
     temperature: float
-    system_prompt_template: Optional[str] = ""
+    system_prompt_template: Optional[str] = None  # Nexus v7.6: None to explicitly indicate not provided
     enabled_tools: List[str] = []
     knowledge_sources: List[str] = []
     channels: List[str] = []
@@ -4853,7 +4853,11 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
              
         # 5. Execute Update
         validated_model = validate_model(agent.model_version)
-        final_prompt = _inject_knowledge_config(agent.system_prompt_template, agent.config)
+        
+        # Nexus v7.6 Fix: Preserve existing prompt if not provided (DynamicAgentWizard doesn't send it)
+        # The wizard architecture generates prompts dynamically via _inject_knowledge_config
+        prompt_to_use = agent.system_prompt_template if agent.system_prompt_template is not None else existing['system_prompt_template']
+        final_prompt = _inject_knowledge_config(prompt_to_use, agent.config)
 
         # 6. Sanitize context/config (Fix Unicode Surrogates v7.3)
         clean_config = sanitize_surrogates(agent.config or {})
