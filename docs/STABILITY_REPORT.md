@@ -17,8 +17,7 @@ La plataforma ha alcanzado su pico de madurez con la implementación del **Proto
 ### 1. Integridad de la Bóveda (Vault)
 *   **[OK] AES-256 Encryption**: Todas las credenciales encriptadas en reposo.
 *   **[OK] Context Isolation**: Inyección de llaves vía `ContextVars` previene fugas.
-*   **[OK] Dual-Path Upsert**: Gestión de colisiones en nombres de credenciales resuelta.
-
+*   **[OK] Dual-Path Upsert**: Gestión de colisiones en nombres de credenciales resuelta 
 ### 2. Capa de Valor (Assist Score)
 *   **[OK] Neuro-Auditing**: El agente se auto-evalúa cada 3 turnos sin latencia perceptible.
 *   **[OK] ROI Precision**: Los cálculos monetarios de ahorro operativo son consistentes en el Dashboard.
