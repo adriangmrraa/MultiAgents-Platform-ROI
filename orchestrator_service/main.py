@@ -2655,8 +2655,16 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
             """, c_id)
             
             if last_msg and last_msg['content'] == combined_text:
-                # Same content? Check time delta. If < 5 seconds, it's likely a double-process or loop artifact.
-                delta = (datetime.utcnow() - last_msg['created_at']).total_seconds()
+                # Same content? check time delta.
+                # FIX: Ensure last_msg['created_at'] is offset-aware or both are naive.
+                last_time = last_msg['created_at']
+                if last_time.tzinfo is None:
+                    last_time = last_time.replace(tzinfo=timezone.utc)
+                
+                # Compare with current UTC time
+                current_time = datetime.now(timezone.utc)
+                delta = (current_time - last_time).total_seconds()
+                
                 if delta < 5:
                     logger.warning(f"♻️ BUFFER: Duplicate detected (Loop Guard) | content='{combined_text[:20]}...' | delta={delta}s | IGNORING")
                     continue

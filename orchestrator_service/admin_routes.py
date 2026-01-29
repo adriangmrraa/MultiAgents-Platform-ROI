@@ -5533,62 +5533,36 @@ async def receive_chatwoot_webhook(
     """, msg_id, tenant_id, conversation_id, role, data, identifier, json.dumps(parsed_attachments))
     
     # 5. Integrate with AI Orchestrator (Lifecycle v6.2)
-    # Detect Echo (Manual reply from human)
-    is_echo = False
-    if msg_type == 'outgoing':
-        is_echo = True
+    is_echo = (msg_type == 'outgoing')
     
-    # Trigger Background Task for AI / Echo Processing
-    # We simulate a partial Inbound Event for the Orchestrator
-    orchestrator_payload = {
-        "provider": "chatwoot",
-        "event_id": msg_id,
-        "from_number": identifier,
-        "content": data,
-        "customer_name": contact_map.get("name"),
-        "event_type": "chatwoot.message_created",
-        "channel_source": nexus_channel,
-        "external_chatwoot_id": chatwoot_conv_id,
-        "external_account_id": chatwoot_account_id,
-        "tenant_id": tenant_id,
-        "message_type": msg_type, # 'incoming' or 'outgoing'
-        "attachments": parsed_attachments
-    }
-    
-    # Internal trigger to main.py:/chat logic
-    # Since we are in the same process but different file/router, we could call a helper
-    # or just let the Frontend/Chatwoot hit this, and we background the AI task.
-    
-    try:
-        from main import process_buffer_task # Import dynamically to avoid circularity
-        logger.info("✅ process_buffer_task imported successfully")
-    except ImportError as e:
-        logger.error(f"❌ CRITICAL: Cannot import process_buffer_task: {e}")
-        return {"status": "error", "reason": "import_failed", "detail": str(e)}
-    
-    # Atomic Buffer Consumption (v6.2)
-    buffer_key = f"buffer:{identifier}"
-    timer_key = f"timer:{identifier}"
-    lock_key = f"active_task:{identifier}"
-    
-    # 1. Buffering
-    await redis_client.rpush(buffer_key, data)
-    await redis_client.setex(timer_key, 16, "1") # 16s debounce
-    
-    logger.info(f"📨 WEBHOOK: Received {nexus_channel} message | identifier={identifier} | tenant={tenant_id} | conv={conversation_id} | content={data[:50]}...")
-    logger.info(f"📦 BUFFER: Added to Redis | key={buffer_key} | timer=16s")
-    
-    # 2. Trigger Task if not running
-    if not await redis_client.get(lock_key):
-        await redis_client.setex(lock_key, 60, "1") # 60s lock for the task
-        logger.info(f"🚀 TASK: Starting process_buffer_task | identifier={identifier} | lock_acquired=True")
-        background_tasks.add_task(
-            process_buffer_task, 
-            identifier, tenant_id, conversation_id, str(uuid.uuid4()), 
-            customer_map.get("name"), nexus_channel
-        )
+    # CRITICAL FIX: Do not buffer outgoing messages (Echoes)
+    # This prevents the Agent from replying to itself (Infinite Loop Fix)
+    if is_echo:
+        logger.info(f"🚫 ECHO: Skipping AI processing for outgoing message | msg_id={msg_id}")
     else:
-        logger.info(f"⏸️ TASK: Skipped (already running) | identifier={identifier}")
+        # Atomic Buffer Consumption (v6.2)
+        buffer_key = f"buffer:{identifier}"
+        timer_key = f"timer:{identifier}"
+        lock_key = f"active_task:{identifier}"
+        
+        # 1. Buffering
+        await redis_client.rpush(buffer_key, data)
+        await redis_client.setex(timer_key, 16, "1") # 16s debounce
+        
+        logger.info(f"📨 WEBHOOK: Received incoming message | identifier={identifier} | tenant={tenant_id} | conv={conversation_id} | content={data[:50]}...")
+        logger.info(f"📦 BUFFER: Added to Redis | key={buffer_key} | timer=16s")
+        
+        # 2. Trigger Task if not running
+        if not await redis_client.get(lock_key):
+            await redis_client.setex(lock_key, 60, "1") # 60s lock for the task
+            logger.info(f"🚀 TASK: Starting process_buffer_task | identifier={identifier} | lock_acquired=True")
+            background_tasks.add_task(
+                process_buffer_task, 
+                identifier, tenant_id, conversation_id, str(uuid.uuid4()), 
+                customer_map.get("name"), nexus_channel
+            )
+        else:
+            logger.info(f"⏸️ TASK: Skipped (already running) | identifier={identifier}")
 
     # 6. Publish to Redis (The "Visualization" part)
     redis_payload = {
