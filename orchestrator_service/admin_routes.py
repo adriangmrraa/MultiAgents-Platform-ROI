@@ -4599,7 +4599,8 @@ async def delete_knowledge_file(doc_id: str, current_user: User = Depends(get_cu
         logger.warning(f"⚠️ PHYSICAL KEEP: Could not delete file from disk: {e}")
 
     # 4. BORRADO LOCAL (Metadata)
-    await db.pool.execute("DELETE FROM rag_documents WHERE id=$1", doc_id)
+    # Nexus v7.6.1 Security Audit Fix: Defense-in-depth tenant verification
+    await db.pool.execute("DELETE FROM rag_documents WHERE id=$1 AND tenant_id=$2", doc_id, doc['tenant_id'])
     logger.info(f"🗑️ LOCAL CLEANUP: Metadata record {doc_uuid} deleted from App DB.")
     
     # Nexus v5.89: Redis Broadcast (Fixing UUID Serialization)

@@ -35,6 +35,32 @@ async def onboarding_interview(
             if reset:
                  user_message = "Hola, quiero crear mi agente."
 
+        # Nexus v7.6.1 Security Audit: Onboarding Usage Limits (P3 Remediation)
+        # Enforce 5 free interviews per tenant, then require API key configuration
+        from db import redis_client
+        
+        onboarding_key = f"onboarding:interviews:{tenant_id}"
+        interview_count = await redis_client.incr(onboarding_key)
+        
+        # Set 30-day TTL on first use
+        if interview_count == 1:
+            await redis_client.expire(onboarding_key, 30 * 24 * 60 * 60)  # 30 days in seconds
+        
+        # Check limit (5 interviews max before requiring own API key)
+        if interview_count > 5:
+            remaining_ttl = await redis_client.ttl(onboarding_key)
+            days_remaining = max(0, remaining_ttl // (24 * 60 * 60))
+            
+            logger.warning("onboarding_limit_exceeded", extra={"tenant_id": tenant_id, "count": interview_count})
+            
+            return {
+                "error": "Onboarding Limit Reached",
+                "detail": f"Has utilizado tus 5 entrevistas gratuitas. Para continuar creando agentes, configura tu propia API Key de OpenAI en el Credential Vault. El límite se reiniciará en {days_remaining} días.",
+                "action_required": "configure_api_key",
+                "limit_reset_days": days_remaining,
+                "ai_message": "🔒 **Límite Alcanzado**: Has completado tus 5 entrevistas de prueba. Para continuar, ve a **Configuración → Credenciales** y agrega tu OpenAI API Key."
+            }
+
         # 2. Append User Message
         ONBOARDING_SESSIONS[session_id].append({"role": "user", "content": user_message})
 
