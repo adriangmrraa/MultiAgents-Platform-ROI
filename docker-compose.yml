@@ -75,6 +75,7 @@ services:
     environment:
       - PORT=8003
       - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-admin-secret-99}
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8003/health" ]
       interval: 30s

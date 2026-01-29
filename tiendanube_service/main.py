@@ -151,6 +151,11 @@ def get_tn_headers(access_token: str) -> Dict[str, str]:
     """Centralized Tienda Nube Header logic (Spec: Authentication: bearer $TOKEN)"""
     if not access_token:
         return {"User-Agent": TIENDANUBE_USER_AGENT}
+    
+    # Nexus v7.6.2: Diagnostic Masking
+    token_len = len(access_token)
+    masked = f"{access_token[:4]}...{access_token[-4:]}" if token_len > 8 else "***"
+    logger.info("tn_token_diagnostic", length=token_len, masked=masked)
         
     return {
         "Authentication": f"bearer {access_token.strip()}",

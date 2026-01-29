@@ -17,5 +17,6 @@ def decrypt_password(encrypted: str) -> str:
     try:
         decoded = base64.b64decode(encrypted).decode()
         return ''.join(chr(ord(c) ^ ord(k)) for c, k in zip(decoded, cycle(ENCRYPTION_KEY)))
-    except:
-        return ""
+    except Exception as e:
+        # Nexus v7.6.2: Return original if not valid Base64/XOR (handles plain-text legacy tokens)
+        return encrypted

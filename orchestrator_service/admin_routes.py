@@ -1038,6 +1038,7 @@ async def internal_credential_sync(
             # Identify category and name based on provider
             category = "meta_whatsapp" if data.provider == "meta" else "tiendanube"
             name = "meta_user_token" if data.provider == "meta" else creds.get("name", "tiendanube_access_token")
+            logger.info("internal_sync_processing", provider=data.provider, name=name, raw_len=len(user_access_token), enc_len=len(enc_token))
             
             # Lookup credential_type_id if internal_key is known
             internal_key_map = {
