@@ -189,7 +189,10 @@ async def browse_general_storefront():
             logger.info("tool_call_response", tool="browse_general_storefront", status=resp.status_code)
             if resp.status_code == 200:
                 data = resp.json()
-                if data.get("ok"): return data.get("data")
+                if data.get("ok"): 
+                    logger.info("tool_call_success", tool="browse_general_storefront", results=len(data.get("data", []) \
+                        if isinstance(data.get("data"), list) else 1), preview=str(data.get("data"))[:100])
+                    return data.get("data")
             return f"Error en catálogo: {resp.text}"
         except Exception as e:
             logger.exception("tool_call_exception", tool="browse_general_storefront")
@@ -232,7 +235,10 @@ async def cupones_list():
             logger.info("tool_call_response", tool="cupones_list", status=resp.status_code)
             if resp.status_code == 200:
                 data = resp.json()
-                if data.get("ok"): return data.get("data")
+                if data.get("ok"): 
+                    logger.info("tool_call_success", tool="cupones_list", results=len(data.get("data", []) \
+                        if isinstance(data.get("data"), list) else 1), preview=str(data.get("data"))[:100])
+                    return data.get("data")
             return f"Error en cupones: {resp.text}"
         except Exception as e:
             logger.exception("tool_call_exception", tool="cupones_list")
