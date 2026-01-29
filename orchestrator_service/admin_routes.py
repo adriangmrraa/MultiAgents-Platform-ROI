@@ -5554,6 +5554,13 @@ async def receive_chatwoot_webhook(
         
         # 2. Trigger Task if not running
         if not await redis_client.get(lock_key):
+            # Dynamic Import to avoid circular dependency
+            try:
+                from main import process_buffer_task 
+            except ImportError as e:
+                logger.error(f"❌ CRITICAL: Cannot import process_buffer_task: {e}")
+                return {"status": "error", "reason": "import_failed", "detail": str(e)}
+
             await redis_client.setex(lock_key, 60, "1") # 60s lock for the task
             logger.info(f"🚀 TASK: Starting process_buffer_task | identifier={identifier} | lock_acquired=True")
             background_tasks.add_task(
