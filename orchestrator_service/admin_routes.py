@@ -973,6 +973,16 @@ async def save_credential(cred: CredentialModel, current_user: User = Depends(ge
         # Also delete 'all' cache for this tenant
         await redis_client.delete(f"settings:all:{cred.tenant_id}")
         
+        # Nexus v7.6.2: Back-sync to legacy 'tenants' table for critical TiendaNube fields
+        if cred.tenant_id:
+            try:
+                if cred.name == "TIENDANUBE_ACCESS_TOKEN":
+                    await db.pool.execute("UPDATE tenants SET tiendanube_access_token = $1 WHERE id = $2", final_value, cred.tenant_id)
+                elif cred.name == "TIENDANUBE_STORE_ID":
+                    await db.pool.execute("UPDATE tenants SET tiendanube_store_id = $1 WHERE id = $2", final_value, cred.tenant_id)
+            except Exception as sync_err:
+                logger.warning(f"Back-sync to tenants failed: {sync_err}")
+
         return res
     except Exception as e:
         logger.error(f"save_credential_failed: {e}")

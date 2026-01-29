@@ -6,17 +6,21 @@ from itertools import cycle
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "agente-js-secret-key-2024")
 
 def encrypt_password(password: str) -> str:
-    """Simple XOR + Base64 encryption."""
+    """Simple XOR + Base64 encryption (Byte-safe)."""
     if not password: return ""
-    xored = ''.join(chr(ord(c) ^ ord(k)) for c, k in zip(password, cycle(ENCRYPTION_KEY)))
-    return base64.b64encode(xored.encode()).decode()
+    data_bytes = password.encode('utf-8')
+    key_bytes = ENCRYPTION_KEY.encode('utf-8')
+    xored = bytes(b ^ k for b, k in zip(data_bytes, cycle(key_bytes)))
+    return base64.b64encode(xored).decode('utf-8')
 
 def decrypt_password(encrypted: str) -> str:
-    """Simple XOR + Base64 decryption."""
+    """Simple XOR + Base64 decryption (Byte-safe)."""
     if not encrypted: return ""
     try:
-        decoded = base64.b64decode(encrypted).decode()
-        return ''.join(chr(ord(c) ^ ord(k)) for c, k in zip(decoded, cycle(ENCRYPTION_KEY)))
+        data_bytes = base64.b64decode(encrypted)
+        key_bytes = ENCRYPTION_KEY.encode('utf-8')
+        xored = bytes(b ^ k for b, k in zip(data_bytes, cycle(key_bytes)))
+        return xored.decode('utf-8')
     except Exception as e:
-        # Nexus v7.6.2: Return original if not valid Base64/XOR (handles plain-text legacy tokens)
+        # Fallback for plain text or older/incompatible formats
         return encrypted
