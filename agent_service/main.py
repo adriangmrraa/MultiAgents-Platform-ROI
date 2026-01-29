@@ -164,7 +164,7 @@ async def search_specific_products(q: str):
                 data = resp.json()
                 if data.get("ok"): 
                     res_count = len(data.get("data", []))
-                    logger.info("tool_call_success", tool="search_specific_products", results=res_count)
+                    logger.info("tool_call_success", tool="search_specific_products", results=res_count, preview=str(data.get("data"))[:100])
                     return data.get("data")
                 logger.warning("tool_call_business_error", tool="search_specific_products", error=data.get("error"))
             else:
@@ -212,7 +212,9 @@ async def search_by_category(category: str, keyword: str = ""):
             logger.info("tool_call_response", tool="search_by_category", status=resp.status_code)
             if resp.status_code == 200:
                 data = resp.json()
-                if data.get("ok"): return data.get("data")
+                if data.get("ok"): 
+                    logger.info("tool_call_success", tool="browse_general_storefront", results=len(data.get("data", [])), preview=str(data.get("data"))[:100])
+                    return data.get("data")
             return f"Error en categorías: {resp.text}"
         except Exception as e:
             logger.exception("tool_call_exception", tool="search_by_category")

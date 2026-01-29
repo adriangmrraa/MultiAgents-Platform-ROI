@@ -38,11 +38,10 @@ async def get_tenant_credential_by_type(tenant_id: int, internal_key: str) -> st
         if not db.pool:
             await db.connect()
             
-        row = await db.pool.fetchrow(query, tenant_id, internal_key)
-        
         if not row:
             # Fallback: Search by name directly if JOIN failed (migration safe v7.6.1)
-            fallback_query = "SELECT value FROM credentials WHERE tenant_id = $1 AND name = $2 LIMIT 1"
+            # Use ILIKE or LOWER to handle case-sensitivity from different sync sources
+            fallback_query = "SELECT value FROM credentials WHERE tenant_id = $1 AND name ILIKE $2 LIMIT 1"
             row = await db.pool.fetchrow(fallback_query, tenant_id, internal_key)
 
         if row and row['value']:
