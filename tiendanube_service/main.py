@@ -148,24 +148,28 @@ async def verify_token(x_internal_token: str = Header(None, alias="X-Internal-Se
         raise HTTPException(status_code=401, detail="Invalid Internal Token")
 
 def get_tn_headers(access_token: str) -> Dict[str, str]:
-    """Centralized Tienda Nube Header logic."""
+    """Centralized Tienda Nube Header logic (Spec: Authentication: bearer $TOKEN)"""
     if not access_token:
-        # Return empty or placeholder to trigger upstream 401 instead of local error
         return {"User-Agent": TIENDANUBE_USER_AGENT}
         
     return {
         "Authentication": f"bearer {access_token.strip()}",
         "User-Agent": TIENDANUBE_USER_AGENT,
+        "Accept": "application/json",
         "Content-Type": "application/json",
     }
 
 async def handle_tn_response(response: httpx.Response) -> ToolResponse:
     """Standardized Upstream Handler."""
-    if response.status_code == 200:
-        return ToolResponse(ok=True, data=response.json())
-    
     status_code = response.status_code
     body = response.text
+    
+    if status_code == 200:
+        data = response.json()
+        res_len = len(data) if isinstance(data, list) else 1
+        logger.info("tn_upstream_success", status=status_code, results=res_len, preview=body[:100])
+        return ToolResponse(ok=True, data=data)
+    
     logger.error("tn_upstream_error", status_code=status_code, body=body)
     
     if status_code == 429:
