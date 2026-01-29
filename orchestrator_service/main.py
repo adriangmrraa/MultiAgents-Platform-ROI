@@ -2614,22 +2614,31 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
             # Instead of lrange + delete (which is racy), we pop all elements atomically if possible, 
             # or pop one by one until empty. Redis LPOP with count is supported in recent versions.
             # But to be safe with standard py-redis async:
-            # Nexus Revert: Safe LRANGE + DELETE (Standard Pattern)
-            # The previous 'lpop' attempt likely failed due to client library version mismatch (no count arg support).
-            # We go back to standard but ensure strict breaking.
-            messages_raw = await redis_client.lrange(buffer_key, 0, -1)
+            # Nexus v7.7.0: Production-Grade Atomic Consumption via Lua Script
+            # This is the "Gold Standard" for queue consumption. 
+            # It executes strictly on the Redis server: Get All Items -> Return Them -> Delete Key.
+            # No network race conditions. No "read but failed to delete". No "delete but failed to read".
+            LUA_POP_ALL = """
+                local elements = redis.call('LRANGE', KEYS[1], 0, -1)
+                if #elements > 0 then
+                    redis.call('DEL', KEYS[1])
+                end
+                return elements
+            """
             
+            try:
+                # Execute Lua Script Atomically
+                messages_raw = await redis_client.eval(LUA_POP_ALL, 1, buffer_key)
+            except Exception as redis_err:
+                logger.error("redis_lua_failure", error=str(redis_err))
+                # Fallback to safety break
+                break
+
             if not messages_raw:
-                logger.info(f"📭 BUFFER: Empty | identifier={from_num} | stopping")
+                logger.info(f"📭 BUFFER: Empty (Atomic) | identifier={from_num} | stopping")
                 break
             
-            # Atomic-ish consumption: Delete immediately after reading
-            await redis_client.delete(buffer_key)
-            
-            # Loop control: We processed a batch. 
-            # Should we loop again? Only if new messages arrived WHILE we were processing.
-            # But the 'while True' above (line 2603) handles that after we finish execution.
-            # So here we just proceed to execution.
+            # Note: No need to delete anymore, the script did it.
             
             # ... process messages ...
             # Fix: messages_raw already contains strings because of decode_responses=True in db.py
