@@ -4763,7 +4763,9 @@ async def create_agent(agent: AgentModel, current_user: User = Depends(get_curre
                   raise HTTPException(404, "Tenant context not found")
 
         # 3. Brain Upgrade: Inject Knowledge Instructions
-        final_prompt = _inject_knowledge_config(agent.system_prompt_template, agent.config)
+        # Nexus v7.6: NULL-safety - if not provided, use empty string
+        base_prompt = agent.system_prompt_template or ""
+        final_prompt = _inject_knowledge_config(base_prompt, agent.config)
 
         q = """
             INSERT INTO agents (
@@ -4833,7 +4835,9 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
              logger.info(f"Forking Agent Template {agent_id} for User {current_user.id}")
              
              validated_model = validate_model(agent.model_version)
-             final_prompt = _inject_knowledge_config(agent.system_prompt_template, agent.config)
+             # Nexus v7.6: NULL-safety for fork path
+             base_prompt = agent.system_prompt_template or ""
+             final_prompt = _inject_knowledge_config(base_prompt, agent.config)
              
              new_id = await db.pool.fetchval("""
                 INSERT INTO agents (
