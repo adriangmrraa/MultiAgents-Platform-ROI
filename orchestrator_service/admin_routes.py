@@ -107,9 +107,10 @@ async def get_internal_credential_endpoint(name: str, tenant_id: Optional[int] =
     """
     try:
         if tenant_id:
-            val = await get_tenant_credential(tenant_id, "general", name)
+            val = await get_tenant_credential_by_type(tenant_id, name)
             if not val:
-                 val = await get_tenant_credential(tenant_id, "%", name)
+                 # Last resort fallback to legacy old function for specific manual entries
+                 val = await get_tenant_credential(tenant_id, "general", name)
         else:
             query = "SELECT value FROM credentials WHERE name = $1 AND scope = 'global' LIMIT 1"
             val_enc = await db.pool.fetchval(query, name)
