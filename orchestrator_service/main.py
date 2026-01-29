@@ -2614,32 +2614,22 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
             # Instead of lrange + delete (which is racy), we pop all elements atomically if possible, 
             # or pop one by one until empty. Redis LPOP with count is supported in recent versions.
             # But to be safe with standard py-redis async:
-            messages_raw = []
-            while True:
-                chunk = await redis_client.lpop(buffer_key, 100) # Pop up to 100 at once (Redis 6.2+) or standard lpop
-                # If the client library/redis version doesn't support count in lpop, it might return just one or fail.
-                # Let's use a transaction-safe approach: LRANGE + LTRIM is standard pattern, but DELETE is also okay if we are sure we consumed ONLY what we read.
-                # Actually, the previous bug might be that we read, processed, loop continued, read again (if buffer wasn't cleared?).
-                # The log says: "Consuming batch ... count=X".
-                # If we see multiple executions, it means 'process_buffer_task' is being called multiple times OR the outer loop 'while True' is not breaking.
-                
-                # CRITICAL FIX: The outer 'while True' (line 2568) KEEPS RUNNING. 
-                # If the buffer fills up again (e.g. echo or delay), it runs again.
-                # BUT, if the buffer IS EMPTY, we break (line 2581).
-                # The logs show executions at 12:53, 12:54, 12:55... exactly 1 minute apart? 
-                # Or 40 seconds. This looks like the 'timer' logic might be weird.
-                
-                # Let's simplify: Standard LPOP of everything
-                val = await redis_client.lrange(buffer_key, 0, -1)
-                if not val: 
-                    break
-                await redis_client.delete(buffer_key)
-                messages_raw = val
-                break # We got our batch
-                
+            # Nexus Revert: Safe LRANGE + DELETE (Standard Pattern)
+            # The previous 'lpop' attempt likely failed due to client library version mismatch (no count arg support).
+            # We go back to standard but ensure strict breaking.
+            messages_raw = await redis_client.lrange(buffer_key, 0, -1)
+            
             if not messages_raw:
-                logger.info(f"📭 BUFFER: No messages to process | identifier={from_num}")
-                break # Exit the main loop
+                logger.info(f"📭 BUFFER: Empty | identifier={from_num} | stopping")
+                break
+            
+            # Atomic-ish consumption: Delete immediately after reading
+            await redis_client.delete(buffer_key)
+            
+            # Loop control: We processed a batch. 
+            # Should we loop again? Only if new messages arrived WHILE we were processing.
+            # But the 'while True' above (line 2603) handles that after we finish execution.
+            # So here we just proceed to execution.
             
             # ... process messages ...
             # Fix: messages_raw already contains strings because of decode_responses=True in db.py
