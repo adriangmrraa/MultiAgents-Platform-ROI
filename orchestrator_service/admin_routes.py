@@ -935,12 +935,23 @@ async def save_credential(cred: CredentialModel, current_user: User = Depends(ge
              cred.tenant_id = current_user.tenant_id
              cred.scope = "tenant" # Enforce tenant scope for non-admins
 
-        # Security: Encrypt sensitive categories (Skip IDs and URLs)
-        final_value = cred.value
-        is_sensitive = cred.category in SENSITIVE_CATEGORIES
-        is_identifier = cred.name.endswith("_ID") or cred.name.endswith("_URL") or "STORE_ID" in cred.name
+        # Sovereign Protocol (v7.6.4): Universal Encryption
+        # Rule: Encrypt everything by default using secure byte-safe XOR.
+        # Exception: Structural identifiers (IDs, URLs) must remain plain-text for API compatibility.
         
-        if is_sensitive and not is_identifier:
+        final_value = cred.value
+        is_identifier = (
+            cred.name.endswith("_ID") or 
+            cred.name.endswith("_URL") or 
+            "STORE_ID" in cred.name or 
+            cred.name.endswith("_URI")
+        )
+        
+        # If it's NOT an identifier, we encrypt it. 
+        # (Previously only SENSITIVE_CATEGORIES were encrypted, now we trust nothing unless it's an ID)
+        should_encrypt = not is_identifier
+        
+        if should_encrypt:
             from utils import encrypt_password
             final_value = encrypt_password(cred.value)
             

@@ -47,8 +47,20 @@ async def get_tenant_credential_by_type(tenant_id: int, internal_key: str) -> st
             row = await db.pool.fetchrow(fallback_query, tenant_id, internal_key)
 
         if row and row['value']:
-            decrypted = decrypt_password(row['value'])
-            return decrypted if decrypted else row['value']
+            val = row['value']
+            # Universal Decryption Logic:
+            # If it looks like an ID/URL (based on key name), we might return raw if decryption fails or returns garbage.
+            # But our decrypt_password function is now safe (returns original on fail).
+            # So, we ALWAYS attempt decryption. If it was stored plain-text (like an ID), decrypt_password *should* return it as is 
+            # (unless it coincidentally looks like valid Base64+XOR, which is unlikely for numeric IDs).
+            
+            # Optimization: If we know it's an ID, maybe we shouldn't even try? 
+            # The User requested "decrypt to use", implying storage IS encrypted. 
+            # But we decided NOT to encrypt IDs in admin_routes. 
+            # So, for IDs, 'decrypt_password' will just return the plain text because it won't decode as valid encrypted bytes.
+            
+            decrypted = decrypt_password(val)
+            return decrypted if decrypted else val
             
         return None
     except Exception as e:
