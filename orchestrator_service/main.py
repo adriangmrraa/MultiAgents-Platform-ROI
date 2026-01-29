@@ -2776,6 +2776,8 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                     chunk = json.loads(line)
                     if chunk.get("type") == "token":
                         full_text_accumulated += chunk.get("content", "")
+                    elif chunk.get("type") in ["tool_start", "tool_end"]:
+                        logger.info(f"🛠️ AGENT TOOL: {chunk.get('type')} | tool={chunk.get('tool')} | input={chunk.get('input') if chunk.get('type') == 'tool_start' else '...'}")
                     yield chunk
 
         # 6. Post-Stream: Consolidation & Delivery

@@ -157,6 +157,7 @@ async def search_specific_products(q: str):
     async with httpx.AsyncClient(timeout=300.0) as client: # Protocol Omega: 300s Timeout
         try:
             logger.info("tool_call_start", tool="search_specific_products", query=q)
+            print(f">>> TOOL CALL: search_specific_products(q='{q}')")
             resp = await client.post(f"{ctx_service_url.get()}/tools/productsq", json=payload, headers=headers)
             logger.info("tool_call_response", tool="search_specific_products", status=resp.status_code)
             
@@ -165,6 +166,7 @@ async def search_specific_products(q: str):
                 if data.get("ok"): 
                     res_count = len(data.get("data", []))
                     logger.info("tool_call_success", tool="search_specific_products", results=res_count, preview=str(data.get("data"))[:100])
+                    print(f"<<< TOOL SUCCESS: {res_count} products found")
                     return data.get("data")
                 logger.warning("tool_call_business_error", tool="search_specific_products", error=data.get("error"))
             else:
@@ -279,15 +281,11 @@ async def search_knowledge_base(q: str):
     source_ids = ",".join(ks) if ks else None
     user_id = ctx_user_id.get()
     
-    params = {"tenant_id": ctx_store_id.get(), "q": q}
-    if user_id:
-        params["user_id"] = user_id # Mandamiento de Búsqueda
-    if source_ids:
-        params["source_ids"] = source_ids
-    
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            logger.info("tool_call_start", tool="search_knowledge_base", query=q)
+            # Nexus v7.6.1 Fix: Use tenant_id instead of store_id for RAG context
+            params = {"tenant_id": ctx_tenant_id.get(), "q": q}
+            logger.info("tool_call_start", tool="search_knowledge_base", query=q, tenant_id=params["tenant_id"])
             resp = await client.get(f"{orch_url}/admin/rag/search", params=params, headers=headers)
             logger.info("tool_call_response", tool="search_knowledge_base", status=resp.status_code)
             if resp.status_code == 200:
