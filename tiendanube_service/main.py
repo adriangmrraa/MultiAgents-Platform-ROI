@@ -180,6 +180,8 @@ async def handle_tn_response(response: httpx.Response) -> ToolResponse:
     if status_code == 429:
         err = ToolError(code="TN_RATE_LIMIT", message="Rate limit exceeded", retryable=True)
     elif status_code in [401, 403]:
+        # Nexus v7.6.3: Detailed Auth failure logging
+        logger.error("tn_auth_failed", status=status_code, body=body)
         err = ToolError(code="TN_UNAUTHORIZED", message=f"Unauthorized upstream: {body}", retryable=False)
     elif status_code >= 500:
         err = ToolError(code="UPSTREAM_UNAVAILABLE", message="Tienda Nube down", retryable=True)

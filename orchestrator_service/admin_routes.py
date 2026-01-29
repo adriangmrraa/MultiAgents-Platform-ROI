@@ -935,9 +935,12 @@ async def save_credential(cred: CredentialModel, current_user: User = Depends(ge
              cred.tenant_id = current_user.tenant_id
              cred.scope = "tenant" # Enforce tenant scope for non-admins
 
-        # Security: Encrypt sensitive categories
+        # Security: Encrypt sensitive categories (Skip IDs and URLs)
         final_value = cred.value
-        if cred.category in SENSITIVE_CATEGORIES:
+        is_sensitive = cred.category in SENSITIVE_CATEGORIES
+        is_identifier = cred.name.endswith("_ID") or cred.name.endswith("_URL") or "STORE_ID" in cred.name
+        
+        if is_sensitive and not is_identifier:
             from utils import encrypt_password
             final_value = encrypt_password(cred.value)
             
@@ -1541,8 +1544,16 @@ async def test_credential_connection(data: ConnectionTestRequest, current_user: 
                         "details": f"Connected to {name}",
                         "valid": True
                     }
-                elif resp.status_code == 401:
-                    return {"status": "error", "message": "Unauthorized (Token Invalid)", "valid": False}
+                elif resp.status_code in [401, 403]:
+                    # Log specifically if it's an authorization failure to help debug tokens
+                    logger.error("tn_auth_failed", status=resp.status_code, body=resp.text)
+                    # Assuming ToolError is defined elsewhere or we return a generic error
+                    # err = ToolError(code="TN_UNAUTHORIZED", message=f"Unauthorized upstream: {resp.text}", retryable=False)
+                    return {"status": "error", "message": f"Unauthorized (Token Invalid/Forbidden) {resp.status_code}", "valid": False}
+                elif resp.status_code >= 500:
+                    # Handle server errors
+                    logger.error("tn_server_error", status=resp.status_code, body=resp.text)
+                    return {"status": "error", "message": f"Upstream Server Error {resp.status_code}", "valid": False}
                 else:
                     return {"status": "error", "message": f"API Error {resp.status_code}", "valid": False}
                     

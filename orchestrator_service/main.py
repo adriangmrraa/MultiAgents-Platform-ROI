@@ -2748,12 +2748,19 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         # Sovereign Credentials (Credential Architecture v2)
         openai_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
         tn_token = await get_tenant_credential_by_type(tenant_id, "TIENDANUBE_ACCESS_TOKEN")
-        tn_store_id = str(tenant_row['tiendanube_store_id']) if tenant_row.get('tiendanube_store_id') else None
+        
+        # Nexus v7.6.3: Store ID might be encrypted if saved via 'Credentials' during the bugged turn
+        raw_store_id = str(tenant_row['tiendanube_store_id']) if tenant_row.get('tiendanube_store_id') else None
+        if raw_store_id:
+            from utils import decrypt_password
+            tn_store_id = decrypt_password(raw_store_id)
+        else:
+            tn_store_id = None
         
         # 🔍 Diagnostic Logging (v7.2.0)
         token_len = len(tn_token) if tn_token else 0
-        masked = f"{tn_token[:5]}...{tn_token[-5:]}" if token_len > 10 else "SHORT/NULL"
-        logger.info(f"🔑 TN Credentials | tid={tenant_id} | len={token_len} | masked={masked} | store_id={tn_store_id or 'NULL'}")
+        masked_token = f"{tn_token[:5]}...{tn_token[-5:]}" if token_len > 10 else "SHORT/NULL"
+        logger.info(f"🔑 TN Credentials | tid={tenant_id} | tlen={token_len} | mtoken={masked_token} | store_id={tn_store_id or 'NULL'}")
 
         # 4. Agent Request
         agent_request = {
