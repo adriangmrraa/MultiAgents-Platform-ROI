@@ -4856,7 +4856,9 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
         
         # Nexus v7.6 Fix: Preserve existing prompt if not provided (DynamicAgentWizard doesn't send it)
         # The wizard architecture generates prompts dynamically via _inject_knowledge_config
-        prompt_to_use = agent.system_prompt_template if agent.system_prompt_template is not None else existing['system_prompt_template']
+        # CRITICAL: existing['system_prompt_template'] might also be NULL if agent was created incorrectly
+        existing_prompt = existing['system_prompt_template'] or ""  # NULL-safety fallback
+        prompt_to_use = agent.system_prompt_template if agent.system_prompt_template is not None else existing_prompt
         final_prompt = _inject_knowledge_config(prompt_to_use, agent.config)
 
         # 6. Sanitize context/config (Fix Unicode Surrogates v7.3)
