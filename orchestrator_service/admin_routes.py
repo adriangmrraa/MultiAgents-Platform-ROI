@@ -3043,7 +3043,12 @@ async def admin_send_message(request: Request):
 
     # 3. Routing Logic: Unified (Triangular) Delivery
     # Protocol Omega: Deliver FIRST, Persist SECOND to prevent duplicates on error/retry
-    await unified_message_delivery(
+    # 3. Routing Logic: Unified (Triangular) Delivery
+    # Protocol Omega Fix: Use BackgroundTasks to prevent Webhook Timeouts (Loop Cause)
+    # Upstream providers (Meta/Chatwoot) expect 200 OK roughly within 5-10s.
+    # Agent execution can take 30s+. decoupling is mandatory.
+    background_tasks.add_task(
+        unified_message_delivery,
         tenant_id=tenant_id,
         conv_id=conv_id,
         phone=phone,
