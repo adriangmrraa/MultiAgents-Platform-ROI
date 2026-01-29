@@ -184,12 +184,15 @@ async def browse_general_storefront():
     headers = {"X-Internal-Secret": ctx_internal_token.get()}
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:
+            logger.info("tool_call_start", tool="browse_general_storefront")
             resp = await client.post(f"{ctx_service_url.get()}/tools/productsall", json=payload, headers=headers)
+            logger.info("tool_call_response", tool="browse_general_storefront", status=resp.status_code)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"): return data.get("data")
             return f"Error en catálogo: {resp.text}"
         except Exception as e:
+            logger.exception("tool_call_exception", tool="browse_general_storefront")
             return f"Excepción en herramienta: {str(e)}"
 
 @tool
@@ -204,12 +207,15 @@ async def search_by_category(category: str, keyword: str = ""):
     headers = {"X-Internal-Secret": ctx_internal_token.get()}
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:
+            logger.info("tool_call_start", tool="search_by_category", category=category, keyword=keyword)
             resp = await client.post(f"{ctx_service_url.get()}/tools/productsq_category", json=payload, headers=headers)
+            logger.info("tool_call_response", tool="search_by_category", status=resp.status_code)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"): return data.get("data")
             return f"Error en categorías: {resp.text}"
         except Exception as e:
+            logger.exception("tool_call_exception", tool="search_by_category")
             return f"Excepción en herramienta: {str(e)}"
 
 @tool
@@ -219,12 +225,15 @@ async def cupones_list():
     headers = {"X-Internal-Secret": ctx_internal_token.get()}
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:
+            logger.info("tool_call_start", tool="cupones_list")
             resp = await client.post(f"{ctx_service_url.get()}/tools/cupones_list", json=payload, headers=headers)
+            logger.info("tool_call_response", tool="cupones_list", status=resp.status_code)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"): return data.get("data")
             return f"Error en cupones: {resp.text}"
         except Exception as e:
+            logger.exception("tool_call_exception", tool="cupones_list")
             return f"Excepción en herramienta: {str(e)}"
 
 @tool
@@ -234,12 +243,15 @@ async def orders(q: str):
     headers = {"X-Internal-Secret": ctx_internal_token.get()}
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:
+            logger.info("tool_call_start", tool="orders", q=q)
             resp = await client.post(f"{ctx_service_url.get()}/tools/orders", json=payload, headers=headers)
+            logger.info("tool_call_response", tool="orders", status=resp.status_code)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"): return data.get("data")
             return f"Error en órdenes: {resp.text}"
         except Exception as e:
+            logger.exception("tool_call_exception", tool="orders")
             return f"Excepción en herramienta: {str(e)}"
 
 @tool
@@ -267,12 +279,15 @@ async def search_knowledge_base(q: str):
     
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
+            logger.info("tool_call_start", tool="search_knowledge_base", query=q)
             resp = await client.get(f"{orch_url}/admin/rag/search", params=params, headers=headers)
+            logger.info("tool_call_response", tool="search_knowledge_base", status=resp.status_code)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"): return data.get("context")
             return f"Error en búsqueda de conocimiento: {resp.text}"
         except Exception as e:
+            logger.exception("tool_call_exception", tool="search_knowledge_base")
             return f"Excepción en herramienta RAG: {str(e)}"
 
 @tool
