@@ -624,7 +624,18 @@ async def execute_agent(
         tools_list = template_tools
 
     agent_def = create_openai_tools_agent(llm, tools_list, prompt)
-    executor = AgentExecutor(agent=agent_def, tools=tools_list, verbose=True)
+    
+    # Nexus v7.6.7: Loop Prevention & Stability
+    # max_iterations: Prevent infinite loop if agent keeps deciding to use tools or repeat itself.
+    # handle_parsing_errors: Prevent crash on "OutputParserException" and allow self-correction.
+    executor = AgentExecutor(
+        agent=agent_def, 
+        tools=tools_list, 
+        verbose=True,
+        max_iterations=5, 
+        handle_parsing_errors=True,
+        max_execution_time=120.0 # 2 minute hard cap
+    )
     
     # 5. Execute with Streaming (Nexus v5.13)
     async def event_generator():
