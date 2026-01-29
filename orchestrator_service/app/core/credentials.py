@@ -40,6 +40,11 @@ async def get_tenant_credential_by_type(tenant_id: int, internal_key: str) -> st
             
         row = await db.pool.fetchrow(query, tenant_id, internal_key)
         
+        if not row:
+            # Fallback: Search by name directly if JOIN failed (migration safe v7.6.1)
+            fallback_query = "SELECT value FROM credentials WHERE tenant_id = $1 AND name = $2 LIMIT 1"
+            row = await db.pool.fetchrow(fallback_query, tenant_id, internal_key)
+
         if row and row['value']:
             decrypted = decrypt_password(row['value'])
             return decrypted if decrypted else row['value']

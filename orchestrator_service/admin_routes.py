@@ -131,7 +131,7 @@ async def get_internal_credential_endpoint(name: str, tenant_id: Optional[int] =
             val = os.getenv(name)
             
         if val:
-            logger.info(f"✅ credential_fetched: {name} | source={'vault' if row else 'env'} | length={len(val) if val else 0}")
+            logger.info(f"✅ credential_fetched: {name} | length={len(val) if val else 0}")
             return {"name": name, "value": val}
             
         # Return 200 with NULL value instead of 404 to avoid breaking the caller (v6.2.14)
@@ -1029,17 +1029,32 @@ async def internal_credential_sync(
         creds = data.credentials
         
         # 2. Store User Access Token (Global for Tenant)
-        user_access_token = creds.get("user_access_token")
+        user_access_token = creds.get("user_access_token") or creds.get("value")
         if user_access_token:
             from utils import encrypt_password
             enc_token = encrypt_password(user_access_token)
             
+            # Identify category and name based on provider
+            category = "meta_whatsapp" if data.provider == "meta" else "tiendanube"
+            name = "meta_user_token" if data.provider == "meta" else creds.get("name", "tiendanube_access_token")
+            
+            # Lookup credential_type_id if internal_key is known
+            internal_key_map = {
+                "meta_user_token": "META_ACCESS_TOKEN",
+                "tiendanube_access_token": "TIENDANUBE_ACCESS_TOKEN",
+                "TIENDANUBE_ACCESS_TOKEN": "TIENDANUBE_ACCESS_TOKEN"
+            }
+            internal_key = internal_key_map.get(name)
+            type_id = None
+            if internal_key:
+                type_id = await db.pool.fetchval("SELECT id FROM credential_types WHERE internal_key = $1", internal_key)
+
             await db.pool.execute("""
-                INSERT INTO credentials (name, value, category, scope, tenant_id, description, updated_at)
-                VALUES ('meta_user_token', $1, 'meta_whatsapp', 'tenant', $2, 'Meta User Token (System User)', NOW())
+                INSERT INTO credentials (name, value, category, scope, tenant_id, description, credential_type_id, updated_at)
+                VALUES ($1, $2, $3, 'tenant', $4, $5, $6, NOW())
                 ON CONFLICT (scope, name) WHERE scope='tenant' AND tenant_id IS NOT NULL
-                DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-            """, enc_token, tenant_id)
+                DO UPDATE SET value = EXCLUDED.value, credential_type_id = EXCLUDED.credential_type_id, updated_at = NOW()
+            """, name, enc_token, category, tenant_id, f"Auto-synced via {data.provider}", type_id)
 
         # 3. Store Raw Assets in 'business_assets' table
         assets = creds.get("assets", {})

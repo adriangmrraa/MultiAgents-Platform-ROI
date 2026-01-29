@@ -149,8 +149,12 @@ async def verify_token(x_internal_token: str = Header(None, alias="X-Internal-Se
 
 def get_tn_headers(access_token: str) -> Dict[str, str]:
     """Centralized Tienda Nube Header logic."""
+    if not access_token:
+        # Return empty or placeholder to trigger upstream 401 instead of local error
+        return {"User-Agent": TIENDANUBE_USER_AGENT}
+        
     return {
-        "Authentication": f"bearer {access_token}",
+        "Authorization": f"Bearer {access_token.strip()}",
         "User-Agent": TIENDANUBE_USER_AGENT,
         "Content-Type": "application/json",
     }
