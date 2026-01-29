@@ -156,12 +156,22 @@ async def search_specific_products(q: str):
     headers = {"X-Internal-Secret": ctx_internal_token.get()}
     async with httpx.AsyncClient(timeout=300.0) as client: # Protocol Omega: 300s Timeout
         try:
+            logger.info("tool_call_start", tool="search_specific_products", query=q)
             resp = await client.post(f"{ctx_service_url.get()}/tools/productsq", json=payload, headers=headers)
+            logger.info("tool_call_response", tool="search_specific_products", status=resp.status_code)
+            
             if resp.status_code == 200:
                 data = resp.json()
-                if data.get("ok"): return data.get("data")
+                if data.get("ok"): 
+                    res_count = len(data.get("data", []))
+                    logger.info("tool_call_success", tool="search_specific_products", results=res_count)
+                    return data.get("data")
+                logger.warning("tool_call_business_error", tool="search_specific_products", error=data.get("error"))
+            else:
+                logger.error("tool_call_http_error", tool="search_specific_products", status=resp.status_code, text=resp.text)
             return f"Error en búsqueda: {resp.text}"
         except Exception as e:
+            logger.exception("tool_call_exception", tool="search_specific_products")
             return f"Excepción en herramienta: {str(e)}"
 
 @tool

@@ -154,7 +154,7 @@ def get_tn_headers(access_token: str) -> Dict[str, str]:
         return {"User-Agent": TIENDANUBE_USER_AGENT}
         
     return {
-        "Authorization": f"Bearer {access_token.strip()}",
+        "Authentication": f"bearer {access_token.strip()}",
         "User-Agent": TIENDANUBE_USER_AGENT,
         "Content-Type": "application/json",
     }
@@ -165,14 +165,17 @@ async def handle_tn_response(response: httpx.Response) -> ToolResponse:
         return ToolResponse(ok=True, data=response.json())
     
     status_code = response.status_code
+    body = response.text
+    logger.error("tn_upstream_error", status_code=status_code, body=body)
+    
     if status_code == 429:
         err = ToolError(code="TN_RATE_LIMIT", message="Rate limit exceeded", retryable=True)
     elif status_code in [401, 403]:
-        err = ToolError(code="TN_UNAUTHORIZED", message="Unauthorized upstream", retryable=False)
+        err = ToolError(code="TN_UNAUTHORIZED", message=f"Unauthorized upstream: {body}", retryable=False)
     elif status_code >= 500:
         err = ToolError(code="UPSTREAM_UNAVAILABLE", message="Tienda Nube down", retryable=True)
     else:
-        err = ToolError(code="TN_ERROR", message=f"Upstream returned {status_code}", retryable=False)
+        err = ToolError(code="TN_ERROR", message=f"Upstream returned {status_code}: {body}", retryable=False)
     
     return ToolResponse(ok=False, error=err)
 
@@ -180,6 +183,7 @@ async def handle_tn_response(response: httpx.Response) -> ToolResponse:
 async def productsq(search: ProductSearch, token: str = Depends(verify_token)):
     url = f"https://api.tiendanube.com/v1/{search.store_id}/products"
     params = {"q": search.q, "per_page": 20}
+    logger.info("productsq_request", url=url, q=search.q)
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(url, headers=get_tn_headers(search.access_token), params=params)
@@ -193,6 +197,7 @@ async def productsq_category(search: ProductCategorySearch, token: str = Depends
     url = f"https://api.tiendanube.com/v1/{search.store_id}/products"
     query = f"{search.category} {search.keyword}"
     params = {"q": query, "per_page": 20}
+    logger.info("productsq_category_request", url=url, query=query)
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(url, headers=get_tn_headers(search.access_token), params=params)
