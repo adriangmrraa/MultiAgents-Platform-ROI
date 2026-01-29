@@ -1036,20 +1036,22 @@ async def internal_credential_sync(
             enc_token = encrypt_password(user_access_token)
             
             # Identify category and name based on provider
-            category = "meta_whatsapp" if data.provider == "meta" else "tiendanube"
-            name = "meta_user_token" if data.provider == "meta" else creds.get("name", "tiendanube_access_token")
-            logger.info("internal_sync_processing", provider=data.provider, name=name, raw_len=len(user_access_token), enc_len=len(enc_token))
+            category = "tiendanube" if data.provider == "tiendanube" else ("meta_whatsapp" if data.provider == "meta" else "general")
+            name = creds.get("name", "tiendanube_access_token") if data.provider == "tiendanube" else ("meta_user_token" if data.provider == "meta" else creds.get("name"))
             
             # Lookup credential_type_id if internal_key is known
             internal_key_map = {
                 "meta_user_token": "META_ACCESS_TOKEN",
                 "tiendanube_access_token": "TIENDANUBE_ACCESS_TOKEN",
-                "TIENDANUBE_ACCESS_TOKEN": "TIENDANUBE_ACCESS_TOKEN"
+                "TIENDANUBE_ACCESS_TOKEN": "TIENDANUBE_ACCESS_TOKEN",
+                "TIENDANUBE_STORE_ID": "TIENDANUBE_STORE_ID"
             }
             internal_key = internal_key_map.get(name)
             type_id = None
             if internal_key:
                 type_id = await db.pool.fetchval("SELECT id FROM credential_types WHERE internal_key = $1", internal_key)
+
+            logger.info("internal_sync_upsert", tenant_id=tenant_id, name=name, type_id=type_id, val_len=len(user_access_token))
 
             await db.pool.execute("""
                 INSERT INTO credentials (name, value, category, scope, tenant_id, description, credential_type_id, updated_at)

@@ -1128,6 +1128,21 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Migration 39 (Assist Score) failed: %', SQLERRM;
     END $$;
+    """,
+    # 32. Auto-Repair TiendaNube Orphans (v7.6.2)
+    """
+    UPDATE credentials 
+    SET credential_type_id = (SELECT id FROM credential_types WHERE internal_key = 'TIENDANUBE_ACCESS_TOKEN'),
+        category = 'tiendanube'
+    WHERE (name = 'tiendanube_access_token' OR name = 'TIENDANUBE_ACCESS_TOKEN' OR name = 'tiendanube_access_token')
+      AND credential_type_id IS NULL;
+    """,
+    """
+    UPDATE credentials 
+    SET credential_type_id = (SELECT id FROM credential_types WHERE internal_key = 'TIENDANUBE_STORE_ID'),
+        category = 'tiendanube'
+    WHERE name = 'TIENDANUBE_STORE_ID'
+      AND credential_type_id IS NULL;
     """
 ]
 
@@ -2736,7 +2751,9 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         tn_store_id = str(tenant_row['tiendanube_store_id']) if tenant_row.get('tiendanube_store_id') else None
         
         # 🔍 Diagnostic Logging (v7.2.0)
-        logger.info(f"🔑 TN Credentials | tid={tenant_id} | token={'***' + tn_token[-4:] if tn_token and len(tn_token) >= 4 else 'NULL'} | store_id={tn_store_id or 'NULL'}")
+        token_len = len(tn_token) if tn_token else 0
+        masked = f"{tn_token[:5]}...{tn_token[-5:]}" if token_len > 10 else "SHORT/NULL"
+        logger.info(f"🔑 TN Credentials | tid={tenant_id} | len={token_len} | masked={masked} | store_id={tn_store_id or 'NULL'}")
 
         # 4. Agent Request
         agent_request = {
