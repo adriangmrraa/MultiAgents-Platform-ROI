@@ -4864,16 +4864,32 @@ async def update_agent(agent_id: int, agent: AgentModel, current_user: User = De
         # 5. Execute Update
         validated_model = validate_model(agent.model_version)
         
-        # Nexus v7.6 Fix: Preserve existing prompt if not provided (DynamicAgentWizard doesn't send it)
+        # Nexus v7.6.1 NULL-Safety Fix: Comprehensive fallback chain
         # The wizard architecture generates prompts dynamically via _inject_knowledge_config
-        # CRITICAL: existing['system_prompt_template'] might also be NULL if agent was created incorrectly
-        existing_prompt = existing['system_prompt_template'] or ""  # NULL-safety fallback
+        # CRITICAL: existing['system_prompt_template'] might be NULL if agent was created incorrectly
+        # We MUST ensure the final value is NEVER NULL to satisfy DB constraint
+        
+        # Step 1: Get existing prompt (NULL-safe)
+        existing_prompt = existing['system_prompt_template'] or ""
+        
+        # Step 2: Use incoming prompt if provided, otherwise use existing
         prompt_to_use = agent.system_prompt_template if agent.system_prompt_template is not None else existing_prompt
+        
+        # Step 3: Inject knowledge (may return empty string but not NULL)
         final_prompt = _inject_knowledge_config(prompt_to_use, agent.config)
+        
+        # Step 4: CRITICAL NULL-SAFETY - Ensure we NEVER write NULL to DB
+        # If final_prompt is still empty/None, use a minimal valid prompt
+        if not final_prompt:
+            final_prompt = f"You are a {agent.role} assistant. Help customers professionally."
 
         # 6. Sanitize context/config (Fix Unicode Surrogates v7.3)
         clean_config = sanitize_surrogates(agent.config or {})
         clean_prompt = sanitize_surrogates(final_prompt)
+        
+        # FINAL DEFENSE: Guarantee non-NULL (should never trigger, but defense-in-depth)
+        if not clean_prompt or clean_prompt is None:
+            clean_prompt = f"You are a {agent.role} assistant."
 
         q = """
             UPDATE agents SET 
