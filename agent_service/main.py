@@ -167,7 +167,10 @@ async def search_specific_products(q: str):
                     res_count = len(data.get("data", []))
                     logger.info("tool_call_success", tool="search_specific_products", results=res_count, preview=str(data.get("data"))[:100])
                     print(f"<<< TOOL SUCCESS: {res_count} products found")
-                    return data.get("data")
+                    
+                    # Nexus v7.6.6: Limit results to avoid LLM context overflow/looping
+                    products = data.get("data", [])
+                    return products[:8] if products else []
                 logger.warning("tool_call_business_error", tool="search_specific_products", error=data.get("error"))
             else:
                 logger.error("tool_call_http_error", tool="search_specific_products", status=resp.status_code, text=resp.text)

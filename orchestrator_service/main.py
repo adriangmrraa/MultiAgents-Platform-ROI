@@ -2543,6 +2543,10 @@ def extract_response_from_agent_output(agent_output: str) -> str:
             # Si tiene campo 'response', extraerlo
             if 'response' in parsed:
                 return parsed['response']
+            # Nexus Fix: Handle 'text' field (common in structured output)
+            if 'text' in parsed:
+                # We could potentially handle 'cta' here too, but for now we return the text info.
+                return parsed['text']
             # Si no, devolver el JSON completo como string (fallback)
             return str(parsed)
     except (json.JSONDecodeError, ValueError):
@@ -2550,6 +2554,41 @@ def extract_response_from_agent_output(agent_output: str) -> str:
         pass
     
     # Fallback: devolver el texto original
+    # Nexus v7.6.5: Advanced Multi-JSON Parser
+    # The agent might output multiple concatenated JSON objects (e.g. {"text": "A"}{"text": "B"})
+    # caused by loop artifacts or iterative generation. We must parse them all.
+    results = []
+    decoder = json.JSONDecoder()
+    pos = 0
+    ws_strip = agent_output.strip()
+    
+    try:
+        while pos < len(ws_strip):
+            # Skip whitespace manually if raw_decode doesn't
+            while pos < len(ws_strip) and ws_strip[pos].isspace():
+                pos += 1
+            if pos >= len(ws_strip):
+                break
+                
+            obj, idx = decoder.raw_decode(ws_strip, pos)
+            pos += idx # Move past this object
+            
+            if isinstance(obj, dict):
+                content = None
+                if 'response' in obj: content = obj['response']
+                elif 'text' in obj: content = obj['text']
+                # elif 'output' in obj: content = obj['output'] # Optional
+                
+                if content:
+                    results.append(str(content))
+                    
+        if results:
+            return "\n\n".join(results)
+            
+    except Exception:
+        # If logical parsing fails, fallback to simple single-load attempt (already done above) or raw
+        pass
+
     return agent_output
 
 async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_source):
