@@ -219,6 +219,12 @@ export const MagicOnboarding: React.FC = () => {
     }, []);
 
     const handleConnect = async () => {
+        // Validate required fields before ignition
+        if (!formData.store_name.trim() || !formData.bot_phone_number.trim()) {
+            setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> ERROR: Project Name and Tenant ID are required.`]);
+            return;
+        }
+
         setStep('igniting');
         setAssets([]);
         setPercent(0);
@@ -232,8 +238,9 @@ export const MagicOnboarding: React.FC = () => {
             await fetchApi('/admin/onboarding/magic', { method: 'POST', body: payload });
 
             // B. Protocol Omega Stream Connection: Use V2 for robustness
+            // EventSource cannot send custom headers, so auth is via cookies (credentials: include)
             const streamUrl = `/api/admin/engine/stream/v2/${formData.bot_phone_number}`;
-            const evtSource = new EventSource(streamUrl);
+            const evtSource = new EventSource(streamUrl, { withCredentials: true });
             evtSourceRef.current = evtSource;
 
             evtSource.onopen = () => {

@@ -175,25 +175,23 @@ export const SetupExperience: React.FC = () => {
     }, []);
 
     const handleConnect = async () => {
+        // Validate required fields
+        if (!formData.store_name.trim() || !formData.bot_phone_number.trim()) {
+            setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> ERROR: Project Name and Tenant ID are required.`]);
+            return;
+        }
+
         setStep('igniting');
 
         try {
             // A. Trigger Ignition
             const payload = { ...formData, tenant_id: formData.bot_phone_number };
-            await fetchApi('/engine/ignite', { method: 'POST', body: payload });
+            await fetchApi('/admin/engine/ignite', { method: 'POST', body: payload });
 
-            // B. Connect to Stream (BFF)
-            // Use API_BASE logic from detectApiBase or relative fallback
-            let base = window.location.origin;
-            // If we are in frontend-xxx.easypanel.host, target orchestrator-xxx.easypanel.host
-            if (base.includes('frontend')) {
-                base = base.replace('frontend', 'orchestrator');
-            } else if (base.includes('localhost')) {
-                base = 'http://localhost:8000';
-            }
-
-            const streamUrl = `${base}/api/engine/stream/${formData.bot_phone_number}`;
-            const evtSource = new EventSource(streamUrl);
+            // B. Connect to Stream via relative URL (Nginx proxy handles routing)
+            // EventSource cannot send custom headers, auth is via cookies
+            const streamUrl = `/api/admin/engine/stream/${formData.bot_phone_number}`;
+            const evtSource = new EventSource(streamUrl, { withCredentials: true });
             evtSourceRef.current = evtSource;
 
             evtSource.onopen = () => {
@@ -217,8 +215,10 @@ export const SetupExperience: React.FC = () => {
             };
 
             evtSource.addEventListener("log", (e: any) => {
-                const log = JSON.parse(e.data);
-                setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] [${log.event_type}] ${log.message}`]);
+                try {
+                    const log = JSON.parse(e.data);
+                    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] [${log.event_type}] ${log.message}`]);
+                } catch { /* ignore malformed JSON */ }
             });
 
             evtSource.addEventListener("branding", (e: any) => handleAsset(e, "branding"));

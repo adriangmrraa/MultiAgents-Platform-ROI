@@ -51,7 +51,11 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
         window.open(url, "TiendaNubeLogin", `width=${width},height=${height},top=${top},left=${left}`);
 
         const handleMessage = (event: MessageEvent) => {
+            // Validate origin to prevent cross-origin message forgery
+            const allowedOrigin = serviceUrl.replace(/\/auth\/login.*/, '');
+            if (event.origin !== allowedOrigin && event.origin !== window.location.origin) return;
             if (event.data?.type === 'TIENDANUBE_SUCCESS') {
+                window.removeEventListener("message", handleMessage);
                 window.location.reload();
             }
         };
@@ -61,10 +65,12 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
     };
 
     const [showManualTn, setShowManualTn] = useState(false);
+    const [manualToken, setManualToken] = useState('');
+    const [manualStoreId, setManualStoreId] = useState('');
 
     const handleManualConnect = async () => {
-        const token = (document.getElementById('tn_manual_token') as HTMLInputElement).value;
-        const id = (document.getElementById('tn_manual_id') as HTMLInputElement).value;
+        const token = manualToken;
+        const id = manualStoreId;
         if (!token || !id) return alert("Completa ambos campos");
         if (!selectedTenantId) return alert("Selecciona una tienda");
 
@@ -188,7 +194,9 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
                                 </div>
                                 <p className="text-xs text-slate-400 mb-6">Sincronización vía Webhook Seguro.</p>
                                 <div className="flex items-center justify-between mt-auto">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400">Conectado</span>
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${connections?.chatwoot?.configured ? 'text-cyan-400' : 'text-slate-500'}`}>
+                                        {connections?.chatwoot?.configured ? 'Conectado' : 'Pendiente'}
+                                    </span>
                                     <button onClick={() => setActiveTab('chatwoot')} className="text-xs font-bold text-cyan-400 hover:underline">Configurar</button>
                                 </div>
                             </div>
@@ -206,7 +214,9 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
                                 </div>
                                 <p className="text-xs text-slate-400 mb-6">Relé oficial de alta capacidad.</p>
                                 <div className="flex items-center justify-between mt-auto">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Pendiente</span>
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${connections?.ycloud?.configured ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                        {connections?.ycloud?.configured ? 'Conectado' : 'Pendiente'}
+                                    </span>
                                     <button onClick={() => setActiveTab('ycloud')} className="text-xs font-bold text-emerald-400 hover:underline">Configurar</button>
                                 </div>
                             </div>
@@ -264,8 +274,8 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
                                                     ))}
                                                 </select>
                                             </div>
-                                            <input type="password" id="tn_manual_token" className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none" placeholder="Access Token" />
-                                            <input type="text" id="tn_manual_id" className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none" placeholder="Store ID" />
+                                            <input type="password" value={manualToken} onChange={e => setManualToken(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none" placeholder="Access Token" />
+                                            <input type="text" value={manualStoreId} onChange={e => setManualStoreId(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none" placeholder="Store ID" />
                                             <button onClick={handleManualConnect} className="w-full py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded">Guardar</button>
                                         </div>
                                     )}
