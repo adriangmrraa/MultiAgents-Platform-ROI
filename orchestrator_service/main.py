@@ -146,6 +146,7 @@ from admin_routes import router as admin_router, sync_environment
 from app.routes.auth_routes import router as auth_router
 from app.routes.platform_routes import router as platform_router
 from app.routes.billing_routes import router as billing_router  # SaaS Billing
+from app.routes.gallery_routes import router as gallery_router  # Smart Gallery (Pomelli-style)
 from app.routes.ingest_routes import router as ingest_router # NEW
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
@@ -1309,6 +1310,7 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(billing_router)  # SaaS Billing Routes
+app.include_router(gallery_router)  # Smart Gallery Routes
 from app.api import agents, templates
 
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
