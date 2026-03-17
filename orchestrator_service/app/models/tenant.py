@@ -31,6 +31,7 @@ class Tenant(Base, TimestampMixin):
     
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(30), default="active")  # active, suspended, archived
     
     # Relationships
     handoff_config: Mapped[Optional["TenantHumanHandoffConfig"]] = relationship(

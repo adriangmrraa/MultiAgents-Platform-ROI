@@ -1,175 +1,742 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
-import { Server, Database, Users, TrendingUp, ShieldAlert } from 'lucide-react';
+import {
+    Server, Database, Users, TrendingUp, ShieldAlert, DollarSign,
+    AlertTriangle, Search, ChevronDown, ChevronUp, Pause, Play,
+    Archive, RefreshCw, Edit2, Crown, Clock, Activity, BarChart3,
+    FileText, Eye, Ban, Zap
+} from 'lucide-react';
+
+interface TenantData {
+    id: number;
+    store_name: string;
+    owner_email: string;
+    owner_name?: string;
+    bot_phone_number: string;
+    tenant_status: string;
+    is_active: boolean;
+    is_verified?: boolean;
+    plan_name?: string;
+    plan_display_name?: string;
+    sub_status?: string;
+    trial_ends_at?: string;
+    payment_provider?: string;
+    messages_this_month: number;
+    tokens_this_month: number;
+    cost_this_month: number;
+    created_at: string;
+}
+
+type Tab = 'overview' | 'tenants' | 'revenue' | 'costs' | 'audit';
 
 export const PlatformTower: React.FC = () => {
     const { fetchApi } = useApi();
+    const [activeTab, setActiveTab] = useState<Tab>('overview');
     const [overview, setOverview] = useState<any>(null);
     const [infra, setInfra] = useState<any>(null);
-    const [tenants, setTenants] = useState<any[]>([]);
+    const [tenants, setTenants] = useState<TenantData[]>([]);
+    const [tenantsTotal, setTenantsTotal] = useState(0);
+    const [plans, setPlans] = useState<any[]>([]);
+    const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    const [revenue, setRevenue] = useState<any>(null);
+    const [costs, setCosts] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [planFilter, setPlanFilter] = useState('');
+    const [selectedTenant, setSelectedTenant] = useState<any>(null);
+    const [actionLoading, setActionLoading] = useState<number | null>(null);
 
-    useEffect(() => {
-        const load = async () => {
-            try {
-                const [ov, inf, ten] = await Promise.all([
-                    fetchApi('/platform/overview'),
-                    fetchApi('/platform/infrastructure'),
-                    fetchApi('/platform/tenants')
-                ]);
-                setOverview(ov);
-                setInfra(inf);
-                setTenants(ten);
-            } catch (e) {
-                console.error(e);
-            } finally {
-                setLoading(false);
-            }
-        };
-        load();
-        const interval = setInterval(load, 10000); // 10s refresh for "Realtime" feel
-        return () => clearInterval(interval);
+    const loadOverview = useCallback(async () => {
+        try {
+            const [ov, inf] = await Promise.all([
+                fetchApi('/platform/overview'),
+                fetchApi('/platform/infrastructure')
+            ]);
+            setOverview(ov);
+            setInfra(inf);
+        } catch (e) { console.error(e); }
     }, [fetchApi]);
 
-    if (loading && !overview) return <div className="p-8 text-center animate-pulse text-red-500 font-mono">INITIALIZING GOD MODE...</div>;
+    const loadTenants = useCallback(async () => {
+        try {
+            const params = new URLSearchParams();
+            if (searchQuery) params.set('search', searchQuery);
+            if (statusFilter) params.set('status_filter', statusFilter);
+            if (planFilter) params.set('plan_filter', planFilter);
+            params.set('limit', '100');
+
+            const data = await fetchApi(`/platform/tenants?${params.toString()}`);
+            setTenants(data.tenants || []);
+            setTenantsTotal(data.total || 0);
+        } catch (e) { console.error(e); }
+    }, [fetchApi, searchQuery, statusFilter, planFilter]);
+
+    const loadPlans = useCallback(async () => {
+        try {
+            const data = await fetchApi('/platform/plans');
+            setPlans(data || []);
+        } catch (e) { console.error(e); }
+    }, [fetchApi]);
+
+    const loadAuditLogs = useCallback(async () => {
+        try {
+            const data = await fetchApi('/platform/audit-logs?limit=50');
+            setAuditLogs(data || []);
+        } catch (e) { console.error(e); }
+    }, [fetchApi]);
+
+    const loadRevenue = useCallback(async () => {
+        try {
+            const data = await fetchApi('/platform/revenue?days=30');
+            setRevenue(data);
+        } catch (e) { console.error(e); }
+    }, [fetchApi]);
+
+    const loadCosts = useCallback(async () => {
+        try {
+            const data = await fetchApi('/platform/costs?months=3');
+            setCosts(data);
+        } catch (e) { console.error(e); }
+    }, [fetchApi]);
+
+    useEffect(() => {
+        const init = async () => {
+            setLoading(true);
+            await Promise.all([loadOverview(), loadTenants(), loadPlans()]);
+            setLoading(false);
+        };
+        init();
+        const interval = setInterval(loadOverview, 30000);
+        return () => clearInterval(interval);
+    }, [loadOverview, loadTenants, loadPlans]);
+
+    useEffect(() => {
+        if (activeTab === 'tenants') loadTenants();
+    }, [activeTab, searchQuery, statusFilter, planFilter, loadTenants]);
+
+    useEffect(() => {
+        if (activeTab === 'audit') loadAuditLogs();
+        if (activeTab === 'revenue') loadRevenue();
+        if (activeTab === 'costs') loadCosts();
+    }, [activeTab, loadAuditLogs, loadRevenue, loadCosts]);
+
+    const handleTenantAction = async (tenantId: number, action: string, reason?: string) => {
+        setActionLoading(tenantId);
+        try {
+            await fetchApi(`/platform/tenants/${tenantId}/action`, {
+                method: 'POST',
+                body: { action, reason }
+            });
+            await loadTenants();
+            await loadOverview();
+        } catch (e: any) {
+            alert(`Error: ${e.message}`);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleChangePlan = async (tenantId: number, planName: string) => {
+        setActionLoading(tenantId);
+        try {
+            await fetchApi(`/platform/tenants/${tenantId}/change-plan`, {
+                method: 'POST',
+                body: { plan_name: planName }
+            });
+            await loadTenants();
+        } catch (e: any) {
+            alert(`Error: ${e.message}`);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleExtendTrial = async (tenantId: number, days: number = 10) => {
+        setActionLoading(tenantId);
+        try {
+            await fetchApi(`/platform/tenants/${tenantId}/extend-trial?days=${days}`, { method: 'POST' });
+            await loadTenants();
+        } catch (e: any) {
+            alert(`Error: ${e.message}`);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleForceTrialCheck = async () => {
+        try {
+            const result = await fetchApi('/platform/check-trials', { method: 'POST' });
+            alert(`Trial check: ${result.trials_expired} expired, ${result.warnings_sent} warnings sent`);
+            await loadTenants();
+        } catch (e: any) {
+            alert(`Error: ${e.message}`);
+        }
+    };
+
+    const getStatusBadge = (status: string) => {
+        const styles: Record<string, string> = {
+            active: 'bg-green-900/30 text-green-400 border-green-500/30',
+            trialing: 'bg-blue-900/30 text-blue-400 border-blue-500/30',
+            expired: 'bg-red-900/30 text-red-400 border-red-500/30',
+            suspended: 'bg-orange-900/30 text-orange-400 border-orange-500/30',
+            canceled: 'bg-slate-800 text-slate-400 border-slate-600/30',
+            past_due: 'bg-yellow-900/30 text-yellow-400 border-yellow-500/30',
+        };
+        return (
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${styles[status] || 'bg-slate-800 text-slate-400'}`}>
+                {status || 'none'}
+            </span>
+        );
+    };
+
+    if (loading && !overview) {
+        return <div className="p-8 text-center animate-pulse text-red-500 font-mono">INITIALIZING GOD MODE...</div>;
+    }
 
     return (
         <div className="min-h-screen bg-[#050505] text-white overflow-hidden relative font-mono">
-            {/* God Mode Decoration */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-600 via-amber-500 to-red-600" />
-            <div className="absolute top-1 left-0 right-0 h-24 bg-gradient-to-b from-red-900/20 to-transparent pointer-events-none" />
 
             <div className="view active p-6 relative z-10">
-                <div className="flex justify-between items-center mb-8 border-b border-red-900/30 pb-4">
+                {/* Header */}
+                <div className="flex justify-between items-center mb-6 border-b border-red-900/30 pb-4">
                     <h1 className="text-2xl font-black tracking-widest text-red-500 flex items-center gap-3 uppercase">
                         <ShieldAlert /> Platform Control Tower
                     </h1>
                     <div className="flex items-center gap-4 text-xs">
-                        <span className="text-amber-500 animate-pulse">● LIVE TELEMETRY</span>
-                        <span className="text-slate-500">ZERO CONTENT ACCESS ENFORCED</span>
+                        <span className="text-amber-500 animate-pulse">LIVE</span>
+                        <button onClick={handleForceTrialCheck} className="text-xs bg-red-900/30 hover:bg-red-900/50 px-3 py-1 rounded border border-red-500/30 flex items-center gap-1">
+                            <Clock size={12} /> Check Trials
+                        </button>
                     </div>
                 </div>
 
-                {/* KPI Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                    <MetricCard
-                        label="TOTAL TENANTS"
-                        value={overview?.total_tenants}
-                        icon={<Server size={20} className="text-blue-400" />}
-                        sub="Active Org Units"
-                    />
-                    <MetricCard
-                        label="TOTAL USERS"
-                        value={overview?.total_users}
-                        icon={<Users size={20} className="text-purple-400" />}
-                        sub="Registered Identities"
-                    />
-                    <MetricCard
-                        label="MSG TRAFFIC (24H)"
-                        value={overview?.messages_24h}
-                        icon={<TrendingUp size={20} className="text-green-400" />}
-                        sub="Volumetric Load"
-                    />
-                    <MetricCard
-                        label="PLATFORM GMV (EST)"
-                        value={overview?.formatted_revenue}
-                        icon={<Database size={20} className="text-amber-400" />}
-                        sub="Aggregate Value Flow"
-                    />
+                {/* Tabs */}
+                <div className="flex gap-1 mb-6 bg-black/30 p-1 rounded-lg w-fit">
+                    {(['overview', 'tenants', 'revenue', 'costs', 'audit'] as Tab[]).map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`px-4 py-2 text-xs uppercase font-bold rounded transition-all ${
+                                activeTab === tab
+                                    ? 'bg-red-600/30 text-red-400 border border-red-500/30'
+                                    : 'text-slate-500 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            {tab}
+                        </button>
+                    ))}
                 </div>
 
-                {/* Infrastructure & Charts */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                    {/* Infrastructure Health */}
-                    <div className="glass border-l-4 border-l-red-500/50 p-6 rounded-none">
-                        <h3 className="text-sm font-bold text-red-400 mb-4 uppercase flex items-center gap-2">
-                            <Server size={16} /> Infrastructure Pulse
-                        </h3>
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                                <span className="text-slate-400 text-xs">REDIS MEMORY</span>
-                                <span className="font-mono text-white">{infra?.redis_memory || 'N/A'}</span>
-                            </div>
-                            <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                                <span className="text-slate-400 text-xs">REDIS PEAK</span>
-                                <span className="font-mono text-amber-500">{infra?.redis_peak || 'N/A'}</span>
-                            </div>
-                            <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                                <span className="text-slate-400 text-xs">DB SIZE</span>
-                                <span className="font-mono text-blue-400">{infra?.db_size || 'UNKNOWN'}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-slate-400 text-xs">STATUS</span>
-                                <span className="text-green-500 font-bold bg-green-900/20 px-2 py-0.5 rounded text-[10px]">OPERATIONAL</span>
-                            </div>
-                        </div>
-                    </div>
+                {/* Tab Content */}
+                {activeTab === 'overview' && (
+                    <OverviewTab overview={overview} infra={infra} plans={plans} />
+                )}
+                {activeTab === 'tenants' && (
+                    <TenantsTab
+                        tenants={tenants}
+                        tenantsTotal={tenantsTotal}
+                        plans={plans}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        statusFilter={statusFilter}
+                        setStatusFilter={setStatusFilter}
+                        planFilter={planFilter}
+                        setPlanFilter={setPlanFilter}
+                        actionLoading={actionLoading}
+                        onAction={handleTenantAction}
+                        onChangePlan={handleChangePlan}
+                        onExtendTrial={handleExtendTrial}
+                        getStatusBadge={getStatusBadge}
+                        selectedTenant={selectedTenant}
+                        setSelectedTenant={setSelectedTenant}
+                        fetchApi={fetchApi}
+                    />
+                )}
+                {activeTab === 'revenue' && <RevenueTab revenue={revenue} overview={overview} />}
+                {activeTab === 'costs' && <CostsTab costs={costs} overview={overview} />}
+                {activeTab === 'audit' && <AuditTab logs={auditLogs} />}
+            </div>
+        </div>
+    );
+};
 
-                    {/* Sim Chart: Traffic */}
-                    <div className="glass p-6 lg:col-span-2 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-4 opacity-5">
-                            <TrendingUp size={100} />
+// ============== OVERVIEW TAB ==============
+const OverviewTab = ({ overview, infra, plans }: any) => (
+    <>
+        {/* KPI Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+            <MetricCard label="TENANTS" value={overview?.total_tenants} icon={<Server size={18} className="text-blue-400" />} sub={`${overview?.active_tenants || 0} activos`} />
+            <MetricCard label="USERS" value={overview?.total_users} icon={<Users size={18} className="text-purple-400" />} sub="Identidades" />
+            <MetricCard label="MSG 24H" value={overview?.messages_24h} icon={<Activity size={18} className="text-green-400" />} sub="Trafico" />
+            <MetricCard label="MRR" value={overview?.revenue?.formatted_mrr} icon={<DollarSign size={18} className="text-emerald-400" />} sub="Recurrente" highlight />
+            <MetricCard label="COSTOS MES" value={overview?.costs?.formatted_cost} icon={<BarChart3 size={18} className="text-orange-400" />} sub="LLM Tokens" />
+            <MetricCard label="MARGEN" value={`$${(overview?.costs?.margin || 0).toFixed(0)}`} icon={<TrendingUp size={18} className="text-cyan-400" />} sub="MRR - Costos" highlight />
+        </div>
+
+        {/* Plan Breakdown + Infra */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            {/* Plan Breakdown */}
+            <div className="glass border-l-4 border-l-purple-500/50 p-6">
+                <h3 className="text-sm font-bold text-purple-400 mb-4 uppercase flex items-center gap-2">
+                    <Crown size={16} /> Distribucion de Planes
+                </h3>
+                <div className="space-y-3">
+                    {Object.entries(overview?.plan_breakdown || {}).map(([plan, data]: [string, any]) => (
+                        <div key={plan} className="flex justify-between items-center border-b border-white/5 pb-2">
+                            <span className="text-sm font-bold text-white capitalize">{plan}</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg font-black text-white">{data.total}</span>
+                                <div className="text-[10px] text-slate-500">
+                                    {Object.entries(data.statuses || {}).map(([s, c]: [string, any]) => (
+                                        <span key={s} className="mr-1">{s}: {c}</span>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
-                        <h3 className="text-sm font-bold text-slate-400 mb-4 uppercase">Global Message Volume (Simulated Trend)</h3>
-                        <div className="h-32 flex items-end gap-1">
-                            {/* Simulated Sparkline Bars */}
-                            {Array.from({ length: 40 }).map((_, i) => {
-                                const h = Math.max(10, Math.random() * 80 + 20); // Mock data since no historic API yet
-                                return (
-                                    <div
-                                        key={i}
-                                        className="bg-red-500/20 flex-1 hover:bg-red-500/60 transition-colors"
-                                        style={{ height: `${h}%` }}
-                                    />
-                                );
-                            })}
-                        </div>
-                    </div>
+                    ))}
                 </div>
-
-                {/* Tenant Registry */}
-                <div className="glass p-0 overflow-hidden">
-                    <div className="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center">
-                        <h3 className="text-sm font-bold text-slate-300 uppercase">Tenant Registry</h3>
-                        <span className="text-[10px] bg-white/10 px-2 py-1 rounded">{tenants.length} UNITS</span>
+                {overview?.trials_expiring_soon > 0 && (
+                    <div className="mt-4 p-3 bg-amber-900/20 rounded border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2">
+                        <AlertTriangle size={14} />
+                        {overview.trials_expiring_soon} trials expiran en los proximos 3 dias
                     </div>
-                    <div className="max-h-96 overflow-y-auto">
+                )}
+            </div>
+
+            {/* Infrastructure */}
+            <div className="glass border-l-4 border-l-red-500/50 p-6">
+                <h3 className="text-sm font-bold text-red-400 mb-4 uppercase flex items-center gap-2">
+                    <Server size={16} /> Infraestructura
+                </h3>
+                <div className="space-y-3">
+                    <InfoRow label="REDIS MEM" value={infra?.redis_memory || 'N/A'} />
+                    <InfoRow label="REDIS PEAK" value={infra?.redis_peak || 'N/A'} color="text-amber-500" />
+                    <InfoRow label="DB SIZE" value={infra?.db_size || 'N/A'} color="text-blue-400" />
+                    <InfoRow label="STATUS" value="OPERATIONAL" color="text-green-500" />
+                </div>
+            </div>
+
+            {/* Revenue Summary */}
+            <div className="glass border-l-4 border-l-emerald-500/50 p-6">
+                <h3 className="text-sm font-bold text-emerald-400 mb-4 uppercase flex items-center gap-2">
+                    <DollarSign size={16} /> Revenue
+                </h3>
+                <div className="space-y-3">
+                    <InfoRow label="MRR" value={overview?.revenue?.formatted_mrr || '$0'} color="text-emerald-400" />
+                    <InfoRow label="30 DIAS" value={overview?.revenue?.formatted_30d || '$0'} />
+                    <InfoRow label="TOTAL" value={overview?.revenue?.formatted_total || '$0'} color="text-white" />
+                    <InfoRow label="TOKENS MES" value={(overview?.costs?.tokens_month || 0).toLocaleString()} color="text-orange-400" />
+                </div>
+            </div>
+        </div>
+
+        {/* DB Tables */}
+        {infra?.tables && infra.tables.length > 0 && (
+            <div className="glass p-4">
+                <h3 className="text-xs font-bold text-slate-400 uppercase mb-3">Database Tables</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                    {infra.tables.map((t: any) => (
+                        <div key={t.table_name} className="bg-black/30 p-2 rounded text-xs">
+                            <div className="font-bold text-slate-300 truncate">{t.table_name}</div>
+                            <div className="text-slate-500">{t.total_size} | {t.row_count} rows</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+    </>
+);
+
+// ============== TENANTS TAB ==============
+const TenantsTab = ({
+    tenants, tenantsTotal, plans, searchQuery, setSearchQuery,
+    statusFilter, setStatusFilter, planFilter, setPlanFilter,
+    actionLoading, onAction, onChangePlan, onExtendTrial,
+    getStatusBadge, selectedTenant, setSelectedTenant, fetchApi
+}: any) => {
+
+    const loadTenantDetail = async (tenantId: number) => {
+        try {
+            const data = await fetchApi(`/platform/tenants/${tenantId}`);
+            setSelectedTenant(data);
+        } catch (e) { console.error(e); }
+    };
+
+    return (
+        <>
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3 mb-6">
+                <div className="relative flex-1 min-w-[200px] max-w-md">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                        type="text"
+                        placeholder="Buscar por nombre o email..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-black/40 border border-white/10 rounded pl-9 pr-3 py-2 text-sm text-white focus:border-red-500/50 outline-none"
+                    />
+                </div>
+                <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="bg-black/40 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none"
+                >
+                    <option value="">Todos los estados</option>
+                    <option value="active">Activo</option>
+                    <option value="trialing">Trial</option>
+                    <option value="expired">Expirado</option>
+                    <option value="suspended">Suspendido</option>
+                    <option value="canceled">Cancelado</option>
+                </select>
+                <select
+                    value={planFilter}
+                    onChange={(e) => setPlanFilter(e.target.value)}
+                    className="bg-black/40 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none"
+                >
+                    <option value="">Todos los planes</option>
+                    {plans.map((p: any) => (
+                        <option key={p.name} value={p.name}>{p.display_name}</option>
+                    ))}
+                </select>
+                <span className="self-center text-xs text-slate-500">{tenantsTotal} total</span>
+            </div>
+
+            <div className="flex gap-6">
+                {/* Tenant Table */}
+                <div className={`glass p-0 overflow-hidden ${selectedTenant ? 'flex-1' : 'w-full'}`}>
+                    <div className="max-h-[600px] overflow-y-auto">
                         <table className="w-full text-left text-sm">
-                            <thead className="text-xs text-slate-500 bg-black/20 uppercase sticky top-0 backdrop-blur">
+                            <thead className="text-[10px] text-slate-500 bg-black/40 uppercase sticky top-0 backdrop-blur-sm z-10">
                                 <tr>
                                     <th className="p-3">ID</th>
-                                    <th className="p-3">Store Name</th>
+                                    <th className="p-3">Tienda</th>
                                     <th className="p-3">Owner</th>
-                                    <th className="p-3">Phone</th>
-                                    <th className="p-3">Created</th>
+                                    <th className="p-3">Plan</th>
+                                    <th className="p-3">Estado</th>
+                                    <th className="p-3">Msgs/mes</th>
+                                    <th className="p-3">Costo</th>
+                                    <th className="p-3">Creado</th>
+                                    <th className="p-3">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5 text-slate-300">
-                                {tenants.map((t) => (
-                                    <tr key={t.id} className="hover:bg-white/5 transition-colors">
+                                {tenants.map((t: TenantData) => (
+                                    <tr key={t.id} className={`hover:bg-white/5 transition-colors ${selectedTenant?.tenant?.id === t.id ? 'bg-red-900/10' : ''}`}>
                                         <td className="p-3 font-mono text-xs text-slate-500">#{t.id}</td>
-                                        <td className="p-3 font-bold text-white">{t.store_name}</td>
-                                        <td className="p-3">{t.owner_email}</td>
-                                        <td className="p-3 font-mono text-xs">{t.bot_phone_number}</td>
+                                        <td className="p-3">
+                                            <button onClick={() => loadTenantDetail(t.id)} className="font-bold text-white hover:text-red-400 text-left">
+                                                {t.store_name}
+                                            </button>
+                                        </td>
+                                        <td className="p-3 text-xs">
+                                            <div>{t.owner_email}</div>
+                                            {t.is_verified === false && <span className="text-[9px] text-amber-500">NO VERIFICADO</span>}
+                                        </td>
+                                        <td className="p-3">
+                                            <span className="text-xs font-bold text-purple-400 capitalize">{t.plan_name || '-'}</span>
+                                        </td>
+                                        <td className="p-3">{getStatusBadge(t.sub_status || t.tenant_status)}</td>
+                                        <td className="p-3 font-mono text-xs">{t.messages_this_month.toLocaleString()}</td>
+                                        <td className="p-3 font-mono text-xs text-orange-400">${t.cost_this_month.toFixed(2)}</td>
                                         <td className="p-3 text-xs text-slate-500">{new Date(t.created_at).toLocaleDateString()}</td>
+                                        <td className="p-3">
+                                            <div className="flex gap-1">
+                                                {t.sub_status !== 'suspended' ? (
+                                                    <button
+                                                        onClick={() => onAction(t.id, 'suspend')}
+                                                        disabled={actionLoading === t.id}
+                                                        className="p-1 hover:bg-orange-900/30 rounded text-orange-400"
+                                                        title="Suspender"
+                                                    >
+                                                        <Pause size={14} />
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => onAction(t.id, 'activate')}
+                                                        disabled={actionLoading === t.id}
+                                                        className="p-1 hover:bg-green-900/30 rounded text-green-400"
+                                                        title="Activar"
+                                                    >
+                                                        <Play size={14} />
+                                                    </button>
+                                                )}
+                                                {(t.sub_status === 'trialing' || t.sub_status === 'expired') && (
+                                                    <button
+                                                        onClick={() => onExtendTrial(t.id)}
+                                                        disabled={actionLoading === t.id}
+                                                        className="p-1 hover:bg-blue-900/30 rounded text-blue-400"
+                                                        title="Extender trial +10d"
+                                                    >
+                                                        <Clock size={14} />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => loadTenantDetail(t.id)}
+                                                    className="p-1 hover:bg-white/10 rounded text-slate-400"
+                                                    title="Ver detalle"
+                                                >
+                                                    <Eye size={14} />
+                                                </button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
                 </div>
+
+                {/* Tenant Detail Panel */}
+                {selectedTenant && (
+                    <div className="w-96 glass p-4 max-h-[600px] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-sm font-bold text-white">Detalle #{selectedTenant.tenant.id}</h3>
+                            <button onClick={() => setSelectedTenant(null)} className="text-slate-500 hover:text-white">&times;</button>
+                        </div>
+
+                        <div className="space-y-3 text-xs">
+                            <div className="bg-black/30 p-3 rounded">
+                                <div className="text-slate-400 mb-1">Tienda</div>
+                                <div className="text-white font-bold">{selectedTenant.tenant.store_name}</div>
+                            </div>
+                            <div className="bg-black/30 p-3 rounded">
+                                <div className="text-slate-400 mb-1">Owner</div>
+                                <div>{selectedTenant.tenant.owner_email}</div>
+                                <div className="text-slate-500">{selectedTenant.tenant.owner_name}</div>
+                            </div>
+                            <div className="bg-black/30 p-3 rounded">
+                                <div className="text-slate-400 mb-1">Plan / Estado</div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-purple-400 font-bold capitalize">{selectedTenant.tenant.plan_name || 'sin plan'}</span>
+                                    {getStatusBadge(selectedTenant.tenant.sub_status || 'none')}
+                                </div>
+                                {selectedTenant.tenant.trial_ends_at && (
+                                    <div className="text-amber-400 mt-1">
+                                        Trial vence: {new Date(selectedTenant.tenant.trial_ends_at).toLocaleString()}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Change Plan */}
+                            <div className="bg-black/30 p-3 rounded">
+                                <div className="text-slate-400 mb-2">Cambiar Plan</div>
+                                <div className="flex gap-1">
+                                    {plans.map((p: any) => (
+                                        <button
+                                            key={p.name}
+                                            onClick={() => onChangePlan(selectedTenant.tenant.id, p.name)}
+                                            className={`px-2 py-1 rounded text-[10px] font-bold border ${
+                                                selectedTenant.tenant.plan_name === p.name
+                                                    ? 'bg-purple-900/40 border-purple-500/50 text-purple-400'
+                                                    : 'bg-black/30 border-white/10 text-slate-400 hover:text-white hover:border-white/30'
+                                            }`}
+                                        >
+                                            {p.display_name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Agents */}
+                            <div className="bg-black/30 p-3 rounded">
+                                <div className="text-slate-400 mb-1">Agentes</div>
+                                <div className="text-2xl font-black text-white">{selectedTenant.agent_count}</div>
+                            </div>
+
+                            {/* Team */}
+                            <div className="bg-black/30 p-3 rounded">
+                                <div className="text-slate-400 mb-2">Equipo ({selectedTenant.team_members?.length || 0})</div>
+                                {selectedTenant.team_members?.map((u: any) => (
+                                    <div key={u.id} className="flex justify-between py-1 border-b border-white/5 last:border-0">
+                                        <span className="text-slate-300">{u.email}</span>
+                                        <span className="text-[10px] text-slate-500">{u.role}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Usage History */}
+                            {selectedTenant.usage_history?.length > 0 && (
+                                <div className="bg-black/30 p-3 rounded">
+                                    <div className="text-slate-400 mb-2">Uso Historico</div>
+                                    {selectedTenant.usage_history.map((u: any, i: number) => (
+                                        <div key={i} className="flex justify-between py-1 border-b border-white/5 text-[10px]">
+                                            <span>{new Date(u.period_start).toLocaleDateString('es', { month: 'short', year: 'numeric' })}</span>
+                                            <span>{u.messages_sent} msgs</span>
+                                            <span className="text-orange-400">${(u.llm_cost_usd || 0).toFixed(2)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Invoices */}
+                            {selectedTenant.invoices?.length > 0 && (
+                                <div className="bg-black/30 p-3 rounded">
+                                    <div className="text-slate-400 mb-2">Facturas</div>
+                                    {selectedTenant.invoices.map((inv: any) => (
+                                        <div key={inv.id} className="flex justify-between py-1 border-b border-white/5 text-[10px]">
+                                            <span>{new Date(inv.created_at).toLocaleDateString()}</span>
+                                            <span className="text-emerald-400">${inv.amount_usd}</span>
+                                            {getStatusBadge(inv.status)}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
-        </div>
+        </>
     );
 };
 
-const MetricCard = ({ label, value, icon, sub }: any) => (
-    <div className="glass p-6 border-t-2 border-t-red-500/20 hover:border-t-red-500 transition-colors">
-        <div className="flex justify-between items-start mb-4">
-            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{label}</span>
-            <div className="p-2 bg-white/5 rounded-lg">{icon}</div>
+// ============== REVENUE TAB ==============
+const RevenueTab = ({ revenue, overview }: any) => (
+    <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <MetricCard label="MRR" value={overview?.revenue?.formatted_mrr} icon={<DollarSign size={18} className="text-emerald-400" />} sub="Monthly Recurring" highlight />
+            <MetricCard label="30 DIAS" value={overview?.revenue?.formatted_30d} icon={<TrendingUp size={18} className="text-blue-400" />} sub="Ingresos reales" />
+            <MetricCard label="TOTAL HISTORICO" value={overview?.revenue?.formatted_total} icon={<Database size={18} className="text-purple-400" />} sub="Desde el inicio" />
         </div>
-        <div className="text-3xl font-black text-white mb-1">{value || 0}</div>
+
+        {revenue?.daily_revenue && revenue.daily_revenue.length > 0 ? (
+            <div className="glass p-4">
+                <h3 className="text-xs font-bold text-slate-400 uppercase mb-3">Ingresos Diarios (30d)</h3>
+                <table className="w-full text-sm">
+                    <thead className="text-[10px] text-slate-500 uppercase">
+                        <tr>
+                            <th className="text-left p-2">Fecha</th>
+                            <th className="text-right p-2">Monto USD</th>
+                            <th className="text-right p-2">Facturas</th>
+                            <th className="text-right p-2">Provider</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                        {revenue.daily_revenue.map((r: any, i: number) => (
+                            <tr key={i}>
+                                <td className="p-2 text-slate-300">{r.date}</td>
+                                <td className="p-2 text-right text-emerald-400 font-bold">${r.revenue_usd?.toFixed(2)}</td>
+                                <td className="p-2 text-right text-slate-400">{r.invoice_count}</td>
+                                <td className="p-2 text-right text-slate-500">{r.payment_provider}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        ) : (
+            <div className="glass p-8 text-center text-slate-500">
+                <DollarSign size={48} className="mx-auto mb-3 opacity-20" />
+                <p>No hay ingresos registrados aun.</p>
+                <p className="text-xs mt-1">Los ingresos apareceran cuando los usuarios paguen sus suscripciones.</p>
+            </div>
+        )}
+    </div>
+);
+
+// ============== COSTS TAB ==============
+const CostsTab = ({ costs, overview }: any) => (
+    <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <MetricCard label="COSTO MES" value={overview?.costs?.formatted_cost} icon={<BarChart3 size={18} className="text-orange-400" />} sub="LLM tokens" />
+            <MetricCard label="TOKENS MES" value={(overview?.costs?.tokens_month || 0).toLocaleString()} icon={<Zap size={18} className="text-yellow-400" />} sub="Consumidos" />
+            <MetricCard label="MARGEN" value={`$${(overview?.costs?.margin || 0).toFixed(0)}`} icon={<TrendingUp size={18} className="text-cyan-400" />} sub="MRR - Costos" highlight />
+        </div>
+
+        {costs?.records && costs.records.length > 0 ? (
+            <div className="glass p-4">
+                <h3 className="text-xs font-bold text-slate-400 uppercase mb-3">Costo por Tenant</h3>
+                <table className="w-full text-sm">
+                    <thead className="text-[10px] text-slate-500 uppercase">
+                        <tr>
+                            <th className="text-left p-2">Tenant</th>
+                            <th className="text-right p-2">Periodo</th>
+                            <th className="text-right p-2">Tokens</th>
+                            <th className="text-right p-2">Mensajes</th>
+                            <th className="text-right p-2">Costo USD</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                        {costs.records.map((r: any, i: number) => (
+                            <tr key={i}>
+                                <td className="p-2 text-white font-bold">{r.store_name}</td>
+                                <td className="p-2 text-right text-slate-400 text-xs">{new Date(r.period_start).toLocaleDateString('es', { month: 'short' })}</td>
+                                <td className="p-2 text-right text-yellow-400">{(r.tokens_used || 0).toLocaleString()}</td>
+                                <td className="p-2 text-right text-slate-300">{r.messages_sent}</td>
+                                <td className="p-2 text-right text-orange-400 font-bold">${(r.llm_cost_usd || 0).toFixed(2)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                <div className="mt-3 pt-3 border-t border-white/10 text-right">
+                    <span className="text-xs text-slate-400 mr-4">Total:</span>
+                    <span className="text-orange-400 font-bold">{costs.summary?.formatted_cost}</span>
+                </div>
+            </div>
+        ) : (
+            <div className="glass p-8 text-center text-slate-500">
+                <BarChart3 size={48} className="mx-auto mb-3 opacity-20" />
+                <p>No hay datos de costos aun.</p>
+                <p className="text-xs mt-1">Los costos se registraran automaticamente cuando los agentes procesen mensajes.</p>
+            </div>
+        )}
+    </div>
+);
+
+// ============== AUDIT TAB ==============
+const AuditTab = ({ logs }: { logs: any[] }) => (
+    <div className="glass p-0 overflow-hidden">
+        <div className="p-4 bg-black/30 border-b border-white/10">
+            <h3 className="text-sm font-bold text-slate-300 uppercase flex items-center gap-2">
+                <FileText size={16} /> Audit Log
+            </h3>
+        </div>
+        {logs.length > 0 ? (
+            <div className="max-h-[500px] overflow-y-auto">
+                <table className="w-full text-sm">
+                    <thead className="text-[10px] text-slate-500 uppercase sticky top-0 bg-black/60 backdrop-blur">
+                        <tr>
+                            <th className="text-left p-3">Fecha</th>
+                            <th className="text-left p-3">Accion</th>
+                            <th className="text-left p-3">Usuario</th>
+                            <th className="text-left p-3">Tenant</th>
+                            <th className="text-left p-3">Detalles</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                        {logs.map((log: any) => (
+                            <tr key={log.id} className="hover:bg-white/5">
+                                <td className="p-3 text-xs text-slate-400">{new Date(log.created_at).toLocaleString()}</td>
+                                <td className="p-3 font-mono text-xs text-amber-400">{log.action}</td>
+                                <td className="p-3 text-xs">{log.user_email || '-'}</td>
+                                <td className="p-3 text-xs text-slate-500">#{log.tenant_id || '-'}</td>
+                                <td className="p-3 text-[10px] text-slate-500 max-w-[200px] truncate">{JSON.stringify(log.details)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        ) : (
+            <div className="p-8 text-center text-slate-500 text-sm">No hay logs de auditoria aun.</div>
+        )}
+    </div>
+);
+
+// ============== SHARED COMPONENTS ==============
+const MetricCard = ({ label, value, icon, sub, highlight }: any) => (
+    <div className={`glass p-4 border-t-2 ${highlight ? 'border-t-emerald-500/50 hover:border-t-emerald-500' : 'border-t-red-500/20 hover:border-t-red-500'} transition-colors`}>
+        <div className="flex justify-between items-start mb-2">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{label}</span>
+            <div className="p-1.5 bg-white/5 rounded">{icon}</div>
+        </div>
+        <div className="text-2xl font-black text-white mb-0.5">{value || 0}</div>
         <div className="text-[10px] text-slate-400">{sub}</div>
+    </div>
+);
+
+const InfoRow = ({ label, value, color = 'text-white' }: any) => (
+    <div className="flex justify-between items-center border-b border-white/5 pb-2">
+        <span className="text-slate-400 text-xs">{label}</span>
+        <span className={`font-mono ${color}`}>{value}</span>
     </div>
 );

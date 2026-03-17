@@ -17,7 +17,8 @@ import {
     Database,
     FileText,
     Link as LinkIcon,
-    Palette
+    Palette,
+    CreditCard
 } from 'lucide-react';
 
 import { useLanguage } from '../contexts/LanguageContext';
@@ -84,6 +85,7 @@ export const Sidebar: React.FC = () => {
                     <NavItem to="/onboarding" icon={<MessageCircle size={20} />} label="Hyper Onboarding" desc="Entrevista IA para crear Agentes" />
 
                     <div className="h-px bg-white/5 w-8 mx-auto my-4" />
+                    <NavItem to="/billing" icon={<CreditCard size={20} />} label="Suscripcion" desc="Planes, pagos y facturacion" />
                     <NavItem to="/settings" icon={<Settings size={20} />} label={t('sidebar.settings')} desc={t('sidebar.settingsDesc')} />
                 </nav>
 

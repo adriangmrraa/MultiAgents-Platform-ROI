@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import timedelta
+from datetime import datetime, timedelta
 import uuid
 import structlog
 
@@ -27,6 +27,27 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
     # DEBUG: Log the actual value from DB
     logger.info("auth_me_check", user_id=str(current_user.id), is_verified=current_user.is_verified)
     
+    # Fetch subscription info
+    sub_info = {}
+    try:
+        from app.models.billing import Subscription, Plan
+        sub_result = await db.execute(
+            select(Subscription).where(Subscription.tenant_id == current_user.tenant_id)
+        )
+        sub = sub_result.scalar_one_or_none()
+        if sub:
+            plan_result = await db.execute(select(Plan).where(Plan.id == sub.plan_id))
+            plan = plan_result.scalar_one_or_none()
+            sub_info = {
+                "plan_name": plan.name if plan else "unknown",
+                "plan_display_name": plan.display_name if plan else "Unknown",
+                "subscription_status": sub.status,
+                "trial_ends_at": sub.trial_ends_at.isoformat() if sub.trial_ends_at else None,
+                "trial_days_remaining": max(0, (sub.trial_ends_at.replace(tzinfo=None) - datetime.utcnow()).days) if sub.trial_ends_at else None
+            }
+    except Exception:
+        pass
+
     return {
         "id": str(current_user.id),
         "email": current_user.email,
@@ -35,7 +56,8 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
         "is_verified": current_user.is_verified,
         "store_name": current_user.tenant.store_name if current_user.tenant else None,
         "full_name": current_user.full_name,
-        "avatar_url": current_user.avatar_url
+        "avatar_url": current_user.avatar_url,
+        **sub_info
     }
 
 @router.post("/register", response_model=Token)
@@ -131,7 +153,25 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
-    
+
+    # 3b. Create Trial Subscription (10 days free)
+    try:
+        from app.models.billing import Plan, Subscription
+        from datetime import timedelta
+        free_plan = (await db.execute(select(Plan).where(Plan.name == "free"))).scalar_one_or_none()
+        if free_plan:
+            trial_sub = Subscription(
+                tenant_id=new_tenant.id,
+                plan_id=free_plan.id,
+                status="trialing",
+                trial_ends_at=datetime.utcnow() + timedelta(days=10)
+            )
+            db.add(trial_sub)
+            await db.commit()
+            logger.info("trial_subscription_created", tenant_id=new_tenant.id, trial_days=10)
+    except Exception as sub_err:
+        logger.warning("trial_subscription_skip", error=str(sub_err))
+
     # 4. Send Verification Email (BLOCKING per User Debug Protocol)
     from app.core.email import EmailService
     from datetime import datetime
