@@ -173,7 +173,35 @@ Se identificaron **120+ problemas** en todo el proyecto:
 
 ## PLAN DE IMPLEMENTACIÓN
 
-### Fase 1: Fixes Críticos (C1-C8)
-### Fase 2: Fixes High (H1-H23)
-### Fase 3: Fixes Medium (M1-M15)
-### Fase 4: Fixes Low (mejoras menores)
+### Fase 1: Fixes Críticos (C1-C8) ✅ COMPLETADO
+### Fase 2: Fixes High (H1-H23) ✅ COMPLETADO
+### Fase 3: Fixes Medium (M1-M15) ✅ COMPLETADO
+### Fase 4: Fixes Low (mejoras menores) - Pendiente
+
+---
+
+## BACKEND AUDIT (Servicios Python/TypeScript)
+
+### Fixes Aplicados al Backend:
+
+**B1 (CRITICAL): BFF admin-secret-99 hardcoded** → Eliminado fallback
+**B2 (CRITICAL): meta_service missing imports httpx/uuid** → Agregados
+**B3 (CRITICAL): orchestrator utils.py XOR key hardcoded** → Eliminado default
+**B4 (CRITICAL): orchestrator config.py secrets hardcoded** → Eliminados defaults
+**B5 (CRITICAL): admin_routes.py admin-secret-99** → Eliminado fallback
+**B6 (CRITICAL): agent_service auth bypass cuando INTERNAL_API_TOKEN no está set** → Corregido
+**B7 (HIGH): agent_service mutable default ContextVar** → Corregido
+**B8 (HIGH): resilience.py operator precedence + typos** → Corregido
+**B9 (MEDIUM): email.py CSS typo max_width** → Corregido a max-width
+**B10 (HIGH): agent_service admin-secret-99 hardcoded** → Eliminado
+
+### Issues Backend Documentados (requieren refactoring mayor):
+- Dual SQLAlchemy Base classes (db.py vs app/models/base.py)
+- Dual database engines/session pools
+- XOR encryption scheme (needs Fernet migration)
+- Synchronous Redis in async whatsapp_service
+- Global webhook secret race condition in whatsapp_service
+- Blocking I/O calls in async RAG functions
+- 30-day JWT token expiry
+- Missing tenant isolation in db.py queries
+- platform_routes.py using wrong DB methods (fetchval on AsyncSession)

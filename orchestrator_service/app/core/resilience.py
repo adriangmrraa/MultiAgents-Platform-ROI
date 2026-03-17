@@ -127,10 +127,10 @@ def safe_db_call(func):
             # Detect Structural Errors
             msg = str(e).lower()
             is_structural = (
-                "relation" in msg and "does not exist" in msg or
-                "column" in msg and "does not exist" in msg or
-                "undifinedtableerror" in str(type(e)).lower() or
-                "undifinedcolumnerror" in str(type(e)).lower() or
+                ("relation" in msg and "does not exist" in msg) or
+                ("column" in msg and "does not exist" in msg) or
+                "undefinedtableerror" in str(type(e)).lower() or
+                "undefinedcolumnerror" in str(type(e)).lower() or
                 "programmingerror" in str(type(e)).lower()
             )
             

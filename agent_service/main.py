@@ -96,7 +96,7 @@ ctx_store_id: ContextVar[str] = ContextVar("ctx_store_id", default="")
 ctx_token: ContextVar[str] = ContextVar("ctx_token", default="")
 ctx_service_url: ContextVar[str] = ContextVar("ctx_service_url", default="")
 ctx_internal_token: ContextVar[str] = ContextVar("ctx_internal_token", default="")
-ctx_knowledge_sources: ContextVar[List[str]] = ContextVar("ctx_knowledge_sources", default=[])
+ctx_knowledge_sources: ContextVar[List[str]] = ContextVar("ctx_knowledge_sources")
 ctx_user_id: ContextVar[str] = ContextVar("ctx_user_id", default="") # Strict Isolation (v5.10)
 ctx_conversation_id: ContextVar[str] = ContextVar("ctx_conversation_id", default="")
 ctx_tenant_id: ContextVar[int] = ContextVar("ctx_tenant_id", default=0)
@@ -277,7 +277,7 @@ async def search_knowledge_base(q: str):
     # In this architecture, we call the orchestrator (which holds the RAGCore).
     # We use ctx_service_url as a base, but orchestrator is usually at 8000.
     orch_url = os.getenv("ORCHESTRATOR_URL", "http://orchestrator_service:8000")
-    headers = {"X-Internal-Secret": ctx_internal_token.get(), "x-admin-token": os.getenv("ADMIN_TOKEN", "admin-secret-99")}
+    headers = {"X-Internal-Secret": ctx_internal_token.get(), "x-admin-token": os.getenv("ADMIN_TOKEN", "")}
     
     # Protocol Omega: Inject filters (v5.10)
     ks = ctx_knowledge_sources.get()
@@ -413,7 +413,7 @@ async def execute_agent(
 ):
     # Security Check
     env_secret = os.getenv("INTERNAL_API_TOKEN")
-    if env_secret and x_internal_secret != env_secret:
+    if not env_secret or x_internal_secret != env_secret:
         raise HTTPException(status_code=401, detail="Invalid Internal Secret")
 
     logger.info("agent_execution_start", tenant_id=request.tenant_id, store=request.context.store_name)
