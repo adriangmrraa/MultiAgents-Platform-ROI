@@ -74,6 +74,16 @@ export function useApi() {
                     throw new Error("Unauthorized");
                 }
 
+                // SaaS Subscription Guard: Redirect to billing when blocked
+                if (response.status === 402) {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.warn("Subscription required (402):", errorData);
+                    if (!window.location.pathname.startsWith('/billing')) {
+                        window.location.href = '/billing';
+                    }
+                    throw new Error(errorData.message || "Suscripcion requerida");
+                }
+
                 if (!response.ok) {
                     const errorText = await response.text();
 

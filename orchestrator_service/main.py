@@ -145,6 +145,8 @@ from utils import encrypt_password, decrypt_password
 from admin_routes import router as admin_router, sync_environment
 from app.routes.auth_routes import router as auth_router
 from app.routes.platform_routes import router as platform_router
+from app.routes.billing_routes import router as billing_router  # SaaS Billing
+from app.routes.gallery_routes import router as gallery_router  # Smart Gallery (Pomelli-style)
 from app.routes.ingest_routes import router as ingest_router # NEW
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
@@ -1206,6 +1208,7 @@ async def lifespan(app: FastAPI):
         from app.models.customer import Customer # Fixes "Phantom Table" issue
         from app.models.agent import Agent # Nexus v3 Agent Support
         from app.models.auth import User # Sovereign Identity
+        from app.models.billing import Plan, Subscription, UsageRecord, Invoice, AuditLog  # SaaS Billing
         
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -1218,7 +1221,31 @@ async def lifespan(app: FastAPI):
             except Exception as hyd_err:
                 logger.error("data_hydration_failed", error=str(hyd_err))
                 # Don't crash, allow partial startup
-            
+
+        # 7. SaaS Services: Usage Tracker + Trial Manager
+        try:
+            from app.services.usage_tracker import init_usage_tracker
+            init_usage_tracker(db)
+            logger.info("usage_tracker_initialized")
+        except Exception as ut_err:
+            logger.error("usage_tracker_init_failed", error=str(ut_err))
+
+        try:
+            from app.services.trial_manager import trial_check_loop
+            asyncio.create_task(trial_check_loop(db.pool))
+            logger.info("trial_manager_started")
+        except Exception as tm_err:
+            logger.error("trial_manager_start_failed", error=str(tm_err))
+
+        # 8. Run billing migration (idempotent - safe to run on every startup)
+        try:
+            from scripts.migrate_saas_billing import MIGRATION_SQL, SEED_PLANS_SQL
+            await db.execute(MIGRATION_SQL)
+            await db.execute(SEED_PLANS_SQL)
+            logger.info("billing_schema_verified")
+        except Exception as bm_err:
+            logger.debug("billing_migration_note", error=str(bm_err))
+
         logger.info("system_startup_complete", port=8000)
         
     except Exception as e:
@@ -1282,11 +1309,18 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(billing_router)  # SaaS Billing Routes
+app.include_router(gallery_router)  # Smart Gallery Routes
 from app.api import agents, templates
 
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(templates.router, prefix="/api/templates", tags=["templates"])
 app.include_router(platform_router) # Platform Router (God Mode)
+
+# SaaS Subscription Guard (blocks expired trials/suspended accounts)
+from app.middleware.subscription_guard import SubscriptionGuardMiddleware
+app.add_middleware(SubscriptionGuardMiddleware)
+
 app.add_middleware(RateLimitMiddleware)
 
 @app.exception_handler(Exception)

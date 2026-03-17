@@ -28,6 +28,7 @@ import Register from './views/auth/Register';
 import VerifyEmail from './views/auth/VerifyEmail';
 import { Profile } from './views/Profile';
 import { PlatformTower } from './views/PlatformTower';
+import { Billing } from './views/Billing';
 import { PrivacyPolicy } from './views/PrivacyPolicy';
 import { TermsOfService } from './views/TermsOfService';
 
@@ -122,6 +123,7 @@ function App() {
                     <Route path="/console" element={<Console />} />
                     <Route path="/handoff" element={<Handoff />} />
                     <Route path="/profile" element={<Profile />} />
+                    <Route path="/billing" element={<Billing />} />
                     <Route path="/platform" element={
                       <RequireSuperAdmin>
                         <PlatformTower />
