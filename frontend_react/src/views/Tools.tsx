@@ -59,13 +59,17 @@ export const Tools: React.FC = () => {
     const [improving, setImproving] = useState(false);
 
     const handleImprovePrompt = async (field: string) => {
-        const text = field === 'prompt' ? formData.prompt_injection : '';
+        const text = field === 'prompt' ? formData.prompt_injection : formData.response_guide;
         if (!text) return;
         setImproving(true);
         try {
             const res = await fetchApi('/admin/ai/improve-prompt', { method: 'POST', body: { text, context: 'tool' } });
             if (res.refined_text) {
-                setFormData({ ...formData, prompt_injection: res.refined_text });
+                if (field === 'prompt') {
+                    setFormData({ ...formData, prompt_injection: res.refined_text });
+                } else {
+                    setFormData({ ...formData, response_guide: res.refined_text });
+                }
             }
         } catch (e) {
             console.error(e);
@@ -96,7 +100,11 @@ export const Tools: React.FC = () => {
             // I'll implement the creation flow first, but the UI suggests editing.
             // I will assume for now we are creating new custom tools.
 
-            await fetchApi('/admin/tools', { method: 'POST', body: formData });
+            if (formData.id) {
+                await fetchApi(`/admin/tools/${formData.id}`, { method: 'PUT', body: formData });
+            } else {
+                await fetchApi('/admin/tools', { method: 'POST', body: formData });
+            }
             setIsModalOpen(false);
             loadTools();
         } catch (e) {

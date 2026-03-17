@@ -608,12 +608,13 @@ export const Chats: React.FC = () => {
 
                                                 {/* Text Content (Linkified) */}
                                                 {!audioMatch && msg.content && msg.content !== '[Attachment/Media]' && (
-                                                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words" dangerouslySetInnerHTML={{
-                                                        __html: msg.content.replace(
-                                                            /(https?:\/\/[^\s]+)/g,
-                                                            '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline"> $1 </a>'
-                                                        )
-                                                    }} />
+                                                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                                        {msg.content.split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
+                                                            part.match(/^https?:\/\//) ? (
+                                                                <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{part}</a>
+                                                            ) : part
+                                                        )}
+                                                    </p>
                                                 )}
 
                                                 <span className="text-[10px] opacity-40 mt-1 block text-right font-mono">
@@ -648,14 +649,14 @@ export const Chats: React.FC = () => {
                                                 <TemplateSelector
                                                     onSend={async (tmpl, vars) => {
                                                         try {
-                                                            await fetchApi(`/api/chats/${selectedChatId}/send`, {
+                                                            await fetchApi(`/admin/chats/${selectedChatId}/send`, {
                                                                 method: 'POST',
-                                                                body: JSON.stringify({
+                                                                body: {
                                                                     type: 'template',
                                                                     template_name: tmpl.name,
                                                                     language: tmpl.language,
                                                                     parameters: vars
-                                                                })
+                                                                }
                                                             });
                                                             // Optimistic update
                                                             setRefreshTrigger(p => p + 1);
@@ -713,7 +714,7 @@ const TemplateSelector = ({ onSend }: { onSend: (t: any, vars: string[]) => void
     const [variables, setVariables] = useState<string[]>([]);
 
     useEffect(() => {
-        fetchApi('/api/templates/').then(data => {
+        fetchApi('/admin/templates/').then(data => {
             setTemplates(data?.filter((t: any) => t.status === 'APPROVED') || []);
         });
     }, []);
@@ -724,7 +725,7 @@ const TemplateSelector = ({ onSend }: { onSend: (t: any, vars: string[]) => void
         // Detect variable count simply by parsing body (not perfect but OK for MVP)
         // Or assume body has {{1}}, {{2}}...
         // Doing a simple regex count
-        const matches = t?.body_text.match(/\{\{\d+\}\}/g);
+        const matches = t?.body_text?.match(/\{\{\d+\}\}/g);
         const count = matches ? new Set(matches).size : 0;
         setVariables(new Array(count).fill(''));
     };

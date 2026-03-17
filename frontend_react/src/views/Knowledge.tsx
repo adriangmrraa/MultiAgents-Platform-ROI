@@ -380,7 +380,7 @@ export const Knowledge: React.FC = () => {
                     <div className="flex gap-3">
                         <button
                             onClick={() => {
-                                performUpload(pendingUploadFile!, activeCollection, heroName);
+                                pendingUploadFile && performUpload(pendingUploadFile, activeCollection, heroName);
                                 setShowHeroModal(false);
                                 setHeroName('');
                             }}
@@ -391,7 +391,7 @@ export const Knowledge: React.FC = () => {
                         <button
                             onClick={() => {
                                 // Fallback to simple upload
-                                performUpload(pendingUploadFile!, activeCollection);
+                                pendingUploadFile && performUpload(pendingUploadFile, activeCollection);
                             }}
                             className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-lg transition-all"
                         >

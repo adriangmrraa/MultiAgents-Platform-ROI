@@ -61,14 +61,14 @@ export const Agents: React.FC = () => {
     }, []);
 
     const loadData = async () => {
-        const [a, t, s, k] = await Promise.all([
+        const [a, tenantsList, s, k] = await Promise.all([
             fetchApi('/admin/agents'),
             fetchApi('/admin/tenants'),
             fetchApi('/admin/tools'),
             fetchApi('/admin/knowledge/list')
         ]);
         if (a) setAgents(a);
-        if (t) setTenants(t);
+        if (tenantsList) setTenants(tenantsList);
         if (s) setTools(s);
         if (k) setKnowledgeFiles(k);
     };
@@ -251,7 +251,7 @@ export const Agents: React.FC = () => {
                                     <button className="btn-secondary text-xs px-2 py-1" onClick={() => openEdit(agent)}>
                                         <Edit size={12} className="mr-1" /> {t('common.edit')}
                                     </button>
-                                    <button className="btn-delete text-xs px-2 py-1" onClick={() => handleDelete(agent.id!)}>
+                                    <button className="btn-delete text-xs px-2 py-1" onClick={() => agent.id && handleDelete(agent.id)}>
                                         <Trash2 size={12} />
                                     </button>
                                 </td>
@@ -300,7 +300,7 @@ export const Agents: React.FC = () => {
                             <label>{t('agents.tenant')}</label>
                             <select required value={formData.tenant_id} onChange={e => setFormData({ ...formData, tenant_id: parseInt(e.target.value) })}>
                                 <option value={0}>{t('common.select')}...</option>
-                                {tenants.map(t => <option key={t.id} value={t.id}>{t.store_name}</option>)}
+                                {tenants.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.store_name}</option>)}
                             </select>
                         </div>
                     </div>
@@ -374,7 +374,7 @@ export const Agents: React.FC = () => {
                                         onChange={e => {
                                             const current = formData.enabled_tools || [];
                                             if (e.target.checked) setFormData({ ...formData, enabled_tools: [...current, tool.name] });
-                                            else setFormData({ ...formData, enabled_tools: current.filter(t => t !== tool.name) });
+                                            else setFormData({ ...formData, enabled_tools: current.filter(item => item !== tool.name) });
                                         }}
                                     />
                                     <span className="text-xs font-mono">{tool.name}</span>

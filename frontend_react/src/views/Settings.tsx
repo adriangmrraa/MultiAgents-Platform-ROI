@@ -56,6 +56,8 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
             }
         };
         window.addEventListener("message", handleMessage);
+        // Auto-cleanup after 5 minutes
+        setTimeout(() => window.removeEventListener("message", handleMessage), 300000);
     };
 
     const [showManualTn, setShowManualTn] = useState(false);
@@ -257,8 +259,8 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
                                                     onChange={(e) => setSelectedTenantId(e.target.value)}
                                                     className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none"
                                                 >
-                                                    {tenants.map((t: any) => (
-                                                        <option key={t.id} value={t.id}>{t.store_name} (ID: {t.id})</option>
+                                                    {tenants.map((tenant: any) => (
+                                                        <option key={tenant.id} value={tenant.id}>{tenant.store_name} (ID: {tenant.id})</option>
                                                     ))}
                                                 </select>
                                             </div>
@@ -279,7 +281,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
                     </div>
                 )}
 
-                {activeTab === 'web' && (activeTab === 'web' && <div className="animate-fade-in"><WebSettings /></div>)}
+                {activeTab === 'web' && <div className="animate-fade-in"><WebSettings /></div>}
                 {activeTab === 'ycloud' && (<div className="animate-fade-in"><YCloudSettings /></div>)}
                 {activeTab === 'meta' && (<div className="animate-fade-in"><MetaSettings /></div>)}
             </div>

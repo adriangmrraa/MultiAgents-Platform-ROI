@@ -9,7 +9,8 @@ import {
     Clock,
     Copy,
     LayoutGrid,
-    MessageSquare
+    MessageSquare,
+    Trash2
 } from 'lucide-react';
 
 interface Template {
@@ -83,12 +84,12 @@ export default function Templates() {
         try {
             await fetchApi('/admin/templates/create', {
                 method: 'POST',
-                body: JSON.stringify({
+                body: {
                     name: newName,
                     category: newCategory,
                     body_text: newBody,
                     language: newLang
-                })
+                }
             });
             setNewName('');
             setNewBody('');

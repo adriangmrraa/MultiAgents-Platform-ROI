@@ -21,7 +21,7 @@ const FuturisticLoader = ({ message, percent, status }: { message?: string, perc
         </div>
 
         <style>{`
-            .futuristic-loader { display: flex; flex-direction: column; alignItems: center; justifyContent: center; height: 400px; }
+            .futuristic-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 400px; }
             .text-cyan-400 { color: #22d3ee; }
             .font-mono { font-family: 'Courier New', monospace; }
             .tracking-widest { letter-spacing: 0.2em; }
@@ -148,6 +148,7 @@ export const SetupExperience: React.FC = () => {
     });
 
     const scrollRef = useRef<HTMLDivElement>(null);
+    const evtSourceRef = useRef<EventSource | null>(null);
 
     // Auto-scroll logs (Smart Scroll)
     useEffect(() => {
@@ -163,6 +164,15 @@ export const SetupExperience: React.FC = () => {
             }
         }
     }, [logs]);
+
+    useEffect(() => {
+        return () => {
+            if (evtSourceRef.current) {
+                evtSourceRef.current.close();
+                evtSourceRef.current = null;
+            }
+        };
+    }, []);
 
     const handleConnect = async () => {
         setStep('igniting');
@@ -184,9 +194,10 @@ export const SetupExperience: React.FC = () => {
 
             const streamUrl = `${base}/api/engine/stream/${formData.bot_phone_number}`;
             const evtSource = new EventSource(streamUrl);
+            evtSourceRef.current = evtSource;
 
             evtSource.onopen = () => {
-                setLogs(prev => [...prev, ">> SYSTEM: Secure Link Established. Protocol Omega Active."]);
+                setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> SYSTEM: Secure Link Established. Protocol Omega Active.`]);
             };
 
             const handleAsset = (e: any, type: string) => {
@@ -200,14 +211,14 @@ export const SetupExperience: React.FC = () => {
                         const normalized = { type: type, content: content.content || content.data || content };
                         return [...prev, normalized];
                     });
-                    setLogs(prev => [...prev, `>> ASSET: ${type.toUpperCase()} Generated Successfully.`]);
+                    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> ASSET: ${type.toUpperCase()} Generated Successfully.`]);
                     setPercent(prev => Math.min(prev + 25, 100));
                 } catch (err) { console.error(err); }
             };
 
             evtSource.addEventListener("log", (e: any) => {
                 const log = JSON.parse(e.data);
-                setLogs(prev => [...prev, `[${log.event_type}] ${log.message}`]);
+                setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] [${log.event_type}] ${log.message}`]);
             });
 
             evtSource.addEventListener("branding", (e: any) => handleAsset(e, "branding"));
@@ -215,13 +226,13 @@ export const SetupExperience: React.FC = () => {
             evtSource.addEventListener("visuals", (e: any) => handleAsset(e, "visuals"));
             evtSource.addEventListener("roi", (e: any) => handleAsset(e, "roi"));
             evtSource.addEventListener("rag", (e: any) => {
-                setLogs(prev => [...prev, ">> RAG: Knowledge Base Vectorized."]);
+                setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> RAG: Knowledge Base Vectorized.`]);
                 setPercent(prev => 100);
             });
 
         } catch (e: any) {
             console.error(e);
-            setLogs(prev => [...prev, `>> CRITICAL ERROR: ${e.message}`]);
+            setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> CRITICAL ERROR: ${e.message}`]);
         }
     };
 
@@ -340,10 +351,10 @@ export const SetupExperience: React.FC = () => {
                         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 font-mono text-xs text-slate-400 space-y-2">
                             {logs.map((log, i) => (
                                 <div key={i} className="border-l-2 border-cyan-500/20 pl-2">
-                                    <span className="text-cyan-600">[{new Date().toLocaleTimeString()}]</span> {log}
+                                    <span className="text-cyan-600">{log.substring(0, log.indexOf(']') + 1)}</span> {log.substring(log.indexOf(']') + 1)}
                                 </div>
                             ))}
-                            <div ref={messagesEndRef} />
+                            <div />
                         </div>
                     </div>
                 </div>

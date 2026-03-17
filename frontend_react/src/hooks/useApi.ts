@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || detectApiBase();
-export const ADMIN_TOKEN = import.meta.env.VITE_API_ADMIN_TOKEN || import.meta.env.VITE_ADMIN_TOKEN || "admin-secret-99";
+export const ADMIN_TOKEN = import.meta.env.VITE_API_ADMIN_TOKEN || import.meta.env.VITE_ADMIN_TOKEN || "";
 
 function detectApiBase() {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
@@ -75,28 +75,24 @@ export function useApi() {
                 }
 
                 if (!response.ok) {
+                    const errorText = await response.text();
+
                     if (response.status === 500) {
-                        try {
-                            const errText = await response.text();
-                            console.error("CRITICAL BACKEND ERROR (500):", errText);
-                        } catch { }
+                        console.error("CRITICAL BACKEND ERROR (500):", errorText);
                         throw new Error("Ocurrió un error inesperado en nuestros servidores. Por favor intente más tarde.");
                     }
 
-                    const errorData = await response.text();
-                    if (errorData.trim().startsWith('<!DOCTYPE html') || errorData.trim().startsWith('<html')) {
+                    if (errorText.trim().startsWith('<!DOCTYPE html') || errorText.trim().startsWith('<html')) {
                         throw new Error(`API Error: ${response.status} (Backend Unreachable)`);
                     }
                     try {
-                        const jsonErr = JSON.parse(errorData);
+                        const jsonErr = JSON.parse(errorText);
                         let finalMsg: any = jsonErr.detail || jsonErr.message || `HTTP ${response.status}`;
 
-                        // PROTOCOL OMEGA: Handle structured FastAPI errors (list/dict)
                         if (typeof finalMsg !== 'string') {
                             finalMsg = JSON.stringify(finalMsg);
                         }
 
-                        // UX SHIELD: Hide raw SQL/DB errors
                         const techKeywords = ["violates", "constraint", "foreign key", "sql", "pydantic", "execution", "integrity", "table", "column"];
                         if (techKeywords.some(k => String(finalMsg).toLowerCase().includes(k))) {
                             console.warn("Sanitized Technical Error:", finalMsg);
@@ -125,7 +121,9 @@ export function useApi() {
                 // Don't retry Auth errors
                 if (err.message === "Unauthorized") throw err;
 
-                if (attempt < MAX_RETRIES) {
+                const method = (options.method || 'GET').toUpperCase();
+                const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT'].includes(method);
+                if (isIdempotent && attempt < MAX_RETRIES) {
                     const delay = INITIAL_BACKOFF * Math.pow(2, attempt - 1);
                     console.warn(`API Attempt ${attempt} failed. Retrying in ${delay}ms...`, err);
                     await new Promise(resolve => setTimeout(resolve, delay));

@@ -39,20 +39,8 @@ export const Stores: React.FC = () => {
 
     const loadTenants = async () => {
         try {
-            console.log('[Stores] Loading tenants...');
             const data = await fetchApi('/admin/tenants');
-            console.log('[Stores] Loaded tenants:', data);
             if (Array.isArray(data)) {
-                // Log each tenant to see exact structure
-                data.forEach((t, i) => {
-                    console.log(`[Stores] Tenant ${i}:`, {
-                        id: t.id,
-                        store_name: t.store_name,
-                        bot_phone_number: t.bot_phone_number,
-                        tiendanube_store_id: t.tiendanube_store_id,
-                        owner_email: t.owner_email
-                    });
-                });
                 setTenants(data);
             } else {
                 console.error("Invalid tenants data received:", data);
@@ -194,7 +182,7 @@ export const Stores: React.FC = () => {
                                     </td>
                                     <td>{t.tiendanube_store_id || 'N/A'}</td>
                                     <td>
-                                        {t.is_tn_connected ? (
+                                        {t.tiendanube_store_id ? (
                                             <span className="service-pill ok"><CheckCircle size={10} /> Conectado</span>
                                         ) : (
                                             <span className="service-pill error"><XCircle size={10} /> Sin Configurar</span>
@@ -206,7 +194,7 @@ export const Stores: React.FC = () => {
                                             <button className="btn-secondary" style={{ padding: '6px', color: 'var(--accent)' }} onClick={() => openToolConfig(t)} title="Configurar Herramientas">
                                                 <Wrench size={14} />
                                             </button>
-                                            <button className="btn-delete" style={{ padding: '6px' }} onClick={() => handleDelete(t.id!)} title="Eliminar"><Trash2 size={14} /></button>
+                                            <button className="btn-delete" style={{ padding: '6px' }} onClick={() => t.id && handleDelete(t.id)} title="Eliminar"><Trash2 size={14} /></button>
                                         </div>
                                     </td>
                                 </tr>

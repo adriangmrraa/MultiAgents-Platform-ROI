@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Database, Network, Search, Sparkles } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
+import { useAuth } from '../contexts/AuthContext';
 
 interface KnowledgeNode {
     id: string;
@@ -15,6 +16,7 @@ interface KnowledgeNode {
 
 export const RagGalaxy: React.FC = () => {
     const { fetchApi } = useApi();
+    const { user } = useAuth();
     const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
     const [hoveredNode, setHoveredNode] = useState<KnowledgeNode | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,7 +26,7 @@ export const RagGalaxy: React.FC = () => {
         const loadGalaxy = async () => {
             try {
                 // Fetch the "Star Map" from the Brain
-                const vectorNodes = await fetchApi('/admin/rag/galaxy?tenant_id=1');
+                const vectorNodes = await fetchApi(`/admin/rag/galaxy?tenant_id=${user?.tenant_id || 1}`);
                 if (Array.isArray(vectorNodes)) {
                     setNodes(vectorNodes);
                 }

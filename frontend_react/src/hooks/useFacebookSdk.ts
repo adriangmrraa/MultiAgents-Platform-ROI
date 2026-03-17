@@ -11,8 +11,6 @@ export const useFacebookSdk = () => {
     const [isReady, setIsReady] = useState(false);
 
     useEffect(() => {
-        console.log("Variables cargadas:", import.meta.env); // DEBUG: User requested
-
         const appId = import.meta.env.VITE_FACEBOOK_APP_ID;
         if (!appId) {
             console.error("[Meta SDK] CRITICAL: VITE_FACEBOOK_APP_ID missing in environment");
@@ -49,15 +47,16 @@ export const useFacebookSdk = () => {
             } finally {
                 setIsReady(true);
             }
-        };    // 4. Timeout Fallback (3s) - Force UI Unblock no matter what
+        };
+        // 3. Load the script
+        const scriptId = 'facebook-jssdk';
+        if (document.getElementById(scriptId)) return;
+
+        // 4. Timeout Fallback (3s) - Force UI Unblock no matter what
         const timeoutId = setTimeout(() => {
             console.warn("[Meta SDK] 3s Timeout reached. Forcing 'Ready' state to unblock UI.");
             setIsReady(true);
         }, 3000);
-
-        // 3. Load the script
-        const scriptId = 'facebook-jssdk';
-        if (document.getElementById(scriptId)) return;
 
         const js = document.createElement('script');
         js.id = scriptId;
