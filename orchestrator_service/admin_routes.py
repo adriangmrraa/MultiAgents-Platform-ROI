@@ -26,7 +26,7 @@ from app.core.models import MODEL_REGISTRY, validate_model, DEFAULT_MODEL
 from app.core.rag import RAGCore # NEW
 
 # Configuration
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-secret-99")
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY")
 
 # Resilience & Engine

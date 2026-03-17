@@ -1,6 +1,7 @@
-
+import React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
+import { useAuth } from '../contexts/AuthContext';
 import { Send, Sparkles, CheckCircle, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -12,6 +13,7 @@ interface ChatMessage {
 export const OnboardingChat: React.FC = () => {
     const navigate = useNavigate();
     const { fetchApi } = useApi();
+    const { user } = useAuth();
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [userInput, setUserInput] = useState('');
     const [sessionId] = useState(() => Math.random().toString(36).substring(7));
@@ -40,7 +42,7 @@ export const OnboardingChat: React.FC = () => {
                     body: {
                         session_id: sessionId,
                         user_message: "HOLA_INIT", // Special trigger
-                        tenant_id: 1, // TODO: Dynamic Tenant
+                        tenant_id: user?.tenant_id || 1, // TODO: Dynamic Tenant
                         reset: true
                     }
                 });
@@ -71,7 +73,7 @@ export const OnboardingChat: React.FC = () => {
                 body: {
                     session_id: sessionId,
                     user_message: currentMsg,
-                    tenant_id: 1 // TODO: Dynamic
+                    tenant_id: user?.tenant_id || 1 // TODO: Dynamic
                 }
             });
 
@@ -101,7 +103,7 @@ export const OnboardingChat: React.FC = () => {
             const res = await fetchApi('/admin/onboarding/draft', {
                 method: 'POST',
                 body: {
-                    tenant_id: 1, // TODO
+                    tenant_id: user?.tenant_id || 1, // TODO
                     final_config: extractedData
                 }
             });

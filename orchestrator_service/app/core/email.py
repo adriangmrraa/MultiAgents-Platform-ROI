@@ -109,7 +109,7 @@ class EmailService:
                     padding: 40px;
                 }}
                 .container {{
-                    max_width: 600px;
+                    max-width: 600px;
                     margin: 0 auto;
                     background: rgba(30, 41, 59, 0.7);
                     border: 1px solid #334155;

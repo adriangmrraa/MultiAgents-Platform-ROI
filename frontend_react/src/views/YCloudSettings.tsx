@@ -34,6 +34,7 @@ export const YCloudSettings: React.FC = () => {
 
                 // Fetch Credentials specifically for YCloud
                 const creds: any[] = await fetchApi('/admin/credentials');
+                if (!Array.isArray(creds)) { setStatus('missing'); return; }
                 const key = creds.find(c => c.category === 'whatsapp_cloud' && c.name === 'YCloud API Key');
                 const secret = creds.find(c => c.category === 'whatsapp_cloud' && c.name === 'YCloud Webhook Secret');
 
@@ -44,6 +45,7 @@ export const YCloudSettings: React.FC = () => {
                 else setStatus('missing');
 
             } catch (e) {
+                setStatus('missing');
                 console.error(e);
             }
         };

@@ -1,4 +1,6 @@
 import os
+import uuid
+import httpx
 import structlog
 from fastapi import FastAPI, Request, BackgroundTasks, Depends, HTTPException, Query
 from contextlib import asynccontextmanager

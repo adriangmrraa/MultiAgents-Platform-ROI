@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Terminal, Play, Pause, Trash2, Filter } from 'lucide-react';
-import { ADMIN_TOKEN } from '../hooks/useApi';
 
 interface LogEvent {
     id: number;
@@ -56,8 +55,8 @@ export const Console: React.FC = () => {
     useEffect(() => {
         if (isStreaming) {
             const apiBase = (window as any).env?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '';
-            const streamUrlRaw = `${apiBase}/admin/console/stream?token=${ADMIN_TOKEN}`;
-            const streamUrlLog = streamUrlRaw.replace(ADMIN_TOKEN || '', '***');
+            const streamUrlRaw = `${apiBase}/admin/console/stream`;
+            const streamUrlLog = streamUrlRaw;
             console.log("Starting Real-time Stream:", streamUrlLog);
 
             const es = new EventSource(streamUrlRaw);
@@ -96,7 +95,7 @@ export const Console: React.FC = () => {
                 eventSourceRef.current = null;
             };
         }
-    }, [isStreaming, token]);
+    }, [isStreaming]);
 
     const scrollRef = useRef<HTMLDivElement>(null);
 

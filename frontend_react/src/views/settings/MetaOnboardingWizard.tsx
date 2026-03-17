@@ -168,7 +168,7 @@ const MetaOnboardingWizard: React.FC<MetaOnboardingWizardProps> = ({ assets, onC
                         className="px-6 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-all shadow-[0_0_15px_rgba(220,38,38,0.4)] hover:shadow-[0_0_20px_rgba(220,38,38,0.6)] flex items-center gap-2 disabled:opacity-50"
                     >
                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                        {step === 'whatsapp' || !hasWa && step === 'instagram' || step === 'empty' ? t('metaWizard.finish') : t('common.next')}
+                        {(step === 'whatsapp' || (!hasWa && step === 'instagram') || step === 'empty') ? t('metaWizard.finish') : t('common.next')}
                         {!isSaving && <ArrowRight className="w-4 h-4" />}
                     </button>
                 </div>

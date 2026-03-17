@@ -65,9 +65,9 @@ class Settings(BaseSettings):
     # Security & AI
     OPENAI_API_KEY: str | None = None
     GOOGLE_API_KEY: str | None = None
-    SECRET_KEY: SecretStr = SecretStr("changeme_in_production_please_32chars")
-    INTERNAL_API_TOKEN: SecretStr = SecretStr("internal_token_fallback")
-    ENCRYPTION_KEY: str = "agente-js-secret-key-2024"
+    SECRET_KEY: SecretStr = SecretStr(os.getenv("SECRET_KEY", "changeme_in_production_please_32chars"))
+    INTERNAL_API_TOKEN: SecretStr = SecretStr(os.getenv("INTERNAL_API_TOKEN", ""))
+    ENCRYPTION_KEY: str = ""
 
     # Supabase (RAG)
     SUPABASE_URL: str = "https://multiagents-supabase.yn8wow.easypanel.host"

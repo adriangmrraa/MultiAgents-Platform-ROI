@@ -113,7 +113,7 @@ export const Dashboard: React.FC = () => {
                                     <span className="text-[10px] font-bold text-gray-500 uppercase">{t('dashboard.salesValue')}</span>
                                 </div>
                                 <div className="text-2xl font-black text-white">
-                                    {stats.assist_metrics?.sales_score || 0} <span className="text-xs text-gray-500">{t('dashboard.points')}</span>
+                                    {stats.assist_metrics?.sales_score ?? 0} <span className="text-xs text-gray-500">{t('dashboard.points')}</span>
                                 </div>
                             </div>
                             <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
@@ -122,7 +122,7 @@ export const Dashboard: React.FC = () => {
                                     <span className="text-[10px] font-bold text-gray-500 uppercase">{t('dashboard.supportValue')}</span>
                                 </div>
                                 <div className="text-2xl font-black text-white">
-                                    {stats.assist_metrics?.estimated_savings || '$0'}
+                                    {stats.assist_metrics?.estimated_savings ?? '$0'}
                                 </div>
                                 <div className="text-[9px] text-emerald-500/70 font-bold">{t('dashboard.estimatedSavings')}</div>
                             </div>
@@ -148,7 +148,7 @@ export const Dashboard: React.FC = () => {
                         <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{t('dashboard.commsTraffic')}</span>
                         <MessageSquare className="text-zinc-600 group-hover:text-red-500 transition-colors" size={20} />
                     </div>
-                    <span className="text-3xl font-black text-white block mb-0.5 tracking-tighter">{stats?.total_messages || 0}</span>
+                    <span className="text-3xl font-black text-white block mb-0.5 tracking-tighter">{stats?.total_messages ?? 0}</span>
                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('dashboard.interactions')}</span>
                 </div>
 

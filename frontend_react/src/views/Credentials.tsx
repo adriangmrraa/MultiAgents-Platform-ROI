@@ -183,7 +183,7 @@ export const Credentials: React.FC = () => {
     };
 
     // NEW: Get selected credential type details
-    const selectedType = credentialTypes.find(t => t.id === formData.credential_type_id);
+    const selectedType = credentialTypes.find(ct => ct.id === formData.credential_type_id);
 
     return (
         <div className="view active">
@@ -211,7 +211,7 @@ export const Credentials: React.FC = () => {
                             </div>
                             <div style={{ display: 'flex', gap: '10px' }}>
                                 <button className="btn-secondary" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => openEdit(cred)}><Edit2 size={12} /></button>
-                                <button className="btn-delete" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleDelete(cred.id!)}><Trash2 size={12} /></button>
+                                <button className="btn-delete" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => cred.id !== undefined && handleDelete(cred.id)}><Trash2 size={12} /></button>
                             </div>
                         </div>
                     ))}
@@ -226,7 +226,7 @@ export const Credentials: React.FC = () => {
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
                                 <span style={{ fontWeight: 600 }}>{cred.user_label || cred.name}</span>
                                 <span style={{ fontSize: '11px', background: 'rgba(0, 230, 118, 0.1)', color: 'var(--success)', padding: '2px 8px', borderRadius: '10px' }}>
-                                    {tenants.find(t => t.id === cred.tenant_id)?.store_name || 'Tienda Desconocida'}
+                                    {tenants.find(tenant => tenant.id === cred.tenant_id)?.store_name || 'Tienda Desconocida'}
                                 </span>
                             </div>
                             <div style={{ fontSize: '12px', color: '#a1a1aa', marginBottom: '15px', fontFamily: 'monospace' }}>
@@ -234,7 +234,7 @@ export const Credentials: React.FC = () => {
                             </div>
                             <div style={{ display: 'flex', gap: '10px' }}>
                                 <button className="btn-secondary" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => openEdit(cred)}><Edit2 size={12} /></button>
-                                <button className="btn-delete" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleDelete(cred.id!)}><Trash2 size={12} /></button>
+                                <button className="btn-delete" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => cred.id !== undefined && handleDelete(cred.id)}><Trash2 size={12} /></button>
                             </div>
                         </div>
                     ))}
@@ -252,7 +252,7 @@ export const Credentials: React.FC = () => {
                             value={formData.credential_type_id || ''}
                             onChange={e => {
                                 const typeId = parseInt(e.target.value);
-                                const type = credentialTypes.find(t => t.id === typeId);
+                                const type = credentialTypes.find(ct => ct.id === typeId);
                                 setFormData({
                                     ...formData,
                                     credential_type_id: typeId,
@@ -367,8 +367,8 @@ export const Credentials: React.FC = () => {
                                 onChange={e => setFormData({ ...formData, tenant_id: parseInt(e.target.value) })}
                             >
                                 <option value="" className="bg-gray-800 text-white">Seleccionar Tienda...</option>
-                                {tenants.map(t => (
-                                    <option key={t.id} value={t.id} className="bg-gray-800 text-white">{t.store_name}</option>
+                                {tenants.map(tenant => (
+                                    <option key={tenant.id} value={tenant.id} className="bg-gray-800 text-white">{tenant.store_name}</option>
                                 ))}
                             </select>
                         </div>

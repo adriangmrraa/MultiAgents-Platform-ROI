@@ -29,6 +29,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     public render() {
         if (this.state.hasError) {
+            const isDev = import.meta.env.DEV;
             return (
                 <div style={{
                     padding: '2rem',
@@ -49,21 +50,23 @@ export class ErrorBoundary extends Component<Props, State> {
                             <line x1="12" y1="17" x2="12.01" y2="17"></line>
                         </svg>
                     </div>
-                    <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Nexus System Failure</h1>
-                    <div style={{
-                        backgroundColor: '#1e293b',
-                        padding: '1.5rem',
-                        borderRadius: '0.5rem',
-                        maxWidth: '800px',
-                        width: '100%',
-                        overflow: 'auto',
-                        border: '1px solid #334155'
-                    }}>
-                        <h2 style={{ color: '#f87171', marginTop: 0 }}>{this.state.error?.name}: {this.state.error?.message}</h2>
-                        <pre style={{ color: '#94a3b8', fontSize: '0.875rem' }}>
-                            {this.state.errorInfo?.componentStack || this.state.error?.stack}
-                        </pre>
-                    </div>
+                    <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Something went wrong</h1>
+                    {isDev && (
+                        <div style={{
+                            backgroundColor: '#1e293b',
+                            padding: '1.5rem',
+                            borderRadius: '0.5rem',
+                            maxWidth: '800px',
+                            width: '100%',
+                            overflow: 'auto',
+                            border: '1px solid #334155'
+                        }}>
+                            <h2 style={{ color: '#f87171', marginTop: 0 }}>{this.state.error?.name}: {this.state.error?.message}</h2>
+                            <pre style={{ color: '#94a3b8', fontSize: '0.875rem' }}>
+                                {this.state.errorInfo?.componentStack || this.state.error?.stack}
+                            </pre>
+                        </div>
+                    )}
                 </div>
             );
         }

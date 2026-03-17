@@ -27,6 +27,7 @@ export const ChatwootSettings: React.FC = () => {
 
                 // 2. Fetch Credentials specifically for Chatwoot
                 const creds: any[] = await fetchApi('/admin/credentials');
+                if (!Array.isArray(creds)) return;
                 const token = creds.find(c => c.category === 'chatwoot' && c.name === 'CHATWOOT_API_TOKEN');
                 const accId = creds.find(c => c.category === 'chatwoot' && c.name === 'CHATWOOT_ACCOUNT_ID');
                 const base = creds.find(c => c.category === 'chatwoot' && c.name === 'CHATWOOT_BASE_URL');

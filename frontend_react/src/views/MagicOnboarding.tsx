@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useApi, ADMIN_TOKEN } from '../hooks/useApi';
+import { useApi } from '../hooks/useApi';
 import { ArrowRight, Loader2, Sparkles, Activity, Brain, Image as ImageIcon, FileText, BarChart3, Palette } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -151,6 +151,7 @@ export const MagicOnboarding: React.FC = () => {
     });
 
     const scrollRef = useRef<HTMLDivElement>(null);
+    const evtSourceRef = useRef<EventSource | null>(null);
 
     // Auto-scroll logs
     useEffect(() => {
@@ -162,6 +163,15 @@ export const MagicOnboarding: React.FC = () => {
             }
         }
     }, [logs]);
+
+    useEffect(() => {
+        return () => {
+            if (evtSourceRef.current) {
+                evtSourceRef.current.close();
+                evtSourceRef.current = null;
+            }
+        };
+    }, []);
 
     // Auto-Resume Session (Persistence Check via DB)
     useEffect(() => {
@@ -192,7 +202,7 @@ export const MagicOnboarding: React.FC = () => {
                                 // ZOMBIE STATE: Marked as done/ignited but empty. RESET.
                                 console.warn(">> Session is 'ghost' (Status ok but Empty Assets). RESETTING.");
                                 localStorage.removeItem('magic_tenant_id');
-                                setLogs(prev => [...prev, ">> WARN: Previous session was empty (Zombie). Resetting to allow retry."]);
+                                setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> WARN: Previous session was empty (Zombie). Resetting to allow retry.`]);
                                 // Do not set step to dashboard, let them restart
                             }
                         });
@@ -209,6 +219,12 @@ export const MagicOnboarding: React.FC = () => {
     }, []);
 
     const handleConnect = async () => {
+        // Validate required fields before ignition
+        if (!formData.store_name.trim() || !formData.bot_phone_number.trim()) {
+            setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> ERROR: Project Name and Tenant ID are required.`]);
+            return;
+        }
+
         setStep('igniting');
         setAssets([]);
         setPercent(0);
@@ -222,11 +238,13 @@ export const MagicOnboarding: React.FC = () => {
             await fetchApi('/admin/onboarding/magic', { method: 'POST', body: payload });
 
             // B. Protocol Omega Stream Connection: Use V2 for robustness
-            const streamUrl = `/api/admin/engine/stream/v2/${formData.bot_phone_number}?token=${ADMIN_TOKEN}`;
-            const evtSource = new EventSource(streamUrl);
+            // EventSource cannot send custom headers, so auth is via cookies (credentials: include)
+            const streamUrl = `/api/admin/engine/stream/v2/${formData.bot_phone_number}`;
+            const evtSource = new EventSource(streamUrl, { withCredentials: true });
+            evtSourceRef.current = evtSource;
 
             evtSource.onopen = () => {
-                setLogs(prev => [...prev, ">> SYSTEM: Secure Protocol Omega Link Established (V2)."]);
+                setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> SYSTEM: Secure Protocol Omega Link Established (V2).`]);
             };
 
             // GENERIC HANDLER (Protocol Omega Standard Payload)
@@ -250,11 +268,11 @@ export const MagicOnboarding: React.FC = () => {
                             return [...prev, { type, content }];
                         });
 
-                        setLogs(prev => [...prev, `>> ASSET: ${type.toUpperCase()} Materialized.`]);
+                        setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> ASSET: ${type.toUpperCase()} Materialized.`]);
                         setPercent(prev => Math.min(prev + 20, 95));
 
                         if (type === 'compliance') {
-                            setLogs(prev => [...prev, ">> SYSTEM: Design Tasks Completed. Initializing Forge..."]);
+                            setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> SYSTEM: Design Tasks Completed. Initializing Forge...`]);
                             setPercent(100);
                             setTimeout(() => {
                                 evtSource.close();
@@ -264,7 +282,7 @@ export const MagicOnboarding: React.FC = () => {
 
                     } else if (payload.event_type) {
                         // IT IS A LOG
-                        setLogs(prev => [...prev, `[${payload.event_type}] ${payload.message}`]);
+                        setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] [${payload.event_type}] ${payload.message}`]);
                     }
 
                 } catch (err) {
@@ -276,7 +294,7 @@ export const MagicOnboarding: React.FC = () => {
             evtSource.addEventListener("log", (e: any) => {
                 try {
                     const log = JSON.parse(e.data);
-                    setLogs(prev => [...prev, `[${log.event_type}] ${log.message}`]);
+                    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] [${log.event_type}] ${log.message}`]);
                 } catch { }
             });
 
@@ -288,7 +306,7 @@ export const MagicOnboarding: React.FC = () => {
 
         } catch (error: any) {
             console.error(error);
-            setLogs(prev => [...prev, `>> CRITICAL ERROR: ${error.message}`]);
+            setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] >> CRITICAL ERROR: ${error.message}`]);
         }
     };
 
@@ -462,9 +480,9 @@ export const MagicOnboarding: React.FC = () => {
                         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 font-mono text-[10px] text-slate-400 space-y-3 custom-scrollbar bg-black/40">
                             {logs.map((log, i) => (
                                 <div key={i} className="flex gap-2 animate-fade-in-left">
-                                    <span className="text-indigo-500 shrink-0">[{new Date().toLocaleTimeString().split(' ')[0]}]</span>
+                                    <span className="text-indigo-500 shrink-0">{log.match(/^\[.*?\]/) ? log.match(/^\[.*?\]/)![0] : ''}</span>
                                     <span className={log.includes(">>") ? "text-cyan-300 font-bold" : "text-slate-300"}>
-                                        {log.replace(">>", "")}
+                                        {log.replace(/^\[.*?\]\s*/, '').replace(">>", "")}
                                     </span>
                                 </div>
                             ))}

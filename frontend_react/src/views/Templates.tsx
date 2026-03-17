@@ -9,7 +9,8 @@ import {
     Clock,
     Copy,
     LayoutGrid,
-    MessageSquare
+    MessageSquare,
+    Trash2
 } from 'lucide-react';
 
 interface Template {
@@ -83,12 +84,12 @@ export default function Templates() {
         try {
             await fetchApi('/admin/templates/create', {
                 method: 'POST',
-                body: JSON.stringify({
+                body: {
                     name: newName,
                     category: newCategory,
                     body_text: newBody,
                     language: newLang
-                })
+                }
             });
             setNewName('');
             setNewBody('');
@@ -241,7 +242,7 @@ export default function Templates() {
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
 
                             {/* Left: Form */}
-                            <div className="space-y-6">
+                            <form onSubmit={handleCreate} className="space-y-6">
                                 <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800">
                                     <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
                                         <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500">1</div>
@@ -324,12 +325,12 @@ export default function Templates() {
                                 )}
 
                                 <button
-                                    onClick={handleCreate}
+                                    type="submit"
                                     className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-700 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/20 hover:shadow-emerald-900/40 hover:from-emerald-500 hover:to-teal-600 transition transform active:scale-[0.98]"
                                 >
                                     Enviar a Revisión de Meta
                                 </button>
-                            </div>
+                            </form>
 
                             {/* Right: Preview */}
                             <div className="flex flex-col">

@@ -16,7 +16,8 @@ import {
     X,
     Database,
     FileText,
-    Link as LinkIcon
+    Link as LinkIcon,
+    Palette
 } from 'lucide-react';
 
 import { useLanguage } from '../contexts/LanguageContext';
@@ -63,6 +64,7 @@ export const Sidebar: React.FC = () => {
                     <NavItem to="/knowledge" icon={<Database size={20} />} label={t('sidebar.knowledge')} desc={t('sidebar.knowledgeDesc')} />
                     <NavItem to="/chats" icon={<MessageCircle size={20} />} label={t('sidebar.commsChannel')} desc={t('sidebar.commsChannelDesc')} />
                     <NavItem to="/templates" icon={<FileText size={20} />} label="Plantillas WA" desc="Gestor de Plantillas WhatsApp" />
+                    <NavItem to="/forge" icon={<Palette size={20} />} label="Business Forge" desc="Galería Inteligente de Assets" />
 
                     <div className="h-px bg-white/5 w-8 mx-auto my-4" />
 
@@ -74,6 +76,7 @@ export const Sidebar: React.FC = () => {
                     <div className="h-px bg-white/5 w-8 mx-auto my-4" />
 
                     <NavItem to="/credentials" icon={<Key size={20} />} label={t('sidebar.keymaster')} desc={t('sidebar.keymasterDesc')} />
+                    <NavItem to="/handoff" icon={<Mail size={20} />} label="Handoff" desc="Derivación a Humanos" />
                     <NavItem to="/channels" icon={<LinkIcon size={20} />} label="Canales" desc="Gestión Multi-Tenant de Canales" />
                     <NavItem to="/settings/ycloud" icon={<Mail size={20} />} label={t('sidebar.ycloud')} desc={t('sidebar.ycloudDesc')} />
                     <NavItem to="/nexus-setup" icon={<Zap size={20} />} label={t('sidebar.nexusEngine')} desc={t('sidebar.nexusEngineDesc')} />

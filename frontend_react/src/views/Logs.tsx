@@ -40,7 +40,7 @@ export const Logs: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h1 className="view-title" style={{ margin: 0 }}>Black Box: Protocol Logs</h1>
                 <button className="btn-secondary" onClick={loadLogs} disabled={loading}>
-                    <RefreshCw size={14} className={loading ? 'spin' : ''} style={{ marginRight: '6px' }} />
+                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} style={{ marginRight: '6px' }} />
                     Actualizar
                 </button>
             </div>
