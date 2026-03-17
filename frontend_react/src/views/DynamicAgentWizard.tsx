@@ -392,7 +392,7 @@ export const DynamicAgentWizard = () => {
                     fetchApi('/admin/integrations/status')
                 ]);
 
-                setTemplates(tpls);
+                if (tpls && typeof tpls === 'object') setTemplates(tpls);
                 if (Array.isArray(tools)) setAvailableTools(tools);
                 if (Array.isArray(models)) setAvailableModels(models);
                 if (status) setChannelStatus(status);
@@ -442,6 +442,8 @@ export const DynamicAgentWizard = () => {
                         model_version: data.model_version || 'gpt-4o',
                         template_type: cfg.template_type || data.template_type || (draftId ? 'sales' : 'custom')
                     }));
+                    // Restore agent's tenant_id on edit
+                    if (data.tenant_id) setSelectedTenantId(data.tenant_id);
 
                     const parseArray = (val: any) => {
                         if (!val) return [];
@@ -919,14 +921,23 @@ export const DynamicAgentWizard = () => {
                     }
                 }
             };
+            // Convert string toggles to booleans for backend
+            if (typeof body.config.shadow_rag_enabled === 'string') {
+                body.config.shadow_rag_enabled = body.config.shadow_rag_enabled === 'true';
+            }
 
-            await fetchApi(agentId ? `/admin/agents/${agentId}` : '/admin/agents', {
+            const result = await fetchApi(agentId ? `/admin/agents/${agentId}` : '/admin/agents', {
                 method: agentId ? 'PUT' : 'POST',
                 body: body
             });
 
             setSuccess(true);
             setTimeout(() => setSuccess(false), 5000);
+
+            // Redirect to edit page after creating new agent to prevent duplicate creation
+            if (!agentId && result?.id) {
+                navigate(`/admin/agents/${result.id}`, { replace: true });
+            }
         } catch (err: any) {
             console.error("Save Error:", err);
             setError(err.message || 'Error al guardar el agente.');

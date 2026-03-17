@@ -209,9 +209,12 @@ const ProductCard = ({ product, onFuse }: { product: Product | any, onFuse: (p: 
             try {
                 const url = await onFuse(prompt, img);
                 window.open(url, '_blank');
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error(e); } finally {
+                setGenerating(false);
+            }
+        } else {
+            setGenerating(false);
         }
-        setGenerating(false);
     };
 
     return (
@@ -255,6 +258,7 @@ export const BusinessForge = () => {
     const [loading, setLoading] = useState(false);
 
     // Filters
+    const [searchTerm, setSearchTerm] = useState('');
     const [assetFilter, setAssetFilter] = useState('all');
     const [categoryFilter, setCategoryFilter] = useState('all');
 
@@ -267,11 +271,11 @@ export const BusinessForge = () => {
         try {
             if (activeTab === 'canvas') {
                 const data = await fetchApi('/admin/assets');
-                setAssets(data);
+                setAssets(Array.isArray(data) ? data : []);
             } else {
                 // Protocol Omega: Dynamic Context Linkage via Cookie
-                const data = await fetchApi('/admin/products');
-                setProducts(data);
+                const pData = await fetchApi('/admin/products');
+                setProducts(Array.isArray(pData) ? pData : []);
             }
         } catch (e) {
             console.error("Error loading forge data", e);
@@ -299,12 +303,24 @@ export const BusinessForge = () => {
     const getCategoryName = (c: any) => c.name?.es || c.name || (typeof c === 'string' ? c : '');
     const getCategory = (p: any) => getCategoryName(p.categories?.[0]);
 
-    const filteredAssets = assets.filter(a => assetFilter === 'all' || a.asset_type === assetFilter);
+    const filteredAssets = assets.filter(a => {
+        if (assetFilter !== 'all' && a.asset_type !== assetFilter) return false;
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            return a.asset_type.toLowerCase().includes(term) || JSON.stringify(a.content).toLowerCase().includes(term);
+        }
+        return true;
+    });
     const filteredProducts = products.filter(p => {
-        if (categoryFilter === 'all') return true;
-        // Check all categories of the product
-        const pCats = p.categories || [];
-        return pCats.some((c: any) => getCategoryName(c) === categoryFilter);
+        if (categoryFilter !== 'all') {
+            const pCats = p.categories || [];
+            if (!pCats.some((c: any) => getCategoryName(c) === categoryFilter)) return false;
+        }
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            return getName(p).toLowerCase().includes(term) || getCategory(p).toLowerCase().includes(term);
+        }
+        return true;
     });
 
     // Extract unique categories safely
@@ -319,7 +335,7 @@ export const BusinessForge = () => {
                 <div className="flex items-center gap-4">
                     <div className="glass px-3 py-2 rounded-lg flex items-center gap-2 text-slate-400 border border-white/5">
                         <Search size={16} />
-                        <input className="bg-transparent border-none outline-none text-sm w-40" placeholder="Search..." />
+                        <input className="bg-transparent border-none outline-none text-sm w-40" placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                     </div>
 
                     {activeTab === 'canvas' && (

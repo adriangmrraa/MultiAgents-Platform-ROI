@@ -8,6 +8,7 @@ import { Setup } from './views/Setup';
 import { SetupExperience } from './views/SetupExperience'; // v3.2 Nexus Engine
 import { Logs } from './views/Logs';
 import { Tools } from './views/Tools';
+import Templates from './views/Templates';
 import { Knowledge } from './views/Knowledge';
 import { Chats } from './views/Chats'; // v3.3 Chat Module
 
@@ -116,6 +117,7 @@ function App() {
                     <Route path="/chats" element={<Chats />} />
                     <Route path="/tools" element={<Tools />} />
                     <Route path="/knowledge" element={<Knowledge />} />
+                    <Route path="/templates" element={<Templates />} />
                     <Route path="/channels" element={<Channels />} />
                     <Route path="/console" element={<Console />} />
                     <Route path="/handoff" element={<Handoff />} />
