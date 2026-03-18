@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { Link } from 'react-router-dom';
-import { Activity, MessageSquare, Target, TrendingUp, Coins, ArrowRight } from 'lucide-react';
+import { Activity, MessageSquare, Target, TrendingUp, Coins, ArrowRight, ShoppingBag } from 'lucide-react';
 import { GlobalStreamLog } from '../components/GlobalStreamLog';
 import { RagGalaxy } from '../components/RagGalaxy';
 import { SystemStatus } from '../components/SystemStatus';
-import { SalesDashboard } from '../components/SalesDashboard';
-import { RoiReal } from '../components/RoiReal';
 
 interface Stats {
     active_tenants: number;
@@ -176,15 +174,45 @@ export const Dashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* Sales Dashboard — Tienda Nube live data */}
-            <div className="mb-8">
-                <SalesDashboard />
-            </div>
-
-            {/* ROI Real — Channel Attribution */}
-            <div className="mb-8">
-                <RoiReal />
-            </div>
+            {/* Sales & ROI — Entry Point Card */}
+            <Link
+                to="/analytics/roi"
+                className="block mb-8 bg-gradient-to-r from-emerald-900/20 via-black to-emerald-900/10 p-6 rounded-[24px] border border-emerald-500/20 hover:border-emerald-500/40 transition-all group cursor-pointer"
+            >
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <ShoppingBag size={22} className="text-emerald-400" />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-black text-white uppercase tracking-wider">Ventas & ROI del Agente IA</h3>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                                {hasTN
+                                    ? 'Ventas reales de Tienda Nube, atribucion por canal y pedidos recientes'
+                                    : 'Conecta Tienda Nube para ver ventas reales y atribucion al agente IA'
+                                }
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {hasTN && stats?.sales_metrics && (
+                            <div className="hidden md:flex items-center gap-4 mr-4">
+                                <div className="text-right">
+                                    <div className="text-lg font-black text-white">{stats.sales_metrics.total_revenue_formatted}</div>
+                                    <div className="text-[10px] text-gray-500">{stats.sales_metrics.total_orders_30d} pedidos (30d)</div>
+                                </div>
+                                {stats.sales_metrics.attributed_orders > 0 && (
+                                    <div className="text-right pl-4 border-l border-emerald-500/20">
+                                        <div className="text-lg font-black text-emerald-400">{stats.sales_metrics.attributed_revenue_formatted}</div>
+                                        <div className="text-[10px] text-emerald-500/60">{stats.sales_metrics.attributed_orders} atribuidos al IA</div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        <ArrowRight size={20} className="text-gray-500 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all" />
+                    </div>
+                </div>
+            </Link>
 
             {/* Operational Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">

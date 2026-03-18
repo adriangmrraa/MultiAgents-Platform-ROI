@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { BadgeDollarSign, Phone, Instagram, Facebook, MessageCircle, Filter, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { SalesDashboard } from '../components/SalesDashboard';
+import { RoiReal } from '../components/RoiReal';
 
 interface AttributedOrder {
     id: string;
@@ -97,10 +99,20 @@ export const RoiAnalytics: React.FC = () => {
                 <Link to="/" className="text-gray-500 hover:text-white transition-colors">
                     <ArrowLeft size={20} />
                 </Link>
-                <h1 className="view-title">ROI Analytics — Atribucion de Ventas</h1>
+                <h1 className="view-title">Ventas & ROI del Agente IA</h1>
             </div>
 
-            {/* Summary Cards */}
+            {/* Sales Dashboard — live TN data */}
+            <div className="mb-8">
+                <SalesDashboard />
+            </div>
+
+            {/* ROI by Channel */}
+            <div className="mb-8">
+                <RoiReal />
+            </div>
+
+            {/* Attribution Detail — Summary Cards */}
             {roi && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                     <div className="bg-white/5 p-6 rounded-[20px] border border-white/10">
