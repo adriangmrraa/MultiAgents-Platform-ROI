@@ -774,15 +774,14 @@ CATALOGO:
         RAISE NOTICE 'Failed to add response_guide to tools';
     END $$;
     """,
-    # 21. Business Assets constraint repair (Protocol Omega)
+    # 21. Business Assets: DROP broken unique constraint (allows multiple assets per type per tenant)
     """
     DO $$
     BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_tenant_asset_type') THEN
-            ALTER TABLE business_assets ADD CONSTRAINT unique_tenant_asset_type UNIQUE (tenant_id, asset_type);
-        END IF;
+        ALTER TABLE business_assets DROP CONSTRAINT IF EXISTS unique_tenant_asset_type;
+        ALTER TABLE business_assets DROP CONSTRAINT IF EXISTS uq_tenant_asset_type;
     EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'Failed to add unique constraint to business_assets';
+        RAISE NOTICE 'business_assets constraint cleanup skipped';
     END $$;
     """,
     # 22. Magic Onboarding State (Protocol Omega)

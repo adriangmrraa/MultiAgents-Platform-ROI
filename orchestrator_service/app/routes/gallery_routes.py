@@ -149,34 +149,21 @@ async def extract_brand_dna(
         store_description=tenant["store_description"] if tenant else None
     )
 
-    # Persist as business asset
-    await db.execute("""
-        INSERT INTO business_assets (id, tenant_id, asset_type, content, is_active, created_at, updated_at)
-        VALUES ($1, $2, 'brand_dna', $3::jsonb, true, NOW(), NOW())
-        ON CONFLICT ON CONSTRAINT uq_tenant_asset_type
-        DO UPDATE SET content = $3::jsonb, updated_at = NOW()
-    """, str(uuid.uuid4()), str(tenant_id), json.dumps(brand_dna))
-
-    # If no conflict constraint exists, use a simpler approach
-    # (The ON CONFLICT might fail, so let's also try a simpler upsert)
-    try:
-        # Check if brand_dna exists
-        existing_id = await db.fetchval(
-            "SELECT id FROM business_assets WHERE tenant_id = $1 AND asset_type = 'brand_dna' LIMIT 1",
-            str(tenant_id)
+    # Persist as business asset (upsert: only 1 brand_dna per tenant)
+    existing_id = await db.fetchval(
+        "SELECT id FROM business_assets WHERE tenant_id = $1 AND asset_type = 'brand_dna' LIMIT 1",
+        str(tenant_id)
+    )
+    if existing_id:
+        await db.execute(
+            "UPDATE business_assets SET content = $1::jsonb, updated_at = NOW() WHERE id = $2",
+            json.dumps(brand_dna), str(existing_id)
         )
-        if existing_id:
-            await db.execute(
-                "UPDATE business_assets SET content = $1::jsonb, updated_at = NOW() WHERE id = $2",
-                json.dumps(brand_dna), str(existing_id)
-            )
-        else:
-            await db.execute("""
-                INSERT INTO business_assets (id, tenant_id, asset_type, content, is_active)
-                VALUES ($1, $2, 'brand_dna', $3::jsonb, true)
-            """, str(uuid.uuid4()), str(tenant_id), json.dumps(brand_dna))
-    except Exception:
-        pass  # First attempt might have succeeded
+    else:
+        await db.execute("""
+            INSERT INTO business_assets (id, tenant_id, asset_type, content, is_active)
+            VALUES ($1, $2, 'brand_dna', $3::jsonb, true)
+        """, str(uuid.uuid4()), str(tenant_id), json.dumps(brand_dna))
 
     return {"brand_dna": brand_dna, "cached": False}
 
