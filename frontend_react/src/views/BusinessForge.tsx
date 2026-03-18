@@ -5,10 +5,11 @@ import {
     Palette, Camera, Megaphone, Pencil, Image, Type, Grid,
     Sparkles, Download, Trash2, RefreshCw, ChevronRight,
     Eye, Layers, Zap, Search, X, Send, Plus, Check,
-    Layout, Smartphone, Mail, MessageSquare, Globe, Star
+    Layout, Smartphone, Mail, MessageSquare, Globe, Star,
+    Users, Upload
 } from 'lucide-react';
 
-type Tab = 'brand-dna' | 'photoshoot' | 'campaigns' | 'gallery';
+type Tab = 'brand-dna' | 'photoshoot' | 'model-shoot' | 'campaigns' | 'gallery';
 
 interface Asset {
     id: string;
@@ -88,6 +89,7 @@ export const BusinessForge: React.FC = () => {
     const tabs = [
         { id: 'brand-dna' as Tab, label: 'Brand DNA', icon: <Palette size={16} />, desc: 'Identidad de marca' },
         { id: 'photoshoot' as Tab, label: 'Photoshoot', icon: <Camera size={16} />, desc: 'Fotos de estudio IA' },
+        { id: 'model-shoot' as Tab, label: 'Model Shoot', icon: <Users size={16} />, desc: 'Producto + modelo' },
         { id: 'campaigns' as Tab, label: 'Campanas', icon: <Megaphone size={16} />, desc: 'Multi-canal' },
         { id: 'gallery' as Tab, label: 'Galeria', icon: <Grid size={16} />, desc: 'Todos los assets' }
     ];
@@ -320,6 +322,7 @@ export const BusinessForge: React.FC = () => {
 
                 {activeTab === 'brand-dna' && <BrandDNATab brandDNA={brandDNA} fetchApi={fetchApi} onRefresh={loadBrandDNA} />}
                 {activeTab === 'photoshoot' && <PhotoshootTab products={products} fetchApi={fetchApi} brandDNA={brandDNA} onAssetCreated={() => loadAssets()} />}
+                {activeTab === 'model-shoot' && <ModelShootTab products={products} fetchApi={fetchApi} brandDNA={brandDNA} onAssetCreated={() => loadAssets()} />}
                 {activeTab === 'campaigns' && <CampaignsTab products={products} fetchApi={fetchApi} brandDNA={brandDNA} onAssetCreated={() => loadAssets()} />}
                 {activeTab === 'gallery' && <GalleryTab assets={assets} fetchApi={fetchApi} onRefresh={loadAssets} brandDNA={brandDNA} />}
             </div>
@@ -515,6 +518,173 @@ const PhotoshootTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) =>
                     </div>
                 ) : (
                     <div className="h-64 flex items-center justify-center text-slate-600 border border-dashed border-white/10 rounded-lg"><div className="text-center"><Camera size={32} className="mx-auto mb-2 opacity-30" /><p className="text-xs">Selecciona un producto y template</p></div></div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ==================== MODEL SHOOT TAB ====================
+const ModelShootTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) => {
+    const [templates, setTemplates] = useState<any[]>([]);
+    const [selectedProduct, setSelectedProduct] = useState<any>(null);
+    const [selectedTemplate, setSelectedTemplate] = useState('urban_street');
+    const [customPrompt, setCustomPrompt] = useState('');
+    const [modelImageUrl, setModelImageUrl] = useState('');
+    const [modelImagePreview, setModelImagePreview] = useState('');
+    const [generating, setGenerating] = useState(false);
+    const [enhancing, setEnhancing] = useState(false);
+    const [result, setResult] = useState<any>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [models, setModels] = useState<any[]>([]);
+    const [selectedModel, setSelectedModel] = useState('nano-banana');
+
+    useEffect(() => {
+        fetchApi('/gallery/model-shoot/templates').then(setTemplates).catch(() => {});
+        fetchApi('/gallery/models').then(setModels).catch(() => {});
+    }, [fetchApi]);
+
+    const filteredProducts = products.filter((p: any) => {
+        const name = p.name?.es || p.name?.en || p.name || '';
+        return name.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const dataUrl = ev.target?.result as string;
+            setModelImageUrl(dataUrl);
+            setModelImagePreview(dataUrl);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleEnhancePrompt = async () => {
+        if (!customPrompt.trim()) return;
+        setEnhancing(true);
+        try {
+            const name = selectedProduct ? (selectedProduct.name?.es || selectedProduct.name?.en || selectedProduct.name || '') : '';
+            const data = await fetchApi('/gallery/enhance-prompt', { method: 'POST', body: { prompt: customPrompt, product_name: name, template: selectedTemplate, context: 'photoshoot' } });
+            if (data?.enhanced) setCustomPrompt(data.enhanced);
+        } catch (e: any) { alert(e.message); }
+        finally { setEnhancing(false); }
+    };
+
+    const handleGenerate = async () => {
+        if (!selectedProduct) return;
+        setGenerating(true); setResult(null);
+        try {
+            const imageUrl = selectedProduct.images?.[0]?.src || selectedProduct.image_url;
+            const name = selectedProduct.name?.es || selectedProduct.name?.en || selectedProduct.name || 'Producto';
+            const data = await fetchApi('/gallery/model-shoot/generate', {
+                method: 'POST',
+                body: {
+                    product_image_url: imageUrl,
+                    product_name: name,
+                    model_image_url: modelImageUrl || undefined,
+                    template: selectedTemplate,
+                    custom_prompt: customPrompt || undefined,
+                    model: selectedModel
+                }
+            });
+            setResult(data); onAssetCreated();
+        } catch (e: any) { alert(e.message); } finally { setGenerating(false); }
+    };
+
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Column 1: Product + Model Photo */}
+            <div className="glass p-5 rounded-xl space-y-4">
+                <h3 className="text-sm font-bold flex items-center gap-2"><Users size={14} className="text-pink-400" /> 1. Producto & Modelo</h3>
+
+                {/* Product selector */}
+                <div>
+                    <label className="text-[10px] text-slate-500 uppercase mb-1 block">Producto</label>
+                    <div className="relative mb-2"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Buscar producto..." className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm outline-none" /></div>
+                    <div className="max-h-[180px] overflow-y-auto space-y-1">
+                        {filteredProducts.map((p: any) => {
+                            const name = p.name?.es || p.name?.en || p.name || 'Producto';
+                            const img = p.images?.[0]?.src || p.image_url;
+                            const sel = selectedProduct?.id === p.id;
+                            return (<button key={p.id} onClick={() => setSelectedProduct(p)} className={`w-full flex items-center gap-2 p-2 rounded-lg text-left transition-all ${sel ? 'bg-pink-900/30 border border-pink-500/30' : 'hover:bg-white/5 border border-transparent'}`}>
+                                {img && <img src={img} alt="" className="w-10 h-10 rounded object-cover bg-white/5" />}
+                                <div className="flex-1 min-w-0"><div className="text-xs font-medium truncate">{name}</div></div>
+                                {sel && <Check size={14} className="text-pink-400" />}
+                            </button>);
+                        })}
+                    </div>
+                </div>
+
+                {/* Model photo upload */}
+                <div>
+                    <label className="text-[10px] text-slate-500 uppercase mb-1 block">Foto de modelo (opcional)</label>
+                    <p className="text-[10px] text-slate-600 mb-2">Sube una foto tuya o de una modelo para referenciar el look</p>
+                    <div className="flex gap-2 items-start">
+                        <label className="flex-1 cursor-pointer">
+                            <div className={`border-2 border-dashed rounded-lg p-3 text-center transition-all hover:border-pink-500/30 ${modelImagePreview ? 'border-pink-500/30' : 'border-white/10'}`}>
+                                {modelImagePreview ? (
+                                    <img src={modelImagePreview} alt="Modelo" className="w-full h-24 object-cover rounded" />
+                                ) : (
+                                    <div className="py-4"><Upload size={20} className="mx-auto text-slate-500 mb-1" /><p className="text-[10px] text-slate-500">Click para subir</p></div>
+                                )}
+                            </div>
+                            <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                        </label>
+                        {modelImagePreview && (
+                            <button onClick={() => { setModelImageUrl(''); setModelImagePreview(''); }} className="p-2 text-slate-500 hover:text-red-400"><X size={14} /></button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Column 2: Scene Template + Prompt */}
+            <div className="glass p-5 rounded-xl">
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2"><Layout size={14} className="text-purple-400" /> 2. Escena & Prompt</h3>
+                <div className="max-h-[200px] overflow-y-auto space-y-1.5 mb-4">
+                    {templates.map((t: any) => (
+                        <button key={t.id} onClick={() => setSelectedTemplate(t.id)} className={`w-full p-2.5 rounded-lg text-left transition-all ${selectedTemplate === t.id ? 'bg-pink-900/20 border border-pink-500/30' : 'bg-black/20 border border-white/5 hover:border-white/20'}`}>
+                            <div className="text-xs font-bold">{t.name}</div>
+                            <div className="text-[10px] text-slate-500">{t.description}</div>
+                        </button>
+                    ))}
+                </div>
+
+                <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-slate-500 uppercase">Prompt personalizado</label>
+                    {customPrompt.trim() && (
+                        <button onClick={handleEnhancePrompt} disabled={enhancing} className="text-[10px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 disabled:opacity-50">
+                            {enhancing ? <><RefreshCw size={10} className="animate-spin" /> Mejorando...</> : <><Sparkles size={10} /> Mejorar prompt</>}
+                        </button>
+                    )}
+                </div>
+                <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="ej: modelo con vestido rojo en terraza al atardecer..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none resize-none h-20 mb-3" />
+
+                {models.length > 0 && <div className="mb-3"><ModelSelector value={selectedModel} onChange={setSelectedModel} models={models} /></div>}
+                <button onClick={handleGenerate} disabled={!selectedProduct || generating} className="w-full py-3 bg-gradient-to-r from-pink-600 to-purple-600 rounded-lg font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40">
+                    {generating ? <><RefreshCw size={16} className="animate-spin" /> Generando...</> : <><Users size={16} /> Generar Model Shoot</>}
+                </button>
+            </div>
+
+            {/* Column 3: Result */}
+            <div className="glass p-5 rounded-xl">
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2"><Image size={14} className="text-emerald-400" /> 3. Resultado</h3>
+                {result ? (
+                    <div className="space-y-3">
+                        <img src={result.image_url} alt={result.product_name} className="w-full rounded-lg border border-white/10" />
+                        <div className="text-xs text-slate-500">
+                            <span className="text-pink-400 font-bold">{result.template_name}</span> | {result.product_name} | <span className="text-purple-400">{result.model_tier}</span>
+                        </div>
+                        {result.model_description && <p className="text-[10px] text-slate-600 italic">{result.model_description.substring(0, 100)}</p>}
+                        <div className="flex gap-2">
+                            <a href={result.image_url} download className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded text-xs text-center flex items-center justify-center gap-1"><Download size={12} /> Descargar</a>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="h-64 flex items-center justify-center text-slate-600 border border-dashed border-white/10 rounded-lg">
+                        <div className="text-center"><Users size={32} className="mx-auto mb-2 opacity-30" /><p className="text-xs">Selecciona producto, escena y genera</p></div>
+                    </div>
                 )}
             </div>
         </div>

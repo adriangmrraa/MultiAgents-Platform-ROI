@@ -106,6 +106,125 @@ CAMPAIGN_CHANNELS = {
 }
 
 
+# Model Shoot templates — product + person/model scenes
+MODEL_SHOOT_TEMPLATES = {
+    "urban_street": {
+        "name": "Urban Street",
+        "description": "Modelo en la calle con el producto, look urbano y moderno",
+        "prompt_suffix": (
+            "Model walking through a trendy urban street, naturally holding/wearing/using the product. "
+            "Street photography aesthetic: candid movement, shallow depth of field blurring the city behind. "
+            "Warm afternoon light reflecting off buildings, subtle lens flare. Outfit is modern streetwear. "
+            "Inspired by campaigns from Off-White, Nike SB, and Carhartt WIP. "
+            "Shot with Leica Q3, 28mm f/1.7, capturing authentic street energy. "
+            "8K resolution. No text, no watermarks, no logos."
+        )
+    },
+    "cozy_home": {
+        "name": "Hogar Cozy",
+        "description": "Modelo usando el producto en un ambiente hogareño y calido",
+        "prompt_suffix": (
+            "Model comfortably using the product in a beautifully designed modern home interior. "
+            "Warm, inviting atmosphere: soft knit blankets, warm lighting, plants, wooden textures. "
+            "The model exudes relaxation and genuine satisfaction. Natural smile, bare feet optional. "
+            "Soft window light creating gentle shadows, hygge Scandinavian interior design. "
+            "Inspired by IKEA lifestyle shoots and West Elm campaigns. "
+            "Shot with Sony A7 IV, 35mm f/1.8, warm color grade. "
+            "8K resolution. No text, no watermarks."
+        )
+    },
+    "outdoor_adventure": {
+        "name": "Aventura Outdoor",
+        "description": "Modelo con el producto en naturaleza, aventura y libertad",
+        "prompt_suffix": (
+            "Model actively using the product in a stunning natural landscape: mountains, forest trail, "
+            "lakeside, or desert. The scene conveys freedom, adventure, and aspiration. "
+            "Dynamic composition with the model in action — hiking, exploring, or pausing to admire the view. "
+            "Golden hour backlighting creating dramatic silhouette edges and warm skin tones. "
+            "Outdoor gear is subtle and stylish, not overloaded. Sweat and authenticity welcome. "
+            "Inspired by Patagonia, The North Face, and REI campaigns. "
+            "Shot with Nikon Z8, 24-70mm f/2.8. 8K resolution. No text, no watermarks."
+        )
+    },
+    "cafe_social": {
+        "name": "Cafe & Social",
+        "description": "Modelo en un cafe o espacio social usando el producto",
+        "prompt_suffix": (
+            "Model sitting in a stylish artisan cafe or co-working space, naturally interacting with the product. "
+            "Scene includes authentic details: latte art, laptop, notebook, exposed brick, hanging plants. "
+            "The model is focused, content, and effortlessly stylish. Candid mid-conversation or mid-thought moment. "
+            "Soft ambient lighting from large windows, bokeh from background patrons and warm pendant lights. "
+            "Lifestyle editorial quality, inspired by Blue Bottle Coffee and WeWork campaign aesthetics. "
+            "Shot with Fujifilm X-T5, 56mm f/1.2, film-like color science. "
+            "8K resolution. No text, no watermarks."
+        )
+    },
+    "fitness_wellness": {
+        "name": "Fitness & Wellness",
+        "description": "Modelo activo/a usando el producto en contexto fitness o bienestar",
+        "prompt_suffix": (
+            "Athletic model using the product during or after a workout session: yoga studio, gym, "
+            "running track, or meditation space. Body language conveys strength, focus, and vitality. "
+            "Dewy skin with natural post-workout glow, dynamic pose showing the product in action. "
+            "Clean, minimal environment with motivational atmosphere. "
+            "Dramatic directional lighting highlighting muscle definition and product details. "
+            "Inspired by Lululemon, Alo Yoga, and Under Armour campaign photography. "
+            "Shot with Canon R5, 70-200mm f/2.8 for compression and bokeh. "
+            "8K resolution. No text, no watermarks."
+        )
+    },
+    "professional_workspace": {
+        "name": "Workspace Pro",
+        "description": "Modelo profesional usando el producto en oficina o estudio",
+        "prompt_suffix": (
+            "Professional model using the product in a sleek, modern workspace or creative studio. "
+            "Clean desk setup, premium materials: walnut desk, leather chair, brass accents. "
+            "The model is focused, competent, and stylishly dressed in smart casual. "
+            "Natural side lighting from floor-to-ceiling windows with city view or greenery. "
+            "The product is integrated naturally into the workflow — not posed but discovered. "
+            "Corporate-editorial hybrid style, inspired by Apple, Herman Miller, and Beats campaigns. "
+            "Shot with Hasselblad X2D, 80mm f/1.9. 8K resolution. No text, no watermarks."
+        )
+    },
+    "night_out": {
+        "name": "Night Out",
+        "description": "Modelo con el producto en una salida nocturna elegante",
+        "prompt_suffix": (
+            "Model using the product during an elevated night out: rooftop bar, art gallery opening, "
+            "upscale restaurant, or city nightscape. Glamorous but not overdone. "
+            "Dramatic low-light photography: neon reflections, candlelight, bokeh from city lights. "
+            "The model is confident, magnetic, and the product is a natural extension of their style. "
+            "Rich, moody color palette: deep blues, warm ambers, subtle magentas. "
+            "Inspired by Tom Ford, YSL, and Hennessy campaign aesthetics. "
+            "Shot with Sony A7S III, 50mm f/1.2, ISO 3200 for beautiful grain. "
+            "8K resolution. No text, no watermarks."
+        )
+    },
+    "beach_summer": {
+        "name": "Beach & Verano",
+        "description": "Modelo con el producto en playa o ambiente veraniego",
+        "prompt_suffix": (
+            "Model using the product on a pristine beach, poolside, or tropical setting. "
+            "Sun-kissed skin, natural wind-swept hair, relaxed genuine smile. "
+            "Crystal clear water, white sand, palm fronds framing the composition. "
+            "Harsh midday sun tamed with reflectors creating soft fill, or golden hour warmth. "
+            "The product is the natural companion to this aspirational summer moment. "
+            "Inspired by Dior, Chanel, and Zimmermann resort campaigns. "
+            "Shot with Canon R6 II, 85mm f/1.2, vivid color profile. "
+            "8K resolution. No text, no watermarks."
+        )
+    }
+}
+
+
+def get_model_shoot_templates():
+    """Return model shoot templates for API."""
+    return [
+        {"id": k, "name": v["name"], "description": v["description"]}
+        for k, v in MODEL_SHOOT_TEMPLATES.items()
+    ]
+
+
 class CreativeStudio:
     """Full creative studio for brand asset generation and editing."""
 
@@ -160,6 +279,73 @@ class CreativeStudio:
             "prompt_used": final_prompt,
             "product_name": product_name,
             "product_description": product_description
+        }
+
+    # ==================== MODEL SHOOT ====================
+
+    async def model_shoot(
+        self,
+        product_image_url: str,
+        product_name: str,
+        model_image_url: str = None,
+        template: str = "urban_street",
+        brand_dna: Dict = None,
+        custom_prompt: str = None,
+        model_tier: str = None
+    ) -> Dict[str, Any]:
+        """
+        Generate a product shot with a human model in a scene.
+        Optionally uses a reference photo of a real person/model.
+        """
+        if template not in MODEL_SHOOT_TEMPLATES:
+            template = "urban_street"
+
+        tmpl = MODEL_SHOOT_TEMPLATES[template]
+
+        # 1. Analyze product image
+        product_description = await self._analyze_product(product_image_url, product_name)
+
+        # 2. Analyze model reference photo if provided
+        model_description = ""
+        if model_image_url and self.google_client:
+            try:
+                from app.core.image_utils import analyze_image_with_gpt4o
+                model_description = await analyze_image_with_gpt4o(
+                    model_image_url,
+                    "Describe this person for a photoshoot: gender, approximate age range, hair color/style, "
+                    "skin tone, body type, overall vibe. Be respectful and professional. Output a concise sentence.",
+                    self.google_api_key
+                )
+            except Exception as e:
+                logger.warning("model_analysis_failed", error=str(e))
+
+        # 3. Build prompt
+        brand_context = self._build_brand_context(brand_dna)
+
+        final_prompt = (
+            f"Create a photorealistic commercial advertisement photograph showing a person "
+            f"naturally using/wearing/holding this product: {product_description}. "
+        )
+        if model_description:
+            final_prompt += f"MODEL REFERENCE: {model_description}. Use a model matching this description. "
+        if brand_context:
+            final_prompt += f"BRAND IDENTITY: {brand_context}. Reflect brand colors, mood, and aesthetic. "
+        if custom_prompt:
+            final_prompt += f"CREATIVE DIRECTION: {custom_prompt}. "
+        final_prompt += f"SCENE & TECHNICAL: {tmpl['prompt_suffix']}"
+
+        # 4. Generate
+        image_url = await generate_image(final_prompt, model_tier=model_tier, google_api_key=self.google_api_key)
+
+        return {
+            "image_url": image_url,
+            "template": template,
+            "template_name": tmpl["name"],
+            "model_tier": model_tier or "nano-banana",
+            "prompt_used": final_prompt,
+            "product_name": product_name,
+            "product_description": product_description,
+            "model_description": model_description or None
         }
 
     # ==================== CAMPAIGN GENERATOR ====================

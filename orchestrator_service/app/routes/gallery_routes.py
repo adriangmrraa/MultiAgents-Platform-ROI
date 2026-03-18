@@ -39,6 +39,15 @@ class PhotoshootRequest(BaseModel):
     model: Optional[str] = None  # nano-banana, nano-banana-2, nano-banana-pro
 
 
+class ModelShootRequest(BaseModel):
+    product_image_url: str
+    product_name: str
+    model_image_url: Optional[str] = None  # Reference photo of person/model
+    template: str = "urban_street"
+    custom_prompt: Optional[str] = None
+    model: Optional[str] = None
+
+
 class CampaignRequest(BaseModel):
     product_name: str
     product_image_url: Optional[str] = None
@@ -390,6 +399,52 @@ async def generate_photoshoot(
     await db.execute("""
         INSERT INTO business_assets (id, tenant_id, asset_type, content, is_active)
         VALUES ($1, $2, 'photoshoot', $3::jsonb, true)
+    """, asset_id, str(current_user.tenant_id), json.dumps({
+        **result,
+        "generated_at": datetime.utcnow().isoformat()
+    }))
+
+    result["asset_id"] = asset_id
+    return result
+
+
+# ==================== MODEL SHOOT ====================
+
+@router.get("/model-shoot/templates")
+async def list_model_shoot_templates():
+    """List available model shoot scene templates."""
+    from app.services.creative_studio import get_model_shoot_templates
+    return get_model_shoot_templates()
+
+
+@router.post("/model-shoot/generate")
+async def generate_model_shoot(
+    req: ModelShootRequest,
+    current_user: User = Depends(get_current_user),
+    db = Depends(get_pool_db)
+):
+    """Generate a product shot with a human model in a scene."""
+    google_key = await _get_google_key(current_user.tenant_id)
+    brand_dna = await _get_brand_dna(current_user.tenant_id, db)
+
+    from app.services.creative_studio import CreativeStudio
+    studio = CreativeStudio(google_api_key=google_key)
+
+    result = await studio.model_shoot(
+        product_image_url=req.product_image_url,
+        product_name=req.product_name,
+        model_image_url=req.model_image_url,
+        template=req.template,
+        brand_dna=brand_dna,
+        custom_prompt=req.custom_prompt,
+        model_tier=req.model
+    )
+
+    # Auto-save as asset
+    asset_id = str(uuid.uuid4())
+    await db.execute("""
+        INSERT INTO business_assets (id, tenant_id, asset_type, content, is_active)
+        VALUES ($1, $2, 'model_shoot', $3::jsonb, true)
     """, asset_id, str(current_user.tenant_id), json.dumps({
         **result,
         "generated_at": datetime.utcnow().isoformat()
