@@ -1,22 +1,37 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 
 import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function Register() {
-    const { register } = useAuth();
+    const { register, loginWithGoogle } = useAuth();
     const { t } = useLanguage();
-    // const navigate = useNavigate();
+    const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [storeName, setStoreName] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
 
     const [success, setSuccess] = useState(false);
     const [resendLoading, setResendLoading] = useState(false);
     const [resendSuccess, setResendSuccess] = useState(false);
+
+    const handleGoogleRegister = async (credential: string) => {
+        setError('');
+        setGoogleLoading(true);
+        try {
+            await loginWithGoogle(credential);
+            navigate('/');
+        } catch (err: any) {
+            setError(err.message || 'Error con Google Sign-In');
+        } finally {
+            setGoogleLoading(false);
+        }
+    };
 
     const handleResend = async () => {
         setResendLoading(true);
@@ -201,6 +216,14 @@ export default function Register() {
                             ) : t('auth.deployBtn')}
                         </button>
                     </form>
+
+                    <div className="relative my-6">
+                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10"></div></div>
+                        <div className="relative flex justify-center text-xs"><span className="px-3 bg-[#1B1D20]/80 text-gray-500 uppercase tracking-widest">o</span></div>
+                    </div>
+
+                    <GoogleSignInButton onCredential={handleGoogleRegister} disabled={googleLoading} text="signup_with" />
+                    {googleLoading && <p className="text-center text-xs text-gray-500 mt-2 animate-pulse">Creando cuenta con Google...</p>}
 
                     <div className="mt-6 text-center text-sm text-gray-500">
                         {t('auth.alreadyDeployed')} <Link to="/login" className="text-red-400 hover:text-red-300 transition-colors font-medium">{t('auth.accessCommand')}</Link>

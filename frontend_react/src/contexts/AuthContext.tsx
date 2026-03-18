@@ -17,6 +17,7 @@ interface AuthContextType {
     isAuthenticated: boolean;
     isLoading: boolean;
     login: (email: string, pass: string) => Promise<void>;
+    loginWithGoogle: (credential: string) => Promise<any>;
     register: (email: string, pass: string, storeName: string) => Promise<any>;
     logout: () => Promise<void>;
     refreshProfile: () => Promise<void>;
@@ -62,6 +63,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await checkSession();
     };
 
+    const loginWithGoogle = async (credential: string) => {
+        const data = await fetchApi('/auth/google', {
+            method: 'POST',
+            body: { credential }
+        });
+        await checkSession();
+        return data;
+    };
+
     const register = async (email: string, pass: string, storeName: string) => {
         const data = await fetchApi('/auth/register', {
             method: 'POST',
@@ -84,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isAuthenticated: !!user,
             isLoading,
             login,
+            loginWithGoogle,
             register,
             logout,
             refreshProfile

@@ -295,6 +295,126 @@ async def resend_verification(db: AsyncSession = Depends(get_db), current_user: 
     
     return {"message": "Verification email sent successfully."}
 
+class GoogleAuthRequest(BaseModel):
+    credential: str  # Google ID token from frontend
+
+
+@router.post("/google")
+async def google_auth(data: GoogleAuthRequest, response: Response, db: AsyncSession = Depends(get_db)):
+    """
+    Google OAuth: verify ID token, create or login user.
+    Single endpoint for both login and register via Google.
+    """
+    import httpx
+
+    # 1. Verify the Google ID token
+    google_client_id = settings.GOOGLE_OAUTH_CLIENT_ID
+    if not google_client_id:
+        raise HTTPException(status_code=503, detail="Google OAuth not configured")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"https://oauth2.googleapis.com/tokeninfo?id_token={data.credential}"
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=401, detail="Invalid Google token")
+            google_user = resp.json()
+    except httpx.HTTPError:
+        raise HTTPException(status_code=401, detail="Failed to verify Google token")
+
+    # Verify audience matches our client ID
+    if google_user.get("aud") != google_client_id:
+        raise HTTPException(status_code=401, detail="Token audience mismatch")
+
+    if not google_user.get("email_verified", False):
+        raise HTTPException(status_code=401, detail="Google email not verified")
+
+    email = google_user["email"]
+    full_name = google_user.get("name", "")
+    avatar_url = google_user.get("picture", "")
+
+    # 2. Check if user exists
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if user:
+        # LOGIN: Existing user — update profile from Google if missing
+        if not user.full_name and full_name:
+            user.full_name = full_name
+        if not user.avatar_url and avatar_url:
+            user.avatar_url = avatar_url
+        if not user.is_verified:
+            user.is_verified = True  # Google-verified email
+        await db.commit()
+        logger.info("google_login", user_id=str(user.id), email=email)
+    else:
+        # REGISTER: Create new tenant + user
+        phone = f"google_{uuid.uuid4().hex[:8]}"
+        store_name = full_name or email.split("@")[0]
+
+        new_tenant = Tenant(
+            store_name=store_name,
+            bot_phone_number=phone,
+            owner_email=email,
+            is_active=True
+        )
+        db.add(new_tenant)
+        await db.flush()
+
+        user = User(
+            email=email,
+            password_hash=security.get_password_hash(uuid.uuid4().hex),  # Random password (Google auth only)
+            tenant_id=new_tenant.id,
+            role="owner",
+            is_verified=True,  # Google-verified
+            full_name=full_name,
+            avatar_url=avatar_url
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+        # Create trial subscription
+        try:
+            from app.models.billing import Plan, Subscription
+            free_plan = (await db.execute(select(Plan).where(Plan.name == "free"))).scalar_one_or_none()
+            if free_plan:
+                trial_sub = Subscription(
+                    tenant_id=new_tenant.id,
+                    plan_id=free_plan.id,
+                    status="trialing",
+                    trial_ends_at=datetime.utcnow() + timedelta(days=10)
+                )
+                db.add(trial_sub)
+                await db.commit()
+        except Exception as sub_err:
+            logger.warning("google_register_trial_skip", error=str(sub_err))
+
+        logger.info("google_register", user_id=str(user.id), email=email)
+
+    # 3. Issue JWT cookie (same as regular login)
+    access_token_expires = timedelta(minutes=security.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = security.create_access_token(
+        subject=user.id, expires_delta=access_token_expires
+    )
+
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        max_age=security.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        samesite="none",
+        secure=True
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "is_new_user": user.created_at and (datetime.utcnow() - user.created_at.replace(tzinfo=None)).seconds < 10
+    }
+
+
 @router.post("/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token")

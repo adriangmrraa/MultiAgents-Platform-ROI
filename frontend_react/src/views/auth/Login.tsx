@@ -1,20 +1,35 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import { GoogleSignInButton } from '../../components/GoogleSignInButton';
 
 import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function Login() {
-    const { login } = useAuth();
+    const { login, loginWithGoogle } = useAuth();
     const { t } = useLanguage();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
     const [resendLoading, setResendLoading] = useState(false);
     const [resendSuccess, setResendSuccess] = useState(false);
     const [showResend, setShowResend] = useState(false);
+
+    const handleGoogleLogin = async (credential: string) => {
+        setError('');
+        setGoogleLoading(true);
+        try {
+            await loginWithGoogle(credential);
+            navigate('/');
+        } catch (err: any) {
+            setError(err.message || 'Error con Google Sign-In');
+        } finally {
+            setGoogleLoading(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -137,6 +152,14 @@ export default function Login() {
                             ) : t('auth.initSession')}
                         </button>
                     </form>
+
+                    <div className="relative my-6">
+                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10"></div></div>
+                        <div className="relative flex justify-center text-xs"><span className="px-3 bg-[#1B1D20]/80 text-gray-500 uppercase tracking-widest">o</span></div>
+                    </div>
+
+                    <GoogleSignInButton onCredential={handleGoogleLogin} disabled={googleLoading} text="signin_with" />
+                    {googleLoading && <p className="text-center text-xs text-gray-500 mt-2 animate-pulse">Autenticando con Google...</p>}
 
                     <div className="mt-6 text-center text-sm text-gray-500">
                         {t('auth.noAccess')} <Link to="/register" className="text-red-400 hover:text-red-300 transition-colors font-medium">{t('auth.requestClearance')}</Link>

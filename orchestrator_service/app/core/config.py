@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     ]
     BOT_PHONE_NUMBER: str | None = None
     
+    # Google OAuth
+    GOOGLE_OAUTH_CLIENT_ID: str | None = None
+
     # Security & AI
     OPENAI_API_KEY: str | None = None
     GOOGLE_API_KEY: str | None = None

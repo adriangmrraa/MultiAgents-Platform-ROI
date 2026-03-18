@@ -27,6 +27,7 @@ logger = structlog.get_logger()
 EXEMPT_PATHS = {
     "/auth/login",
     "/auth/register",
+    "/auth/google",
     "/auth/verify",
     "/auth/me",
     "/billing/plans",
