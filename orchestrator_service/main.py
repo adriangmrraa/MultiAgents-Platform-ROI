@@ -1372,9 +1372,11 @@ async def lifespan(app: FastAPI):
         try:
             from scripts.migrate_saas_billing import run_startup_billing_migration
             await run_startup_billing_migration(db)
-            logger.info("billing_schema_verified")
+            # Verify plans were seeded
+            plan_count = await db.pool.fetchval("SELECT COUNT(*) FROM plans")
+            logger.info("billing_schema_verified", plans_count=plan_count)
         except Exception as bm_err:
-            logger.debug("billing_migration_note", error=str(bm_err))
+            logger.warning("billing_migration_failed", error=str(bm_err))
 
         # 9. Orders Sync & Attribution Job (ROI Real v8.0)
         try:

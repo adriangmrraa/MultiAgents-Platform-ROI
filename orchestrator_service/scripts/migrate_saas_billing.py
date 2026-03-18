@@ -246,11 +246,20 @@ async def run_startup_billing_migration(db_pool):
     Uses the shared asyncpg Database instance.
     """
     try:
-        await db_pool.execute(MIGRATION_SQL)
-        await db_pool.execute(SEED_PLANS_SQL)
-        await db_pool.execute(HYDRATE_EXISTING_TENANTS_SQL)
+        # Use pool directly for multi-statement SQL
+        pool = db_pool.pool if hasattr(db_pool, 'pool') else db_pool
+        async with pool.acquire() as conn:
+            await conn.execute(MIGRATION_SQL)
+            logger.info("billing_schema_created")
 
-        # Promote super admin from env var (direct parameterized query)
+            await conn.execute(SEED_PLANS_SQL)
+            plan_count = await conn.fetchval("SELECT COUNT(*) FROM plans")
+            logger.info("billing_plans_seeded", count=plan_count)
+
+            await conn.execute(HYDRATE_EXISTING_TENANTS_SQL)
+            logger.info("billing_tenants_hydrated")
+
+        # Promote super admin from env var
         super_admin_email = os.getenv("SUPER_ADMIN_EMAIL", "")
         if super_admin_email:
             await db_pool.execute(
@@ -261,7 +270,7 @@ async def run_startup_billing_migration(db_pool):
 
         logger.info("billing_startup_migration_complete")
     except Exception as e:
-        logger.warning("billing_startup_migration_partial", error=str(e))
+        logger.error("billing_startup_migration_failed", error=str(e), error_type=type(e).__name__)
 
 
 async def run_migration():
