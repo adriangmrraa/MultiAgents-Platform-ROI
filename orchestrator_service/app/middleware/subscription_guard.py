@@ -164,6 +164,28 @@ class SubscriptionGuardMiddleware(BaseHTTPMiddleware):
                     "redirect": "/billing"
                 })
 
+            # Check usage limits (messages/tokens) — only for message-processing endpoints
+            usage_check_paths = ("/chat", "/ingest/message", "/admin/whatsapp/send")
+            if any(path.startswith(p) for p in usage_check_paths):
+                try:
+                    from app.services.usage_tracker import get_usage_tracker
+                    tracker = get_usage_tracker()
+                    limits = await tracker.check_limits(tenant_id)
+                    if not limits.get("allowed", True):
+                        reason = "mensajes" if limits.get("messages_exceeded") else "tokens"
+                        plan_name = limits.get("plan", "free")
+                        limit_val = limits.get("messages_limit", 0)
+                        used_val = limits.get("messages_used", 0)
+                        return self._block_response(request, 429, {
+                            "error": "usage_limit_exceeded",
+                            "message": f"Alcanzaste el limite de {reason} de tu plan ({used_val}/{limit_val}). Actualiza tu plan para seguir usando la plataforma.",
+                            "redirect": "/billing",
+                            "plan": plan_name,
+                            "usage": limits
+                        })
+                except Exception as limit_err:
+                    logger.warning("usage_limit_check_error", error=str(limit_err))
+
         except Exception as e:
             # Don't block on middleware errors - log and continue
             logger.error("subscription_guard_error", error=str(e), path=path)

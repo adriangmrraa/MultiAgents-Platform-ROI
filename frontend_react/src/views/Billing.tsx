@@ -196,7 +196,7 @@ export const Billing: React.FC = () => {
                                 <FreeInclude icon={<Instagram size={16} />} label="1 Instagram" />
                                 <FreeInclude icon={<Facebook size={16} />} label="1 Facebook" />
                                 <FreeInclude icon={<MessageCircle size={16} />} label="2 WhatsApp" />
-                                <FreeInclude icon={<MessageSquare size={16} />} label="200 mensajes" />
+                                <FreeInclude icon={<MessageSquare size={16} />} label="50 mensajes" />
                                 <FreeInclude icon={<Users size={16} />} label="1 agente IA" />
                             </div>
                             <p className="text-[11px] text-slate-600 mt-3">

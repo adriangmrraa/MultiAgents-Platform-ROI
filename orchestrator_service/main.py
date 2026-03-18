@@ -3125,9 +3125,21 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                 VALUES ($1, $2, $3, 'assistant', $4, $5, NOW(), $6, (SELECT channel_source FROM chat_conversations WHERE id = $3))
             """, agent_msg_id, tenant_id, conv_id, clean_response, correlation_id, from_number)
             
+            # Track usage: outgoing message + estimated tokens
+            try:
+                from app.services.usage_tracker import get_usage_tracker
+                tracker = get_usage_tracker()
+                await tracker.track_message(tenant_id, "sent")
+                # Estimate tokens: ~4 chars per token (rough approximation)
+                estimated_tokens = len(clean_response) // 4 + len(content) // 4
+                estimated_cost = estimated_tokens * 0.000002  # ~$0.002/1K tokens for gpt-4o-mini
+                await tracker.track_tokens(tenant_id, estimated_tokens, "gpt-4o-mini", estimated_cost)
+            except Exception as track_err:
+                logger.warning("usage_track_agent_error", error=str(track_err))
+
             # Nexus v5.32: Shadow RAG Ingestion (Agent Message)
             asyncio.create_task(ShadowIndexer.process_message(agent_msg_id, tenant_id))
-            
+
             # --- Real-Time Update for UI (Protocol Omega) ---
             redis_payload = {
                 "event": "message",

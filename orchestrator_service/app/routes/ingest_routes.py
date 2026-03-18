@@ -292,6 +292,14 @@ async def ingest_message(event: SimpleEvent):
         VALUES ($1, $2, $3, 'user', $4, NOW(), $5, $6)
     """, msg_id, tenant_id, conversation_id, content, event.sender_id, event.platform)
 
+    # 5b. Track usage (incoming message)
+    try:
+        from app.services.usage_tracker import get_usage_tracker
+        tracker = get_usage_tracker()
+        await tracker.track_message(tenant_id, "received")
+    except Exception as track_err:
+        logger.warning("usage_track_error", error=str(track_err))
+
     # 6. Update conversation last message
     await db.pool.execute("""
         UPDATE chat_conversations SET last_message_at = NOW(), last_message_preview = $1, updated_at = NOW()

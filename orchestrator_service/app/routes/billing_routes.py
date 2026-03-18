@@ -94,7 +94,7 @@ PLANS_CREATE_AND_SEED = """
         features, sort_order)
     VALUES
         (gen_random_uuid(), 'free', 'Free Trial', '10 dias gratis para probar la plataforma completa.',
-         0, 0, 0, 0, 1, 200, 5, 1, 1, 25000,
+         0, 0, 0, 0, 1, 50, 5, 1, 1, 25000,
          '{"analytics": false, "custom_branding": false, "api_access": false, "priority_support": false, "whatsapp_templates": false, "multi_channel": false}', 0),
         (gen_random_uuid(), 'pro', 'Pro', 'Para negocios en crecimiento. Todo lo que necesitas para escalar.',
          49, 45000, 470, 432000, 5, 5000, 50, 3, 5, 500000,
@@ -159,7 +159,7 @@ async def list_plans(db = Depends(get_pool_db)):
                 await conn.execute("ALTER TABLE plans ALTER COLUMN is_active DROP NOT NULL")
                 # Seed each plan individually
                 for plan in [
-                    ('free', 'Free Trial', '10 dias gratis con acceso moderado a la plataforma.', 0, 0, 0, 0, 'monthly', 1, 200, 5, 1, 1, 25000, '{"analytics": false, "custom_branding": false, "api_access": false, "priority_support": false, "whatsapp_templates": false, "multi_channel": false}', True, 0),
+                    ('free', 'Free Trial', '10 dias gratis con acceso moderado a la plataforma.', 0, 0, 0, 0, 'monthly', 1, 50, 5, 1, 1, 25000, '{"analytics": false, "custom_branding": false, "api_access": false, "priority_support": false, "whatsapp_templates": false, "multi_channel": false}', True, 0),
                     ('pro', 'Pro', 'Para negocios en crecimiento. Todo lo que necesitas para escalar.', 49, 45000, 470, 432000, 'monthly', 5, 5000, 50, 3, 5, 500000, '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": false, "whatsapp_templates": true, "multi_channel": true}', True, 1),
                     ('enterprise', 'Enterprise', 'Para grandes equipos. Soporte prioritario y features exclusivas.', 199, 180000, 1910, 1728000, 'monthly', -1, -1, -1, -1, -1, -1, '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": true, "whatsapp_templates": true, "multi_channel": true, "dedicated_support": true, "sla": true}', True, 2),
                 ]:

@@ -175,7 +175,7 @@ INSERT INTO plans (name, display_name, description, price_usd, price_ars, price_
 VALUES
     ('free', 'Free Trial', '10 dias gratis para probar la plataforma completa. Sin tarjeta de credito.',
      0, 0, 0, 0,
-     1, 200, 5, 1, 1, 25000,
+     1, 50, 5, 1, 1, 25000,
      '{"analytics": false, "custom_branding": false, "api_access": false, "priority_support": false, "whatsapp_templates": false, "multi_channel": false}',
      0),
     ('pro', 'Pro', 'Para negocios en crecimiento. Todo lo que necesitas para escalar tu atencion al cliente con IA.',
@@ -196,7 +196,7 @@ ON CONFLICT (name) DO UPDATE SET
     price_usd_yearly = EXCLUDED.price_usd_yearly,
     price_ars_yearly = EXCLUDED.price_ars_yearly,
     max_agents = EXCLUDED.max_agents,
-    max_messages_per_month = EXCLUDED.max_messages_per_month,
+    max_messages_per_month = EXCLUDED.max_messages_per_month, -- Forces update (free: 50, pro: 5000, enterprise: -1)
     max_knowledge_docs = EXCLUDED.max_knowledge_docs,
     max_channels = EXCLUDED.max_channels,
     max_team_members = EXCLUDED.max_team_members,
