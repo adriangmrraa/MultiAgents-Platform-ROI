@@ -117,7 +117,7 @@ async def setup_google_key(
         from google import genai
         client = genai.Client(api_key=req.api_key)
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-2.5-flash',
             contents='Respond with just "ok"'
         )
         if not response.text:

@@ -77,7 +77,7 @@ async def generate_ad_from_product(base64_product: str, prompt: str, google_api_
         analysis_prompt = f"Describe este producto detalladamente para un anuncio de {prompt}. Enfócate en la estética, colores y marca."
         
         response = target_client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-2.5-flash',
             contents=[analysis_prompt, img]
         )
         visual_description = response.text
@@ -96,7 +96,7 @@ async def generate_image_dalle3(full_prompt: str, reference_image: Image.Image =
     Image Generation with fallback chain:
     1. Imagen 3.0-generate-002 (Gemini API)
     2. Imagen 3.0-generate-001 (Vertex AI)
-    3. Gemini native image generation (gemini-2.0-flash)
+    3. Gemini native image generation (gemini-2.5-flash)
     """
     target_client = get_google_client(google_api_key)
     if not target_client:
@@ -123,10 +123,10 @@ async def generate_image_dalle3(full_prompt: str, reference_image: Image.Image =
             logger.warning("imagen_model_unavailable", model=model_id, error=str(e)[:100])
             continue
 
-    # Strategy 2: Gemini native image generation (gemini-2.0-flash with image output)
+    # Strategy 2: Gemini native image generation (gemini-2.5-flash with image output)
     try:
         response = target_client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-2.5-flash-exp',
             contents=f"Generate a professional product photography image: {full_prompt}. Output ONLY the image, no text.",
             config=types.GenerateContentConfig(
                 response_modalities=['IMAGE', 'TEXT'],
@@ -137,7 +137,7 @@ async def generate_image_dalle3(full_prompt: str, reference_image: Image.Image =
             for part in response.candidates[0].content.parts:
                 if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.mime_type.startswith('image/'):
                     b64_img = base64.b64encode(part.inline_data.data).decode('utf-8')
-                    logger.info("image_generated", model="gemini-2.0-flash-exp")
+                    logger.info("image_generated", model="gemini-2.5-flash-exp")
                     return f"data:image/{part.inline_data.mime_type.split('/')[-1]};base64,{b64_img}"
     except Exception as e:
         logger.warning("gemini_image_gen_failed", error=str(e)[:100])
