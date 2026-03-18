@@ -59,7 +59,10 @@ async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(url)
             data = resp.json()
-            logger.info("meta_profile_response", status=resp.status_code, platform=platform, sender=sender_id, has_error="error" in data)
+            # Full debug log to see exactly what Meta returns
+            logger.info("meta_profile_raw_response",
+                status=resp.status_code, platform=platform,
+                sender=sender_id, body=json.dumps(data)[:500])
 
             if resp.status_code == 200 and "error" not in data:
                 if platform == "instagram":
@@ -71,13 +74,18 @@ async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform:
                 else:
                     first = data.get("first_name", "")
                     last = data.get("last_name", "")
+                    pic = data.get("profile_pic") or ""
+                    logger.info("meta_fb_profile_parsed", first=first, last=last, has_pic=bool(pic))
                     return {
                         "name": f"{first} {last}".strip() or "",
-                        "avatar": data.get("profile_pic") or ""
+                        "avatar": pic
                     }
             else:
                 error_msg = data.get("error", {}).get("message", "unknown")
-                logger.warning("meta_profile_fetch_failed", status=resp.status_code, sender=sender_id, error=error_msg)
+                error_code = data.get("error", {}).get("code", "")
+                logger.warning("meta_profile_fetch_failed",
+                    status=resp.status_code, sender=sender_id,
+                    error=error_msg, error_code=error_code, platform=platform)
     except Exception as e:
         logger.warning("meta_profile_fetch_error", error=str(e), sender=sender_id)
     return {}
