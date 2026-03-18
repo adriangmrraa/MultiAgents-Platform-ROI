@@ -786,7 +786,12 @@ const GalleryTab = ({ assets, fetchApi, onRefresh, brandDNA }: any) => {
         return true;
     });
 
-    const isImg = (a: Asset) => a.content?.image_url && !a.content.image_url.includes('placehold.co');
+    const parseContent = (a: Asset) => {
+        if (!a.content) return {};
+        if (typeof a.content === 'string') { try { return JSON.parse(a.content); } catch { return {}; } }
+        return a.content;
+    };
+    const isImg = (a: Asset) => { const c = parseContent(a); return c?.image_url && !c.image_url.includes('placehold.co'); };
 
     const handleEdit = async () => {
         if (!selectedAsset || !editPrompt.trim()) return;
@@ -823,11 +828,12 @@ const GalleryTab = ({ assets, fetchApi, onRefresh, brandDNA }: any) => {
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                     {filteredAssets.map((a: Asset) => {
-                        const hasImg = isImg(a);
-                        const title = a.content?.product_name || a.content?.headline || a.content?.channel_name || a.content?.texts?.[0]?.headline || a.asset_type;
-                        const sub = a.content?.template_name || a.content?.campaign_goal || a.content?.body?.substring(0, 60) || '';
-                        return (<button key={a.id} onClick={() => setSelectedAsset(a)} className={`glass rounded-xl overflow-hidden text-left transition-all hover:ring-2 hover:ring-purple-500/30 ${selectedAsset?.id === a.id ? 'ring-2 ring-purple-500/50' : ''}`}>
-                            {hasImg ? <img src={a.content.image_url} alt="" className="w-full h-32 object-cover" /> : <div className="h-32 p-3 flex flex-col justify-center bg-gradient-to-br from-slate-800/50 to-black/50"><p className="text-sm font-medium line-clamp-2">{title}</p><p className="text-[10px] text-slate-500 mt-1 truncate">{sub}</p></div>}
+                        const c = parseContent(a);
+                        const hasImg = c?.image_url && !c.image_url.includes('placehold.co');
+                        const title = c?.product_name || c?.headline || c?.channel_name || c?.texts?.[0]?.headline || a.asset_type;
+                        const sub = c?.template_name || c?.campaign_goal || c?.body?.substring(0, 60) || '';
+                        return (<button key={a.id} onClick={() => setSelectedAsset({...a, content: c})} className={`glass rounded-xl overflow-hidden text-left transition-all hover:ring-2 hover:ring-purple-500/30 ${selectedAsset?.id === a.id ? 'ring-2 ring-purple-500/50' : ''}`}>
+                            {hasImg ? <img src={c.image_url} alt="" className="w-full h-32 object-cover" /> : <div className="h-32 p-3 flex flex-col justify-center bg-gradient-to-br from-slate-800/50 to-black/50"><p className="text-sm font-medium line-clamp-2">{title}</p><p className="text-[10px] text-slate-500 mt-1 truncate">{sub}</p></div>}
                             <div className="p-2 flex items-center justify-between"><span className="text-[10px] text-purple-400 capitalize">{a.asset_type.replace(/_/g, ' ')}</span><span className="text-[10px] text-slate-600">{new Date(a.created_at).toLocaleDateString()}</span></div>
                         </button>);
                     })}

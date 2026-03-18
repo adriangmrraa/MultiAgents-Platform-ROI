@@ -666,12 +666,22 @@ async def list_assets(
         SELECT COUNT(*) FROM business_assets WHERE {where}
     """, *params[:-2])
 
+    def _parse_content(raw):
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, str):
+            try:
+                return json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                return {"raw": raw}
+        return raw or {}
+
     return {
         "assets": [
             {
                 "id": str(r["id"]),
                 "asset_type": r["asset_type"],
-                "content": r["content"],
+                "content": _parse_content(r["content"]),
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                 "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None
             }
