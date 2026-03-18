@@ -246,7 +246,20 @@ async def verify_email(data: TokenSchema, db: AsyncSession = Depends(get_db)):
     user.is_verified = True
     user.verification_token = None # One-time use
     await db.commit()
-    
+
+    # Send welcome email after verification
+    try:
+        from app.core.email import EmailService
+        store_name = user.tenant.store_name if user.tenant else None
+        await EmailService.send_welcome_email(
+            to_email=user.email,
+            full_name=user.full_name,
+            avatar_url=user.avatar_url,
+            store_name=store_name
+        )
+    except Exception as e:
+        logger.warning("verify_welcome_email_failed", error=str(e))
+
     return {"message": "Email verified successfully"}
 
 @router.post("/resend-verification")
@@ -391,6 +404,18 @@ async def google_auth(data: GoogleAuthRequest, response: Response, db: AsyncSess
             logger.warning("google_register_trial_skip", error=str(sub_err))
 
         logger.info("google_register", user_id=str(user.id), email=email)
+
+        # Send welcome email for new Google users
+        try:
+            from app.core.email import EmailService
+            await EmailService.send_welcome_email(
+                to_email=email,
+                full_name=full_name,
+                avatar_url=avatar_url,
+                store_name=store_name
+            )
+        except Exception as e:
+            logger.warning("google_welcome_email_failed", error=str(e))
 
     # 3. Issue JWT cookie (same as regular login)
     access_token_expires = timedelta(minutes=security.ACCESS_TOKEN_EXPIRE_MINUTES)
