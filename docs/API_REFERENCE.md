@@ -1,300 +1,124 @@
-# API Reference: System & Management (Nexus v7.6)
+# Future Platform — API Reference
 
-## Infraestructura y Control
+## Authentication (`/auth`)
 
-### 🌐 Registro de Modelos 2026
-`GET /admin/system/available-models`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/login` | Email/password login → JWT |
+| POST | `/auth/register` | User registration |
+| GET | `/auth/me` | Current user info |
+| GET | `/auth/google/oauth-url` | Google OAuth initiation |
+| POST | `/auth/google/callback` | Google OAuth callback |
 
-Devuelve la lista de modelos de IA soportados, categorizados por su capacidad.
-*   **Auth**: Requiere `X-Admin-Token`.
-*   **Respuesta**:
-    ```json
-    {
-      "default_model": "gpt-5-mini",
-      "models": [
-        { "id": "gpt-5.2", "tier": "flagship", "name": "GPT-5.2 (Flagship)" },
-        { "id": "gpt-5-mini", "tier": "economy", "name": "GPT-5 Mini" },
-        { "id": "gpt-5.2-pro", "tier": "premium", "name": "GPT-5.2 Pro" },
-        { "id": "gpt-5.2-codex", "tier": "advanced", "name": "GPT-5.2 Codex" },
-        { "id": "gemini-3-pro", "tier": "advanced", "name": "Gemini 3 Pro" },
-        { "id": "gemini-3-flash", "tier": "economy", "name": "Gemini 3 Flash" }
-      ]
-    }
-    ```
+## Admin — Agents (`/admin`)
 
-### 🔧 Inicialización de DB RAG
-`GET /admin/system/init-db`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/agents` | List tenant agents |
+| POST | `/admin/agents` | Create agent |
+| PUT | `/admin/agents/{id}` | Update agent |
+| DELETE | `/admin/agents/{id}` | Delete agent |
+| POST | `/admin/agents/{id}/test` | Test agent with sample input |
 
-Disparador manual para el bootstrapper de Supabase/pgvector.
-*   **Auth**: Requiere `X-Admin-Token`.
-*   **Uso**: En caso de errores de "Table not found" o migraciones corruptas.
+## Admin — Chats (`/admin`)
 
-## Agentes (Gestión v6.0)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/chats/summary` | List conversations (supports `channel`, `provider`, `limit`, `offset`) |
+| GET | `/admin/chats/{id}/messages` | Paginated message history |
+| POST | `/admin/whatsapp/send` | Send manual message (routes to correct provider) |
+| POST | `/admin/conversations/{id}/human-override` | Toggle human override lock |
 
-### 📋 Listar Agentes
-`GET /admin/agents`
-*   **Auth**: Requiere autenticación de usuario (`get_current_user`).
-*   **Scope**: 
-    - **SuperAdmin**: Ve todos los agentes de todos los tenants.
-    - **Usuario regular**: Ve solo los agentes de su tenant.
-*   **Respuesta**: Array de agentes con información del tenant.
-    ```json
-    [
-      {
-        "id": "uuid-123",
-        "name": "Agente de Ventas (IA)",
-        "role": "sales",
-        "tenant_id": 1,
-        "tenant_name": "Mi Tienda",
-        "model_provider": "openai",
-        "model_version": "gpt-4o",
-        "temperature": 0.3,
-        "is_active": true,
-        "enabled_tools": ["search_specific_products", "create_order"],
-        "channels": ["whatsapp", "instagram", "web"],
-        "created_at": "2026-01-27T00:00:00Z"
-      }
-    ]
-    ```
-*   **Nota v6.2**: Este endpoint devuelve un **array vacío** `[]` si no hay agentes, evitando errores de frontend.
+## Admin — Credentials (`/admin`)
 
-### 🤖 Crear Agente
-`POST /admin/agents`
-*   **Validación**: El campo `model_version` es validado contra el registry. Si el modelo no existe, se asigna `gpt-5-mini` automáticamente.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/credentials` | List tenant credentials (masked) |
+| POST | `/admin/credentials` | Create/update credential |
+| DELETE | `/admin/credentials/{id}` | Delete credential |
+| POST | `/admin/credentials/internal-sync` | Internal: sync from meta/tiendanube service |
+| GET | `/admin/internal/credentials/{name}` | Internal: fetch decrypted credential |
 
-### 🔄 Actualizar Agente
-`PUT /admin/agents/{id}`
-*   **Evolución v6.0 Payload**:
-    *   `model_provider`, `model_version` y `enabled_tools` viven en la **raíz** del JSON.
-    *   `config` (JSONB) encapsula parámetros dinámicos: `reasoning_effort`, `text_verbosity`, `agent_tone`.
-*   **Intelligent Sync**: Si cambias a un modelo **Premium/Flagship**, el sistema ajustará automáticamente los timeouts y filtros de razonamiento.
+## Admin — Integrations (`/admin`)
 
-## Tenants (Gestión Multi-Inquilino)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/integrations/channels` | List connected channels + assets |
+| POST | `/admin/integrations/update-channels` | Activate/deactivate channels |
 
-### 📋 Listar Tenants
-`GET /admin/tenants`
-*   **Auth**: Requiere autenticación de usuario (`get_current_user`).
-*   **Scope**:
-    - **SuperAdmin**: Ve todos los tenants (límite configurable).
-    - **Owner**: Ve solo tenants donde `owner_email` coincide con su email.
-*   **Query Params**:
-    - `limit` (opcional, default: 100): Número máximo de resultados.
-*   **Respuesta**: Array de tenants (cambio en v6.2 - antes devolvía `{"tenants": [...]}`).
-    ```json
-    [
-      {
-        "id": 1,
-        "store_name": "Mi Tienda",
-        "bot_phone_number": "+5491112345678",
-        "owner_email": "owner@example.com",
-        "store_location": "Buenos Aires, Argentina",
-        "store_website": "https://mitienda.com",
-        "store_description": "Tienda de productos artesanales",
-        "handoff_policy": {},
-        "tiendanube_access_token": null
-      }
-    ]
-    ```
-*   **Seguridad**: El campo `tiendanube_access_token` siempre se devuelve como `null` por razones de seguridad.
-*   **Deprecación v7.5**: El campo `bot_phone_number` está en proceso de deprecación. Para ruteo de mensajes, el sistema ahora utiliza la tabla `channel_bindings`.
-*   **Breaking Change v6.2**: La respuesta ahora es un array directo en lugar de `{"tenants": [...]}` para consistencia con otros endpoints.
+## Billing (`/billing`)
 
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/billing/plans` | Available plans |
+| GET | `/billing/my-subscription` | Current subscription |
+| POST | `/billing/checkout` | Create checkout session |
+| POST | `/billing/change-plan` | Upgrade/downgrade |
+| GET | `/billing/invoices` | Invoice history |
+| GET | `/billing/usage` | Current period usage |
+| POST | `/billing/webhook/stripe` | Stripe webhook |
+| POST | `/billing/webhook/mercadopago` | MercadoPago webhook |
 
-## Canales Multi-Tenant (v7.5)
+## Knowledge / RAG (`/ingest`)
 
-Gestión de vinculaciones de canales (WhatsApp, Meta, Chatwoot) a tiendas.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/ingest/upload` | Upload document (PDF/DOCX/TXT/CSV) |
+| POST | `/ingest/url` | Ingest from URL |
+| GET | `/ingest/collections` | List knowledge collections |
+| DELETE | `/ingest/document/{id}` | Delete document + embeddings |
+| POST | `/ingest/search` | Semantic search |
 
-### 📋 Listar Vinculaciones
-`GET /admin/channels/bindings`
-*   **Auth**: Requiere autenticación de usuario.
-*   **Respuesta**:
-    ```json
-    {
-      "bindings": [
-        {
-          "id": 1,
-          "provider": "ycloud",
-          "channel_id": "109283746",
-          "label": "WhatsApp Principal",
-          "tenant_id": 37,
-          "tenant_name": "Urban Roots",
-          "created_at": "...",
-          "updated_at": "..."
-        }
-      ]
-    }
-    ```
+## Message Ingestion (`/ingest`)
 
-### 🔗 Vincular Canal
-`POST /admin/channels/bind`
-*   **Payload**:
-    ```json
-    {
-      "provider": "ycloud",
-      "channel_id": "ID_DEL_CANAL",
-      "label": "Mi Canal",
-      "tenant_id": 37
-    }
-    ```
-*   **Nota**: `tenant_id` es opcional; si no se envía, se asocia al tenant del usuario actual.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/ingest/message` | Internal: receive normalized event from meta_service |
 
-### 🔄 Editar Canal
-`PUT /admin/channels/edit/{id}`
-*   **Payload**: Permite cambiar el `channel_id`, `label` y `tenant_id` (para re-asociar el canal a otra tienda).
+## Gallery / Creative Studio (`/gallery`)
 
-### 🗑️ Desvincular Canal
-`DELETE /admin/channels/unbind/{id}`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/gallery/brand-dna` | Extract brand DNA |
+| POST | `/gallery/photoshoot` | Generate product photos |
+| POST | `/gallery/model-shoot` | Generate model scenes |
+| POST | `/gallery/campaign` | Generate campaigns |
+| POST | `/gallery/enhance-prompt` | AI prompt enhancement |
+| GET | `/gallery/assets` | List gallery assets |
+| DELETE | `/gallery/assets/{id}` | Delete asset |
 
----
+## Platform Admin (`/platform`)
 
-### 📤 Upload Document (RAG)
-`POST /admin/knowledge/upload`
-*   **Content-Type**: `multipart/form-data`
-*   **Parámetros**:
-    *   `file`: (Binary) Archivo PDF, DOCX, TXT.
-    *   `collection`: (String) Nombre de la colección (ej. 'General', 'ADN Personal').
-    *   `hero_name`: (String, Opcional) Nombre del Héroe para el `WhatsAppParser` si la colección es de identidad.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/platform/overview` | MRR, revenue, costs (super admin) |
+| GET | `/platform/tenants` | List all tenants |
+| POST | `/platform/tenants/{id}/action` | Suspend/activate tenant |
+| POST | `/platform/tenants/{id}/plan` | Change tenant plan |
+| GET | `/platform/audit-logs` | Admin action logs |
 
-### 🗑️ Delete Document
-`DELETE /admin/knowledge/{id}`
-*   **Comportamiento Destructivo**: Esta operación es **irreversible** en Supabase.
-*   **Performance**: Puede tardar 1-2 segundos en retornar mientras limpia los vectores embebidos del clúster de Supabase (pgvector).
+## Meta Service (`meta_service`)
 
-## Integraciones Meta (Meta Service v6.1)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/webhook` | Meta verification challenge |
+| POST | `/webhook` | Receive Meta webhook events |
+| POST | `/connect` | Exchange auth code → connect account |
+| POST | `/subscribe` | Subscribe asset to webhooks |
+| POST | `/messages/send` | Send FB/IG message via Graph API |
+| POST | `/whatsapp/send` | Send WhatsApp message via Cloud API |
 
-### 🔗 Connect OAuth
-`POST /admin/meta/connect`
-*   **Propósito**: Intercambio de códigos OAuth por tokens de larga duración.
-*   **Payload**:
-    ```json
-    {
-      "code": "AQC...",
-      "redirect_uri": "https://...",
-      "tenant_id": 123
-    }
-    ```
+## WhatsApp Service (`whatsapp_service`)
 
-### 📩 Send Message (Social - FB/IG)
-`POST /admin/meta/messages/send`
-*   **Uso**: Envío de mensajes a Messenger e Instagram Direct (Graph API).
-*   **Payload**:
-    ```json
-    {
-      "recipient_id": "123456",
-      "text": "Hola mundo",
-      "access_token": "PAGE_TOKEN",
-      "messaging_type": "RESPONSE"
-    }
-    ```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/messages/relay` | Universal delivery relay (routes to Meta/YCloud/Chatwoot) |
+| POST | `/webhook/ycloud` | YCloud webhook reception |
+| POST | `/webhook/chatwoot` | Chatwoot webhook reception |
 
-### 🟢 Send Message (WhatsApp Cloud API)
-`POST /admin/meta/whatsapp/send`
-*   **Uso**: Envío directo a WhatsApp Cloud API (WABA).
-*   **Diferencia Clave**: Requiere `phone_number_id` y usa estructura `messaging_product`.
-*   **Payload**:
-    ```json
-    {
-      "recipient_id": "54911...",
-      "text": "Hola WhatsApp",
-      "access_token": "SYSTEM_USER_TOKEN",
-      "phone_number_id": "100200..."
-    }
-    ```
+## Orchestrator — Main (`/`)
 
-### 🪝 Webhooks
-`POST /admin/meta/webhook`
-*   **Propósito**: Ingesta y normalización de eventos de Meta (Textos, Audios, Status Updates).
-*   **Seguridad**: Verifica firma HMAC con `META_APP_SECRET`.
-
----
-
-## APIs Internas (v6.2 - Inter-Service Communication)
-
-### 🔐 Internal Credentials API
-`GET /admin/internal/credentials/{name}`
-
-API de alta seguridad para que los microservicios obtengan credenciales desencriptadas.
-*   **Auth**: Requiere header `X-Internal-Token`.
-*   **Query Params**: `tenant_id` (opcional) para scope de inquilino.
-
-### 📡 Universal Delivery Relay
-`POST /messages/relay` (Servicio: `whatsapp_service`)
-
-Punto de salida centralizado para toda la mensajería multi-canal.
-*   **Propósito**: Unifica la entrega, aplica **Spacing (4s)** y gestiona el enrutamiento dinámico (Meta, Chatwoot, YCloud).
-*   **Payload**:
-    ```json
-    {
-      "to": "ID_DESTINO",
-      "text": "Contenido del mensaje",
-      "provider": "ycloud | meta_direct | chatwoot",
-      "channel_source": "whatsapp | instagram | facebook",
-      "tenant_id": 123,
-      "conversation_id": "uuid",
-      "external_chatwoot_id": 456,
-      "external_account_id": 1
-    }
-    ```
-
-### 💬 Chatwoot Unified Webhook
-`POST /admin/chatwoot/webhook`
-
-Receiver central para eventos de Chatwoot (Instagram, Facebook, WebChat).
-*   **Query Params**: `access_token` (requerido para validación de inquilino).
-*   **Procesamiento v6.2**:
-    - **Identity Fix**: Resuelve al cliente real ignorando ecos de agentes.
-    - **Atomic Buffer**: Debouncing de mensajes en Redis (16s).
-    - **AI Trigger**: Despierta al Orquestador automáticamente.
-
----
-
-
-## Métricas de Valor y ROI (v7.6)
-
-El sistema ahora audita y cuantifica el impacto directo de la IA en el negocio a través del Protocolo Assist Score.
-
-### 📈 Estadísticas Maestras (Dashboard)
-`GET /admin/stats`
-*   **Añadido en v7.6**: Objeto `assist_metrics`.
-*   **Estructura**:
-    ```json
-    {
-      "assist_metrics": {
-        "sales_score": 15.5,
-        "support_score": 42.0,
-        "checkpoints": 128,
-        "estimated_savings": "$42,000"
-      }
-    }
-    ```
-*   **Lógica de Valor**:
-    - `sales_score`: Puntos acumulados por asistencia en el funnel de compra.
-    - `support_score`: Puntos por resolución autónoma de dudas técnicas/logísticas.
-    - `estimated_savings`: Cálculo monetario basado en el ahorro de tiempo humano ($1000 ARS por punto de soporte).
-
-### 🕵️‍♂️ Log de Auditoría ROI
-`GET /admin/analytics/assist-audits`
-*   **Propósito**: Recupera el desglose de las últimas evaluaciones realizadas por los agentes.
-*   **Auth**: Requiere autenticación de usuario.
-*   **Respuesta**: Array de objetos con el razonamiento de la IA.
-    ```json
-    [
-      {
-        "conversation_id": "uuid",
-        "type": "sales",
-        "score": 1.0,
-        "reasoning": "El cliente confirmó el método de pago tras mi explicación de las cuotas.",
-        "timestamp": "2026-01-28T15:00:00Z"
-      }
-    ]
-    ```
-
-### 🧠 Herramienta de Reporte (Internal)
-`POST /admin/tools/report_assistance`
-*   **Uso**: Endpoint seguro utilizado por el `agent_service` para registrar métricas tras la auto-auditoría.
-*   **Auth**: Requiere `X-Internal-Token`.
-*   **Payload**: `{"conversation_id": "...", "tenant_id": 1, "type": "sales|support", "score": 1.0, "reasoning": "..."}`
-
----
-
-**© 2026 Platform AI Solutions - Sovereign Engine Core**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/chat` | Main message processing (from whatsapp_service) |
+| GET | `/health` | Health check |
