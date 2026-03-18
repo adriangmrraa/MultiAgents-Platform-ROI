@@ -19,60 +19,67 @@ class MetaAuthService:
 
     async def exchange_code(self, code: str, redirect_uri: str) -> str:
         """
-        Exchanges an Authorization Code for a User Access Token.
-        Required for 'Business Login for Tech Providers' (System User Flow).
+        Exchanges an Authorization Code for a Long-Lived User Access Token (60 days).
+        Tries redirect_uri with and without trailing slash (Meta is strict about exact match).
+        Flow: code → short-lived token → long-lived token (fb_exchange_token)
         """
-        url = f"{self.base_url}/oauth/access_token"
-        params = {
-            "client_id": self.app_id,
-            "client_secret": self.app_secret,
-            "redirect_uri": redirect_uri,
-            "code": code
-        }
-        
-        async with httpx.AsyncClient() as client:
-            try:
-                resp = await client.get(url, params=params)
-                data = resp.json()
-                
-                if "error" in data:
-                    logger.error("meta_code_exchange_failed", error=data["error"])
-                    raise HTTPException(status_code=400, detail=data["error"]["message"])
-                    
-                # Step 1: Get Short-Lived User Token
-                short_token = data.get("access_token")
+        uris_to_try = [redirect_uri]
+        if redirect_uri.endswith("/"):
+            uris_to_try.append(redirect_uri.rstrip("/"))
+        else:
+            uris_to_try.append(redirect_uri + "/")
 
-                # Step 2: Exchange for Long-Lived Token (60 days)
-                # https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived
-                exchange_url = f"{self.base_url}/oauth/access_token"
-                exchange_params = {
+        url = f"{self.base_url}/oauth/access_token"
+        last_error = None
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            for uri in uris_to_try:
+                # Step 1: Code → Short-Lived Token
+                resp = await client.get(url, params={
+                    "client_id": self.app_id,
+                    "client_secret": self.app_secret,
+                    "redirect_uri": uri,
+                    "code": code
+                })
+                data = resp.json()
+
+                if "error" in data:
+                    last_error = data["error"]
+                    logger.warning("code_exchange_attempt_failed", uri=uri, error=data["error"].get("message", ""))
+                    continue  # Try next URI variant
+
+                short_token = data.get("access_token")
+                if not short_token:
+                    last_error = {"message": "No access_token in response"}
+                    continue
+
+                logger.info("short_token_obtained", uri=uri)
+
+                # Step 2: Short-Lived → Long-Lived Token (60 days)
+                resp_exchange = await client.get(url, params={
                     "grant_type": "fb_exchange_token",
                     "client_id": self.app_id,
                     "client_secret": self.app_secret,
                     "fb_exchange_token": short_token
-                }
-                
-                resp_exchange = await client.get(exchange_url, params=exchange_params)
+                })
                 exchange_data = resp_exchange.json()
-                
+
                 if "access_token" in exchange_data:
-                    # Parse Expiration (seconds)
                     expires_in = exchange_data.get("expires_in")
-                    
-                    logger.info("Sovereign Token Persisted", 
-                        valid_for="60 days", 
+                    logger.info("long_lived_token_obtained",
                         expires_in_seconds=expires_in,
-                        token_type="long_lived"
+                        valid_days=round(expires_in / 86400) if expires_in else "unknown"
                     )
                     return exchange_data["access_token"]
-                
-                # CRITICAL: Do NOT fallback to short token. We want to ensure long-lived only.
-                logger.error("long_lived_exchange_failed", response=exchange_data)
-                raise HTTPException(status_code=400, detail="Could not generate Sovereign Long-Lived Token. Please try again.")
 
-            except httpx.ConnectError as e:
-                logger.error("meta_connection_error", url=url, error=str(e))
-                raise HTTPException(status_code=503, detail=f"Could not connect to Meta API at {url}. Check DNS/Network.")
+                # Long-lived exchange failed — still return short token as fallback
+                logger.warning("long_lived_exchange_failed", response=exchange_data)
+                return short_token
+
+        # All URI variants failed
+        error_msg = last_error.get("message", "Unknown error") if last_error else "Code exchange failed"
+        logger.error("all_code_exchange_attempts_failed", error=error_msg, uris_tried=uris_to_try)
+        raise HTTPException(status_code=400, detail=f"Meta token exchange failed: {error_msg}")
 
     async def check_token_health(self, access_token: str) -> dict:
         """

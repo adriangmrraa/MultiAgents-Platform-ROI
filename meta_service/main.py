@@ -52,9 +52,10 @@ async def connect_meta_account(
     """
     code = data.get("code")
     tenant_id = data.get("tenant_id")
-    # Meta is strict: Redirect URI must match exactly what was used in frontend (or the page origin)
-    default_redirect_uri = os.getenv("FRONTEND_URL", "https://multiagents-frontend.yn8wow.easypanel.host")
-    redirect_uri = data.get("redirect_uri", default_redirect_uri)
+    # Meta is strict: redirect_uri must match EXACTLY what was configured in the Login Configuration
+    # For FB.login() with config_id, Meta uses the origin of the page that opened the popup
+    frontend_url = os.getenv("FRONTEND_URL", "https://multiagents-frontend.yn8wow.easypanel.host")
+    redirect_uri = data.get("redirect_uri") or frontend_url
     
     if not code or not tenant_id:
         raise HTTPException(400, "Missing code or tenant_id")
