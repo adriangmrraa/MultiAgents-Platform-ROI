@@ -93,39 +93,54 @@ async def generate_ad_from_product(base64_product: str, prompt: str, google_api_
 
 async def generate_image_dalle3(full_prompt: str, reference_image: Image.Image = None, google_api_key: str = None) -> str:
     """
-    Standard Generation: Imagen 3.0 (Nano Banana)
-    Supports Subject Reference if available.
+    Image Generation with fallback chain:
+    1. Imagen 3.0-generate-002 (Gemini API)
+    2. Imagen 3.0-generate-001 (Vertex AI)
+    3. Gemini native image generation (gemini-2.0-flash)
     """
     target_client = get_google_client(google_api_key)
     if not target_client:
-         raise Exception("Missing GOOGLE_API_KEY for Imagen 3.0")
+         raise Exception("Missing GOOGLE_API_KEY for image generation")
 
-    try:
-        model_id = 'imagen-3.0-generate-001'
-        
-        config = {
-            'number_of_images': 1,
-            'output_mime_type': 'image/png'
-        }
-        
+    # Strategy 1: Try Imagen models (newest first)
+    for model_id in ['imagen-3.0-generate-002', 'imagen-3.0-generate-001']:
         try:
-            # We will use the standard call.
+            config = {
+                'number_of_images': 1,
+                'output_mime_type': 'image/png'
+            }
             response = target_client.models.generate_images(
                 model=model_id,
                 prompt=full_prompt,
                 config=config
             )
+            if response.generated_images:
+                img_bytes = response.generated_images[0].image_bytes
+                b64_img = base64.b64encode(img_bytes).decode('utf-8')
+                logger.info("image_generated", model=model_id)
+                return f"data:image/png;base64,{b64_img}"
         except Exception as e:
-             logger.warning("imagen_sdk_failed_trying_predict", error=str(e))
-             raise e
+            logger.warning("imagen_model_unavailable", model=model_id, error=str(e)[:100])
+            continue
 
-        if response.generated_images:
-            img_bytes = response.generated_images[0].image_bytes
-            b64_img = base64.b64encode(img_bytes).decode('utf-8')
-            return f"data:image/png;base64,{b64_img}"
-            
-        return "https://placehold.co/1024x1024/1e293b/FFF.png?text=Imagen+Generation+Unavailable"
-
+    # Strategy 2: Gemini native image generation (gemini-2.0-flash with image output)
+    try:
+        response = target_client.models.generate_content(
+            model='gemini-2.0-flash-exp',
+            contents=f"Generate a professional product photography image: {full_prompt}. Output ONLY the image, no text.",
+            config=types.GenerateContentConfig(
+                response_modalities=['IMAGE', 'TEXT'],
+            )
+        )
+        # Extract image from multimodal response
+        if response.candidates:
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.mime_type.startswith('image/'):
+                    b64_img = base64.b64encode(part.inline_data.data).decode('utf-8')
+                    logger.info("image_generated", model="gemini-2.0-flash-exp")
+                    return f"data:image/{part.inline_data.mime_type.split('/')[-1]};base64,{b64_img}"
     except Exception as e:
-        logger.error("imagen_failed", error=str(e))
-        return f"https://placehold.co/1024x1024/1e293b/FFF.png?text=Imagen+Error:+{str(e)[:20]}"
+        logger.warning("gemini_image_gen_failed", error=str(e)[:100])
+
+    logger.error("all_image_generation_failed", prompt_preview=full_prompt[:50])
+    return "https://placehold.co/1024x1024/1e293b/FFF.png?text=Image+Generation+Unavailable"
