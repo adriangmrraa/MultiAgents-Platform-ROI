@@ -60,6 +60,39 @@ async def list_plans(db = Depends(get_pool_db)):
         FROM plans WHERE is_active = true
         ORDER BY sort_order
     """)
+
+    # Auto-seed if plans table is empty (migration may have failed)
+    if not rows:
+        logger.warning("plans_table_empty_seeding_now")
+        try:
+            await db.execute("""
+                INSERT INTO plans (name, display_name, description, price_usd, price_ars, price_usd_yearly, price_ars_yearly,
+                    max_agents, max_messages_per_month, max_knowledge_docs, max_channels, max_team_members, max_tokens_per_month,
+                    features, sort_order)
+                VALUES
+                    ('free', 'Free Trial', '10 dias gratis para probar la plataforma completa.',
+                     0, 0, 0, 0, 1, 200, 5, 1, 1, 25000,
+                     '{"analytics": false, "custom_branding": false, "api_access": false, "priority_support": false, "whatsapp_templates": false, "multi_channel": false}', 0),
+                    ('pro', 'Pro', 'Para negocios en crecimiento. Todo lo que necesitas para escalar.',
+                     49, 45000, 470, 432000, 5, 5000, 50, 3, 5, 500000,
+                     '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": false, "whatsapp_templates": true, "multi_channel": true}', 1),
+                    ('enterprise', 'Enterprise', 'Para grandes equipos. Soporte prioritario y features exclusivas.',
+                     199, 180000, 1910, 1728000, -1, -1, -1, -1, -1, -1,
+                     '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": true, "whatsapp_templates": true, "multi_channel": true, "dedicated_support": true, "sla": true}', 2)
+                ON CONFLICT (name) DO NOTHING
+            """)
+            rows = await db.fetch("""
+                SELECT id, name, display_name, description,
+                       price_usd, price_ars, price_usd_yearly, price_ars_yearly,
+                       billing_period, max_agents, max_messages_per_month,
+                       max_knowledge_docs, max_channels, max_team_members,
+                       max_tokens_per_month, features, sort_order
+                FROM plans WHERE is_active = true ORDER BY sort_order
+            """)
+            logger.info("plans_auto_seeded", count=len(rows))
+        except Exception as e:
+            logger.error("plans_auto_seed_failed", error=str(e))
+
     return [dict(r) for r in rows]
 
 
