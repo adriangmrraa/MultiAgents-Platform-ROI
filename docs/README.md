@@ -15,6 +15,7 @@
 | [Creative Studio](./CREATIVE_STUDIO.md) | Brand DNA, Photoshoot, Campaigns (Business Forge) |
 | [Deployment](./DEPLOYMENT.md) | EasyPanel, Docker Compose, environment variables |
 | [Troubleshooting](./TROUBLESHOOTING.md) | Common issues and solutions |
+| [Launch Checklist](./LAUNCH_CHECKLIST.md) | Step-by-step guide to go live (Stripe, MP, Meta, security) |
 
 ## Quick Links
 
