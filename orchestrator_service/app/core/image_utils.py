@@ -119,10 +119,11 @@ async def generate_ad_from_product(base64_product: str, prompt: str, google_api_
 
 # ==================== IMAGE GENERATION ====================
 
-async def generate_image(full_prompt: str, model_tier: str = None, google_api_key: str = None) -> str:
+async def generate_image(full_prompt: str, model_tier: str = None, google_api_key: str = None, reference_images: list = None) -> str:
     """
     Generate an image using the specified Nano Banana model tier.
     Falls back through models if the selected one fails.
+    reference_images: optional list of PIL.Image objects to use as visual references.
     """
     target_client = get_google_client(google_api_key)
     if not target_client:
@@ -143,10 +144,10 @@ async def generate_image(full_prompt: str, model_tier: str = None, google_api_ke
             if method == "imagen":
                 result = await _generate_with_imagen(target_client, model_id, full_prompt)
             else:
-                result = await _generate_with_gemini(target_client, model_id, full_prompt)
+                result = await _generate_with_gemini(target_client, model_id, full_prompt, reference_images)
 
             if result:
-                logger.info("image_generated", model=model_id, tier=t)
+                logger.info("image_generated", model=model_id, tier=t, has_references=bool(reference_images))
                 return result
 
         except Exception as e:
@@ -171,13 +172,21 @@ async def _generate_with_imagen(client, model_id: str, prompt: str) -> str | Non
     return None
 
 
-async def _generate_with_gemini(client, model_id: str, prompt: str) -> str | None:
-    """Generate image using Gemini native image generation."""
+async def _generate_with_gemini(client, model_id: str, prompt: str, reference_images: list = None) -> str | None:
+    """Generate image using Gemini native image generation, optionally with reference images."""
+    # Build contents: prompt + optional reference images
+    if reference_images:
+        contents = [prompt] + reference_images
+        modalities = ['TEXT', 'IMAGE']  # Need TEXT+IMAGE for multimodal input
+    else:
+        contents = prompt
+        modalities = ['IMAGE']
+
     response = client.models.generate_content(
         model=model_id,
-        contents=prompt,
+        contents=contents,
         config=types.GenerateContentConfig(
-            response_modalities=['IMAGE'],
+            response_modalities=modalities,
         )
     )
     if response.candidates:

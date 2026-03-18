@@ -340,8 +340,29 @@ class CreativeStudio:
             final_prompt += f"CREATIVE DIRECTION: {custom_prompt}. "
         final_prompt += f"SCENE & TECHNICAL: {tmpl['prompt_suffix']}"
 
-        # 4. Generate
-        image_url = await generate_image(final_prompt, model_tier=model_tier, google_api_key=self.google_api_key)
+        # 4. Load reference images for multimodal generation
+        reference_images = []
+        try:
+            # Load product image
+            product_img = await self._load_image(product_image_url)
+            if product_img:
+                reference_images.append(product_img)
+
+            # Load model reference image
+            if model_image_url:
+                model_img = await self._load_image(model_image_url)
+                if model_img:
+                    reference_images.append(model_img)
+        except Exception as e:
+            logger.warning("reference_image_load_failed", error=str(e))
+
+        # 5. Generate with reference images
+        image_url = await generate_image(
+            final_prompt,
+            model_tier=model_tier,
+            google_api_key=self.google_api_key,
+            reference_images=reference_images if reference_images else None
+        )
 
         return {
             "image_url": image_url,
@@ -354,6 +375,20 @@ class CreativeStudio:
             "product_category": product_analysis["category"],
             "model_description": model_description or None
         }
+
+    async def _load_image(self, image_url: str):
+        """Load an image from URL or base64 data URL into PIL Image."""
+        from PIL import Image
+        from io import BytesIO
+
+        if image_url.startswith("data:image"):
+            b64_data = image_url.split(",")[1]
+            return Image.open(BytesIO(base64.b64decode(b64_data)))
+        else:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(image_url)
+                resp.raise_for_status()
+                return Image.open(BytesIO(resp.content))
 
     async def _analyze_product_for_model_shoot(self, image_url: str, product_name: str) -> Dict:
         """
