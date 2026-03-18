@@ -2,6 +2,7 @@ import os
 import uuid
 import json
 import asyncio
+import httpx
 import structlog
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Header, Depends
@@ -12,6 +13,70 @@ from db import db, redis_client
 from app.core.config import settings
 
 logger = structlog.get_logger()
+
+
+async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform: str, tenant_id: int) -> dict:
+    """
+    Fetches sender profile (name, avatar) from Meta Graph API.
+    Uses the stored page token for the recipient (page/IG account).
+    """
+    from utils import decrypt_password
+    try:
+        # Try specific page token first, then general
+        token_row = await db.pool.fetchrow(
+            "SELECT value FROM credentials WHERE tenant_id = $1 AND name = $2",
+            tenant_id, f"META_PAGE_TOKEN_{recipient_id}"
+        )
+        if not token_row:
+            # Try linked page for Instagram
+            asset = await db.pool.fetchrow(
+                "SELECT content->>'linked_page_id' as linked_page_id FROM business_assets WHERE content->>'id' = $1 AND tenant_id = $2",
+                recipient_id, str(tenant_id)
+            )
+            if asset and asset['linked_page_id']:
+                token_row = await db.pool.fetchrow(
+                    "SELECT value FROM credentials WHERE tenant_id = $1 AND name = $2",
+                    tenant_id, f"META_PAGE_TOKEN_{asset['linked_page_id']}"
+                )
+        if not token_row:
+            token_row = await db.pool.fetchrow(
+                "SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'meta_page_token'",
+                tenant_id
+            )
+        if not token_row:
+            return {}
+
+        token = decrypt_password(token_row['value'])
+
+        # Fetch profile from Graph API
+        api_version = os.getenv("META_GRAPH_API_VERSION", "v22.0")
+        if platform == "instagram":
+            url = f"https://graph.facebook.com/{api_version}/{sender_id}?fields=name,username,profile_pic&access_token={token}"
+        else:
+            url = f"https://graph.facebook.com/{api_version}/{sender_id}?fields=first_name,last_name,profile_pic&access_token={token}"
+
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                if platform == "instagram":
+                    return {
+                        "name": data.get("name") or data.get("username") or "",
+                        "username": data.get("username") or "",
+                        "avatar": data.get("profile_pic") or ""
+                    }
+                else:
+                    first = data.get("first_name", "")
+                    last = data.get("last_name", "")
+                    return {
+                        "name": f"{first} {last}".strip() or "",
+                        "avatar": data.get("profile_pic") or ""
+                    }
+            else:
+                logger.warning("meta_profile_fetch_failed", status=resp.status_code, sender=sender_id)
+    except Exception as e:
+        logger.warning("meta_profile_fetch_error", error=str(e), sender=sender_id)
+    return {}
 
 router = APIRouter(prefix="/ingest", tags=["ingetion"])
 
@@ -88,21 +153,39 @@ async def ingest_message(event: SimpleEvent):
     if asset_info and asset_info['name']:
         source_identifier = asset_info['name']
 
+    # 2b. Fetch sender profile from Meta Graph API (name + avatar)
+    sender_name = event.sender_name
+    sender_avatar = None
+    if sender_name in (None, "", "User") and event.platform in ("instagram", "facebook"):
+        profile = await fetch_meta_sender_profile(
+            event.sender_id, event.recipient_id, event.platform, tenant_id
+        )
+        if profile.get("name"):
+            sender_name = profile["name"]
+        if profile.get("avatar"):
+            sender_avatar = profile["avatar"]
+        if profile.get("username"):
+            sender_name = sender_name or profile["username"]
+        logger.info("sender_profile_resolved", name=sender_name, platform=event.platform)
+
+    if not sender_name or sender_name == "User":
+        sender_name = event.sender_id  # Fallback to PSID
+
     # 3. Protocol Omega: Identity Link (Find or Create Customer)
     customer_id = None
     if event.platform == 'instagram':
         customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND instagram_psid = $2", tenant_id, event.sender_id)
         if not customer_id:
-            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, instagram_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, event.sender_name)
+            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, instagram_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, sender_name)
     elif event.platform == 'facebook':
         customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND facebook_psid = $2", tenant_id, event.sender_id)
         if not customer_id:
-            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, facebook_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, event.sender_name)
+            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, facebook_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, sender_name)
     else:
         # Default WhatsApp (Phone)
         customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND phone_number = $2", tenant_id, event.sender_id)
         if not customer_id:
-            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, phone_number, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, event.sender_name)
+            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, phone_number, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, sender_name)
 
     # 4. Sync Conversation
     conv_query = """
@@ -123,28 +206,35 @@ async def ingest_message(event: SimpleEvent):
             now = datetime.now(lockout.tzinfo) if lockout.tzinfo else datetime.now()
             if lockout > now:
                 is_locked = True
+        # Build meta JSONB for sender info
+        meta_json = json.dumps({"sender_name": sender_name, "sender_avatar": sender_avatar or ""})
+
         # Update metadata
         await db.pool.execute("""
             UPDATE chat_conversations
             SET platform_origin = $1, source_identifier = $2, source_entity_id = $3,
                 customer_id = $4, updated_at = NOW(), last_message_at = NOW(),
-                last_message_preview = $6, provider = 'meta_direct'
+                last_message_preview = $6, provider = 'meta_direct',
+                display_name = $7, avatar_url = $8, meta = $9::jsonb
             WHERE id = $5
         """, event.platform, source_identifier, event.recipient_id, customer_id, conversation_id,
-             (event.payload.get("text") or "[Media]")[:50])
+             (event.payload.get("text") or "[Media]")[:50],
+             sender_name, sender_avatar, meta_json)
     else:
         conversation_id = str(uuid.uuid4())
+        meta_json = json.dumps({"sender_name": sender_name, "sender_avatar": sender_avatar or ""})
+
         await db.pool.execute("""
             INSERT INTO chat_conversations (
                 id, tenant_id, channel, external_user_id, customer_id, status, provider,
                 platform_origin, source_identifier, source_entity_id,
-                display_name, last_message_at, last_message_preview,
+                display_name, avatar_url, meta, last_message_at, last_message_preview,
                 created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, 'open', 'meta_direct', $6, $7, $8, $9, NOW(), $10, NOW(), NOW())
+            VALUES ($1, $2, $3, $4, $5, 'open', 'meta_direct', $6, $7, $8, $9, $10, $11::jsonb, NOW(), $12, NOW(), NOW())
         """, conversation_id, tenant_id, event.platform, event.sender_id, customer_id,
              event.platform, source_identifier, event.recipient_id,
-             event.sender_name or event.sender_id,
+             sender_name, sender_avatar,  meta_json,
              (event.payload.get("text") or "[Media]")[:50])
 
     # 5. Persist Message

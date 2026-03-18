@@ -2472,7 +2472,7 @@ async def get_chats_summary(
         SELECT c.id, c.external_user_id, c.tenant_id, c.channel, 
                c.provider, c.platform_origin, c.source_identifier, c.customer_id,
                COALESCE(c.display_name, c.meta->>'sender_name', c.external_user_id) as name,
-               c.meta->>'sender_avatar' as avatar_url,
+               COALESCE(c.avatar_url, c.meta->>'sender_avatar') as avatar_url,
                c.meta, c.updated_at, c.status, 
                CASE WHEN c.human_override_until > NOW() THEN true ELSE false END as is_locked, 
                c.human_override_until,
