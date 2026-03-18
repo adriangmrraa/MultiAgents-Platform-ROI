@@ -56,6 +56,13 @@ class EditImageRequest(BaseModel):
     model: Optional[str] = None
 
 
+class EnhancePromptRequest(BaseModel):
+    prompt: str
+    product_name: Optional[str] = None
+    template: Optional[str] = None
+    context: str = "photoshoot"  # photoshoot, campaign
+
+
 class EditTextRequest(BaseModel):
     asset_id: str
     edit_prompt: str
@@ -185,6 +192,67 @@ async def remove_google_key(
         current_user.tenant_id
     )
     return {"message": "Google API Key desconectada", "google_connected": False}
+
+
+# ==================== ENHANCE PROMPT ====================
+
+@router.post("/enhance-prompt")
+async def enhance_prompt(
+    req: EnhancePromptRequest,
+    current_user: User = Depends(get_current_user),
+    db = Depends(get_pool_db)
+):
+    """Enhance a user's basic prompt into a professional image generation prompt."""
+    google_key = await _get_google_key(current_user.tenant_id)
+    if not google_key:
+        raise HTTPException(status_code=400, detail="Google API Key required")
+
+    from app.core.image_utils import get_google_client
+    client = get_google_client(google_key)
+    if not client:
+        raise HTTPException(status_code=400, detail="Could not initialize AI client")
+
+    # Get brand DNA for context
+    brand_dna = await _get_brand_dna(current_user.tenant_id, db)
+    brand_context = ""
+    if brand_dna:
+        from app.services.creative_studio import CreativeStudio
+        studio = CreativeStudio()
+        brand_context = studio._build_brand_context(brand_dna)
+
+    system_prompt = f"""You are an expert commercial photography art director and prompt engineer.
+The user wrote a basic prompt for an AI image generator. Your job is to transform it into a
+professional, detailed prompt that will produce stunning, photorealistic commercial imagery.
+
+RULES:
+- Keep the user's core idea and intent intact
+- Add specific lighting details (type, direction, quality)
+- Add camera/lens specifications for realism (e.g., "shot with Sony A7R V, 85mm f/1.4")
+- Add composition guidance (rule of thirds, leading lines, negative space)
+- Add texture, material, and surface details
+- Add mood and atmosphere descriptors
+- Add post-production style notes
+- End with: "8K resolution. No text, no watermarks, no logos."
+- Write the enhanced prompt in English (image models perform better)
+- Output ONLY the enhanced prompt, nothing else — no quotes, no explanation
+{"- BRAND CONTEXT to incorporate: " + brand_context if brand_context else ""}
+{"- TEMPLATE STYLE: " + req.template if req.template else ""}
+{"- PRODUCT: " + req.product_name if req.product_name else ""}
+- CONTEXT: This is for a {req.context} ({"product photography" if req.context == "photoshoot" else "advertising campaign"})"""
+
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[
+                {"role": "user", "parts": [{"text": system_prompt}]},
+                {"role": "user", "parts": [{"text": f"Enhance this prompt: {req.prompt}"}]}
+            ]
+        )
+        enhanced = response.text.strip().strip('"').strip("'")
+        return {"original": req.prompt, "enhanced": enhanced}
+    except Exception as e:
+        logger.error("enhance_prompt_failed", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to enhance prompt")
 
 
 # ==================== IMAGE MODELS ====================

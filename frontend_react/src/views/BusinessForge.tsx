@@ -432,10 +432,22 @@ const PhotoshootTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) =>
     const [selectedTemplate, setSelectedTemplate] = useState('studio');
     const [customPrompt, setCustomPrompt] = useState('');
     const [generating, setGenerating] = useState(false);
+    const [enhancing, setEnhancing] = useState(false);
     const [result, setResult] = useState<any>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [models, setModels] = useState<any[]>([]);
     const [selectedModel, setSelectedModel] = useState('nano-banana');
+
+    const handleEnhancePrompt = async () => {
+        if (!customPrompt.trim()) return;
+        setEnhancing(true);
+        try {
+            const name = selectedProduct ? (selectedProduct.name?.es || selectedProduct.name?.en || selectedProduct.name || '') : '';
+            const data = await fetchApi('/gallery/enhance-prompt', { method: 'POST', body: { prompt: customPrompt, product_name: name, template: selectedTemplate, context: 'photoshoot' } });
+            if (data?.enhanced) setCustomPrompt(data.enhanced);
+        } catch (e: any) { alert(e.message); }
+        finally { setEnhancing(false); }
+    };
 
     useEffect(() => {
         fetchApi('/gallery/photoshoot/templates').then(setTemplates).catch(() => {});
@@ -476,8 +488,15 @@ const PhotoshootTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) =>
                 <div className="space-y-2 mb-4">
                     {templates.map((t: any) => (<button key={t.id} onClick={() => setSelectedTemplate(t.id)} className={`w-full p-3 rounded-lg text-left transition-all ${selectedTemplate === t.id ? 'bg-purple-900/30 border border-purple-500/30' : 'bg-black/20 border border-white/5 hover:border-white/20'}`}><div className="text-sm font-bold">{t.name}</div><div className="text-xs text-slate-500">{t.description}</div></button>))}
                 </div>
-                <label className="text-[10px] text-slate-500 uppercase mb-1 block">Prompt adicional</label>
-                <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="ej: con fondo de playa tropical..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none resize-none h-20 mb-3" />
+                <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-slate-500 uppercase">Prompt personalizado</label>
+                    {customPrompt.trim() && (
+                        <button onClick={handleEnhancePrompt} disabled={enhancing} className="text-[10px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 disabled:opacity-50">
+                            {enhancing ? <><RefreshCw size={10} className="animate-spin" /> Mejorando...</> : <><Sparkles size={10} /> Mejorar prompt</>}
+                        </button>
+                    )}
+                </div>
+                <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="ej: con fondo de playa tropical, iluminacion dramatica..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none resize-none h-24 mb-3" />
                 {models.length > 0 && <div className="mb-3"><ModelSelector value={selectedModel} onChange={setSelectedModel} models={models} /></div>}
                 <button onClick={handleGenerate} disabled={!selectedProduct || generating} className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40">
                     {generating ? <><RefreshCw size={16} className="animate-spin" /> Generando...</> : <><Camera size={16} /> Generar Photoshoot</>}
@@ -510,9 +529,21 @@ const CampaignsTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) => 
     const [campaignGoal, setCampaignGoal] = useState('vender');
     const [customPrompt, setCustomPrompt] = useState('');
     const [generating, setGenerating] = useState(false);
+    const [enhancing, setEnhancing] = useState(false);
     const [result, setResult] = useState<any>(null);
     const [models, setModels] = useState<any[]>([]);
     const [selectedModel, setSelectedModel] = useState('nano-banana');
+
+    const handleEnhancePrompt = async () => {
+        if (!customPrompt.trim()) return;
+        setEnhancing(true);
+        try {
+            const name = selectedProduct ? (selectedProduct.name?.es || selectedProduct.name?.en || selectedProduct.name || '') : '';
+            const data = await fetchApi('/gallery/enhance-prompt', { method: 'POST', body: { prompt: customPrompt, product_name: name, context: 'campaign' } });
+            if (data?.enhanced) setCustomPrompt(data.enhanced);
+        } catch (e: any) { alert(e.message); }
+        finally { setEnhancing(false); }
+    };
 
     useEffect(() => {
         fetchApi('/gallery/campaigns/channels').then(setChannels).catch(() => {});
@@ -539,7 +570,17 @@ const CampaignsTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) => 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div><label className="text-[10px] text-slate-500 uppercase mb-1 block">Producto</label><select value={selectedProduct?.id || ''} onChange={(e) => setSelectedProduct(products.find((p: any) => String(p.id) === e.target.value))} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm outline-none"><option value="">Seleccionar...</option>{products.map((p: any) => (<option key={p.id} value={p.id}>{p.name?.es || p.name?.en || p.name}</option>))}</select></div>
                     <div><label className="text-[10px] text-slate-500 uppercase mb-1 block">Objetivo</label><select value={campaignGoal} onChange={(e) => setCampaignGoal(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm outline-none"><option value="vender">Vender</option><option value="promocion">Promocion</option><option value="lanzamiento">Lanzamiento</option><option value="engagement">Engagement</option><option value="branding">Branding</option></select></div>
-                    <div><label className="text-[10px] text-slate-500 uppercase mb-1 block">Instrucciones</label><input type="text" value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="ej: enfocate en el precio..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm outline-none" /></div>
+                    <div>
+                        <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] text-slate-500 uppercase">Instrucciones</label>
+                            {customPrompt.trim() && (
+                                <button onClick={handleEnhancePrompt} disabled={enhancing} className="text-[10px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 disabled:opacity-50">
+                                    {enhancing ? <><RefreshCw size={10} className="animate-spin" /> Mejorando...</> : <><Sparkles size={10} /> Mejorar</>}
+                                </button>
+                            )}
+                        </div>
+                        <input type="text" value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="ej: enfocate en el precio, tono urgente..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm outline-none" />
+                    </div>
                 </div>
                 <div className="mt-4"><label className="text-[10px] text-slate-500 uppercase mb-2 block">Canales</label><div className="flex flex-wrap gap-2">{channels.map((ch: any) => { const sel = selectedChannels.includes(ch.id); return (<button key={ch.id} onClick={() => setSelectedChannels(prev => sel ? prev.filter(c => c !== ch.id) : [...prev, ch.id])} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${sel ? 'bg-orange-900/30 text-orange-400 border border-orange-500/30' : 'bg-black/20 text-slate-500 border border-white/5'}`}>{channelIcons[ch.id]}{ch.name}</button>); })}</div></div>
                 {models.length > 0 && <div className="mt-4"><ModelSelector value={selectedModel} onChange={setSelectedModel} models={models} /></div>}

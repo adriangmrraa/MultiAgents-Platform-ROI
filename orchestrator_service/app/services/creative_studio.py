@@ -20,32 +20,78 @@ from app.core.image_utils import get_google_client, generate_image, generate_ima
 
 logger = structlog.get_logger()
 
-# Photoshoot template prompts
+# Photoshoot template prompts — professional commercial photography
 PHOTOSHOOT_TEMPLATES = {
     "studio": {
         "name": "Studio",
         "description": "Fondo limpio de estudio profesional con iluminacion suave",
-        "prompt_suffix": "Clean studio background, professional product photography, soft studio lighting, white or gradient background, sharp focus, commercial quality, 8k, no text"
+        "prompt_suffix": (
+            "Shot in a high-end photography studio. Seamless white or soft gradient background. "
+            "Three-point lighting setup: key light at 45 degrees creating gentle highlights, fill light "
+            "softening shadows, rim light separating the product from the background. "
+            "Razor-sharp focus on the product with subtle depth of field on edges. "
+            "Color-accurate representation, true-to-life textures and materials. "
+            "Shot with a Phase One IQ4 150MP at f/8, 1/125s, ISO 50. "
+            "Post-production: subtle shadow under product for grounding, clean retouching, "
+            "magazine-ready commercial quality. 8K resolution. No text, no watermarks, no logos."
+        )
     },
     "floating": {
         "name": "Floating",
         "description": "Producto flotando con sombra dramatica y fondo gradiente",
-        "prompt_suffix": "Product floating in mid-air, dramatic shadow below, gradient background, levitation effect, clean modern aesthetic, product photography, 8k, no text"
+        "prompt_suffix": (
+            "Product elegantly suspended in mid-air, defying gravity with a sense of luxury and weightlessness. "
+            "Dramatic soft shadow cast directly below on a reflective surface, creating depth and dimension. "
+            "Rich gradient background transitioning from deep charcoal to warm amber or brand-complementary tones. "
+            "Cinematic lighting: strong key light from above-left with atmospheric volumetric haze. "
+            "Subtle motion blur particles or light rays adding dynamism. "
+            "Shot with Sony A7R V, 90mm macro, f/5.6 for perfect product isolation. "
+            "Premium e-commerce aesthetic, Apple-level presentation quality. "
+            "8K resolution. No text, no watermarks."
+        )
     },
     "lifestyle": {
         "name": "Lifestyle",
-        "description": "Producto en un escenario de estilo de vida real",
-        "prompt_suffix": "Product in a real lifestyle scene, natural setting, warm ambient lighting, editorial photography style, aspirational environment, 8k, no text"
+        "description": "Producto en un escenario de estilo de vida aspiracional",
+        "prompt_suffix": (
+            "Product placed naturally in a beautifully styled aspirational environment. "
+            "Golden hour natural lighting streaming through windows, creating warm highlights and soft shadows. "
+            "Carefully curated scene with complementary props that tell a story: marble surfaces, linen textures, "
+            "fresh botanicals, artisan ceramics — all supporting the product as the hero. "
+            "Shallow depth of field (f/2.8) drawing the eye to the product while the environment remains "
+            "dreamy and inviting. Editorial photography style inspired by Kinfolk and Cereal magazine. "
+            "Color palette is warm, muted, and cohesive. Feels authentic yet elevated. "
+            "Shot with Hasselblad X2D 100C. 8K resolution. No text, no watermarks."
+        )
     },
     "in_use": {
         "name": "In Use",
         "description": "Producto siendo usado por una persona en contexto natural",
-        "prompt_suffix": "Product being used by a person, natural context, lifestyle photography, warm tones, authentic moment, editorial quality, 8k, no text"
+        "prompt_suffix": (
+            "Product being naturally used by an attractive, diverse model in an authentic real-world moment. "
+            "The model interacts with the product genuinely — no forced poses, capturing a candid, aspirational instant. "
+            "Soft natural backlighting creating a warm halo effect around the subject. "
+            "Environment is contextually relevant: modern home, outdoor terrace, urban cafe, or workspace. "
+            "Skin tones are rich and natural, clothing is contemporary and stylish. "
+            "Focus split between the product and the model's expression of satisfaction/enjoyment. "
+            "Editorial fashion photography quality, inspired by campaigns from Glossier, Aesop, or Nike. "
+            "Shot with Canon R5, 85mm f/1.4 for beautiful bokeh. 8K resolution. No text, no watermarks."
+        )
     },
     "ingredient": {
         "name": "Ingredient",
-        "description": "Producto rodeado de sus ingredientes o materiales",
-        "prompt_suffix": "Product surrounded by its raw ingredients or materials, flat lay composition, artistic arrangement, premium food/beauty photography style, 8k, no text"
+        "description": "Producto rodeado de sus ingredientes o materiales clave",
+        "prompt_suffix": (
+            "Stunning overhead flat-lay composition with the product as the centerpiece, surrounded by a curated "
+            "arrangement of its raw ingredients, key materials, or sensory elements. "
+            "Each ingredient is artistically placed: fresh herbs with water droplets, spices in small ceramic bowls, "
+            "raw materials with natural textures, essential oils, botanical elements — all radiating outward. "
+            "Surface is premium: dark slate, aged wood, Italian marble, or handmade ceramic. "
+            "Dramatic top-down lighting with subtle side highlights on each element. "
+            "Color story is cohesive: earthy, vibrant, or monochromatic depending on the brand. "
+            "Food/beauty photography at its finest — David Loftus and Gentl & Hyers inspired. "
+            "Shot with Sony A7 IV, 35mm f/2.8 for flat-lay perfection. 8K resolution. No text, no watermarks."
+        )
     }
 }
 
@@ -91,22 +137,17 @@ class CreativeStudio:
         product_description = await self._analyze_product(product_image_url, product_name)
 
         # 2. Build prompt incorporating brand DNA
-        brand_context = ""
-        if brand_dna:
-            colors = brand_dna.get("colors", {}).get("primary", [])
-            style = brand_dna.get("visual_style", {}).get("photography_style", "")
-            personality = brand_dna.get("brand_personality", "")
-            if colors:
-                brand_context += f"Brand colors: {', '.join(colors)}. "
-            if style:
-                brand_context += f"Brand visual style: {style}. "
-            if personality:
-                brand_context += f"Brand personality: {personality}. "
+        brand_context = self._build_brand_context(brand_dna)
 
-        final_prompt = f"Professional product photography of {product_description}. "
+        final_prompt = (
+            f"Create a photorealistic commercial product photograph of: {product_description}. "
+            f"The product must be the absolute hero of the image, perfectly lit and in sharp focus. "
+        )
+        if brand_context:
+            final_prompt += f"BRAND IDENTITY: {brand_context}. The image must reflect these brand attributes in color temperature, mood, and styling. "
         if custom_prompt:
-            final_prompt += f"{custom_prompt}. "
-        final_prompt += f"{brand_context}{tmpl['prompt_suffix']}"
+            final_prompt += f"CREATIVE DIRECTION: {custom_prompt}. "
+        final_prompt += f"TECHNICAL EXECUTION: {tmpl['prompt_suffix']}"
 
         # 3. Generate image
         image_url = await generate_image(final_prompt, model_tier=model_tier, google_api_key=self.google_api_key)
@@ -166,12 +207,26 @@ class CreativeStudio:
                 num_variations=num_variations
             )
 
-            # Generate ONE image for the campaign (reuse across channels to save cost/time)
+            # Generate campaign image optimized for the channel
             image_url = None
             if product_image_url:
-                img_prompt = f"Marketing {channel['name']} creative for {product_name}. {product_desc}. {brand_context}. {campaign_goal}. Professional advertising photography, commercial quality, 8k, no text on image"
+                img_prompt = (
+                    f"Create a high-converting {channel['name']} advertisement image for {product_name}. "
+                    f"Product: {product_desc}. "
+                    f"Campaign objective: {campaign_goal}. "
+                    f"The image must stop the scroll — visually striking, emotionally compelling, and conversion-optimized. "
+                    f"Use proven advertising composition: rule of thirds, clear visual hierarchy, product as hero element. "
+                    f"Lighting is cinematic and premium. Colors evoke the desired emotion for {campaign_goal}. "
+                )
+                if brand_context:
+                    img_prompt += f"BRAND IDENTITY: {brand_context}. "
                 if custom_prompt:
-                    img_prompt = f"{custom_prompt}. {img_prompt}"
+                    img_prompt += f"CREATIVE DIRECTION: {custom_prompt}. "
+                img_prompt += (
+                    f"Aspect ratio optimized for {channel['name']} ({channel['aspect']}). "
+                    f"Professional advertising photography, magazine-quality, photorealistic, 8K. "
+                    f"NO text, NO typography, NO logos, NO watermarks — text will be added in post-production."
+                )
                 image_url = await generate_image(img_prompt, model_tier=model_tier, google_api_key=self.google_api_key)
 
             return {
@@ -395,27 +450,47 @@ TEXTO EDITADO:"""
         if not self.google_client:
             return [{"headline": product_name, "body": f"Descubri {product_name}", "cta": "Comprar ahora"}]
 
-        prompt = f"""Genera {num_variations} variaciones de copy para una campana de marketing.
+        goal_frameworks = {
+            "vender": "Use AIDA (Attention-Interest-Desire-Action). Lead with the transformation, not the product. Create urgency without being pushy.",
+            "promocion": "Lead with the offer value. Use anchoring (was $X, now $Y). Create FOMO with time-limited language. Emphasize savings percentage.",
+            "lanzamiento": "Build anticipation and exclusivity. Use 'first', 'new', 'introducing'. Create a sense of being part of something new. Emphasize innovation.",
+            "engagement": "Ask provocative questions. Use 'you' language. Create debate or emotional resonance. Optimize for comments and shares, not clicks.",
+            "branding": "Focus on brand values and emotional connection. Tell a micro-story. Use sensory language. Make the audience feel, not think."
+        }
+        framework = goal_frameworks.get(campaign_goal, goal_frameworks["vender"])
 
-PRODUCTO: {product_name}
-DESCRIPCION: {product_desc}
-OBJETIVO: {campaign_goal}
-CANAL: {channel['name']}
-LIMITE TEXTO: {channel['max_text']} caracteres aprox
-CONTEXTO DE MARCA: {brand_context}
-{f'INSTRUCCION ADICIONAL: {custom_prompt}' if custom_prompt else ''}
+        prompt = f"""You are a senior copywriter at a top advertising agency (Ogilvy, Wieden+Kennedy level).
+Generate {num_variations} high-converting copy variations for a {channel['name']} campaign.
 
-Responde en JSON array con esta estructura:
+PRODUCT: {product_name}
+PRODUCT DETAILS: {product_desc}
+CAMPAIGN OBJECTIVE: {campaign_goal}
+CHANNEL: {channel['name']}
+CHARACTER LIMIT: ~{channel['max_text']} characters for body text
+BRAND CONTEXT: {brand_context}
+{f'CREATIVE BRIEF: {custom_prompt}' if custom_prompt else ''}
+
+COPYWRITING FRAMEWORK: {framework}
+
+RULES:
+- Headlines must be punchy, benefit-driven, max 8 words. Use power words that trigger emotion.
+- Body copy must be scannable, conversational, and end with a clear reason to act NOW.
+- CTAs must be specific and action-oriented (not generic "Learn more" — use "Get yours today", "Claim 50% off", etc.)
+- Each variation must have a different angle/hook (emotional, rational, social proof, urgency, curiosity).
+- Write in Spanish (Latin America) unless brand context indicates otherwise.
+- Hashtags must be a mix of high-volume and niche-specific.
+
+Respond ONLY with a JSON array:
 [
   {{
-    "headline": "titulo impactante corto",
-    "body": "texto principal del post/ad",
-    "cta": "call to action",
-    "hashtags": ["3 hashtags relevantes"]
+    "headline": "punchy headline here",
+    "body": "compelling body copy",
+    "cta": "specific call to action",
+    "hashtags": ["#relevant", "#niche", "#branded"]
   }}
 ]
 
-SOLO responde con el JSON array, sin texto adicional ni markdown."""
+NO markdown, NO explanation, ONLY the JSON array."""
 
         try:
             response = self.google_client.models.generate_content(
