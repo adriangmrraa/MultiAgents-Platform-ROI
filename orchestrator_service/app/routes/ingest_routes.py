@@ -50,42 +50,59 @@ async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform:
 
         # Fetch profile from Graph API
         api_version = os.getenv("META_GRAPH_API_VERSION", "v22.0")
-        if platform == "instagram":
-            url = f"https://graph.facebook.com/{api_version}/{sender_id}?fields=name,username,profile_pic&access_token={token}"
-        else:
-            # Facebook Messenger: use page-scoped user profile
-            url = f"https://graph.facebook.com/{api_version}/{sender_id}?fields=first_name,last_name,profile_pic&access_token={token}"
 
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(url)
-            data = resp.json()
-            # Full debug log to see exactly what Meta returns
-            logger.info("meta_profile_raw_response",
-                status=resp.status_code, platform=platform,
-                sender=sender_id, body=json.dumps(data)[:500])
+            if platform == "instagram":
+                url = f"https://graph.facebook.com/{api_version}/{sender_id}?fields=name,username,profile_pic&access_token={token}"
+                resp = await client.get(url)
+                data = resp.json()
+                logger.info("meta_profile_raw_response", status=resp.status_code, platform=platform, sender=sender_id, body=json.dumps(data)[:500])
 
-            if resp.status_code == 200 and "error" not in data:
-                if platform == "instagram":
+                if resp.status_code == 200 and "error" not in data:
                     return {
                         "name": data.get("name") or data.get("username") or "",
                         "username": data.get("username") or "",
                         "avatar": data.get("profile_pic") or ""
                     }
-                else:
-                    first = data.get("first_name", "")
-                    last = data.get("last_name", "")
-                    pic = data.get("profile_pic") or ""
-                    logger.info("meta_fb_profile_parsed", first=first, last=last, has_pic=bool(pic))
+
+            elif platform == "facebook":
+                # v13+: GET /{psid} is restricted. Use conversations endpoint instead.
+                url = f"https://graph.facebook.com/{api_version}/{recipient_id}/conversations?fields=participants&user_id={sender_id}&access_token={token}"
+                resp = await client.get(url)
+                data = resp.json()
+                logger.info("meta_profile_raw_response", status=resp.status_code, platform=platform, sender=sender_id, body=json.dumps(data)[:500])
+
+                if resp.status_code == 200 and "error" not in data:
+                    # Extract participant name from conversations response
+                    convs = data.get("data", [])
+                    if convs:
+                        participants = convs[0].get("participants", {}).get("data", [])
+                        for p in participants:
+                            if p.get("id") == sender_id:
+                                return {
+                                    "name": p.get("name", ""),
+                                    "avatar": ""  # Not available via this endpoint
+                                }
+                            elif p.get("id") != recipient_id:
+                                # Non-page participant
+                                return {
+                                    "name": p.get("name", ""),
+                                    "avatar": ""
+                                }
+
+                # Fallback: try direct GET /{psid} (works if app has pages_read_user_content)
+                url2 = f"https://graph.facebook.com/{api_version}/{sender_id}?fields=first_name,last_name,profile_pic&access_token={token}"
+                resp2 = await client.get(url2)
+                data2 = resp2.json()
+                if resp2.status_code == 200 and "error" not in data2:
+                    first = data2.get("first_name", "")
+                    last = data2.get("last_name", "")
                     return {
                         "name": f"{first} {last}".strip() or "",
-                        "avatar": pic
+                        "avatar": data2.get("profile_pic") or ""
                     }
-            else:
-                error_msg = data.get("error", {}).get("message", "unknown")
-                error_code = data.get("error", {}).get("code", "")
-                logger.warning("meta_profile_fetch_failed",
-                    status=resp.status_code, sender=sender_id,
-                    error=error_msg, error_code=error_code, platform=platform)
+
+            logger.warning("meta_profile_fetch_failed", platform=platform, sender=sender_id)
     except Exception as e:
         logger.warning("meta_profile_fetch_error", error=str(e), sender=sender_id)
     return {}
