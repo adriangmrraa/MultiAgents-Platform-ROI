@@ -33,6 +33,7 @@ EXEMPT_PATHS = {
     "/billing/plans",
     "/billing/checkout",
     "/billing/my-subscription",
+    "/billing/usage",
     "/billing/webhook/stripe",
     "/billing/webhook/mercadopago",
     "/billing/invoices",
@@ -49,7 +50,7 @@ EXEMPT_PATHS = {
 
 EXEMPT_PREFIXES = (
     "/platform/",
-    "/billing/webhook",
+    "/billing/",
     "/webhook/",
     "/auth/",
     "/admin/",
