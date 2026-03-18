@@ -436,7 +436,6 @@ async def _create_mp_checkout(plan, req, current_user, db):
                 },
                 "auto_return": "approved",
                 "external_reference": external_ref,
-                "notification_url": f"{FRONTEND_URL.replace('frontend', 'orchestrator')}/billing/webhook/mercadopago",
                 "metadata": {
                     "tenant_id": str(current_user.tenant_id),
                     "plan_name": plan["name"],
@@ -453,10 +452,16 @@ async def _create_mp_checkout(plan, req, current_user, db):
 
         data = resp.json()
 
-    logger.info("mp_checkout_created", tenant_id=current_user.tenant_id, plan=plan["name"], preference_id=data.get("id"))
+    checkout_url = data.get("init_point") or data.get("sandbox_init_point")
+    logger.info("mp_checkout_created",
+        tenant_id=current_user.tenant_id,
+        plan=plan["name"],
+        preference_id=data.get("id"),
+        init_point=checkout_url,
+        price=price)
 
     return {
-        "checkout_url": data.get("init_point") or data.get("sandbox_init_point"),
+        "checkout_url": checkout_url,
         "preference_id": data.get("id"),
         "provider": "mercadopago"
     }
