@@ -87,17 +87,19 @@ PLANS_CREATE_AND_SEED = """
         updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
     );
 
-    INSERT INTO plans (name, display_name, description, price_usd, price_ars, price_usd_yearly, price_ars_yearly,
+    ALTER TABLE plans ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+    INSERT INTO plans (id, name, display_name, description, price_usd, price_ars, price_usd_yearly, price_ars_yearly,
         max_agents, max_messages_per_month, max_knowledge_docs, max_channels, max_team_members, max_tokens_per_month,
         features, sort_order)
     VALUES
-        ('free', 'Free Trial', '10 dias gratis para probar la plataforma completa.',
+        (gen_random_uuid(), 'free', 'Free Trial', '10 dias gratis para probar la plataforma completa.',
          0, 0, 0, 0, 1, 200, 5, 1, 1, 25000,
          '{"analytics": false, "custom_branding": false, "api_access": false, "priority_support": false, "whatsapp_templates": false, "multi_channel": false}', 0),
-        ('pro', 'Pro', 'Para negocios en crecimiento. Todo lo que necesitas para escalar.',
+        (gen_random_uuid(), 'pro', 'Pro', 'Para negocios en crecimiento. Todo lo que necesitas para escalar.',
          49, 45000, 470, 432000, 5, 5000, 50, 3, 5, 500000,
          '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": false, "whatsapp_templates": true, "multi_channel": true}', 1),
-        ('enterprise', 'Enterprise', 'Para grandes equipos. Soporte prioritario y features exclusivas.',
+        (gen_random_uuid(), 'enterprise', 'Enterprise', 'Para grandes equipos. Soporte prioritario y features exclusivas.',
          199, 180000, 1910, 1728000, -1, -1, -1, -1, -1, -1,
          '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": true, "whatsapp_templates": true, "multi_channel": true, "dedicated_support": true, "sla": true}', 2)
     ON CONFLICT (name) DO NOTHING;
