@@ -428,7 +428,10 @@ async def _create_mp_checkout(plan, req, current_user, db):
 
         if resp.status_code not in (200, 201):
             logger.error("mp_checkout_error", status=resp.status_code, body=resp.text)
-            raise HTTPException(status_code=502, detail="MercadoPago error")
+            error_msg = "MercadoPago error"
+            if resp.status_code == 401:
+                error_msg = "MercadoPago: Access Token invalido. Verifica MP_ACCESS_TOKEN en las variables de entorno."
+            raise HTTPException(status_code=400, detail=error_msg)
 
         data = resp.json()
 
