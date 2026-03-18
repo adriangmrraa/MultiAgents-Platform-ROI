@@ -399,14 +399,18 @@ async def _create_mp_checkout(plan, req, current_user, db):
 
     import httpx
 
-    price = plan["price_ars"] if req.currency == "ARS" else plan["price_usd"]
+    # MercadoPago Argentina only accepts ARS — always use ARS prices
+    price = plan["price_ars"]
     if req.billing_period == "yearly":
-        price = (plan["price_ars_yearly"] or price * 10) if req.currency == "ARS" else (plan["price_usd_yearly"] or price * 10)
+        price = plan["price_ars_yearly"] or (price * 10)
+    # Fallback: if ARS price is 0 but USD exists, skip (shouldn't happen with seeded plans)
+    if not price or price <= 0:
+        raise HTTPException(status_code=400, detail="Precio no disponible en ARS para este plan")
 
     period_label = "Anual" if req.billing_period == "yearly" else "Mensual"
     external_ref = f"tenant_{current_user.tenant_id}_{plan['name']}_{req.billing_period}"
 
-    # Checkout Pro (preference) — works with any MP Access Token
+    # Checkout Pro (preference) — always in ARS for MercadoPago AR
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://api.mercadopago.com/checkout/preferences",
@@ -419,7 +423,7 @@ async def _create_mp_checkout(plan, req, current_user, db):
                     "title": f"Future {plan['display_name']} - {period_label}",
                     "description": plan["description"] or f"Plan {plan['display_name']}",
                     "quantity": 1,
-                    "currency_id": req.currency,
+                    "currency_id": "ARS",
                     "unit_price": float(price)
                 }],
                 "payer": {
