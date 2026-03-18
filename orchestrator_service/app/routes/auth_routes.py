@@ -414,6 +414,57 @@ async def google_auth(data: GoogleAuthRequest, response: Response, db: AsyncSess
     }
 
 
+class ForgotPasswordSchema(BaseModel):
+    email: str
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotPasswordSchema, db: AsyncSession = Depends(get_db)):
+    """
+    Request a password reset link. Always returns success to prevent email enumeration.
+    """
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+
+    if user:
+        reset_token = uuid.uuid4().hex
+        user.verification_token = reset_token
+        await db.commit()
+
+        try:
+            from app.core.email import EmailService
+            await EmailService.send_password_reset_email(user.email, reset_token)
+            logger.info("password_reset_email_sent", email=data.email)
+        except Exception as e:
+            logger.error("password_reset_email_failed", error=str(e))
+    else:
+        logger.info("password_reset_no_user", email=data.email)
+
+    return {"message": "Si el email existe, recibiras un enlace para restablecer tu contrasena."}
+
+
+class ResetPasswordSchema(BaseModel):
+    token: str
+    new_password: str
+
+@router.post("/reset-password")
+async def reset_password(data: ResetPasswordSchema, db: AsyncSession = Depends(get_db)):
+    """
+    Reset password using the token from forgot-password email.
+    """
+    result = await db.execute(select(User).where(User.verification_token == data.token))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Token invalido o expirado.")
+
+    user.password_hash = security.get_password_hash(data.new_password)
+    user.verification_token = None
+    await db.commit()
+
+    logger.info("password_reset_success", user_id=str(user.id))
+    return {"message": "Contrasena actualizada exitosamente. Ya puedes iniciar sesion."}
+
+
 @router.post("/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token")

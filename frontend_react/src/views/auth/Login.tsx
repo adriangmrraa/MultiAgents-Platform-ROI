@@ -161,7 +161,13 @@ export default function Login() {
                     <GoogleSignInButton onCredential={handleGoogleLogin} disabled={googleLoading} text="signin_with" />
                     {googleLoading && <p className="text-center text-xs text-gray-500 mt-2 animate-pulse">Autenticando con Google...</p>}
 
-                    <div className="mt-6 text-center text-sm text-gray-500">
+                    <div className="mt-4 text-center">
+                        <Link to="/forgot-password" className="text-gray-500 hover:text-gray-300 text-xs transition-colors">
+                            Olvide mi contrasena
+                        </Link>
+                    </div>
+
+                    <div className="mt-4 text-center text-sm text-gray-500">
                         {t('auth.noAccess')} <Link to="/register" className="text-red-400 hover:text-red-300 transition-colors font-medium">{t('auth.requestClearance')}</Link>
                     </div>
                 </div>

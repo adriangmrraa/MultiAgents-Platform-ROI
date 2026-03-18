@@ -725,3 +725,74 @@ async def change_plan(
                 from_plan=current_sub["plan_name"], to_plan=req.new_plan_name)
 
     return {"message": f"Plan changed to {new_plan['display_name']}", "new_plan": req.new_plan_name}
+
+
+# ---------- Cancel Subscription ----------
+
+@router.post("/cancel-subscription")
+async def cancel_subscription(
+    current_user: User = Depends(get_current_user),
+    db = Depends(get_pool_db)
+):
+    """Cancel the current subscription (Stripe or MercadoPago)."""
+    sub = await db.fetchrow("""
+        SELECT s.*, p.name as plan_name FROM subscriptions s
+        JOIN plans p ON p.id = s.plan_id
+        WHERE s.tenant_id = $1
+    """, current_user.tenant_id)
+
+    if not sub:
+        raise HTTPException(status_code=404, detail="No active subscription found")
+
+    if sub["status"] in ("canceled", "expired"):
+        raise HTTPException(status_code=400, detail="Subscription already canceled")
+
+    provider = sub["payment_provider"]
+    ext_sub_id = sub["external_subscription_id"]
+
+    # Cancel with payment provider
+    if provider == "stripe" and ext_sub_id:
+        if not STRIPE_SECRET_KEY:
+            raise HTTPException(status_code=503, detail="Stripe not configured")
+        import stripe
+        stripe.api_key = STRIPE_SECRET_KEY
+        try:
+            stripe.Subscription.cancel(ext_sub_id)
+        except Exception as e:
+            logger.error("stripe_cancel_error", error=str(e))
+            raise HTTPException(status_code=500, detail=f"Error canceling Stripe subscription: {str(e)}")
+
+    elif provider == "mercadopago" and ext_sub_id:
+        if not MP_ACCESS_TOKEN:
+            raise HTTPException(status_code=503, detail="MercadoPago not configured")
+        import httpx
+        async with httpx.AsyncClient() as client:
+            resp = await client.put(
+                f"https://api.mercadopago.com/preapproval/{ext_sub_id}",
+                headers={
+                    "Authorization": f"Bearer {MP_ACCESS_TOKEN}",
+                    "Content-Type": "application/json"
+                },
+                json={"status": "cancelled"}
+            )
+            if resp.status_code not in (200, 201):
+                logger.error("mp_cancel_error", status=resp.status_code, body=resp.text)
+                raise HTTPException(status_code=500, detail="Error canceling MercadoPago subscription")
+
+    # Update DB
+    await db.execute("""
+        UPDATE subscriptions SET status = 'canceled', canceled_at = NOW(), updated_at = NOW()
+        WHERE tenant_id = $1
+    """, current_user.tenant_id)
+
+    # Audit log
+    await db.execute("""
+        INSERT INTO audit_logs (user_id, tenant_id, action, resource_type, details)
+        VALUES ($1, $2, 'subscription.cancel', 'subscription',
+                $3::jsonb)
+    """, current_user.id, current_user.tenant_id,
+         f'{{"plan": "{sub["plan_name"]}", "provider": "{provider or "none"}"}}')
+
+    logger.info("subscription_canceled", tenant_id=current_user.tenant_id, plan=sub["plan_name"])
+
+    return {"status": "canceled", "message": "Suscripcion cancelada exitosamente."}

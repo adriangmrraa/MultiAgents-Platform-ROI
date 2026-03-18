@@ -27,9 +27,13 @@ import { RoiAnalytics } from './views/RoiAnalytics'; // v8.0 ROI Real
 import Login from './views/auth/Login';
 import Register from './views/auth/Register';
 import VerifyEmail from './views/auth/VerifyEmail';
+import ForgotPassword from './views/auth/ForgotPassword';
+import ResetPassword from './views/auth/ResetPassword';
 import { Profile } from './views/Profile';
 import { PlatformTower } from './views/PlatformTower';
 import { Billing } from './views/Billing';
+import { Landing } from './views/Landing';
+import { Pricing } from './views/Pricing';
 import { PrivacyPolicy } from './views/PrivacyPolicy';
 import { TermsOfService } from './views/TermsOfService';
 
@@ -73,6 +77,10 @@ function RequireAuth({ children }: { children: JSX.Element }) {
   }
 
   if (!isAuthenticated) {
+    // Show landing page for root path, redirect to login for other protected routes
+    if (location.pathname === '/') {
+      return <Navigate to="/landing" replace />;
+    }
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
@@ -88,9 +96,13 @@ function App() {
         <AuthProvider>
           <Routes>
             {/* Public Routes */}
+            <Route path="/landing" element={<Landing />} />
+            <Route path="/pricing" element={<Pricing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/verify" element={<VerifyEmail />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
 

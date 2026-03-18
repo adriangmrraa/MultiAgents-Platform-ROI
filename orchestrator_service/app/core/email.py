@@ -193,6 +193,111 @@ class EmailService:
             raise e
 
     @staticmethod
+    async def send_password_reset_email(to_email: str, token: str):
+        """Send password reset email with Future Platform aesthetic."""
+        dynamic_conf = await EmailService.get_connection_config(mode="system")
+
+        subject = "Restablecer contrasena - Future Platform"
+        reset_link = f"{FRONTEND_URL}/reset-password?token={token}"
+
+        logger.info("password_reset_link_generated", link=reset_link)
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: 'Courier New', monospace;
+                    background-color: #0f172a;
+                    color: #e2e8f0;
+                    margin: 0;
+                    padding: 40px;
+                }}
+                .container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    background: rgba(30, 41, 59, 0.7);
+                    border: 1px solid #334155;
+                    border-radius: 12px;
+                    overflow: hidden;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+                    padding: 20px;
+                    text-align: center;
+                    color: white;
+                    font-weight: bold;
+                    letter-spacing: 2px;
+                }}
+                .content {{
+                    padding: 30px;
+                    text-align: center;
+                }}
+                .btn {{
+                    display: inline-block;
+                    background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+                    color: white !important;
+                    text-decoration: none;
+                    padding: 12px 24px;
+                    border-radius: 8px;
+                    font-weight: bold;
+                    margin-top: 20px;
+                    box-shadow: 0 0 15px rgba(139, 92, 246, 0.5);
+                }}
+                .footer {{
+                    margin-top: 30px;
+                    font-size: 12px;
+                    color: #94a3b8;
+                    border-top: 1px solid #334155;
+                    padding-top: 20px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    FUTURE PLATFORM
+                </div>
+                <div class="content">
+                    <h2>Restablecer contrasena</h2>
+                    <p>Recibimos una solicitud para restablecer la contrasena de tu cuenta.</p>
+                    <p>Hace click en el boton para crear una nueva contrasena.</p>
+
+                    <a href="{reset_link}" class="btn">RESTABLECER CONTRASENA</a>
+
+                    <p style="margin-top: 30px; font-size: 12px; color: #cbd5e1;">
+                        O copia este enlace:<br>
+                        {reset_link}
+                    </p>
+                    <p style="margin-top: 20px; font-size: 11px; color: #64748b;">
+                        Si no solicitaste este cambio, ignora este email. Tu contrasena no sera modificada.
+                    </p>
+                </div>
+                <div class="footer">
+                    &copy; 2026 Future Platform. Todos los derechos reservados.
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        try:
+            message = MessageSchema(
+                subject=subject,
+                recipients=[to_email],
+                body=html_content,
+                subtype=MessageType.html
+            )
+            fm = FastMail(dynamic_conf)
+            await fm.send_message(message)
+            logger.info("password_reset_email_sent", to=to_email)
+        except Exception as e:
+            logger.error("password_reset_email_failed", error=str(e))
+            raise e
+
+    @staticmethod
     async def send_handoff_notification(to_email: str, tenant_name: str, customer_info: str, reason: str, tenant_id: int):
         """
         Notify Admin about Human Request.

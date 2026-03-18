@@ -49,6 +49,8 @@ export const Billing: React.FC = () => {
     const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
     const [currency, setCurrency] = useState<'USD' | 'ARS'>('USD');
     const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+    const [cancelLoading, setCancelLoading] = useState(false);
+    const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
     useEffect(() => {
         const load = async () => {
@@ -76,6 +78,21 @@ export const Billing: React.FC = () => {
     }, [fetchApi]);
 
     const [mpFallbackUrl, setMpFallbackUrl] = useState<string | null>(null);
+
+    const handleCancelSubscription = async () => {
+        setCancelLoading(true);
+        try {
+            await fetchApi('/billing/cancel-subscription', { method: 'POST' });
+            // Refresh subscription data
+            const s = await fetchApi('/billing/my-subscription').catch(() => null);
+            setSubscription(s);
+            setShowCancelConfirm(false);
+        } catch (e: any) {
+            alert(e.message || 'Error al cancelar la suscripcion');
+        } finally {
+            setCancelLoading(false);
+        }
+    };
 
     const handleCheckout = async (planName: string, provider: string) => {
         setCheckoutLoading(`${planName}-${provider}`);
@@ -360,7 +377,44 @@ export const Billing: React.FC = () => {
                                     )}
                                 </div>
                             </div>
+                            <button
+                                onClick={() => setShowCancelConfirm(true)}
+                                className="text-xs text-red-400/70 hover:text-red-400 border border-red-500/20 hover:border-red-500/40 px-3 py-1.5 rounded-lg transition-all"
+                            >
+                                Cancelar suscripcion
+                            </button>
                         </div>
+
+                        {/* Cancel Confirmation Dialog */}
+                        {showCancelConfirm && (
+                            <div className="mb-8 p-5 rounded-xl bg-red-900/20 border border-red-500/30">
+                                <div className="flex items-start gap-3 mb-4">
+                                    <AlertTriangle size={20} className="text-red-400 shrink-0 mt-0.5" />
+                                    <div>
+                                        <h3 className="font-bold text-red-400 mb-1">Confirmar cancelacion</h3>
+                                        <p className="text-slate-300 text-sm">
+                                            Estas seguro de que deseas cancelar tu suscripcion al plan <strong>{subscription?.plan_display_name}</strong>?
+                                            Perderas acceso a las funciones premium al finalizar el periodo actual.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3 ml-8">
+                                    <button
+                                        onClick={handleCancelSubscription}
+                                        disabled={cancelLoading}
+                                        className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+                                    >
+                                        {cancelLoading ? 'Cancelando...' : 'Si, cancelar suscripcion'}
+                                    </button>
+                                    <button
+                                        onClick={() => setShowCancelConfirm(false)}
+                                        className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg transition-colors"
+                                    >
+                                        No, mantener plan
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Usage Section */}
                         {usage && (

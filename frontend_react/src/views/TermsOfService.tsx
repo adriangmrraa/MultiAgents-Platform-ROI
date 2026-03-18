@@ -12,7 +12,7 @@ export const TermsOfService: React.FC = () => {
                         <div className="w-8 h-8 bg-gradient-to-tr from-red-600 to-orange-600 rounded-lg flex items-center justify-center">
                             <Zap size={18} className="text-white fill-current" />
                         </div>
-                        <span className="text-xl font-bold tracking-tight">Future IA</span>
+                        <span className="text-xl font-bold tracking-tight">Future Platform</span>
                     </div>
                     <div className="flex items-center gap-6">
                         <Link to="/login" className="text-sm text-gray-400 hover:text-white transition-colors">Iniciar Sesión</Link>
@@ -32,7 +32,7 @@ export const TermsOfService: React.FC = () => {
                             Condiciones del Servicio
                         </h1>
                         <p className="text-xl text-gray-400 leading-relaxed">
-                            Bienvenido a Future IA. Al utilizar nuestra plataforma de automatización inteligente, aceptas potenciar tu negocio bajo las siguientes condiciones diseñadas para proteger tu crecimiento y seguridad.
+                            Bienvenido a Future Platform. Al utilizar nuestra plataforma de automatización inteligente, aceptas potenciar tu negocio bajo las siguientes condiciones diseñadas para proteger tu crecimiento y seguridad.
                         </p>
                     </div>
 
@@ -42,7 +42,7 @@ export const TermsOfService: React.FC = () => {
                                 <span className="text-red-500">01.</span> Aceptación de Términos
                             </h3>
                             <p>
-                                Al acceder y utilizar la plataforma "Future IA" (en adelante, "el Servicio"), usted acepta estar legalmente vinculado por estos términos. Si no está de acuerdo con alguna parte, no podrá acceder al servicio. Estas condiciones aplican a todos los visitantes, usuarios y otras personas que accedan o utilicen el Servicio.
+                                Al acceder y utilizar la plataforma "Future Platform" (en adelante, "el Servicio"), usted acepta estar legalmente vinculado por estos términos. Si no está de acuerdo con alguna parte, no podrá acceder al servicio. Estas condiciones aplican a todos los visitantes, usuarios y otras personas que accedan o utilicen el Servicio.
                             </p>
                         </section>
 
@@ -51,7 +51,7 @@ export const TermsOfService: React.FC = () => {
                                 <span className="text-red-500">02.</span> Descripción del Servicio
                             </h3>
                             <p>
-                                Future IA provee herramientas de software como servicio (SaaS) para la automatización de mensajería, gestión de clientes y operaciones comerciales mediante Inteligencia Artificial.
+                                Future Platform provee herramientas de software como servicio (SaaS) para la automatización de mensajería, gestión de clientes y operaciones comerciales mediante Inteligencia Artificial.
                                 Nos reservamos el derecho de modificar, suspender o discontinuar cualquier aspecto del servicio en cualquier momento, aunque nos esforzaremos por notificar cambios significativos.
                             </p>
                         </section>
@@ -82,21 +82,59 @@ export const TermsOfService: React.FC = () => {
                                 <span className="text-red-500">04.</span> Uso Prohibido
                             </h3>
                             <p>
-                                Queda estrictamente prohibido usar el servicio para enviar spam, contenido ilegal, ofensivo o que viole derechos de terceros. Future IA se adhiere a una política de tolerancia cero respecto al abuso de mensajería automatizada.
+                                Queda estrictamente prohibido usar el servicio para enviar spam, contenido ilegal, ofensivo o que viole derechos de terceros. Future Platform se adhiere a una política de tolerancia cero respecto al abuso de mensajería automatizada.
                             </p>
                         </section>
 
                         <section>
                             <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-                                <span className="text-red-500">05.</span> Limitación de Responsabilidad
+                                <span className="text-red-500">05.</span> Pagos Recurrentes y Suscripciones
+                            </h3>
+                            <p className="mb-3">
+                                Al suscribirse a un plan pago de Future Platform, usted acepta los siguientes términos de facturación:
+                            </p>
+                            <ul className="list-none space-y-2">
+                                <li className="flex gap-3 items-start">
+                                    <Check size={16} className="text-green-500 mt-1 shrink-0" />
+                                    <span>Los pagos son recurrentes (mensuales o anuales) y se cobran automáticamente al inicio de cada período.</span>
+                                </li>
+                                <li className="flex gap-3 items-start">
+                                    <Check size={16} className="text-green-500 mt-1 shrink-0" />
+                                    <span>Puede cancelar su suscripción en cualquier momento desde el panel de Facturación. La cancelación toma efecto al finalizar el período ya pagado.</span>
+                                </li>
+                                <li className="flex gap-3 items-start">
+                                    <Check size={16} className="text-green-500 mt-1 shrink-0" />
+                                    <span>No se realizan reembolsos por períodos parciales. Mantendrá acceso hasta el final del ciclo de facturación.</span>
+                                </li>
+                                <li className="flex gap-3 items-start">
+                                    <Check size={16} className="text-green-500 mt-1 shrink-0" />
+                                    <span>Los precios pueden actualizarse con previo aviso de 30 días. Se le notificará por email antes de aplicar cambios.</span>
+                                </li>
+                            </ul>
+                        </section>
+
+                        <section>
+                            <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+                                <span className="text-red-500">06.</span> Procesamiento con Inteligencia Artificial
                             </h3>
                             <p>
-                                En ningún caso Future IA, ni sus directores, empleados o afiliados, serán responsables por daños indirectos, incidentales, especiales, consecuentes o punitivos, incluyendo sin limitación, pérdida de beneficios, datos, uso, buena voluntad u otras pérdidas intangibles.
+                                Future Platform utiliza modelos de Inteligencia Artificial para procesar mensajes, generar respuestas y automatizar interacciones comerciales.
+                                Al utilizar el servicio, usted acepta que sus datos de conversación y contenido comercial sean procesados por sistemas de IA
+                                con el único propósito de brindar el servicio contratado. No utilizamos sus datos para entrenar modelos de IA de terceros.
+                            </p>
+                        </section>
+
+                        <section>
+                            <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+                                <span className="text-red-500">07.</span> Limitación de Responsabilidad
+                            </h3>
+                            <p>
+                                En ningún caso Future Platform, ni sus directores, empleados o afiliados, serán responsables por daños indirectos, incidentales, especiales, consecuentes o punitivos, incluyendo sin limitación, pérdida de beneficios, datos, uso, buena voluntad u otras pérdidas intangibles.
                             </p>
                         </section>
 
                         <div className="pt-8 border-t border-white/10 text-sm text-gray-500">
-                            Última actualización: 15 de Enero de 2026
+                            Última actualización: 18 de Marzo de 2026
                         </div>
                     </div>
                 </div>
@@ -142,7 +180,7 @@ export const TermsOfService: React.FC = () => {
             <footer className="border-t border-white/10 py-12 bg-black">
                 <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="text-gray-500 text-sm">
-                        © 2026 Future IA & Automatización. Todos los derechos reservados.
+                        © 2026 Future Platform & Automatización. Todos los derechos reservados.
                     </div>
                     <div className="flex gap-6 text-sm font-medium">
                         <Link to="/privacy-policy" className="text-gray-400 hover:text-white transition-colors">Política de Privacidad</Link>

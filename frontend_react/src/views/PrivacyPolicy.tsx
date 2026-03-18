@@ -12,7 +12,7 @@ export const PrivacyPolicy: React.FC = () => {
                         <div className="w-8 h-8 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
                             <Zap size={18} className="text-white fill-current" />
                         </div>
-                        <span className="text-xl font-bold tracking-tight">Future IA</span>
+                        <span className="text-xl font-bold tracking-tight">Future Platform</span>
                     </div>
                     <div className="flex items-center gap-6">
                         <Link to="/login" className="text-sm text-gray-400 hover:text-white transition-colors">Iniciar Sesión</Link>
@@ -32,7 +32,7 @@ export const PrivacyPolicy: React.FC = () => {
                             Política de Privacidad
                         </h1>
                         <p className="text-xl text-gray-400 leading-relaxed">
-                            En Future IA, la transparencia es nuestro core. Esta política detalla cómo protegemos, procesamos y respetamos tus datos y los de tus clientes al utilizar nuestra infraestructura de Inteligencia Artificial.
+                            En Future Platform, la transparencia es nuestro core. Esta política detalla cómo protegemos, procesamos y respetamos tus datos y los de tus clientes al utilizar nuestra infraestructura de Inteligencia Artificial.
                         </p>
                     </div>
 
@@ -91,15 +91,43 @@ export const PrivacyPolicy: React.FC = () => {
 
                         <section>
                             <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-                                <span className="text-purple-500">04.</span> Seguridad y Retención
+                                <span className="text-purple-500">04.</span> Procesamiento con Inteligencia Artificial
                             </h3>
                             <p>
-                                Implementamos medidas técnicas avanzadas (Cifrado TLS 1.3, bases de datos encriptadas en reposo) para proteger su información. Retenemos los datos solo el tiempo necesario para proveer el servicio activo o cumplir con obligaciones legales.
+                                Future Platform utiliza modelos de IA de terceros (OpenAI, Anthropic, etc.) para procesar mensajes y generar respuestas automatizadas.
+                                Sus datos de conversación son enviados a estos proveedores exclusivamente para generar respuestas en tiempo real.
+                                No se utilizan para entrenar modelos de IA externos. Los proveedores de IA están sujetos a acuerdos de procesamiento de datos (DPA)
+                                que garantizan la confidencialidad y seguridad de la información procesada.
+                            </p>
+                        </section>
+
+                        <section>
+                            <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+                                <span className="text-purple-500">05.</span> Seguridad y Retención de Datos
+                            </h3>
+                            <p className="mb-3">
+                                Implementamos medidas técnicas avanzadas (Cifrado TLS 1.3, bases de datos encriptadas en reposo) para proteger su información.
+                            </p>
+                            <ul className="list-disc pl-5 space-y-1 mt-2 marker:text-purple-500">
+                                <li><strong>Datos de cuenta:</strong> Se retienen mientras la cuenta esté activa y hasta 90 días después de la cancelación.</li>
+                                <li><strong>Historial de conversaciones:</strong> Se retiene durante la vigencia de la suscripción. Puede solicitar su eliminación en cualquier momento.</li>
+                                <li><strong>Datos de facturación:</strong> Se retienen por el período legalmente requerido (mínimo 5 años por normativa fiscal).</li>
+                                <li><strong>Logs y analytics:</strong> Datos anonimizados pueden retenerse indefinidamente para mejora del servicio.</li>
+                            </ul>
+                        </section>
+
+                        <section>
+                            <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+                                <span className="text-purple-500">06.</span> Pagos y Datos Financieros
+                            </h3>
+                            <p>
+                                Los pagos son procesados por Stripe y MercadoPago. Future Platform no almacena números de tarjeta de crédito ni datos
+                                financieros sensibles. Toda la información de pago es gestionada directamente por los procesadores de pago certificados (PCI DSS).
                             </p>
                         </section>
 
                         <div className="pt-8 border-t border-white/10 text-sm text-gray-500">
-                            Última actualización: 15 de Enero de 2026
+                            Última actualización: 18 de Marzo de 2026
                         </div>
                     </div>
                 </div>
@@ -139,7 +167,7 @@ export const PrivacyPolicy: React.FC = () => {
             <footer className="border-t border-white/10 py-12 bg-black">
                 <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="text-gray-500 text-sm">
-                        © 2026 Future IA & Automatización.
+                        © 2026 Future Platform & Automatización.
                     </div>
                     <div className="flex gap-6 text-sm font-medium">
                         <Link to="/privacy-policy" className="text-white">Política de Privacidad</Link>
