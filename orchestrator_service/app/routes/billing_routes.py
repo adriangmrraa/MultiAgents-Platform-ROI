@@ -121,7 +121,51 @@ async def list_plans(db = Depends(get_pool_db)):
         try:
             pool = db.pool if hasattr(db, 'pool') else db
             async with pool.acquire() as conn:
-                await conn.execute(PLANS_CREATE_AND_SEED)
+                # Ensure table exists
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS plans (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        name VARCHAR(50) UNIQUE NOT NULL,
+                        display_name VARCHAR(100) NOT NULL,
+                        description TEXT,
+                        price_usd DOUBLE PRECISION DEFAULT 0.0,
+                        price_ars DOUBLE PRECISION DEFAULT 0.0,
+                        price_usd_yearly DOUBLE PRECISION DEFAULT 0.0,
+                        price_ars_yearly DOUBLE PRECISION DEFAULT 0.0,
+                        billing_period VARCHAR(20) DEFAULT 'monthly',
+                        stripe_price_id VARCHAR(255),
+                        stripe_price_id_yearly VARCHAR(255),
+                        stripe_product_id VARCHAR(255),
+                        mp_plan_id VARCHAR(255),
+                        mp_plan_id_yearly VARCHAR(255),
+                        max_agents INTEGER DEFAULT 1,
+                        max_messages_per_month INTEGER DEFAULT 100,
+                        max_knowledge_docs INTEGER DEFAULT 10,
+                        max_channels INTEGER DEFAULT 1,
+                        max_team_members INTEGER DEFAULT 1,
+                        max_tokens_per_month INTEGER DEFAULT 50000,
+                        features JSONB DEFAULT '{}',
+                        is_active BOOLEAN DEFAULT true,
+                        sort_order INTEGER DEFAULT 0,
+                        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+                        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+                    )
+                """)
+                # Fix default if missing
+                await conn.execute("ALTER TABLE plans ALTER COLUMN id SET DEFAULT gen_random_uuid()")
+                # Seed each plan individually to avoid multi-statement issues
+                for plan in [
+                    ('free', 'Free Trial', '10 dias gratis con acceso moderado a la plataforma.', 0, 0, 0, 0, 1, 200, 5, 1, 1, 25000, '{"analytics": false, "custom_branding": false, "api_access": false, "priority_support": false, "whatsapp_templates": false, "multi_channel": false}', 0),
+                    ('pro', 'Pro', 'Para negocios en crecimiento. Todo lo que necesitas para escalar.', 49, 45000, 470, 432000, 5, 5000, 50, 3, 5, 500000, '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": false, "whatsapp_templates": true, "multi_channel": true}', 1),
+                    ('enterprise', 'Enterprise', 'Para grandes equipos. Soporte prioritario y features exclusivas.', 199, 180000, 1910, 1728000, -1, -1, -1, -1, -1, -1, '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": true, "whatsapp_templates": true, "multi_channel": true, "dedicated_support": true, "sla": true}', 2),
+                ]:
+                    await conn.execute("""
+                        INSERT INTO plans (id, name, display_name, description, price_usd, price_ars, price_usd_yearly, price_ars_yearly,
+                            max_agents, max_messages_per_month, max_knowledge_docs, max_channels, max_team_members, max_tokens_per_month,
+                            features, sort_order)
+                        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15)
+                        ON CONFLICT (name) DO NOTHING
+                    """, *plan)
             rows = await db.fetch(PLANS_SELECT)
             logger.info("plans_auto_seeded", count=len(rows))
         except Exception as e:
