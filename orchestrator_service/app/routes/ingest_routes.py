@@ -53,12 +53,15 @@ async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform:
         if platform == "instagram":
             url = f"https://graph.facebook.com/{api_version}/{sender_id}?fields=name,username,profile_pic&access_token={token}"
         else:
+            # Facebook Messenger: use page-scoped user profile
             url = f"https://graph.facebook.com/{api_version}/{sender_id}?fields=first_name,last_name,profile_pic&access_token={token}"
 
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(url)
-            if resp.status_code == 200:
-                data = resp.json()
+            data = resp.json()
+            logger.info("meta_profile_response", status=resp.status_code, platform=platform, sender=sender_id, has_error="error" in data)
+
+            if resp.status_code == 200 and "error" not in data:
                 if platform == "instagram":
                     return {
                         "name": data.get("name") or data.get("username") or "",
@@ -73,7 +76,8 @@ async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform:
                         "avatar": data.get("profile_pic") or ""
                     }
             else:
-                logger.warning("meta_profile_fetch_failed", status=resp.status_code, sender=sender_id)
+                error_msg = data.get("error", {}).get("message", "unknown")
+                logger.warning("meta_profile_fetch_failed", status=resp.status_code, sender=sender_id, error=error_msg)
     except Exception as e:
         logger.warning("meta_profile_fetch_error", error=str(e), sender=sender_id)
     return {}
