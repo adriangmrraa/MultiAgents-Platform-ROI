@@ -111,6 +111,9 @@ const MetaOnboardingWizard: React.FC<MetaOnboardingWizardProps> = ({ assets, onC
                             <div className="min-w-0 flex-1">
                                 <h3 className="text-white font-medium truncate" title={asset.name || asset.username}>{asset.name || asset.username}</h3>
                                 <p className="text-xs text-zinc-500 truncate">ID: {asset.id}</p>
+                                {(asset as any).phone_numbers?.map((p: any) => (
+                                    <p key={p.id} className="text-xs text-green-400/70 truncate">{p.display_phone_number} — {p.verified_name}</p>
+                                ))}
                             </div>
                         </div>
 

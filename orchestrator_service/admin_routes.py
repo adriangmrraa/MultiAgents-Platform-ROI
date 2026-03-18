@@ -1171,64 +1171,126 @@ class ChannelSelectionRequest(BaseModel):
 @router.post("/integrations/update-channels", dependencies=[Depends(get_current_user)])
 async def update_channels_selection(data: ChannelSelectionRequest, current_user: User = Depends(get_current_user)):
     """
-    Wizard Completion Endpoints.
-    Activates the selected assets and updates the Tenant's active channels.
+    Wizard Completion: Activates selected Meta assets, subscribes webhooks, updates agent channels.
+    selected_assets contains Meta external IDs (page_id, ig_id, waba_id) from the wizard UI.
     """
     tenant_id = current_user.tenant_id
-    
+    meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
+
     try:
-        # 1. toggle 'is_active' or similar in business_assets
-        # First, mark ALL as inactive (optional, or just strictly activate selected)
-        # We'll just activate the selected ones.
-        
-        # NOTE: A more robust approach updates the 'agents' table configuration.
-        # For now, we update 'business_assets' content to include {active: true}
-        
-        # Fetch current assets to identify types
-        rows = await db.pool.fetch("SELECT * FROM business_assets WHERE tenant_id = $1", str(tenant_id))
-        
+        # 1. Fetch all Meta business assets for this tenant
+        rows = await db.pool.fetch("""
+            SELECT id, asset_type, content FROM business_assets
+            WHERE tenant_id = $1 AND asset_type IN ('facebook_page', 'instagram_account', 'whatsapp_waba')
+        """, str(tenant_id))
+
         active_channels = set()
-        
+
         for row in rows:
-            asset_id = row['asset_id']
             content = json.loads(row['content']) if isinstance(row['content'], str) else row['content']
-            
-            is_selected = asset_id in data.selected_assets
+            meta_external_id = str(content.get("id", ""))
+
+            # Match by Meta external ID (what the wizard sends) OR by internal UUID
+            is_selected = meta_external_id in data.selected_assets or str(row['id']) in data.selected_assets
             content['active'] = is_selected
-            
+
             if is_selected:
-                if row['asset_type'] == 'facebook_page': 
+                asset_type = row['asset_type']
+
+                # Retrieve the stored token for this asset from credentials
+                token = None
+                if asset_type == 'facebook_page':
                     active_channels.add('facebook')
-                    # Webhook Subscription Strategy
-                    try:
-                        meta_service_url = os.getenv("META_SERVICE_URL", "http://meta_service:8000")
-                        async with httpx.AsyncClient(timeout=10.0) as client:
-                            await client.post(f"{meta_service_url}/subscribe", json={
-                                "asset_id": asset_id,
-                                "access_token": content.get("access_token"),
-                                "asset_type": "facebook_page"
-                            })
-                            logger.info(f"webhook_subscription_triggered: {asset_id}")
-                    except Exception as sub_err:
-                        logger.warning(f"webhook_subscription_failed: {asset_id} - {sub_err}")
+                    from utils import decrypt_password
+                    token_row = await db.pool.fetchrow(
+                        "SELECT value FROM credentials WHERE tenant_id = $1 AND name = $2",
+                        tenant_id, f"META_PAGE_TOKEN_{meta_external_id}"
+                    )
+                    if token_row:
+                        token = decrypt_password(token_row['value'])
 
-                if row['asset_type'] == 'instagram_account': active_channels.add('instagram')
-                if row['asset_type'] == 'whatsapp_waba': 
+                    # Subscribe page to webhooks
+                    if token:
+                        try:
+                            async with httpx.AsyncClient(timeout=10.0) as client:
+                                await client.post(f"{meta_service_url}/subscribe", json={
+                                    "asset_id": meta_external_id,
+                                    "access_token": token,
+                                    "asset_type": "facebook_page"
+                                })
+                            logger.info("webhook_subscribed_page", page_id=meta_external_id)
+                        except Exception as sub_err:
+                            logger.warning("webhook_subscribe_failed_page", page_id=meta_external_id, error=str(sub_err))
+
+                elif asset_type == 'instagram_account':
+                    active_channels.add('instagram')
+                    # IG uses the linked page token — subscription is done via the page
+                    linked_page_id = content.get("linked_page_id")
+                    if linked_page_id:
+                        from utils import decrypt_password
+                        token_row = await db.pool.fetchrow(
+                            "SELECT value FROM credentials WHERE tenant_id = $1 AND name = $2",
+                            tenant_id, f"META_PAGE_TOKEN_{linked_page_id}"
+                        )
+                        if token_row:
+                            token = decrypt_password(token_row['value'])
+                            try:
+                                async with httpx.AsyncClient(timeout=10.0) as client:
+                                    await client.post(f"{meta_service_url}/subscribe", json={
+                                        "asset_id": meta_external_id,
+                                        "access_token": token,
+                                        "asset_type": "instagram_account",
+                                        "linked_page_id": linked_page_id
+                                    })
+                                logger.info("webhook_subscribed_ig", ig_id=meta_external_id)
+                            except Exception as sub_err:
+                                logger.warning("webhook_subscribe_failed_ig", error=str(sub_err))
+
+                elif asset_type == 'whatsapp_waba':
                     active_channels.add('whatsapp')
-            
-            await db.pool.execute("UPDATE business_assets SET content = $1 WHERE id = $2", json.dumps(content), row['id'])
+                    from utils import decrypt_password
+                    token_row = await db.pool.fetchrow(
+                        "SELECT value FROM credentials WHERE tenant_id = $1 AND name = $2",
+                        tenant_id, f"META_WA_TOKEN_{meta_external_id}"
+                    )
+                    if token_row:
+                        token = decrypt_password(token_row['value'])
+                        # Subscribe WhatsApp phone numbers
+                        phone_numbers = content.get("phone_numbers", [])
+                        for phone in phone_numbers:
+                            try:
+                                async with httpx.AsyncClient(timeout=10.0) as client:
+                                    await client.post(f"{meta_service_url}/subscribe", json={
+                                        "asset_id": meta_external_id,
+                                        "access_token": token,
+                                        "asset_type": "whatsapp_waba",
+                                        "phone_number_id": phone.get("id")
+                                    })
+                                logger.info("webhook_subscribed_wa", waba_id=meta_external_id, phone=phone.get("display_phone_number"))
+                            except Exception as sub_err:
+                                logger.warning("webhook_subscribe_failed_wa", error=str(sub_err))
 
-        # 2. Update Tenant/Agents Active Channels
-        # We update the 'agents' table for this tenant to include these channels
+            # Update business_asset with active status
+            await db.pool.execute(
+                "UPDATE business_assets SET content = $1, is_active = $2, updated_at = NOW() WHERE id = $3",
+                json.dumps(content), is_selected, row['id']
+            )
+
+        # 2. Update agents with active channels
         channel_list = list(active_channels)
-        if "web" not in channel_list: channel_list.append("web") # Always keep web
-        
-        await db.pool.execute("UPDATE agents SET channels = $1::jsonb WHERE tenant_id = $2", json.dumps(channel_list), tenant_id)
+        if "web" not in channel_list:
+            channel_list.append("web")
 
+        await db.pool.execute(
+            "UPDATE agents SET channels = $1::jsonb WHERE tenant_id = $2",
+            json.dumps(channel_list), tenant_id
+        )
+
+        logger.info("channels_updated", tenant_id=tenant_id, channels=channel_list)
         return {"status": "ok", "active_channels": channel_list}
-        
+
     except Exception as e:
-        logger.error(f"Channel Update Error: {e}")
+        logger.error("channel_update_error", error=str(e))
         raise HTTPException(500, str(e))
 
 @router.get("/credentials")
