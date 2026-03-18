@@ -72,7 +72,7 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center bg-[#1B1D20] relative overflow-hidden">
+        <div className="min-h-screen w-full flex items-center justify-center bg-[#1B1D20] relative overflow-x-hidden py-10">
             {/* Background Ambience */}
             <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-600/10 rounded-full blur-[120px] pointer-events-none" />
             <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-zinc-800/20 rounded-full blur-[120px] pointer-events-none" />
@@ -173,7 +173,7 @@ export default function Login() {
                 </div>
             </div>
             {/* Legal Footer */}
-            <div className="absolute bottom-6 left-0 w-full text-center">
+            <div className="mt-6 w-full text-center">
                 <div className="flex justify-center gap-6 text-[11px] text-gray-600 font-medium">
                     <Link to="/privacy-policy" className="hover:text-gray-400 transition-colors">Privacy Policy</Link>
                     <Link to="/terms-of-service" className="hover:text-gray-400 transition-colors">Terms of Service</Link>

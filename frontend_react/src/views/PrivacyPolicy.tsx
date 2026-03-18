@@ -7,23 +7,23 @@ export const PrivacyPolicy: React.FC = () => {
         <div className="min-h-screen bg-[#09090b] text-white selection:bg-purple-500/30">
             {/* Header / Nav */}
             <nav className="fixed top-0 w-full z-50 bg-[#09090b]/80 backdrop-blur-lg border-b border-white/10">
-                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
-                            <Zap size={18} className="text-white fill-current" />
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
+                            <Zap size={16} className="text-white fill-current" />
                         </div>
-                        <span className="text-xl font-bold tracking-tight">Future Platform</span>
+                        <span className="text-lg sm:text-xl font-bold tracking-tight">Future</span>
                     </div>
-                    <div className="flex items-center gap-6">
-                        <Link to="/login" className="text-sm text-gray-400 hover:text-white transition-colors">Iniciar Sesión</Link>
-                        <Link to="/register" className="btn-primary bg-white text-black hover:bg-gray-200 border-none px-6 py-2 rounded-full text-sm font-bold flex items-center gap-2">
-                            Prueba Gratis <ArrowRight size={14} />
+                    <div className="flex items-center gap-2 sm:gap-6">
+                        <Link to="/login" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">Login</Link>
+                        <Link to="/register" className="bg-white text-black hover:bg-gray-200 border-none px-3 sm:px-6 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold flex items-center gap-1 sm:gap-2">
+                            Gratis <ArrowRight size={12} />
                         </Link>
                     </div>
                 </div>
             </nav>
 
-            <main className="pt-32 pb-20 px-6 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12">
+            <main className="pt-24 sm:pt-32 pb-20 px-4 sm:px-6 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12">
 
                 {/* Legal Content Column */}
                 <div className="lg:col-span-8 space-y-12">

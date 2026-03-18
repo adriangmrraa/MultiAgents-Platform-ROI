@@ -7,25 +7,25 @@ export const Landing: React.FC = () => {
         <div className="min-h-screen bg-[#09090b] text-white selection:bg-purple-500/30">
             {/* Nav */}
             <nav className="fixed top-0 w-full z-50 bg-[#09090b]/80 backdrop-blur-lg border-b border-white/10">
-                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
-                            <Zap size={18} className="text-white fill-current" />
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
+                            <Zap size={16} className="text-white fill-current" />
                         </div>
-                        <span className="text-xl font-bold tracking-tight">Future Platform</span>
+                        <span className="text-lg sm:text-xl font-bold tracking-tight">Future</span>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <Link to="/pricing" className="text-sm text-gray-400 hover:text-white transition-colors hidden sm:block">Precios</Link>
-                        <Link to="/login" className="text-sm text-gray-400 hover:text-white transition-colors">Iniciar Sesion</Link>
-                        <Link to="/register" className="bg-white text-black hover:bg-gray-200 px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-colors">
-                            Comenzar Gratis <ArrowRight size={14} />
+                    <div className="flex items-center gap-2 sm:gap-4">
+                        <Link to="/pricing" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors hidden sm:block">Precios</Link>
+                        <Link to="/login" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">Login</Link>
+                        <Link to="/register" className="bg-white text-black hover:bg-gray-200 px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold flex items-center gap-1 sm:gap-2 transition-colors">
+                            Gratis <ArrowRight size={12} />
                         </Link>
                     </div>
                 </div>
             </nav>
 
             {/* Hero */}
-            <section className="pt-32 pb-20 px-6 relative overflow-hidden">
+            <section className="pt-24 sm:pt-32 pb-20 px-6 relative overflow-x-hidden">
                 <div className="absolute top-20 left-1/4 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none" />
                 <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
 
