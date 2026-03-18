@@ -393,7 +393,7 @@ async def _create_stripe_checkout(plan, req, current_user, db):
 
 
 async def _create_mp_checkout(plan, req, current_user, db):
-    """Create MercadoPago checkout preference."""
+    """Create MercadoPago Checkout Pro preference."""
     if not MP_ACCESS_TOKEN:
         raise HTTPException(status_code=503, detail="MercadoPago not configured")
 
@@ -403,43 +403,57 @@ async def _create_mp_checkout(plan, req, current_user, db):
     if req.billing_period == "yearly":
         price = (plan["price_ars_yearly"] or price * 10) if req.currency == "ARS" else (plan["price_usd_yearly"] or price * 10)
 
-    # Create a preapproval (subscription) in MercadoPago
+    period_label = "Anual" if req.billing_period == "yearly" else "Mensual"
+    external_ref = f"tenant_{current_user.tenant_id}_{plan['name']}_{req.billing_period}"
+
+    # Checkout Pro (preference) — works with any MP Access Token
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            "https://api.mercadopago.com/preapproval",
+            "https://api.mercadopago.com/checkout/preferences",
             headers={
                 "Authorization": f"Bearer {MP_ACCESS_TOKEN}",
                 "Content-Type": "application/json"
             },
             json={
-                "reason": f"Platform AI - {plan['display_name']}",
-                "auto_recurring": {
-                    "frequency": 1,
-                    "frequency_type": "months" if req.billing_period == "monthly" else "years",
-                    "transaction_amount": price,
-                    "currency_id": req.currency
+                "items": [{
+                    "title": f"Future {plan['display_name']} - {period_label}",
+                    "description": plan["description"] or f"Plan {plan['display_name']}",
+                    "quantity": 1,
+                    "currency_id": req.currency,
+                    "unit_price": float(price)
+                }],
+                "payer": {
+                    "email": current_user.email
                 },
-                "payer_email": current_user.email,
-                "back_url": f"{FRONTEND_URL}/billing?status=success",
-                "external_reference": f"tenant_{current_user.tenant_id}_{plan['name']}",
-                "status": "pending"
+                "back_urls": {
+                    "success": f"{FRONTEND_URL}/billing?status=success&provider=mercadopago",
+                    "failure": f"{FRONTEND_URL}/billing?status=failure",
+                    "pending": f"{FRONTEND_URL}/billing?status=pending"
+                },
+                "auto_return": "approved",
+                "external_reference": external_ref,
+                "notification_url": f"{FRONTEND_URL.replace('frontend', 'orchestrator')}/billing/webhook/mercadopago",
+                "metadata": {
+                    "tenant_id": str(current_user.tenant_id),
+                    "plan_name": plan["name"],
+                    "billing_period": req.billing_period,
+                    "user_email": current_user.email
+                }
             }
         )
 
         if resp.status_code not in (200, 201):
             logger.error("mp_checkout_error", status=resp.status_code, body=resp.text)
-            error_msg = "MercadoPago error"
-            if resp.status_code == 401:
-                error_msg = "MercadoPago: Access Token invalido. Verifica MP_ACCESS_TOKEN en las variables de entorno."
-            raise HTTPException(status_code=400, detail=error_msg)
+            error_detail = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+            raise HTTPException(status_code=400, detail=f"MercadoPago error: {error_detail}")
 
         data = resp.json()
 
-    logger.info("mp_checkout_created", tenant_id=current_user.tenant_id, plan=plan["name"])
+    logger.info("mp_checkout_created", tenant_id=current_user.tenant_id, plan=plan["name"], preference_id=data.get("id"))
 
     return {
-        "checkout_url": data.get("init_point"),
-        "preapproval_id": data.get("id"),
+        "checkout_url": data.get("init_point") or data.get("sandbox_init_point"),
+        "preference_id": data.get("id"),
         "provider": "mercadopago"
     }
 
