@@ -439,7 +439,7 @@ const PhotoshootTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) =>
     const [result, setResult] = useState<any>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [models, setModels] = useState<any[]>([]);
-    const [selectedModel, setSelectedModel] = useState('nano-banana');
+    const [selectedModel, setSelectedModel] = useState('nano-banana-2');
 
     const handleEnhancePrompt = async () => {
         if (!customPrompt.trim()) return;
@@ -537,7 +537,7 @@ const ModelShootTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) =>
     const [result, setResult] = useState<any>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [models, setModels] = useState<any[]>([]);
-    const [selectedModel, setSelectedModel] = useState('nano-banana');
+    const [selectedModel, setSelectedModel] = useState('nano-banana-2');
 
     useEffect(() => {
         fetchApi('/gallery/model-shoot/templates').then(setTemplates).catch(() => {});
@@ -702,7 +702,7 @@ const CampaignsTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) => 
     const [enhancing, setEnhancing] = useState(false);
     const [result, setResult] = useState<any>(null);
     const [models, setModels] = useState<any[]>([]);
-    const [selectedModel, setSelectedModel] = useState('nano-banana');
+    const [selectedModel, setSelectedModel] = useState('nano-banana-2');
 
     const handleEnhancePrompt = async () => {
         if (!customPrompt.trim()) return;

@@ -14,33 +14,27 @@ logger = structlog.get_logger()
 # ==================== MODEL CATALOG ====================
 
 IMAGE_MODELS = {
-    "nano-banana": {
-        "id": "gemini-2.5-flash-preview-image-generation",
-        "name": "Nano Banana",
-        "description": "Rapido y economico. Gemini 2.5 Flash Image.",
-        "method": "gemini_native",
-        "cost_label": "~$0.04/img",
-        "speed": "fast",
-    },
     "nano-banana-2": {
         "id": "gemini-3.1-flash-image-preview",
         "name": "Nano Banana 2",
-        "description": "Gemini 3.1 Flash Image. Alta calidad, optimizado para volumen.",
+        "description": "Rapido y con image-to-image. Gemini 3.1 Flash Image.",
         "method": "gemini_native",
+        "supports_references": True,
         "cost_label": "~$0.04/img",
-        "speed": "medium",
+        "speed": "fast",
     },
     "nano-banana-pro": {
         "id": "gemini-3-pro-image-preview",
         "name": "Nano Banana Pro",
-        "description": "Gemini 3 Pro Image. Maxima calidad y fotorrealismo.",
+        "description": "Maxima calidad. Gemini 3 Pro con razonamiento avanzado.",
         "method": "gemini_native",
+        "supports_references": True,
         "cost_label": "~$0.07/img",
         "speed": "slow",
     },
 }
 
-DEFAULT_MODEL = "nano-banana"
+DEFAULT_MODEL = "nano-banana-2"
 
 
 def get_image_models():

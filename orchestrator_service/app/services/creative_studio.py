@@ -268,14 +268,28 @@ class CreativeStudio:
             final_prompt += f"CREATIVE DIRECTION: {custom_prompt}. "
         final_prompt += f"TECHNICAL EXECUTION: {tmpl['prompt_suffix']}"
 
-        # 3. Generate image
-        image_url = await generate_image(final_prompt, model_tier=model_tier, google_api_key=self.google_api_key)
+        # 3. Load product image as reference for image-to-image
+        reference_images = []
+        try:
+            product_img = await self._load_image(product_image_url)
+            if product_img:
+                reference_images.append(product_img)
+        except Exception as e:
+            logger.warning("photoshoot_ref_image_load_failed", error=str(e))
+
+        # 4. Generate image with product reference
+        image_url = await generate_image(
+            final_prompt,
+            model_tier=model_tier,
+            google_api_key=self.google_api_key,
+            reference_images=reference_images if reference_images else None
+        )
 
         return {
             "image_url": image_url,
             "template": template,
             "template_name": tmpl["name"],
-            "model_tier": model_tier or "nano-banana",
+            "model_tier": model_tier or "nano-banana-2",
             "prompt_used": final_prompt,
             "product_name": product_name,
             "product_description": product_description
