@@ -145,7 +145,7 @@ export const MetaSettings: React.FC = () => {
                             </div>
 
                             {/* Discovery Result Grid */}
-                            <div className="grid grid-cols-3 gap-4 w-full mb-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full mb-6">
                                 {/* Facebook */}
                                 <div className={`p-4 rounded-xl border flex flex-col items-center gap-2 ${connectedAssets['facebook'] ? 'bg-[#1877F2]/10 border-[#1877F2]/30' : 'bg-white/5 border-white/10 opacity-50'}`}>
                                     <Facebook size={24} className={connectedAssets['facebook'] ? 'text-[#1877F2]' : 'text-gray-400'} />

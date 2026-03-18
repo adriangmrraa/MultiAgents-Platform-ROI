@@ -149,7 +149,7 @@ export const Channels = () => {
             )}
 
             {/* Provider Status Cards */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 <StatusCard
                     provider="YCloud"
                     status={providerStatus.ycloud ? 'configured' : 'pending'}
@@ -242,7 +242,7 @@ export const Channels = () => {
                         </h2>
                         <form onSubmit={handleBind} className="space-y-4">
                             {!editingBinding && (
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-sm text-gray-400 mb-2">Proveedor</label>
                                         <select
@@ -271,7 +271,7 @@ export const Channels = () => {
                             )}
 
                             {editingBinding && (
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="bg-blue-500/10 border border-blue-500/30 px-4 py-3 rounded-xl text-xs text-blue-300">
                                         Provider: <strong>{editingBinding.provider.toUpperCase()}</strong>
                                     </div>

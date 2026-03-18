@@ -39,7 +39,7 @@ const BrandingBlock = ({ data }: { data: any }) => (
                 ))}
             </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <h4 className="text-xs font-bold text-slate-500 uppercase">Archetype</h4>
                 <p className="text-cyan-400 font-mono text-sm">{data.identity?.archetype}</p>
@@ -347,7 +347,7 @@ export const MagicOnboarding: React.FC = () => {
 
                         <div className="form-group border-t border-slate-800 pt-4 mt-4">
                             <label className="text-sm text-cyan-400 font-bold mb-2 block">Tienda Nube Connection</label>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs text-slate-500">Store ID</label>
                                     <input

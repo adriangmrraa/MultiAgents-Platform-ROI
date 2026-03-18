@@ -614,7 +614,7 @@ export const DynamicAgentWizard = () => {
                         Asegúrate de haber subido documentos en la sección "Base de Conocimiento".
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {collections.map(col => (
                             <button
                                 key={col}

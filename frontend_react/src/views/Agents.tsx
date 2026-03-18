@@ -291,7 +291,7 @@ export const Agents: React.FC = () => {
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={isEditing ? t('common.edit') + ' ' + t('agents.name') : t('agents.newAgent')}>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="form-group">
                             <label>{t('agents.name')}</label>
                             <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Ej: Agente de Ventas 1" />
@@ -305,7 +305,7 @@ export const Agents: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="form-group">
                             <label>{t('agents.model')}</label>
                             <select value={formData.model_provider} onChange={e => setFormData({ ...formData, model_provider: e.target.value })}>

@@ -122,7 +122,7 @@ export default function Templates() {
     };
 
     return (
-        <div className="p-8 bg-[#0B0E14] min-h-screen text-gray-100 flex flex-col h-screen overflow-hidden">
+        <div className="p-4 sm:p-8 bg-[#0B0E14] min-h-screen text-gray-100 flex flex-col h-screen overflow-hidden">
             {/* Header */}
             <div className="flex justify-between items-center mb-8 shrink-0">
                 <div>
@@ -152,7 +152,7 @@ export default function Templates() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-8 border-b border-gray-800 mb-6 shrink-0">
+            <div className="flex gap-4 sm:gap-8 border-b border-gray-800 mb-6 shrink-0 overflow-x-auto">
                 <button
                     onClick={() => setActiveTab('library')}
                     className={`pb-4 px-2 text-sm font-medium transition-all relative ${activeTab === 'library' ? 'text-emerald-400' : 'text-gray-500 hover:text-gray-300'
@@ -263,7 +263,7 @@ export default function Templates() {
                                             <p className="text-xs text-gray-600 mt-1.5">Solo minúsculas y guiones bajos (snake_case).</p>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-400 mb-1.5">Categoría</label>
                                                 <div className="relative">

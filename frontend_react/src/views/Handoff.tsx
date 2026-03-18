@@ -144,7 +144,7 @@ export const Handoff: React.FC = () => {
                             <span className="font-bold">Habilitar Derivación Automática</span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="form-group">
                                 <label>Email de Destino</label>
                                 <input type="email" required value={config.destination_email} onChange={e => setConfig({ ...config, destination_email: e.target.value })} />
@@ -159,7 +159,7 @@ export const Handoff: React.FC = () => {
                     {/* SMTP Settings */}
                     <div className="glass p-6">
                         <h3 className="font-bold mb-4 flex items-center gap-2"><Settings size={18} /> Configuración SMTP</h3>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="form-group">
                                 <label>Host</label>
                                 <input value={config.smtp_host} onChange={e => setConfig({ ...config, smtp_host: e.target.value })} />
