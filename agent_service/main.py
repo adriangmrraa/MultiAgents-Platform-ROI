@@ -289,7 +289,22 @@ async def search_knowledge_base(q: str):
             # Nexus v7.6.1 Fix: Use tenant_id instead of store_id for RAG context
             params = {"tenant_id": ctx_tenant_id.get(), "q": q}
             logger.info("tool_call_start", tool="search_knowledge_base", query=q, tenant_id=params["tenant_id"])
-            resp = await client.get(f"{orch_url}/admin/rag/search", params=params, headers=headers)
+            
+            # Primary Attempt
+            try:
+                resp = await client.get(f"{orch_url}/admin/rag/search", params=params, headers=headers)
+            except Exception as e:
+                # DNS Fallback (Nexus v6.2.12 Pattern)
+                if "Name or service not known" in str(e) or "ConnectError" in str(e):
+                    if "orchestrator_service" in orch_url:
+                        dash_url = orch_url.replace("orchestrator_service", "orchestrator-service")
+                        logger.warning(f"🔁 RAG CONFIG: Primary host failed. Attempting Dash Fallback | url={dash_url}")
+                        resp = await client.get(f"{dash_url}/admin/rag/search", params=params, headers=headers)
+                    else:
+                        raise e
+                else:
+                    raise e
+
             logger.info("tool_call_response", tool="search_knowledge_base", status=resp.status_code)
             if resp.status_code == 200:
                 data = resp.json()

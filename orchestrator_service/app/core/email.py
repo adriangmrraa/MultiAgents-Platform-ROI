@@ -191,3 +191,70 @@ class EmailService:
             print(error_msg, flush=True) # Immediate visibility in container logs
             logger.error("email_delivery_failed", error=str(e), host=dynamic_conf.MAIL_SERVER)
             raise e
+
+    @staticmethod
+    async def send_handoff_notification(to_email: str, tenant_name: str, customer_info: str, reason: str, tenant_id: int):
+        """
+        Notify Admin about Human Request.
+        """
+        # Always use system/global config for notifications FROM the platform TO the tenant admin
+        # Or should we use tenant config if they brought their own SMTP? 
+        # Protocol Omega: Notifications are System -> Tenant. So System SMTP.
+        dynamic_conf = await EmailService.get_connection_config(tenant_id, mode="system")
+        
+        subject = f"🚨 Solicitud de Humano: {tenant_name}"
+        
+        # Dashboard URL
+        dashboard_url = "https://app.nexus-ai.com/chat" # Generic or env based
+        if FRONTEND_URL and "localhost" not in FRONTEND_URL:
+             dashboard_url = f"{FRONTEND_URL}/chat"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: 'Inter', sans-serif; background-color: #f3f4f6; padding: 20px; }}
+                .card {{ background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); max-width: 600px; margin: 0 auto; }}
+                .header {{ border-bottom: 2px solid #ef4444; padding-bottom: 15px; margin-bottom: 20px; }}
+                .tag {{ background: #fee2e2; color: #991b1b; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }}
+                .btn {{ background: #ef4444; color: white !important; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="header">
+                    <h2 style="margin:0; color: #1f2937;">👤 Intervención Requerida</h2>
+                    <span class="tag">PRIORIDAD ALTA</span>
+                </div>
+                <p>El cliente <strong>{customer_info}</strong> ha solicitado hablar con un humano.</p>
+                
+                <div style="background: #f8fafc; padding: 15px; border-left: 4px solid #3b82f6; margin: 20px 0;">
+                    <strong>Motivo Detectado:</strong><br>
+                    {reason}
+                </div>
+                
+                <a href="{dashboard_url}" class="btn">Ir al Chat</a>
+                
+                <p style="font-size: 12px; color: #6b7280; margin-top: 30px;">
+                    Enviado por Nexus Orchestrator • {tenant_name}
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        try:
+            message = MessageSchema(
+                subject=subject,
+                recipients=[to_email],
+                body=html_content,
+                subtype=MessageType.html
+            )
+            fm = FastMail(dynamic_conf)
+            await fm.send_message(message)
+            logger.info("handoff_email_sent", to=to_email)
+        except Exception as e:
+            logger.error("handoff_email_failed", error=str(e))
+            # Don't crash the flow, just log
+

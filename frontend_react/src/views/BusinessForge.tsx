@@ -351,9 +351,11 @@ const GalleryTab = ({ assets, fetchApi, onRefresh, brandDNA }: any) => {
 
     const handleDelete = async (id: string) => {
         if (!confirm('Eliminar?')) return;
-        await fetchApi(`/gallery/assets/${id}`, { method: 'DELETE' });
-        if (selectedAsset?.id === id) setSelectedAsset(null);
-        onRefresh();
+        try {
+            await fetchApi(`/gallery/assets/${id}`, { method: 'DELETE' });
+            if (selectedAsset?.id === id) setSelectedAsset(null);
+            onRefresh();
+        } catch (e: any) { alert(e.message || 'Error al eliminar'); }
     };
 
     return (

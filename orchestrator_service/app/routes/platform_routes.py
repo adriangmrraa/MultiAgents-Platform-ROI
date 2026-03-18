@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta
-from app.core.database import get_db, AsyncSession
+from db import get_pool_db
 from app.api.deps import get_current_super_admin
 from app.models.auth import User
 from db import redis_client
@@ -59,7 +59,7 @@ class UpdatePlanRequest(BaseModel):
 @router.get("/overview")
 async def platform_overview(
     current_user: User = Depends(get_current_super_admin),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """
     God Mode: Aggregate metrics with REAL revenue data.
@@ -155,7 +155,7 @@ async def platform_overview(
 # ---------- Infrastructure ----------
 
 @router.get("/infrastructure")
-async def platform_infrastructure(db: AsyncSession = Depends(get_db)):
+async def platform_infrastructure(db = Depends(get_pool_db)):
     """Technical Health Check."""
     redis_info = {}
     try:
@@ -201,7 +201,7 @@ async def list_all_tenants(
     status_filter: str = None,
     plan_filter: str = None,
     search: str = None,
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Paginated list of tenants with subscription info."""
     conditions = []
@@ -268,7 +268,7 @@ async def list_all_tenants(
 
 
 @router.get("/tenants/{tenant_id}")
-async def get_tenant_detail(tenant_id: int, db: AsyncSession = Depends(get_db)):
+async def get_tenant_detail(tenant_id: int, db = Depends(get_pool_db)):
     """Get detailed info for a specific tenant."""
     tenant = await db.fetchrow("""
         SELECT t.*, u.email as owner_email, u.full_name as owner_name,
@@ -331,7 +331,7 @@ async def tenant_action(
     req: TenantActionRequest,
     request: Request,
     current_user: User = Depends(get_current_super_admin),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Suspend, activate, or archive a tenant."""
     tenant = await db.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
@@ -388,7 +388,7 @@ async def admin_change_plan(
     req: ChangeTenantPlanRequest,
     request: Request,
     current_user: User = Depends(get_current_super_admin),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Admin: Force change a tenant's plan."""
     plan = await db.fetchrow("SELECT * FROM plans WHERE name = $1", req.plan_name)
@@ -425,7 +425,7 @@ async def admin_change_plan(
 # ---------- Plans Management ----------
 
 @router.get("/plans")
-async def list_plans(db: AsyncSession = Depends(get_db)):
+async def list_plans(db = Depends(get_pool_db)):
     """List all plans with subscriber counts."""
     rows = await db.fetch("""
         SELECT p.*,
@@ -444,7 +444,7 @@ async def update_plan(
     plan_name: str,
     req: UpdatePlanRequest,
     current_user: User = Depends(get_current_super_admin),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Update a plan's configuration."""
     plan = await db.fetchrow("SELECT * FROM plans WHERE name = $1", plan_name)
@@ -481,7 +481,7 @@ async def update_plan(
 @router.get("/revenue")
 async def platform_revenue(
     days: int = 30,
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Revenue analytics - daily breakdown."""
     rows = await db.fetch("""
@@ -504,7 +504,7 @@ async def platform_revenue(
 @router.get("/costs")
 async def platform_costs(
     months: int = 6,
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Cost analytics - per tenant LLM costs."""
     rows = await db.fetch("""
@@ -540,7 +540,7 @@ async def get_audit_logs(
     offset: int = 0,
     tenant_id: int = None,
     action: str = None,
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """View audit logs."""
     conditions = []
@@ -578,7 +578,7 @@ async def get_audit_logs(
 @router.post("/check-trials")
 async def force_check_trials(
     current_user: User = Depends(get_current_super_admin),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Manually trigger trial expiration check."""
     from app.services.trial_manager import check_trial_expirations
@@ -592,7 +592,7 @@ async def extend_trial(
     tenant_id: int,
     days: int = 10,
     current_user: User = Depends(get_current_super_admin),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Extend a tenant's trial period."""
     new_end = datetime.utcnow() + timedelta(days=days)

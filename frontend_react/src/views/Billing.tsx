@@ -55,8 +55,8 @@ export const Billing: React.FC = () => {
         const load = async () => {
             try {
                 const [p, s, u, i] = await Promise.all([
-                    fetchApi('/billing/plans'),
-                    fetchApi('/billing/my-subscription'),
+                    fetchApi('/billing/plans').catch(() => []),
+                    fetchApi('/billing/my-subscription').catch(() => null),
                     fetchApi('/billing/usage').catch(() => null),
                     fetchApi('/billing/invoices').catch(() => [])
                 ]);
@@ -428,7 +428,7 @@ export const Billing: React.FC = () => {
                                                     inv.status === 'pending' ? 'bg-yellow-900/30 text-yellow-400' :
                                                     'bg-red-900/30 text-red-400'
                                                 }`}>
-                                                    {inv.status.toUpperCase()}
+                                                    {(inv.status || 'unknown').toUpperCase()}
                                                 </span>
                                             </td>
                                             <td className="p-3 text-right text-slate-500 text-xs">{inv.payment_provider || '-'}</td>

@@ -104,3 +104,10 @@ class Database:
 # --- Global Instances ---
 db = Database()
 redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+
+
+async def get_pool_db():
+    """FastAPI dependency: yields the raw asyncpg Database instance for routes using raw SQL."""
+    if not db.pool:
+        await db.connect()
+    yield db

@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from typing import Optional
 
-from app.core.database import get_db, AsyncSession
+from db import get_pool_db
 from app.api.deps import get_current_user
 from app.models.auth import User
 
@@ -49,7 +49,7 @@ class ChangePlanRequest(BaseModel):
 # ---------- Public Endpoints ----------
 
 @router.get("/plans")
-async def list_plans(db: AsyncSession = Depends(get_db)):
+async def list_plans(db = Depends(get_pool_db)):
     """List all available subscription plans."""
     rows = await db.fetch("""
         SELECT id, name, display_name, description,
@@ -66,7 +66,7 @@ async def list_plans(db: AsyncSession = Depends(get_db)):
 @router.get("/my-subscription")
 async def my_subscription(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Get current tenant's subscription details."""
     row = await db.fetchrow("""
@@ -113,7 +113,7 @@ async def my_subscription(
 @router.get("/usage")
 async def my_usage(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Get current month usage for tenant."""
     now = datetime.utcnow()
@@ -158,7 +158,7 @@ async def my_usage(
 @router.get("/invoices")
 async def my_invoices(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """List invoices for current tenant."""
     rows = await db.fetch("""
@@ -179,7 +179,7 @@ async def my_invoices(
 async def create_checkout(
     req: CheckoutRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Create a checkout session for upgrading plan."""
     # Get target plan
@@ -222,7 +222,7 @@ async def _create_stripe_checkout(plan, req, current_user, db):
         product = stripe.Product.create(
             name=f"{plan['display_name']} - Platform AI",
             metadata={"plan_name": plan["name"]}
-        ) if not plan.get("stripe_product_id") else None
+        ) if not plan["stripe_product_id"] else None
 
         product_id = product.id if product else plan["stripe_product_id"]
 
@@ -245,7 +245,7 @@ async def _create_stripe_checkout(plan, req, current_user, db):
         "SELECT external_customer_id FROM subscriptions WHERE tenant_id = $1",
         current_user.tenant_id
     )
-    customer_id = sub["external_customer_id"] if sub and sub.get("external_customer_id") else None
+    customer_id = sub["external_customer_id"] if sub and sub["external_customer_id"] else None
 
     if not customer_id:
         customer = stripe.Customer.create(
@@ -286,7 +286,7 @@ async def _create_mp_checkout(plan, req, current_user, db):
 
     price = plan["price_ars"] if req.currency == "ARS" else plan["price_usd"]
     if req.billing_period == "yearly":
-        price = plan.get("price_ars_yearly", price * 10) if req.currency == "ARS" else plan.get("price_usd_yearly", price * 10)
+        price = (plan["price_ars_yearly"] or price * 10) if req.currency == "ARS" else (plan["price_usd_yearly"] or price * 10)
 
     # Create a preapproval (subscription) in MercadoPago
     async with httpx.AsyncClient() as client:
@@ -329,7 +329,7 @@ async def _create_mp_checkout(plan, req, current_user, db):
 # ---------- Webhooks ----------
 
 @router.post("/webhook/stripe")
-async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+async def stripe_webhook(request: Request, db = Depends(get_pool_db)):
     """Handle Stripe webhook events."""
     if not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Stripe not configured")
@@ -461,7 +461,7 @@ async def _handle_stripe_sub_canceled(sub_data, db):
 
 
 @router.post("/webhook/mercadopago")
-async def mercadopago_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+async def mercadopago_webhook(request: Request, db = Depends(get_pool_db)):
     """Handle MercadoPago webhook events."""
     if not MP_ACCESS_TOKEN:
         raise HTTPException(status_code=503, detail="MercadoPago not configured")
@@ -552,7 +552,7 @@ async def mercadopago_webhook(request: Request, db: AsyncSession = Depends(get_d
 async def change_plan(
     req: ChangePlanRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Change subscription plan. For downgrades, applies at period end."""
     new_plan = await db.fetchrow(

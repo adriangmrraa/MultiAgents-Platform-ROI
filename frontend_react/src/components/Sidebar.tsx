@@ -109,10 +109,12 @@ export const Sidebar: React.FC = () => {
                     <NavItem to="/" icon={<LayoutDashboard size={20} />} label={t('sidebar.dashboard')} />
                     <NavItem to="/chats" icon={<MessageCircle size={20} />} label={t('sidebar.commsChannel')} />
                     <NavItem to="/agents" icon={<Zap size={20} />} label={t('sidebar.agentSquad')} />
-                    <NavItem to="/analytics" icon={<BarChart2 size={20} />} label={t('sidebar.telemetry')} />
-                    <NavItem to="/logs" icon={<Terminal size={20} />} label={t('sidebar.blackBox')} />
-                    <NavItem to="/settings" icon={<Settings size={20} />} label={t('sidebar.settings')} />
                     <NavItem to="/stores" icon={<Store size={20} />} label={t('sidebar.hangar')} />
+                    <NavItem to="/forge" icon={<Palette size={20} />} label="Forge" />
+                    <NavItem to="/knowledge" icon={<Database size={20} />} label={t('sidebar.knowledge')} />
+                    <NavItem to="/billing" icon={<CreditCard size={20} />} label="Billing" />
+                    <NavItem to="/analytics" icon={<BarChart2 size={20} />} label={t('sidebar.telemetry')} />
+                    <NavItem to="/settings" icon={<Settings size={20} />} label={t('sidebar.settings')} />
                 </div>
             </div>
 

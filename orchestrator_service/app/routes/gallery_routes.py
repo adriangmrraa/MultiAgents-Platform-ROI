@@ -14,7 +14,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.core.database import get_db, AsyncSession
+from db import get_pool_db
 from app.api.deps import get_current_user
 from app.models.auth import User
 from app.core.credentials import get_tenant_credential_by_type
@@ -96,7 +96,7 @@ async def _get_brand_dna(tenant_id: int, db) -> Optional[dict]:
 async def extract_brand_dna(
     req: BrandDNARequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """
     Extract Brand DNA from website + TiendaNube data.
@@ -119,7 +119,7 @@ async def extract_brand_dna(
             "SELECT store_name, store_description, store_website, tiendanube_store_id, tiendanube_access_token FROM tenants WHERE id = $1",
             tenant_id
         )
-        if tenant and tenant.get("tiendanube_store_id") and tenant.get("tiendanube_access_token"):
+        if tenant and tenant["tiendanube_store_id"] and tenant["tiendanube_access_token"]:
             import httpx
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
@@ -134,7 +134,7 @@ async def extract_brand_dna(
     # Determine website URL
     website_url = req.website_url
     if not website_url and tenant:
-        website_url = tenant.get("store_website")
+        website_url = tenant["store_website"]
     if not website_url and tn_data:
         website_url = tn_data.get("url_with_protocol") or tn_data.get("main_url")
 
@@ -146,7 +146,7 @@ async def extract_brand_dna(
         website_url=website_url,
         tiendanube_data=tn_data,
         store_name=tenant["store_name"] if tenant else None,
-        store_description=tenant.get("store_description") if tenant else None
+        store_description=tenant["store_description"] if tenant else None
     )
 
     # Persist as business asset
@@ -184,7 +184,7 @@ async def extract_brand_dna(
 @router.get("/brand-dna")
 async def get_brand_dna(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Get stored Brand DNA for current tenant."""
     dna = await _get_brand_dna(current_user.tenant_id, db)
@@ -206,7 +206,7 @@ async def list_photoshoot_templates():
 async def generate_photoshoot(
     req: PhotoshootRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Generate a studio-quality product shot."""
     google_key = await _get_google_key(current_user.tenant_id)
@@ -250,7 +250,7 @@ async def list_campaign_channels():
 async def generate_campaign(
     req: CampaignRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Generate a multi-channel marketing campaign."""
     google_key = await _get_google_key(current_user.tenant_id)
@@ -302,7 +302,7 @@ async def generate_campaign(
 async def edit_image_asset(
     req: EditImageRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Edit an image asset using natural language prompt."""
     google_key = await _get_google_key(current_user.tenant_id)
@@ -354,7 +354,7 @@ async def edit_image_asset(
 async def edit_text_asset(
     req: EditTextRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Edit a text asset (script, copy) using natural language."""
     google_key = await _get_google_key(current_user.tenant_id)
@@ -370,7 +370,7 @@ async def edit_text_asset(
         )
         if asset:
             content = asset["content"] if isinstance(asset["content"], dict) else json.loads(asset["content"])
-            asset_type = asset.get("asset_type", "scripts")
+            asset_type = asset["asset_type"] or "scripts"
             # Extract text from various content shapes
             if isinstance(content, dict):
                 original_text = original_text or content.get("text") or content.get("body") or content.get("script") or json.dumps(content)
@@ -415,7 +415,7 @@ async def list_assets(
     limit: int = 50,
     offset: int = 0,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """List all gallery assets for the tenant with filtering."""
     conditions = ["tenant_id = $1", "is_active = true"]
@@ -468,7 +468,7 @@ async def list_assets(
 async def get_asset(
     asset_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Get a single asset with its version history."""
     asset = await db.fetchrow(
@@ -510,7 +510,7 @@ async def get_asset(
 async def delete_asset(
     asset_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Soft-delete an asset."""
     result = await db.execute(
@@ -524,7 +524,7 @@ async def delete_asset(
 async def save_asset(
     req: SaveAssetRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db = Depends(get_pool_db)
 ):
     """Manually save an asset to the gallery."""
     asset_id = str(uuid.uuid4())
