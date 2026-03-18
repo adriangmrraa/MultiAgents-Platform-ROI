@@ -294,42 +294,48 @@ class CreativeStudio:
         model_tier: str = None
     ) -> Dict[str, Any]:
         """
-        Generate a product shot with a human model in a scene.
-        Optionally uses a reference photo of a real person/model.
+        Generate a product shot with a human model wearing/using the product.
+        The model's face and body are replicated from the reference photo.
+        The prompt adapts dynamically to the product type (clothing, shoes, accessories, etc.)
         """
         if template not in MODEL_SHOOT_TEMPLATES:
             template = "urban_street"
 
         tmpl = MODEL_SHOOT_TEMPLATES[template]
 
-        # 1. Analyze product image
-        product_description = await self._analyze_product(product_image_url, product_name)
+        # 1. Deep product analysis — what IS it and how should a person interact with it?
+        product_analysis = await self._analyze_product_for_model_shoot(product_image_url, product_name)
 
-        # 2. Analyze model reference photo if provided
+        # 2. Deep model analysis — exact face, body, style replication
         model_description = ""
         if model_image_url and self.google_client:
-            try:
-                from app.core.image_utils import analyze_image_with_gpt4o
-                model_description = await analyze_image_with_gpt4o(
-                    model_image_url,
-                    "Describe this person for a photoshoot: gender, approximate age range, hair color/style, "
-                    "skin tone, body type, overall vibe. Be respectful and professional. Output a concise sentence.",
-                    self.google_api_key
-                )
-            except Exception as e:
-                logger.warning("model_analysis_failed", error=str(e))
+            model_description = await self._analyze_model_reference(model_image_url)
 
-        # 3. Build prompt
+        # 3. Build context-aware prompt
         brand_context = self._build_brand_context(brand_dna)
 
+        # Core prompt — adapts to product type
         final_prompt = (
-            f"Create a photorealistic commercial advertisement photograph showing a person "
-            f"naturally using/wearing/holding this product: {product_description}. "
+            f"Create a photorealistic commercial photograph. "
+            f"PRODUCT: {product_analysis['description']}. "
+            f"PRODUCT INTERACTION: {product_analysis['interaction_instruction']}. "
         )
+
+        # Model identity — exact replication
         if model_description:
-            final_prompt += f"MODEL REFERENCE: {model_description}. Use a model matching this description. "
+            final_prompt += (
+                f"MODEL IDENTITY (MUST REPLICATE EXACTLY): {model_description}. "
+                f"The model in the generated image MUST have the EXACT same face, facial features, "
+                f"skin tone, hair color, hair style, and body proportions as described. "
+                f"DO NOT change the model's appearance — only change their outfit/accessories "
+                f"based on the product. "
+            )
+
+        # Product-specific wearing/usage instruction
+        final_prompt += f"{product_analysis['wearing_instruction']} "
+
         if brand_context:
-            final_prompt += f"BRAND IDENTITY: {brand_context}. Reflect brand colors, mood, and aesthetic. "
+            final_prompt += f"BRAND AESTHETIC: {brand_context}. "
         if custom_prompt:
             final_prompt += f"CREATIVE DIRECTION: {custom_prompt}. "
         final_prompt += f"SCENE & TECHNICAL: {tmpl['prompt_suffix']}"
@@ -344,9 +350,158 @@ class CreativeStudio:
             "model_tier": model_tier or "nano-banana",
             "prompt_used": final_prompt,
             "product_name": product_name,
-            "product_description": product_description,
+            "product_description": product_analysis["description"],
+            "product_category": product_analysis["category"],
             "model_description": model_description or None
         }
+
+    async def _analyze_product_for_model_shoot(self, image_url: str, product_name: str) -> Dict:
+        """
+        Deep analysis of the product to determine how a model should interact with it.
+        Returns category, description, and specific wearing/holding instructions.
+        """
+        if not self.google_client:
+            return {
+                "description": product_name,
+                "category": "general",
+                "interaction_instruction": f"The model is using {product_name}",
+                "wearing_instruction": f"The model naturally interacts with {product_name}."
+            }
+
+        try:
+            from app.core.image_utils import analyze_image_with_gpt4o
+            analysis_prompt = (
+                f"Analyze this product image of '{product_name}'. I need you to determine:\n"
+                f"1. CATEGORY: Is it clothing (top/bottom/dress/jacket/suit), footwear (sneakers/heels/boots), "
+                f"accessory (watch/jewelry/bag/hat/sunglasses), cosmetics/skincare, food/drink, electronics, "
+                f"home decor, or other?\n"
+                f"2. DESCRIPTION: Describe the product in detail — colors, materials, style, design features.\n"
+                f"3. HOW_WORN: If wearable, exactly how should the model wear it? (e.g., 'on feet' for shoes, "
+                f"'on upper body' for shirts, 'on wrist' for watches, 'carried in hand' for bags, "
+                f"'held/presented' for non-wearable items)\n\n"
+                f"Respond in this EXACT format (3 lines, no extra text):\n"
+                f"CATEGORY: [category]\n"
+                f"DESCRIPTION: [detailed description]\n"
+                f"HOW_WORN: [specific instruction]"
+            )
+
+            raw = await analyze_image_with_gpt4o(image_url, analysis_prompt, self.google_api_key)
+
+            # Parse response
+            lines = raw.strip().split("\n")
+            category = "general"
+            description = product_name
+            how_worn = f"naturally interacting with {product_name}"
+
+            for line in lines:
+                line = line.strip()
+                if line.upper().startswith("CATEGORY:"):
+                    category = line.split(":", 1)[1].strip().lower()
+                elif line.upper().startswith("DESCRIPTION:"):
+                    description = line.split(":", 1)[1].strip()
+                elif line.upper().startswith("HOW_WORN:"):
+                    how_worn = line.split(":", 1)[1].strip()
+
+            # Build context-aware instructions based on category
+            interaction = self._build_interaction_instruction(category, description, product_name)
+            wearing = self._build_wearing_instruction(category, description, product_name, how_worn)
+
+            return {
+                "description": description,
+                "category": category,
+                "interaction_instruction": interaction,
+                "wearing_instruction": wearing
+            }
+        except Exception as e:
+            logger.warning("product_model_shoot_analysis_failed", error=str(e))
+            return {
+                "description": product_name,
+                "category": "general",
+                "interaction_instruction": f"The model is presenting {product_name}",
+                "wearing_instruction": f"The model naturally interacts with {product_name}."
+            }
+
+    def _build_interaction_instruction(self, category: str, description: str, name: str) -> str:
+        """Build how the model should interact based on product category."""
+        if any(w in category for w in ["clothing", "top", "bottom", "dress", "jacket", "shirt", "pants", "remera"]):
+            return f"The model is WEARING this {name} as clothing. It must be visible on their body, properly fitted and styled."
+        elif any(w in category for w in ["footwear", "shoe", "sneaker", "boot", "heel", "zapatilla", "zapato"]):
+            return f"The model is WEARING these {name} on their feet. The shoes must be clearly visible and in focus."
+        elif any(w in category for w in ["watch", "jewelry", "ring", "necklace", "bracelet", "earring"]):
+            return f"The model is WEARING this {name} as jewelry/accessory. It must be visible and highlighted."
+        elif any(w in category for w in ["bag", "purse", "backpack", "cartera", "mochila"]):
+            return f"The model is CARRYING this {name}. It should be held naturally or worn on the shoulder."
+        elif any(w in category for w in ["hat", "cap", "sunglasses", "glasses", "gorra", "lentes"]):
+            return f"The model is WEARING this {name} on their head/face. It must be the focal accessory."
+        elif any(w in category for w in ["cosmetic", "skincare", "beauty", "perfume", "makeup"]):
+            return f"The model is HOLDING and PRESENTING this {name} near their face/hands, showing the product elegantly."
+        elif any(w in category for w in ["food", "drink", "beverage"]):
+            return f"The model is ENJOYING/CONSUMING this {name}. Natural, appetizing moment of consumption."
+        elif any(w in category for w in ["electronic", "phone", "laptop", "gadget", "tech"]):
+            return f"The model is USING this {name} naturally in context. The device screen or product is visible."
+        else:
+            return f"The model is HOLDING and PRESENTING this {name}, showing it to camera while interacting naturally."
+
+    def _build_wearing_instruction(self, category: str, description: str, name: str, how_worn: str) -> str:
+        """Build specific wearing/styling instructions."""
+        if any(w in category for w in ["clothing", "top", "bottom", "dress", "jacket", "shirt", "pants", "remera"]):
+            return (
+                f"CRITICAL WARDROBE: The model MUST be wearing this exact product: {description}. "
+                f"The {name} is the MAIN garment — it must be clearly visible, properly fitted on the model's body. "
+                f"Style the rest of the outfit to complement the product without competing. "
+                f"The product garment must be recognizable — same colors, design, and details as the original."
+            )
+        elif any(w in category for w in ["footwear", "shoe", "sneaker", "boot", "heel", "zapatilla", "zapato"]):
+            return (
+                f"CRITICAL FOOTWEAR: The model MUST be wearing this exact product on their feet: {description}. "
+                f"Frame the shot to clearly show the shoes — ankle-down detail or full body with visible feet. "
+                f"The {name} must be recognizable — same colors, sole, design details as the original product. "
+                f"Pair with complementary clothing that doesn't distract from the shoes."
+            )
+        elif any(w in category for w in ["bag", "purse", "backpack", "cartera", "mochila"]):
+            return (
+                f"CRITICAL ACCESSORY: The model MUST be carrying/wearing this exact product: {description}. "
+                f"The {name} is prominently visible — held in hand, on shoulder, or worn naturally. "
+                f"Same colors, texture, hardware, and design details as the original product."
+            )
+        else:
+            return (
+                f"PRODUCT PLACEMENT: The model must be {how_worn} with this exact product: {description}. "
+                f"The {name} is the HERO of the image — in sharp focus and prominently displayed. "
+                f"The product must be recognizable — same colors and details as the original."
+            )
+
+    async def _analyze_model_reference(self, model_image_url: str) -> str:
+        """
+        Deep analysis of model reference photo for exact face/body replication.
+        """
+        if not self.google_client:
+            return ""
+
+        try:
+            from app.core.image_utils import analyze_image_with_gpt4o
+            prompt = (
+                "You are a professional casting director describing a model for an exact photographic replication. "
+                "Analyze this person's photo and describe them with EXTREME precision so another artist can "
+                "recreate their EXACT appearance. Include ALL of the following:\n\n"
+                "FACE: Face shape (oval/round/square/heart), forehead size, eyebrow shape and thickness, "
+                "eye shape and color, nose shape and size, lip shape and fullness, jawline definition, "
+                "cheekbone prominence, any distinctive features (dimples, freckles, moles, beauty marks).\n\n"
+                "HAIR: Exact color (not just 'brown' — be specific like 'warm chestnut brown with caramel highlights'), "
+                "texture (straight/wavy/curly/coily), length, style, parting, volume.\n\n"
+                "SKIN: Exact skin tone (use Fitzpatrick scale or precise description like 'warm olive with golden undertones'), "
+                "skin texture, any visible features.\n\n"
+                "BODY: Approximate height impression (tall/average/petite), body type (athletic/slim/curvy/muscular), "
+                "shoulder width, proportions.\n\n"
+                "VIBE: Overall energy (confident/relaxed/elegant/edgy/warm/professional), "
+                "apparent age range, gender expression.\n\n"
+                "Output a SINGLE detailed paragraph. Do NOT include what they are wearing — "
+                "only describe the PERSON themselves (face, hair, skin, body, vibe)."
+            )
+            return await analyze_image_with_gpt4o(model_image_url, prompt, self.google_api_key)
+        except Exception as e:
+            logger.warning("model_reference_analysis_failed", error=str(e))
+            return ""
 
     # ==================== CAMPAIGN GENERATOR ====================
 
