@@ -42,7 +42,7 @@ export const OnboardingChat: React.FC = () => {
                     body: {
                         session_id: sessionId,
                         user_message: "HOLA_INIT", // Special trigger
-                        tenant_id: user?.tenant_id || 1, // TODO: Dynamic Tenant
+                        tenant_id: user?.tenant_id, // TODO: Dynamic Tenant
                         reset: true
                     }
                 });
@@ -73,7 +73,7 @@ export const OnboardingChat: React.FC = () => {
                 body: {
                     session_id: sessionId,
                     user_message: currentMsg,
-                    tenant_id: user?.tenant_id || 1 // TODO: Dynamic
+                    tenant_id: user?.tenant_id // TODO: Dynamic
                 }
             });
 
@@ -103,7 +103,7 @@ export const OnboardingChat: React.FC = () => {
             const res = await fetchApi('/admin/onboarding/draft', {
                 method: 'POST',
                 body: {
-                    tenant_id: user?.tenant_id || 1, // TODO
+                    tenant_id: user?.tenant_id, // TODO
                     final_config: extractedData
                 }
             });

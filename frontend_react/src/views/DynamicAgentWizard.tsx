@@ -87,7 +87,7 @@ const AGENT_CONFIG_SCHEMA: FieldConfig[] = [
 ];
 
 // --- Nexus v5.26: Live Preview Panel ---
-const LivePreviewPanel = ({ formData, tenantId = 1, knowledgeCollections = [] }: { formData: Record<string, any>, tenantId?: number, knowledgeCollections?: string[] }) => {
+const LivePreviewPanel = ({ formData, tenantId = 0, knowledgeCollections = [] }: { formData: Record<string, any>, tenantId?: number, knowledgeCollections?: string[] }) => {
     const { fetchApi } = useApi();
     const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant', content: string }>>([
         { role: 'assistant', content: 'Hola, soy tu agente en modo prueba. Edita las reglas a la izquierda y probame en tiempo real.' }
@@ -113,7 +113,7 @@ const LivePreviewPanel = ({ formData, tenantId = 1, knowledgeCollections = [] }:
             // We pass the RAW formData so the backend constructs the transient agent
             // v5.58 Fix: Provide full identity context
             const payload = {
-                tenant_id: tenantId || 1,
+                tenant_id: tenantId,
                 message: text,
                 history: messages.slice(-6), // Keep context tight
                 // Transient Agent Config - Must match backend expectation
@@ -379,7 +379,7 @@ export const DynamicAgentWizard = () => {
     const [selectedTools, setSelectedTools] = useState<string[]>(['search_specific_products', 'orders', 'derivhumano']); // Defaults
     const [selectedChannels, setSelectedChannels] = useState<string[]>(['whatsapp', 'web']); // Defaults
     const [channelStatus, setChannelStatus] = useState<Record<string, boolean>>({ whatsapp: false, instagram: false, facebook: false, web: true });
-    const [selectedTenantId, setSelectedTenantId] = useState<number>(user?.tenant_id || 1); // v7.0 Multi-tenant binding
+    const [selectedTenantId, setSelectedTenantId] = useState<number>(user?.tenant_id || 0); // v7.0 Multi-tenant binding
 
     useEffect(() => {
         // Load Templates, Tools & Integration Status

@@ -184,9 +184,8 @@ async def register(user_in: UserRegister, response: Response, db: AsyncSession =
         await db.commit()
     except Exception as e:
         logger.error("smtp_register_error", error=str(e))
-        # In register we still return success but with email_sent=False to see the detail in response
         email_sent = False
-        message = f"User created, but SMTP Failed: {str(e)}"
+        message = "Cuenta creada exitosamente. El email de verificacion puede demorar unos minutos."
     else:
         message = "User created. System in Spectator Mode until verified."
     

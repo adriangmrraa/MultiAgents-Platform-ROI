@@ -26,7 +26,7 @@ export const RagGalaxy: React.FC = () => {
         const loadGalaxy = async () => {
             try {
                 // Fetch the "Star Map" from the Brain
-                const vectorNodes = await fetchApi(`/admin/rag/galaxy?tenant_id=${user?.tenant_id || 1}`);
+                const vectorNodes = await fetchApi(`/admin/rag/galaxy?tenant_id=${user?.tenant_id}`);
                 if (Array.isArray(vectorNodes)) {
                     setNodes(vectorNodes);
                 }
