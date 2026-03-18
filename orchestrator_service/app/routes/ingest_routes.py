@@ -77,18 +77,31 @@ async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform:
                     convs = data.get("data", [])
                     if convs:
                         participants = convs[0].get("participants", {}).get("data", [])
+                        sender_name_fb = ""
                         for p in participants:
                             if p.get("id") == sender_id:
-                                return {
-                                    "name": p.get("name", ""),
-                                    "avatar": ""  # Not available via this endpoint
-                                }
+                                sender_name_fb = p.get("name", "")
+                                break
                             elif p.get("id") != recipient_id:
-                                # Non-page participant
-                                return {
-                                    "name": p.get("name", ""),
-                                    "avatar": ""
-                                }
+                                sender_name_fb = p.get("name", "")
+                                break
+
+                        # Fetch profile picture via public endpoint
+                        avatar_url = ""
+                        try:
+                            pic_url = f"https://graph.facebook.com/{api_version}/{sender_id}/picture?type=large&redirect=false&access_token={token}"
+                            pic_resp = await client.get(pic_url)
+                            pic_data = pic_resp.json()
+                            if pic_resp.status_code == 200 and pic_data.get("data", {}).get("url"):
+                                avatar_url = pic_data["data"]["url"]
+                        except Exception:
+                            pass
+
+                        if sender_name_fb:
+                            return {
+                                "name": sender_name_fb,
+                                "avatar": avatar_url
+                            }
 
                 # Fallback: try direct GET /{psid} (works if app has pages_read_user_content)
                 url2 = f"https://graph.facebook.com/{api_version}/{sender_id}?fields=first_name,last_name,profile_pic&access_token={token}"
