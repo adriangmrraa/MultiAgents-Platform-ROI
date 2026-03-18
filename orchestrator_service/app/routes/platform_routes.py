@@ -422,6 +422,112 @@ async def admin_change_plan(
     return {"message": f"Plan changed to {plan['display_name']}", "tenant_id": tenant_id}
 
 
+# ---------- Edit Tenant ----------
+
+class EditTenantRequest(BaseModel):
+    store_name: Optional[str] = None
+    owner_email: Optional[str] = None
+    bot_phone_number: Optional[str] = None
+    store_website: Optional[str] = None
+    store_description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@router.put("/tenants/{tenant_id}")
+async def edit_tenant(
+    tenant_id: int,
+    req: EditTenantRequest,
+    request: Request,
+    current_user: User = Depends(get_current_super_admin),
+    db = Depends(get_pool_db)
+):
+    """Admin: Edit tenant details."""
+    tenant = await db.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    updates = []
+    params = []
+    idx = 1
+
+    for field, value in req.model_dump(exclude_none=True).items():
+        updates.append(f"{field} = ${idx}")
+        params.append(value)
+        idx += 1
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    params.append(tenant_id)
+    await db.execute(
+        f"UPDATE tenants SET {', '.join(updates)}, updated_at = NOW() WHERE id = ${idx}",
+        *params
+    )
+
+    # If owner_email changed, update users table too
+    if req.owner_email:
+        await db.execute(
+            "UPDATE users SET email = $1 WHERE tenant_id = $2 AND role = 'owner'",
+            req.owner_email, tenant_id
+        )
+
+    # Audit
+    await db.execute("""
+        INSERT INTO audit_logs (user_id, tenant_id, action, resource_type, details, ip_address)
+        VALUES ($1, $2, 'tenant.edit', 'tenant', $3::jsonb, $4)
+    """, current_user.id, tenant_id,
+         json.dumps(req.model_dump(exclude_none=True)),
+         request.client.host if request.client else None)
+
+    logger.info("tenant_edited", tenant_id=tenant_id, by=str(current_user.id))
+    return {"message": "Tenant updated", "tenant_id": tenant_id}
+
+
+# ---------- Delete Tenant ----------
+
+@router.delete("/tenants/{tenant_id}")
+async def delete_tenant(
+    tenant_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_super_admin),
+    db = Depends(get_pool_db)
+):
+    """Admin: Permanently delete a tenant and all associated data."""
+    tenant = await db.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    # Prevent deleting own tenant
+    if current_user.tenant_id == tenant_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own tenant")
+
+    store_name = tenant["store_name"]
+
+    # Delete in order (respecting FK constraints)
+    await db.execute("DELETE FROM audit_logs WHERE tenant_id = $1", tenant_id)
+    await db.execute("DELETE FROM invoices WHERE tenant_id = $1", tenant_id)
+    await db.execute("DELETE FROM usage_records WHERE tenant_id = $1", tenant_id)
+    await db.execute("DELETE FROM subscriptions WHERE tenant_id = $1", tenant_id)
+    await db.execute("DELETE FROM business_assets WHERE tenant_id = $1::text", str(tenant_id))
+    await db.execute("DELETE FROM chat_messages WHERE from_number IN (SELECT bot_phone_number FROM tenants WHERE id = $1)", tenant_id)
+    await db.execute("DELETE FROM agents WHERE tenant_id = $1", tenant_id)
+    await db.execute("DELETE FROM credentials WHERE tenant_id = $1", tenant_id)
+    await db.execute("DELETE FROM tenant_human_handoff_config WHERE tenant_id = $1", tenant_id)
+    await db.execute("DELETE FROM users WHERE tenant_id = $1", tenant_id)
+    await db.execute("DELETE FROM tenants WHERE id = $1", tenant_id)
+
+    # Audit (log with null tenant since it's deleted)
+    await db.execute("""
+        INSERT INTO audit_logs (user_id, tenant_id, action, resource_type, details, ip_address)
+        VALUES ($1, NULL, 'tenant.delete', 'tenant', $2::jsonb, $3)
+    """, current_user.id,
+         json.dumps({"deleted_tenant_id": tenant_id, "store_name": store_name}),
+         request.client.host if request.client else None)
+
+    logger.info("tenant_deleted", tenant_id=tenant_id, store_name=store_name, by=str(current_user.id))
+    return {"message": f"Tenant '{store_name}' deleted permanently", "tenant_id": tenant_id}
+
+
 # ---------- Plans Management ----------
 
 @router.get("/plans")

@@ -164,6 +164,38 @@ export const PlatformTower: React.FC = () => {
         }
     };
 
+    const handleEditTenant = async (tenantId: number, data: Record<string, any>) => {
+        setActionLoading(tenantId);
+        try {
+            await fetchApi(`/platform/tenants/${tenantId}`, {
+                method: 'PUT',
+                body: data
+            });
+            await loadTenants();
+            await loadOverview();
+        } catch (e: any) {
+            alert(`Error: ${e.message}`);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleDeleteTenant = async (tenantId: number, storeName: string) => {
+        if (!confirm(`ELIMINAR PERMANENTEMENTE "${storeName}"?\n\nEsto borra TODO: usuarios, agentes, chats, suscripción.\n\nEsta acción NO se puede deshacer.`)) return;
+        if (!confirm(`CONFIRMAR: Escribir OK para eliminar "${storeName}"`)) return;
+        setActionLoading(tenantId);
+        try {
+            await fetchApi(`/platform/tenants/${tenantId}`, { method: 'DELETE' });
+            setSelectedTenant(null);
+            await loadTenants();
+            await loadOverview();
+        } catch (e: any) {
+            alert(`Error: ${e.message}`);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     const handleForceTrialCheck = async () => {
         try {
             const result = await fetchApi('/platform/check-trials', { method: 'POST' });
@@ -248,6 +280,8 @@ export const PlatformTower: React.FC = () => {
                         onAction={handleTenantAction}
                         onChangePlan={handleChangePlan}
                         onExtendTrial={handleExtendTrial}
+                        onEditTenant={handleEditTenant}
+                        onDeleteTenant={handleDeleteTenant}
                         getStatusBadge={getStatusBadge}
                         selectedTenant={selectedTenant}
                         setSelectedTenant={setSelectedTenant}
@@ -354,14 +388,44 @@ const TenantsTab = ({
     tenants, tenantsTotal, plans, searchQuery, setSearchQuery,
     statusFilter, setStatusFilter, planFilter, setPlanFilter,
     actionLoading, onAction, onChangePlan, onExtendTrial,
+    onEditTenant, onDeleteTenant,
     getStatusBadge, selectedTenant, setSelectedTenant, fetchApi
 }: any) => {
+    const [editMode, setEditMode] = useState(false);
+    const [editForm, setEditForm] = useState<Record<string, string>>({});
 
     const loadTenantDetail = async (tenantId: number) => {
         try {
             const data = await fetchApi(`/platform/tenants/${tenantId}`);
             setSelectedTenant(data);
+            setEditMode(false);
         } catch (e) { console.error(e); }
+    };
+
+    const startEdit = (tenant: any) => {
+        setEditForm({
+            store_name: tenant.store_name || '',
+            owner_email: tenant.owner_email || '',
+            bot_phone_number: tenant.bot_phone_number || '',
+            store_website: tenant.store_website || '',
+            store_description: tenant.store_description || '',
+        });
+        setEditMode(true);
+    };
+
+    const submitEdit = async () => {
+        const changes: Record<string, string> = {};
+        const t = selectedTenant.tenant;
+        if (editForm.store_name && editForm.store_name !== t.store_name) changes.store_name = editForm.store_name;
+        if (editForm.owner_email && editForm.owner_email !== t.owner_email) changes.owner_email = editForm.owner_email;
+        if (editForm.bot_phone_number && editForm.bot_phone_number !== t.bot_phone_number) changes.bot_phone_number = editForm.bot_phone_number;
+        if (editForm.store_website !== (t.store_website || '')) changes.store_website = editForm.store_website;
+        if (editForm.store_description !== (t.store_description || '')) changes.store_description = editForm.store_description;
+
+        if (Object.keys(changes).length === 0) { setEditMode(false); return; }
+        await onEditTenant(t.id, changes);
+        await loadTenantDetail(t.id);
+        setEditMode(false);
     };
 
     return (
@@ -479,6 +543,14 @@ const TenantsTab = ({
                                                 >
                                                     <Eye size={14} />
                                                 </button>
+                                                <button
+                                                    onClick={() => onDeleteTenant(t.id, t.store_name)}
+                                                    disabled={actionLoading === t.id}
+                                                    className="p-1 hover:bg-red-900/30 rounded text-red-400/50 hover:text-red-400"
+                                                    title="Eliminar"
+                                                >
+                                                    <Ban size={14} />
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -496,16 +568,63 @@ const TenantsTab = ({
                             <button onClick={() => setSelectedTenant(null)} className="text-slate-500 hover:text-white">&times;</button>
                         </div>
 
+                        <div className="flex gap-1 mb-3">
+                            <button
+                                onClick={() => startEdit(selectedTenant.tenant)}
+                                className="flex-1 text-[10px] font-bold py-1.5 rounded bg-blue-900/30 text-blue-400 border border-blue-500/30 hover:bg-blue-900/50 flex items-center justify-center gap-1"
+                            >
+                                <Edit2 size={10} /> Editar
+                            </button>
+                            <button
+                                onClick={() => onDeleteTenant(selectedTenant.tenant.id, selectedTenant.tenant.store_name)}
+                                className="flex-1 text-[10px] font-bold py-1.5 rounded bg-red-900/30 text-red-400 border border-red-500/30 hover:bg-red-900/50 flex items-center justify-center gap-1"
+                            >
+                                <Ban size={10} /> Eliminar
+                            </button>
+                        </div>
+
                         <div className="space-y-3 text-xs">
-                            <div className="bg-black/30 p-3 rounded">
-                                <div className="text-slate-400 mb-1">Tienda</div>
-                                <div className="text-white font-bold">{selectedTenant.tenant.store_name}</div>
-                            </div>
-                            <div className="bg-black/30 p-3 rounded">
-                                <div className="text-slate-400 mb-1">Owner</div>
-                                <div>{selectedTenant.tenant.owner_email}</div>
-                                <div className="text-slate-500">{selectedTenant.tenant.owner_name}</div>
-                            </div>
+                            {editMode ? (
+                                <div className="bg-black/30 p-3 rounded space-y-2">
+                                    <div className="text-slate-400 mb-1 font-bold">Editando Tenant</div>
+                                    <div>
+                                        <label className="text-[10px] text-slate-500">Tienda</label>
+                                        <input value={editForm.store_name || ''} onChange={e => setEditForm({...editForm, store_name: e.target.value})} className="w-full bg-black/60 border border-white/10 rounded px-2 py-1 text-white text-xs outline-none focus:border-blue-500/50" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-slate-500">Email Owner</label>
+                                        <input value={editForm.owner_email || ''} onChange={e => setEditForm({...editForm, owner_email: e.target.value})} className="w-full bg-black/60 border border-white/10 rounded px-2 py-1 text-white text-xs outline-none focus:border-blue-500/50" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-slate-500">Telefono</label>
+                                        <input value={editForm.bot_phone_number || ''} onChange={e => setEditForm({...editForm, bot_phone_number: e.target.value})} className="w-full bg-black/60 border border-white/10 rounded px-2 py-1 text-white text-xs outline-none focus:border-blue-500/50" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-slate-500">Website</label>
+                                        <input value={editForm.store_website || ''} onChange={e => setEditForm({...editForm, store_website: e.target.value})} className="w-full bg-black/60 border border-white/10 rounded px-2 py-1 text-white text-xs outline-none focus:border-blue-500/50" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-slate-500">Descripcion</label>
+                                        <textarea value={editForm.store_description || ''} onChange={e => setEditForm({...editForm, store_description: e.target.value})} rows={2} className="w-full bg-black/60 border border-white/10 rounded px-2 py-1 text-white text-xs outline-none focus:border-blue-500/50 resize-none" />
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <button onClick={submitEdit} className="flex-1 py-1.5 rounded bg-emerald-900/30 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold hover:bg-emerald-900/50">Guardar</button>
+                                        <button onClick={() => setEditMode(false)} className="flex-1 py-1.5 rounded bg-white/5 text-slate-400 border border-white/10 text-[10px] font-bold hover:bg-white/10">Cancelar</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="bg-black/30 p-3 rounded">
+                                        <div className="text-slate-400 mb-1">Tienda</div>
+                                        <div className="text-white font-bold">{selectedTenant.tenant.store_name}</div>
+                                    </div>
+                                    <div className="bg-black/30 p-3 rounded">
+                                        <div className="text-slate-400 mb-1">Owner</div>
+                                        <div>{selectedTenant.tenant.owner_email}</div>
+                                        <div className="text-slate-500">{selectedTenant.tenant.owner_name}</div>
+                                    </div>
+                                </>
+                            )}
                             <div className="bg-black/30 p-3 rounded">
                                 <div className="text-slate-400 mb-1">Plan / Estado</div>
                                 <div className="flex items-center gap-2">
