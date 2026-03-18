@@ -49,12 +49,29 @@ EXEMPT_PREFIXES = (
     "/billing/webhook",
     "/webhook/",
     "/auth/",
+    "/admin/",
 )
 
 
 class SubscriptionGuardMiddleware(BaseHTTPMiddleware):
+    def _block_response(self, request: Request, status_code: int, content: dict) -> JSONResponse:
+        """Return a 402 JSONResponse WITH CORS headers so the browser doesn't swallow it."""
+        origin = request.headers.get("origin", "*")
+        return JSONResponse(
+            status_code=status_code,
+            content=content,
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+            }
+        )
+
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
+
+        # 0. Always let CORS preflight through
+        if request.method == "OPTIONS":
+            return await call_next(request)
 
         # 1. Skip exempt paths
         if path in EXEMPT_PATHS or any(path.startswith(p) for p in EXEMPT_PREFIXES):
@@ -107,14 +124,11 @@ class SubscriptionGuardMiddleware(BaseHTTPMiddleware):
 
             if not sub:
                 # No subscription at all - block
-                return JSONResponse(
-                    status_code=402,
-                    content={
-                        "error": "subscription_required",
-                        "message": "No tienes una suscripcion activa. Elige un plan para continuar.",
-                        "redirect": "/billing"
-                    }
-                )
+                return self._block_response(request, 402, {
+                    "error": "subscription_required",
+                    "message": "No tienes una suscripcion activa. Elige un plan para continuar.",
+                    "redirect": "/billing"
+                })
 
             status = sub["status"]
 
@@ -126,15 +140,12 @@ class SubscriptionGuardMiddleware(BaseHTTPMiddleware):
                         "UPDATE subscriptions SET status = 'expired' WHERE tenant_id = $1",
                         tenant_id
                     )
-                    return JSONResponse(
-                        status_code=402,
-                        content={
-                            "error": "trial_expired",
-                            "message": "Tu periodo de prueba de 10 dias ha expirado. Elige un plan para continuar usando la plataforma.",
-                            "redirect": "/billing",
-                            "plan_name": sub["plan_name"]
-                        }
-                    )
+                    return self._block_response(request, 402, {
+                        "error": "trial_expired",
+                        "message": "Tu periodo de prueba de 10 dias ha expirado. Elige un plan para continuar usando la plataforma.",
+                        "redirect": "/billing",
+                        "plan_name": sub["plan_name"]
+                    })
 
             # Block expired/suspended/canceled
             if status in ("expired", "suspended", "canceled"):
@@ -143,14 +154,11 @@ class SubscriptionGuardMiddleware(BaseHTTPMiddleware):
                     "suspended": "Tu cuenta esta suspendida. Contacta soporte.",
                     "canceled": "Tu suscripcion fue cancelada. Reactiva un plan."
                 }
-                return JSONResponse(
-                    status_code=402,
-                    content={
-                        "error": f"subscription_{status}",
-                        "message": messages.get(status, "Suscripcion inactiva."),
-                        "redirect": "/billing"
-                    }
-                )
+                return self._block_response(request, 402, {
+                    "error": f"subscription_{status}",
+                    "message": messages.get(status, "Suscripcion inactiva."),
+                    "redirect": "/billing"
+                })
 
         except Exception as e:
             # Don't block on middleware errors - log and continue
