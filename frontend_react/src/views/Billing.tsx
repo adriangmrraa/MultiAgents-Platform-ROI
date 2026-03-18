@@ -75,15 +75,28 @@ export const Billing: React.FC = () => {
         load();
     }, [fetchApi]);
 
+    const [mpFallbackUrl, setMpFallbackUrl] = useState<string | null>(null);
+
     const handleCheckout = async (planName: string, provider: string) => {
         setCheckoutLoading(`${planName}-${provider}`);
+        setMpFallbackUrl(null);
         try {
             const result = await fetchApi('/billing/checkout', {
                 method: 'POST',
                 body: { plan_name: planName, billing_period: billingPeriod, provider, currency }
             });
             if (result.checkout_url) {
-                window.location.href = result.checkout_url;
+                if (provider === 'mercadopago') {
+                    // Open in new tab — avoids tracking prevention blocking MP assets
+                    const newWindow = window.open(result.checkout_url, '_blank');
+                    if (!newWindow) {
+                        // Popup blocked — show fallback link
+                        setMpFallbackUrl(result.checkout_url);
+                    }
+                } else {
+                    // Stripe: redirect in same tab (works fine)
+                    window.location.href = result.checkout_url;
+                }
             }
         } catch (e: any) {
             alert(e.message || 'Error al crear el checkout');
@@ -212,6 +225,24 @@ export const Billing: React.FC = () => {
                                 <button onClick={() => setCurrency('ARS')} className={`px-3 py-1.5 rounded text-xs font-bold ${currency === 'ARS' ? 'bg-white/10 text-white' : 'text-slate-500'}`}>ARS</button>
                             </div>
                         </div>
+
+                        {/* MP Fallback Link */}
+                        {mpFallbackUrl && (
+                            <div className="mb-6 p-4 rounded-xl bg-[#009ee3]/10 border border-[#009ee3]/30">
+                                <p className="text-sm text-[#00b1ea] font-bold mb-2">Tu navegador bloqueo la ventana de pago</p>
+                                <p className="text-xs text-slate-400 mb-3">Si la pagina de MercadoPago no se abrio, usa este enlace:</p>
+                                <div className="flex gap-2">
+                                    <a href={mpFallbackUrl} target="_blank" rel="noopener noreferrer"
+                                       className="flex-1 py-2.5 bg-[#009ee3] hover:bg-[#0088cc] text-white font-bold text-sm rounded-lg text-center transition-colors">
+                                        Abrir MercadoPago
+                                    </a>
+                                    <button onClick={() => { navigator.clipboard.writeText(mpFallbackUrl); alert('Link copiado!'); }}
+                                            className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg font-bold transition-colors">
+                                        Copiar Link
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Plans Grid */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
