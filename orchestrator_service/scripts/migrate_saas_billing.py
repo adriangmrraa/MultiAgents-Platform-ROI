@@ -207,6 +207,63 @@ ON CONFLICT (name) DO UPDATE SET
 """
 
 
+HYDRATE_EXISTING_TENANTS_SQL = """
+-- Give existing tenants (pre-billing era) an active Pro subscription
+-- so they are not blocked by the subscription guard.
+-- Only affects tenants that have NO subscription record at all.
+DO $$
+DECLARE
+    pro_plan_id UUID;
+    t_record RECORD;
+    affected INT := 0;
+BEGIN
+    SELECT id INTO pro_plan_id FROM plans WHERE name = 'pro';
+    IF pro_plan_id IS NULL THEN
+        RAISE NOTICE 'Pro plan not found - skipping tenant hydration';
+        RETURN;
+    END IF;
+
+    FOR t_record IN
+        SELECT t.id FROM tenants t
+        LEFT JOIN subscriptions s ON s.tenant_id = t.id
+        WHERE s.id IS NULL
+    LOOP
+        INSERT INTO subscriptions (tenant_id, plan_id, status, current_period_start, trial_ends_at)
+        VALUES (t_record.id, pro_plan_id, 'active', NOW(), NULL)
+        ON CONFLICT (tenant_id) DO NOTHING;
+        affected := affected + 1;
+    END LOOP;
+
+    IF affected > 0 THEN
+        RAISE NOTICE 'Hydrated % existing tenants with Pro plan', affected;
+    END IF;
+END $$;
+"""
+
+async def run_startup_billing_migration(db_pool):
+    """
+    Called from main.py lifespan. Runs all billing migrations idempotently.
+    Uses the shared asyncpg Database instance.
+    """
+    try:
+        await db_pool.execute(MIGRATION_SQL)
+        await db_pool.execute(SEED_PLANS_SQL)
+        await db_pool.execute(HYDRATE_EXISTING_TENANTS_SQL)
+
+        # Promote super admin from env var (direct parameterized query)
+        super_admin_email = os.getenv("SUPER_ADMIN_EMAIL", "")
+        if super_admin_email:
+            await db_pool.execute(
+                "UPDATE users SET role = 'super_admin' WHERE email = $1 AND role != 'super_admin'",
+                super_admin_email
+            )
+            logger.info("super_admin_check", email=super_admin_email)
+
+        logger.info("billing_startup_migration_complete")
+    except Exception as e:
+        logger.warning("billing_startup_migration_partial", error=str(e))
+
+
 async def run_migration():
     if not POSTGRES_DSN:
         print("ERROR: POSTGRES_DSN or DATABASE_URL not set")
@@ -224,22 +281,18 @@ async def run_migration():
         await conn.execute(SEED_PLANS_SQL)
         print(">> Plans seeded (Free, Pro, Enterprise)")
 
-        # Create trial subscriptions for existing tenants without subscriptions
-        free_plan_id = await conn.fetchval("SELECT id FROM plans WHERE name = 'free'")
-        if free_plan_id:
-            tenants_without_sub = await conn.fetch("""
-                SELECT t.id FROM tenants t
-                LEFT JOIN subscriptions s ON s.tenant_id = t.id
-                WHERE s.id IS NULL
-            """)
-            for t in tenants_without_sub:
-                trial_end = datetime.utcnow() + timedelta(days=10)
-                await conn.execute("""
-                    INSERT INTO subscriptions (tenant_id, plan_id, status, trial_ends_at, current_period_start, current_period_end)
-                    VALUES ($1, $2, 'trialing', $3, NOW(), $3)
-                    ON CONFLICT (tenant_id) DO NOTHING
-                """, t['id'], free_plan_id, trial_end)
-            print(f">> Created trial subscriptions for {len(tenants_without_sub)} existing tenants")
+        # Hydrate existing tenants
+        await conn.execute(HYDRATE_EXISTING_TENANTS_SQL)
+        print(">> Existing tenants hydrated with Pro plan")
+
+        # Promote super admin
+        super_admin_email = os.getenv("SUPER_ADMIN_EMAIL", "")
+        if super_admin_email:
+            await conn.execute(
+                "UPDATE users SET role = 'super_admin' WHERE email = $1 AND role != 'super_admin'",
+                super_admin_email
+            )
+            print(f">> Super admin check: {super_admin_email}")
 
         await conn.close()
         print(">> Migration complete!")

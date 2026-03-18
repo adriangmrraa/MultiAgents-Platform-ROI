@@ -1239,9 +1239,8 @@ async def lifespan(app: FastAPI):
 
         # 8. Run billing migration (idempotent - safe to run on every startup)
         try:
-            from scripts.migrate_saas_billing import MIGRATION_SQL, SEED_PLANS_SQL
-            await db.execute(MIGRATION_SQL)
-            await db.execute(SEED_PLANS_SQL)
+            from scripts.migrate_saas_billing import run_startup_billing_migration
+            await run_startup_billing_migration(db)
             logger.info("billing_schema_verified")
         except Exception as bm_err:
             logger.debug("billing_migration_note", error=str(bm_err))
