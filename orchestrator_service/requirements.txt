@@ -30,3 +30,4 @@ docx2txt
 supabase
 psycopg2-binary
 vecs
+stripe>=8.0.0
