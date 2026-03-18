@@ -2679,27 +2679,29 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
             logger.info(f"📥 BUFFER: Consuming batch | identifier={from_num} | count={len(messages_raw)} | text_length={len(combined_text)}")
             
             # Nexus v7.6.8: History De-duplication Guard
-            # Check if this exact message was already processed in the last few seconds (race condition/loop prevention)
-            # We look at the last user message in the DB for this conversation
+            # Check if the agent already responded to this exact message (prevents re-processing)
+            # We check if there's an assistant reply AFTER the last user message with same content
             last_msg = await db.pool.fetchrow("""
-                SELECT content, created_at FROM chat_messages 
-                WHERE conversation_id = $1 AND role = 'user' 
-                ORDER BY created_at DESC LIMIT 1
+                SELECT m.content, m.created_at,
+                    (SELECT COUNT(*) FROM chat_messages r
+                     WHERE r.conversation_id = $1 AND r.role = 'assistant'
+                     AND r.created_at > m.created_at) as reply_count
+                FROM chat_messages m
+                WHERE m.conversation_id = $1 AND m.role = 'user'
+                ORDER BY m.created_at DESC LIMIT 1
             """, c_id)
-            
-            if last_msg and last_msg['content'] == combined_text:
-                # Same content? check time delta.
-                # FIX: Ensure last_msg['created_at'] is offset-aware or both are naive.
+
+            if last_msg and last_msg['content'] == combined_text and last_msg['reply_count'] > 0:
+                # Same content AND agent already replied — skip
                 last_time = last_msg['created_at']
                 if last_time.tzinfo is None:
                     last_time = last_time.replace(tzinfo=timezone.utc)
-                
-                # Compare with current UTC time
+
                 current_time = datetime.now(timezone.utc)
                 delta = (current_time - last_time).total_seconds()
-                
-                if delta < 5:
-                    logger.warning(f"♻️ BUFFER: Duplicate detected (Loop Guard) | content='{combined_text[:20]}...' | delta={delta}s | IGNORING")
+
+                if delta < 10:
+                    logger.warning(f"♻️ BUFFER: Duplicate detected (Loop Guard) | content='{combined_text[:20]}...' | delta={delta}s | already_replied | IGNORING")
                     continue
             
             # Execute agent (Synchronous sink to ensure one task at a time per user)
