@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
+import { useAuth } from '../contexts/AuthContext';
 import { Save, ExternalLink, MessageSquare, AlertTriangle, Check, Copy, Globe } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
 export const ChatwootSettings: React.FC = () => {
     const { t } = useLanguage();
+    const { user } = useAuth();
     const { fetchApi, loading } = useApi();
     const [apiToken, setApiToken] = useState('');
     const [accountId, setAccountId] = useState('');
@@ -50,7 +52,7 @@ export const ChatwootSettings: React.FC = () => {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const tenantId = import.meta.env.VITE_DEFAULT_TENANT_ID || 1;
+            const tenantId = user?.tenant_id || 1;
 
             // Save API Token (Credential Architecture v2)
             await fetchApi('/admin/credentials', {

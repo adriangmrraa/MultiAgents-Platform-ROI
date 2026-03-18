@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApi } from '../hooks/useApi';
+import { useAuth } from '../contexts/AuthContext';
 import { WebSettings } from './WebSettings';
 import { YCloudSettings } from './YCloudSettings';
 import { MetaSettings } from './MetaSettings';
@@ -13,17 +14,19 @@ interface SettingsProps {
 
 export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' }) => {
     const { t } = useLanguage();
+    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'integrations' | 'ycloud' | 'meta' | 'web' | 'chatwoot'>(initialTab);
     const { fetchApi } = useApi();
     const [connections, setConnections] = useState<any>(null);
     const [tenants, setTenants] = useState<any[]>([]);
-    const [selectedTenantId, setSelectedTenantId] = useState<string>(import.meta.env.VITE_DEFAULT_TENANT_ID || "1");
+    const tenantId = user?.tenant_id || import.meta.env.VITE_DEFAULT_TENANT_ID || "1";
+    const [selectedTenantId, setSelectedTenantId] = useState<string>(String(tenantId));
 
     // Fetch Connection Status
     useEffect(() => {
         const loadData = async () => {
             try {
-                const detailsData = await fetchApi(`/admin/tenants/${import.meta.env.VITE_DEFAULT_TENANT_ID || 1}/details`);
+                const detailsData = await fetchApi(`/admin/tenants/${tenantId}/details`);
                 setConnections(detailsData?.connections);
 
                 // Also fetch all tenants for the dropdown
@@ -44,10 +47,10 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
         const height = 700;
         const left = window.screen.width / 2 - width / 2;
         const top = window.screen.height / 2 - height / 2;
-        const tenantId = import.meta.env.VITE_DEFAULT_TENANT_ID || 1;
+        const tid = user?.tenant_id || import.meta.env.VITE_DEFAULT_TENANT_ID || 1;
         let serviceUrl = import.meta.env.VITE_TIENDANUBE_SERVICE_URL || "https://multiagents-tiendanube-service.yn8wow.easypanel.host";
         serviceUrl = serviceUrl.replace(/\/$/, '');
-        const url = `${serviceUrl}/auth/login?tenant_id=${tenantId}`;
+        const url = `${serviceUrl}/auth/login?tenant_id=${tid}`;
         window.open(url, "TiendaNubeLogin", `width=${width},height=${height},top=${top},left=${left}`);
 
         const handleMessage = (event: MessageEvent) => {
