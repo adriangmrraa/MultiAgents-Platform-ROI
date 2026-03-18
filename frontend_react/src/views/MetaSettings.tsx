@@ -29,12 +29,9 @@ export const MetaSettings: React.FC = () => {
                 throw new Error("El SDK de Facebook no pudo cargarse (bloqueado por navegador/red).");
             }
 
-            // WhatsApp Embedded Signup: use token flow (not code flow)
-            // Code flow has redirect_uri issues with config_id popups.
-            // Token flow returns accessToken directly — no server-side exchange needed.
             const loginParams: any = {
                 config_id: import.meta.env.VITE_META_CONFIG_ID,
-                response_type: 'token',
+                response_type: 'code',
                 override_default_response_type: true,
             };
 
@@ -47,19 +44,19 @@ export const MetaSettings: React.FC = () => {
 
             (window as any).FB.login((response: any) => {
                 console.log('FB.login response status:', response.status);
-                console.log('FB.login authResponse keys:', response.authResponse ? Object.keys(response.authResponse) : 'none');
+                console.log('FB.login authResponse:', JSON.stringify(response.authResponse || {}));
 
+                const code = response.authResponse?.code || response.code;
                 const accessToken = response.authResponse?.accessToken;
-                const code = response.authResponse?.code;
 
                 if (accessToken) {
-                    console.log('Access token received directly');
+                    console.log('Direct access token received');
                     connectWithBackend(accessToken, 'token');
                 } else if (code) {
-                    console.log('Code received, will exchange server-side');
+                    console.log('Code received for exchange');
                     connectWithBackend(code, 'code');
                 } else {
-                    console.log('No auth data received', response);
+                    console.log('No auth data', response);
                     setStatus('idle');
                     if (response.status !== 'connected' && response.status !== 'unknown') {
                         setErrorMsg("No se recibió autorización de Meta.");

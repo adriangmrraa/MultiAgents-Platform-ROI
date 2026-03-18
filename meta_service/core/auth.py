@@ -29,15 +29,20 @@ class MetaAuthService:
         parsed = urlparse(redirect_uri)
         origin = f"{parsed.scheme}://{parsed.netloc}"
 
-        uris_to_try = [
-            # 1. Exact as received from frontend
+        # If META_REDIRECT_URI env var is set, use it as the highest priority
+        # This must match EXACTLY what's in the Login Configuration on Meta Dashboard
+        forced_uri = os.getenv("META_REDIRECT_URI")
+
+        uris_to_try = []
+        if forced_uri:
+            uris_to_try.append(forced_uri)
+        # Then try what frontend sent + variants
+        uris_to_try.extend([
             redirect_uri,
-            # 2. With/without trailing slash
             redirect_uri.rstrip("/") if redirect_uri.endswith("/") else redirect_uri + "/",
-            # 3. Origin only
             origin,
             origin + "/",
-        ]
+        ])
         # Deduplicate while preserving order
         uris_to_try = list(dict.fromkeys(uris_to_try))
 
