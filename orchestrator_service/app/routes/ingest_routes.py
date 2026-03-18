@@ -30,10 +30,12 @@ class SimpleEvent(BaseModel):
 async def verify_internal_secret(x_internal_secret: str = Header(None)):
     """
     Validates that the request comes from a trusted microservice.
+    Accepts both INTERNAL_API_TOKEN and INTERNAL_SECRET_KEY for compatibility.
     """
     trusted_secret = settings.INTERNAL_API_TOKEN.get_secret_value()
+    alt_secret = os.getenv("INTERNAL_SECRET_KEY", "")
 
-    if x_internal_secret != trusted_secret:
+    if x_internal_secret not in (trusted_secret, alt_secret):
          logger.warning("ingest_unauthorized", provided=x_internal_secret[:4] if x_internal_secret else "None")
          raise HTTPException(status_code=403, detail="Unauthorized Internal Access")
 
