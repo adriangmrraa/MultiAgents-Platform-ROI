@@ -149,14 +149,12 @@ class CreativeStudio:
         # 2. Build brand context
         brand_context = self._build_brand_context(brand_dna)
 
-        # 3. Generate campaign copy for all channels
-        campaign_assets = []
+        # 3. Generate campaign assets for all channels in parallel
+        import asyncio
 
-        for channel_key in channels:
-            channel = CAMPAIGN_CHANNELS.get(channel_key)
-            if not channel:
-                continue
+        valid_channels = [(k, CAMPAIGN_CHANNELS[k]) for k in channels if k in CAMPAIGN_CHANNELS]
 
+        async def _generate_channel(channel_key: str, channel: Dict) -> Dict:
             # Generate text variations
             texts = await self._generate_campaign_texts(
                 product_name=product_name,
@@ -168,7 +166,7 @@ class CreativeStudio:
                 num_variations=num_variations
             )
 
-            # Generate image for the channel
+            # Generate ONE image for the campaign (reuse across channels to save cost/time)
             image_url = None
             if product_image_url:
                 img_prompt = f"Marketing {channel['name']} creative for {product_name}. {product_desc}. {brand_context}. {campaign_goal}. Professional advertising photography, commercial quality, 8k, no text on image"
@@ -176,13 +174,25 @@ class CreativeStudio:
                     img_prompt = f"{custom_prompt}. {img_prompt}"
                 image_url = await generate_image(img_prompt, model_tier=model_tier, google_api_key=self.google_api_key)
 
-            campaign_assets.append({
+            return {
                 "channel": channel_key,
                 "channel_name": channel["name"],
                 "aspect_ratio": channel["aspect"],
                 "texts": texts,
                 "image_url": image_url
-            })
+            }
+
+        # Run all channels in parallel
+        campaign_assets = await asyncio.gather(
+            *[_generate_channel(k, ch) for k, ch in valid_channels],
+            return_exceptions=True
+        )
+
+        # Filter out exceptions
+        campaign_assets = [
+            a for a in campaign_assets
+            if not isinstance(a, Exception)
+        ]
 
         return {
             "campaign_goal": campaign_goal,
@@ -320,22 +330,54 @@ TEXTO EDITADO:"""
             return product_name
 
     def _build_brand_context(self, brand_dna: Dict = None) -> str:
-        """Build brand context string from DNA."""
+        """Build brand context string from DNA for image generation prompts."""
         if not brand_dna:
             return ""
 
         parts = []
-        colors = brand_dna.get("colors", {}).get("primary", [])
-        if colors:
-            parts.append(f"Brand colors: {', '.join(colors[:3])}")
 
-        style = brand_dna.get("visual_style", {}).get("photography_style", "")
-        if style:
-            parts.append(f"Visual style: {style}")
+        # Colors
+        colors = brand_dna.get("colors", {})
+        primary = colors.get("primary", [])
+        secondary = colors.get("secondary", [])
+        if primary:
+            parts.append(f"Brand primary colors: {', '.join(primary[:4])}")
+        if secondary:
+            parts.append(f"Secondary colors: {', '.join(secondary[:3])}")
 
+        # Typography style
+        typography = brand_dna.get("typography", {})
+        if isinstance(typography, dict):
+            font_style = typography.get("style") or typography.get("primary", "")
+            if font_style:
+                parts.append(f"Typography style: {font_style}")
+
+        # Visual style
+        visual = brand_dna.get("visual_style", {})
+        if isinstance(visual, dict):
+            photo_style = visual.get("photography_style", "")
+            aesthetic = visual.get("aesthetic", "")
+            mood = visual.get("mood", "")
+            if photo_style:
+                parts.append(f"Photography style: {photo_style}")
+            if aesthetic:
+                parts.append(f"Visual aesthetic: {aesthetic}")
+            if mood:
+                parts.append(f"Mood: {mood}")
+
+        # Brand personality & tone
         personality = brand_dna.get("brand_personality", "")
         if personality:
             parts.append(f"Brand personality: {personality}")
+
+        tone = brand_dna.get("tone_of_voice", "") or brand_dna.get("tone", "")
+        if tone:
+            parts.append(f"Tone: {tone}")
+
+        # Target audience
+        audience = brand_dna.get("target_audience", "")
+        if audience:
+            parts.append(f"Target audience: {audience}")
 
         return ". ".join(parts)
 
