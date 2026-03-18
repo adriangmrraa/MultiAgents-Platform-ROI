@@ -319,10 +319,19 @@ async def orders_summary(req: OrdersSummaryRequest, token: str = Depends(verify_
             customer = o.get("customer", {}) or {}
             products = []
             for item in (o.get("products") or []):
+                # Image: TN returns image.src on order products
+                img = item.get("image") or {}
+                image_url = img.get("src", "") if isinstance(img, dict) else ""
+                # Fallback: some TN versions use thumbnail
+                if not image_url:
+                    image_url = item.get("thumbnail", "")
                 products.append({
                     "name": item.get("name", ""),
                     "quantity": item.get("quantity", 1),
                     "price": item.get("price", "0"),
+                    "image": image_url,
+                    "variant": item.get("variant_values", []),
+                    "product_id": item.get("product_id", ""),
                 })
 
             order_list.append({
@@ -375,6 +384,19 @@ async def orders_recent(req: OrdersRecentRequest, token: str = Depends(verify_to
             recent = []
             for o in orders_data[:req.limit]:
                 customer = o.get("customer", {}) or {}
+                products = []
+                for item in (o.get("products") or []):
+                    img = item.get("image") or {}
+                    image_url = img.get("src", "") if isinstance(img, dict) else ""
+                    if not image_url:
+                        image_url = item.get("thumbnail", "")
+                    products.append({
+                        "name": item.get("name", ""),
+                        "quantity": item.get("quantity", 1),
+                        "price": item.get("price", "0"),
+                        "image": image_url,
+                        "variant": item.get("variant_values", []),
+                    })
                 recent.append({
                     "id": o.get("id"),
                     "number": o.get("number"),
@@ -387,6 +409,7 @@ async def orders_recent(req: OrdersRecentRequest, token: str = Depends(verify_to
                     "customer_phone": customer.get("phone", ""),
                     "customer_email": customer.get("email", ""),
                     "landing_url": o.get("landing_url", ""),
+                    "products": products,
                 })
             return ToolResponse(ok=True, data=recent)
     except Exception as e:

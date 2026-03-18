@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
-import { ShoppingBag, TrendingUp, Clock, CheckCircle, XCircle, AlertCircle, ExternalLink } from 'lucide-react';
+import { ShoppingBag, TrendingUp, Clock, CheckCircle, XCircle, AlertCircle, ExternalLink, Package } from 'lucide-react';
+
+interface ProductItem {
+    name: string;
+    quantity: number;
+    price: string;
+    image: string;
+    variant?: string[];
+}
 
 interface OrderItem {
     id: string;
@@ -11,6 +19,7 @@ interface OrderItem {
     status: string;
     payment_status: string;
     customer_name: string;
+    products?: ProductItem[];
 }
 
 interface SalesData {
@@ -147,7 +156,7 @@ export const SalesDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* Recent Orders */}
+            {/* Recent Orders with Products */}
             {data.recent_orders.length > 0 && (
                 <div className="bg-white/5 backdrop-blur-xl p-6 rounded-[20px] border border-white/10">
                     <div className="flex items-center justify-between mb-4">
@@ -156,17 +165,47 @@ export const SalesDashboard: React.FC = () => {
                             Ver todas <ExternalLink size={10} />
                         </a>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                         {data.recent_orders.map((order, i) => (
-                            <div key={i} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-                                <div className="flex items-center gap-3">
-                                    <span className="text-sm font-mono text-gray-400">#{order.number}</span>
-                                    <span className="text-sm text-white font-medium">{order.customer_name || 'Sin nombre'}</span>
+                            <div key={i} className="py-3 border-b border-white/5 last:border-0">
+                                {/* Order header */}
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-sm font-mono text-gray-400">#{order.number}</span>
+                                        <span className="text-sm text-white font-medium">{order.customer_name || 'Sin nombre'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <StatusBadge status={order.payment_status} />
+                                        <span className="text-sm font-bold text-white">${parseFloat(order.total).toLocaleString()}</span>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <StatusBadge status={order.payment_status} />
-                                    <span className="text-sm font-bold text-white">${parseFloat(order.total).toLocaleString()}</span>
-                                </div>
+                                {/* Products */}
+                                {order.products && order.products.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                        {order.products.map((prod, j) => (
+                                            <div key={j} className="flex items-center gap-2 bg-white/5 rounded-lg px-2 py-1.5 border border-white/5">
+                                                {prod.image ? (
+                                                    <img
+                                                        src={prod.image}
+                                                        alt={prod.name}
+                                                        className="w-8 h-8 rounded object-cover flex-shrink-0"
+                                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                    />
+                                                ) : (
+                                                    <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center flex-shrink-0">
+                                                        <Package size={14} className="text-gray-500" />
+                                                    </div>
+                                                )}
+                                                <div className="min-w-0">
+                                                    <div className="text-xs text-white font-medium truncate max-w-[180px]">{prod.name}</div>
+                                                    <div className="text-[10px] text-gray-500">
+                                                        {prod.quantity > 1 && `${prod.quantity}x `}${parseFloat(prod.price).toLocaleString()}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

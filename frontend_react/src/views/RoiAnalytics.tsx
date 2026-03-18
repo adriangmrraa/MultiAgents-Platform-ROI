@@ -1,9 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../hooks/useApi';
-import { BadgeDollarSign, Phone, Instagram, Facebook, MessageCircle, Filter, ArrowLeft } from 'lucide-react';
+import { BadgeDollarSign, Phone, Instagram, Facebook, MessageCircle, Filter, ArrowLeft, Package } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { SalesDashboard } from '../components/SalesDashboard';
 import { RoiReal } from '../components/RoiReal';
+
+interface ProductItem {
+    name: string;
+    quantity: number;
+    price: string;
+    image: string;
+    variant?: string[];
+}
 
 interface AttributedOrder {
     id: string;
@@ -21,6 +29,7 @@ interface AttributedOrder {
     conversation_id: string | null;
     conversation_preview: string | null;
     attributed_at: string | null;
+    products?: ProductItem[];
 }
 
 interface RoiData {
@@ -166,42 +175,25 @@ export const RoiAnalytics: React.FC = () => {
                 <span className="text-xs text-gray-500">{totalOrders} ordenes atribuidas</span>
             </div>
 
-            {/* Orders Table */}
+            {/* Attributed Orders */}
             <div className="bg-white/5 rounded-[20px] border border-white/10 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-b border-white/10">
-                                <th className="text-left text-[10px] font-black text-gray-500 uppercase tracking-widest px-4 py-3">Orden</th>
-                                <th className="text-left text-[10px] font-black text-gray-500 uppercase tracking-widest px-4 py-3">Cliente</th>
-                                <th className="text-left text-[10px] font-black text-gray-500 uppercase tracking-widest px-4 py-3">Monto</th>
-                                <th className="text-left text-[10px] font-black text-gray-500 uppercase tracking-widest px-4 py-3">Estado</th>
-                                <th className="text-left text-[10px] font-black text-gray-500 uppercase tracking-widest px-4 py-3">Canal</th>
-                                <th className="text-left text-[10px] font-black text-gray-500 uppercase tracking-widest px-4 py-3">Metodo</th>
-                                <th className="text-left text-[10px] font-black text-gray-500 uppercase tracking-widest px-4 py-3">Confianza</th>
-                                <th className="text-left text-[10px] font-black text-gray-500 uppercase tracking-widest px-4 py-3">Fecha</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan={8} className="text-center py-8 text-gray-500 text-sm">Cargando...</td></tr>
-                            ) : orders.length === 0 ? (
-                                <tr><td colSpan={8} className="text-center py-8 text-gray-500 text-sm">Sin ordenes atribuidas en este periodo</td></tr>
-                            ) : orders.map(order => (
-                                <tr key={order.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm font-mono text-gray-300">#{order.order_number}</span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm text-white">{order.customer_name || '-'}</span>
-                                        {order.conversation_preview && (
-                                            <div className="text-[10px] text-gray-600 truncate max-w-[200px]">{order.conversation_preview}</div>
-                                        )}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm font-bold text-white">${order.order_total?.toLocaleString()}</span>
-                                    </td>
-                                    <td className="px-4 py-3">
+                <div className="px-4 py-3 border-b border-white/10">
+                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Ordenes Atribuidas al Agente IA</span>
+                </div>
+
+                {loading ? (
+                    <div className="text-center py-8 text-gray-500 text-sm">Cargando...</div>
+                ) : orders.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 text-sm">Sin ordenes atribuidas en este periodo</div>
+                ) : (
+                    <div className="divide-y divide-white/5">
+                        {orders.map(order => (
+                            <div key={order.id} className="p-4 hover:bg-white/5 transition-colors">
+                                {/* Order header row */}
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-sm font-mono text-gray-400">#{order.order_number}</span>
+                                        <span className="text-sm text-white font-medium">{order.customer_name || '-'}</span>
                                         <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
                                             order.payment_status === 'paid' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' :
                                             order.payment_status === 'pending' ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' :
@@ -209,31 +201,65 @@ export const RoiAnalytics: React.FC = () => {
                                         }`}>
                                             {order.payment_status}
                                         </span>
-                                    </td>
-                                    <td className="px-4 py-3">
+                                    </div>
+                                    <div className="flex items-center gap-4">
                                         <div className="flex items-center gap-1.5">
                                             {channelIcons[order.channel_source] || <MessageCircle size={12} className="text-gray-400" />}
                                             <span className="text-xs text-gray-300 capitalize">{order.channel_source}</span>
                                         </div>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-xs text-gray-400">{methodLabels[order.attribution_method] || order.attribution_method}</span>
-                                    </td>
-                                    <td className="px-4 py-3">
+                                        <span className="text-xs text-gray-500">{methodLabels[order.attribution_method] || order.attribution_method}</span>
                                         <span className={`text-xs font-bold ${confidenceColor(order.attribution_confidence)}`}>
                                             {Math.round(order.attribution_confidence * 100)}%
                                         </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-xs text-gray-500">
-                                            {order.order_created_at ? new Date(order.order_created_at).toLocaleDateString() : '-'}
+                                        <span className="text-sm font-bold text-white">${order.order_total?.toLocaleString()}</span>
+                                        <span className="text-xs text-gray-600">
+                                            {order.order_created_at ? new Date(order.order_created_at).toLocaleDateString() : ''}
                                         </span>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                                    </div>
+                                </div>
+
+                                {/* Products row */}
+                                {order.products && order.products.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                        {order.products.map((prod, j) => (
+                                            <div key={j} className="flex items-center gap-2.5 bg-white/5 rounded-lg px-2.5 py-2 border border-white/5">
+                                                {prod.image ? (
+                                                    <img
+                                                        src={prod.image}
+                                                        alt={prod.name}
+                                                        className="w-10 h-10 rounded-md object-cover flex-shrink-0"
+                                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                    />
+                                                ) : (
+                                                    <div className="w-10 h-10 rounded-md bg-white/10 flex items-center justify-center flex-shrink-0">
+                                                        <Package size={16} className="text-gray-500" />
+                                                    </div>
+                                                )}
+                                                <div className="min-w-0">
+                                                    <div className="text-xs text-white font-medium truncate max-w-[220px]">{prod.name}</div>
+                                                    <div className="text-[10px] text-gray-500">
+                                                        {prod.quantity > 1 && <span>{prod.quantity}x </span>}
+                                                        ${parseFloat(prod.price).toLocaleString()}
+                                                        {prod.variant && prod.variant.length > 0 && (
+                                                            <span className="ml-1 text-gray-600">| {prod.variant.join(', ')}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Conversation preview */}
+                                {order.conversation_preview && (
+                                    <div className="mt-2 text-[10px] text-gray-600 truncate max-w-[500px] italic">
+                                        Conversacion: "{order.conversation_preview}"
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {/* Pagination */}
                 {totalPages > 1 && (

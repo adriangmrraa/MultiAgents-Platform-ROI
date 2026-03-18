@@ -4167,6 +4167,15 @@ async def get_attributed_orders(
             except Exception:
                 pass
 
+        # Extract products from attribution_details JSONB
+        details = r["attribution_details"] or {}
+        if isinstance(details, str):
+            try:
+                details = json.loads(details)
+            except Exception:
+                details = {}
+        products = details.get("products", [])
+
         orders.append({
             "id": str(r["id"]),
             "order_id": r["order_id"],
@@ -4183,6 +4192,7 @@ async def get_attributed_orders(
             "conversation_id": str(r["conversation_id"]) if r["conversation_id"] else None,
             "conversation_preview": conv_preview,
             "attributed_at": r["attributed_at"].isoformat() if r["attributed_at"] else None,
+            "products": products,
         })
 
     return {

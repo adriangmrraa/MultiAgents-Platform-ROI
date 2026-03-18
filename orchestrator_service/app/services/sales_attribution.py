@@ -298,6 +298,12 @@ class SalesAttributionService:
         conv_id = attribution.get("conversation_id")
         attributed_at = datetime.now(timezone.utc) if conv_id else None
 
+        # Store products in attribution_details for display
+        products = order.get("products", [])
+        details = attribution.get("attribution_details", {})
+        if products:
+            details["products"] = products[:10]  # Cap at 10 products
+
         try:
             await db.pool.execute("""
                 INSERT INTO attributed_sales (
@@ -329,7 +335,7 @@ class SalesAttributionService:
                 attribution.get("channel_source"),
                 attribution.get("attribution_method"),
                 attribution.get("attribution_confidence", 0.0),
-                json.dumps(attribution.get("attribution_details", {})),
+                json.dumps(details),
                 attributed_at,
             )
             if conv_id:
