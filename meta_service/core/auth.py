@@ -30,13 +30,11 @@ class MetaAuthService:
         origin = f"{parsed.scheme}://{parsed.netloc}"
 
         uris_to_try = [
-            # 1. The standard SDK redirect (what FB.login popup uses internally)
-            "https://www.facebook.com/connect/login_success.html",
-            # 2. Exact as received from frontend
+            # 1. Exact as received from frontend
             redirect_uri,
-            # 3. With/without trailing slash
+            # 2. With/without trailing slash
             redirect_uri.rstrip("/") if redirect_uri.endswith("/") else redirect_uri + "/",
-            # 4. Origin only
+            # 3. Origin only
             origin,
             origin + "/",
         ]

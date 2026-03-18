@@ -29,37 +29,44 @@ export const MetaSettings: React.FC = () => {
                 throw new Error("El SDK de Facebook no pudo cargarse (bloqueado por navegador/red).");
             }
 
+            // WhatsApp Embedded Signup: use token flow (not code flow)
+            // Code flow has redirect_uri issues with config_id popups.
+            // Token flow returns accessToken directly — no server-side exchange needed.
+            const loginParams: any = {
+                config_id: import.meta.env.VITE_META_CONFIG_ID,
+                response_type: 'token',
+                override_default_response_type: true,
+            };
+
+            if (import.meta.env.VITE_META_EMBEDDED_SIGNUP === 'true') {
+                loginParams.extras = {
+                    feature: 'whatsapp_embedded_signup',
+                    setup: {}
+                };
+            }
+
             (window as any).FB.login((response: any) => {
-                console.log('FB.login full response:', JSON.stringify(response));
+                console.log('FB.login response status:', response.status);
+                console.log('FB.login authResponse keys:', response.authResponse ? Object.keys(response.authResponse) : 'none');
 
-                // Strategy 1: Code flow (FB Login for Business)
-                const code = response.authResponse?.code || response.code;
-                // Strategy 2: Direct token flow (some embedded signup configs)
                 const accessToken = response.authResponse?.accessToken;
+                const code = response.authResponse?.code;
 
-                if (code) {
-                    console.log('FB Code Received');
-                    connectWithBackend(code, 'code');
-                } else if (accessToken) {
-                    console.log('FB Access Token Received directly');
+                if (accessToken) {
+                    console.log('Access token received directly');
                     connectWithBackend(accessToken, 'token');
+                } else if (code) {
+                    console.log('Code received, will exchange server-side');
+                    connectWithBackend(code, 'code');
                 } else {
-                    console.log('User cancelled or no auth data.', response);
+                    console.log('No auth data received', response);
                     setStatus('idle');
                     if (response.status !== 'connected' && response.status !== 'unknown') {
                         setErrorMsg("No se recibió autorización de Meta.");
                         setStatus('error');
                     }
                 }
-            }, {
-                config_id: import.meta.env.VITE_META_CONFIG_ID,
-                response_type: 'code',
-                override_default_response_type: true,
-                extras: import.meta.env.VITE_META_EMBEDDED_SIGNUP === 'true' ? {
-                    feature: 'whatsapp_embedded_signup',
-                    setup: {}
-                } : undefined
-            });
+            }, loginParams);
         } catch (error) {
             console.error("Login Error", error);
             setStatus('error');
