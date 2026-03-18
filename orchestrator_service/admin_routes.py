@@ -1089,12 +1089,20 @@ async def internal_credential_sync(
 
             # 2b. Store individual page tokens (for FB Messenger + IG)
             assets = creds.get("assets", {})
+            first_page_token_stored = False
             for page in assets.get("pages", []):
                 if page.get("access_token"):
                     await save_credential(
                         f"META_PAGE_TOKEN_{page['id']}", page["access_token"],
                         "meta", "META_PAGE_ACCESS_TOKEN"
                     )
+                    # Store first page token as general meta_page_token for relay lookup
+                    if not first_page_token_stored:
+                        await save_credential(
+                            "meta_page_token", page["access_token"],
+                            "meta", "META_PAGE_ACCESS_TOKEN"
+                        )
+                        first_page_token_stored = True
 
             # 2c. Store IG tokens (use linked page token)
             for ig in assets.get("instagram", []):
@@ -2416,7 +2424,8 @@ async def list_chats(
 @router.get("/chats/summary")
 @safe_db_call
 async def get_chats_summary(
-    channel: Optional[str] = None, 
+    channel: Optional[str] = None,
+    provider: Optional[str] = None,
     human_override: Optional[bool] = None,
     limit: int = 20,
     offset: int = 0,
@@ -2462,7 +2471,7 @@ async def get_chats_summary(
     base_query = """
         SELECT c.id, c.external_user_id, c.tenant_id, c.channel, 
                c.provider, c.platform_origin, c.source_identifier, c.customer_id,
-               COALESCE(c.meta->>'sender_name', c.external_user_id) as name,
+               COALESCE(c.display_name, c.meta->>'sender_name', c.external_user_id) as name,
                c.meta->>'sender_avatar' as avatar_url,
                c.meta, c.updated_at, c.status, 
                CASE WHEN c.human_override_until > NOW() THEN true ELSE false END as is_locked, 
@@ -2482,7 +2491,12 @@ async def get_chats_summary(
              base_query += f" AND c.channel = ${i}"
              p.append(channel)
              i += 1
-             
+
+    if provider and provider != 'all':
+        base_query += f" AND c.provider = ${i}"
+        p.append(provider)
+        i += 1
+
     base_query += f" ORDER BY c.updated_at DESC LIMIT ${i} OFFSET ${i+1}"
     p.extend([limit, offset])
     
@@ -2498,14 +2512,18 @@ async def get_chats_summary(
         "id": str(r["id"]),
         "phone": r["external_user_id"],
         "tenant_id": r["tenant_id"],
-        "channel": r["channel"], # channel_source
+        "channel": r["channel"],
+        "provider": r["provider"],
+        "platform_origin": r["platform_origin"],
+        "source_identifier": r["source_identifier"],
         "name": r["name"],
         "last_message": r["last_message"] or "",
         "avatar_url": r["avatar_url"],
         "timestamp": r["updated_at"].isoformat() if r["updated_at"] else "",
         "status": r["status"],
         "is_locked": r["is_locked"],
-        "human_override_until": r["human_override_until"].isoformat() if r["human_override_until"] else None
+        "human_override_until": r["human_override_until"].isoformat() if r["human_override_until"] else None,
+        "meta": json.loads(r["meta"]) if r["meta"] and isinstance(r["meta"], str) else (r["meta"] if r["meta"] else {})
     } for r in rows]
 
 @router.get("/chats/{conversation_id}/messages")
@@ -3009,11 +3027,16 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
         cw_acc = await db.pool.fetchval("SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'CHATWOOT_ACCOUNT_ID'", tenant_id)
         logger.info(f"🔄 RELAY: Account ID fallback | acc={cw_acc} | tenant={tenant_id}")
     
+    # Resolve provider from conversation if available
+    conv_provider = conv_data['provider'] if conv_data and conv_data['provider'] else None
+
     provider = 'ycloud'
-    if cw_id:
+    if conv_provider == 'meta_direct':
+        provider = 'meta_direct'
+    elif cw_id:
         provider = 'chatwoot'
     elif channel in ['instagram', 'facebook']:
-        has_meta = await db.pool.fetchval("SELECT 1 FROM credentials WHERE tenant_id = $1 AND name = 'meta_page_token'", tenant_id)
+        has_meta = await db.pool.fetchval("SELECT 1 FROM credentials WHERE tenant_id = $1 AND name LIKE 'META_PAGE_TOKEN_%'", tenant_id)
         provider = 'meta_direct' if has_meta else 'chatwoot'
 
     # 2. Call Relay Service
@@ -3084,7 +3107,7 @@ async def unified_message_delivery(tenant_id: int, conv_id: str, phone: str, tex
     return {"status": "sent"}
 
 @router.post("/whatsapp/send", dependencies=[Depends(verify_admin_token)])
-async def admin_send_message(request: Request):
+async def admin_send_message(request: Request, background_tasks: BackgroundTasks):
     """
     Endpoint used by Frontend Chats.tsx to send manual messages.
     """

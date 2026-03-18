@@ -42,6 +42,7 @@ interface Message {
 export const Chats: React.FC = () => {
     const { fetchApi, loading } = useApi();
     const [selectedChannel, setSelectedChannel] = useState<string>('all');
+    const [selectedProvider, setSelectedProvider] = useState<string>('all');
     const [chats, setChats] = useState<Chat[]>([]);
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
     const selectedChat = chats.find(c => c.id === selectedChatId);
@@ -61,7 +62,7 @@ export const Chats: React.FC = () => {
     // Icon & Style Helper
     const getChannelStyle = (chat: Chat | any) => {
         const c = chat.channel?.toLowerCase() || '';
-        const provider = chat.provider?.toLowerCase() || 'ycloud';
+        const provider = chat.provider?.toLowerCase() || '';
 
         if (provider === 'chatwoot') {
             return {
@@ -69,7 +70,8 @@ export const Chats: React.FC = () => {
                 bg: 'bg-cyan-500/10',
                 border: 'border-cyan-500/30',
                 shadow: 'shadow-cyan-500/20',
-                icon: <MessageSquare size={18} />
+                icon: <MessageSquare size={18} />,
+                label: 'Chatwoot'
             };
         }
 
@@ -78,14 +80,16 @@ export const Chats: React.FC = () => {
             bg: 'bg-[#E1306C]/10',
             border: 'border-[#E1306C]/30',
             shadow: 'shadow-[#E1306C]/20',
-            icon: <Instagram size={18} />
+            icon: <Instagram size={18} />,
+            label: provider === 'meta_direct' ? 'Meta' : 'Instagram'
         };
         if (c.includes('facebook')) return {
             color: 'text-[#1877F2]',
             bg: 'bg-[#1877F2]/10',
             border: 'border-[#1877F2]/30',
             shadow: 'shadow-[#1877F2]/20',
-            icon: <Facebook size={18} />
+            icon: <Facebook size={18} />,
+            label: provider === 'meta_direct' ? 'Meta' : 'Facebook'
         };
 
         // Default WhatsApp / YCloud
@@ -94,7 +98,8 @@ export const Chats: React.FC = () => {
             bg: 'bg-[#25D366]/10',
             border: 'border-[#25D366]/30',
             shadow: 'shadow-[#25D366]/20',
-            icon: <MessageCircle size={18} />
+            icon: <MessageCircle size={18} />,
+            label: provider === 'meta_direct' ? 'Meta WA' : 'WhatsApp'
         };
     };
 
@@ -160,6 +165,10 @@ export const Chats: React.FC = () => {
                 url += `&channel=${selectedChannel}`;
             }
 
+            if (selectedProvider !== 'all') {
+                url += `&provider=${selectedProvider}`;
+            }
+
             const data = await fetchApi(url);
 
             if (Array.isArray(data)) {
@@ -177,6 +186,7 @@ export const Chats: React.FC = () => {
                     channel: d.channel,
                     provider: d.provider,
                     platform_origin: d.platform_origin,
+                    source_identifier: d.source_identifier,
                     meta: d.meta
                 }));
 
@@ -234,7 +244,7 @@ export const Chats: React.FC = () => {
         }, 10000);
 
         return () => clearInterval(intervalId);
-    }, [selectedChannel, refreshTrigger]); // Removed selectedTenant dep
+    }, [selectedChannel, selectedProvider, refreshTrigger]); // Removed selectedTenant dep
 
     // Cleanup interval if it existed (we removed it for infinite scroll)
 
@@ -395,7 +405,17 @@ export const Chats: React.FC = () => {
                                 <option value="whatsapp" className="bg-black text-white">WhatsApp</option>
                                 <option value="instagram" className="bg-black text-white">Instagram</option>
                                 <option value="facebook" className="bg-black text-white">Facebook</option>
-                                <option value="human_override" className="bg-black text-white">⚠️ Intervención</option>
+                                <option value="human_override" className="bg-black text-white">Intervención</option>
+                            </select>
+                            <select
+                                className="bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none flex-1"
+                                value={selectedProvider}
+                                onChange={(e) => setSelectedProvider(e.target.value)}
+                            >
+                                <option value="all" className="bg-black text-white">Providers</option>
+                                <option value="meta_direct" className="bg-black text-white">Meta Direct</option>
+                                <option value="chatwoot" className="bg-black text-white">Chatwoot</option>
+                                <option value="ycloud" className="bg-black text-white">YCloud</option>
                             </select>
                         </div>
                         <div className="flex justify-between items-center">
@@ -446,14 +466,28 @@ export const Chats: React.FC = () => {
                                             <h4 className={`font-bold text-[15px] truncate leading-tight ${selectedChatId === chat.id ? 'text-white' : 'text-gray-200'} flex-1`}>
                                                 {chat.name || identifier}
                                             </h4>
-                                            <span className="text-[10px] text-gray-500 font-mono shrink-0 ml-2">
-                                                {chat.timestamp ? new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                            </span>
+                                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                                {chat.provider && chat.provider !== 'ycloud' && (
+                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-mono uppercase tracking-wider ${
+                                                        chat.provider === 'meta_direct' ? 'text-blue-400 border-blue-500/30 bg-blue-500/10' :
+                                                        chat.provider === 'chatwoot' ? 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' :
+                                                        'text-gray-400 border-gray-500/30 bg-gray-500/10'
+                                                    }`}>
+                                                        {chat.provider === 'meta_direct' ? 'META' : chat.provider?.toUpperCase()}
+                                                    </span>
+                                                )}
+                                                <span className="text-[10px] text-gray-500 font-mono">
+                                                    {chat.timestamp ? new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                </span>
+                                            </div>
                                         </div>
 
                                         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
                                             {/* Subtext: Handle or Last Message */}
                                             <p className={`text-xs truncate ${selectedChatId === chat.id ? 'text-gray-300' : 'text-gray-500'} flex items-center gap-1 min-w-0`}>
+                                                {chat.provider === 'meta_direct' && chat.source_identifier && (
+                                                    <span className="font-bold text-blue-400 shrink-0 max-w-[80px] truncate">{chat.source_identifier} •</span>
+                                                )}
                                                 {chat.provider === 'meta_direct' && chat.meta?.username && (
                                                     <span className="font-bold text-blue-400 shrink-0 max-w-[80px] truncate">@{chat.meta.username} •</span>
                                                 )}
@@ -509,7 +543,12 @@ export const Chats: React.FC = () => {
                                         <span className="text-xs text-green-400 flex items-center gap-1">
                                             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
                                             {selectedChat?.channel ? (
-                                                <span className="capitalize">{selectedChat.channel} User</span>
+                                                <span className="capitalize">
+                                                    {selectedChat.channel}
+                                                    {selectedChat.provider === 'meta_direct' ? ' (Meta Direct)' :
+                                                     selectedChat.provider === 'chatwoot' ? ' (Chatwoot)' :
+                                                     selectedChat.provider ? ` (${selectedChat.provider})` : ''}
+                                                </span>
                                             ) : 'Online'}
                                         </span>
                                     </div>

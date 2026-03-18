@@ -1390,6 +1390,7 @@ async def health_check():
 # --- Include Admin Router ---
 app.include_router(admin_router)
 app.include_router(onboarding_router, prefix="/admin/onboarding")
+app.include_router(ingest_router)  # Meta Direct Messaging Ingestion
 
 # Metrics
 SERVICE_NAME = "orchestrator_service"
