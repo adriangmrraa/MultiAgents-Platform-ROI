@@ -393,7 +393,7 @@ async def _create_stripe_checkout(plan, req, current_user, db):
 
 
 async def _create_mp_checkout(plan, req, current_user, db):
-    """Create MercadoPago Checkout Pro preference."""
+    """Create MercadoPago recurring subscription (preapproval) via Checkout API."""
     if not MP_ACCESS_TOKEN:
         raise HTTPException(status_code=503, detail="MercadoPago not configured")
 
@@ -403,51 +403,43 @@ async def _create_mp_checkout(plan, req, current_user, db):
     price = plan["price_ars"]
     if req.billing_period == "yearly":
         price = plan["price_ars_yearly"] or (price * 10)
-    # Fallback: if ARS price is 0 but USD exists, skip (shouldn't happen with seeded plans)
     if not price or price <= 0:
         raise HTTPException(status_code=400, detail="Precio no disponible en ARS para este plan")
 
     period_label = "Anual" if req.billing_period == "yearly" else "Mensual"
     external_ref = f"tenant_{current_user.tenant_id}_{plan['name']}_{req.billing_period}"
+    frequency_type = "years" if req.billing_period == "yearly" else "months"
 
-    # Checkout Pro (preference) — always in ARS for MercadoPago AR
+    # Preapproval = recurring subscription (Checkout API)
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            "https://api.mercadopago.com/checkout/preferences",
+            "https://api.mercadopago.com/preapproval",
             headers={
                 "Authorization": f"Bearer {MP_ACCESS_TOKEN}",
                 "Content-Type": "application/json"
             },
             json={
-                "items": [{
-                    "title": f"Future {plan['display_name']} - {period_label}",
-                    "description": plan["description"] or f"Plan {plan['display_name']}",
-                    "quantity": 1,
-                    "currency_id": "ARS",
-                    "unit_price": float(price)
-                }],
-                "payer": {
-                    "email": current_user.email
+                "reason": f"Future {plan['display_name']} - {period_label}",
+                "auto_recurring": {
+                    "frequency": 1,
+                    "frequency_type": frequency_type,
+                    "transaction_amount": float(price),
+                    "currency_id": "ARS"
                 },
-                "back_urls": {
-                    "success": f"{FRONTEND_URL}/billing?status=success&provider=mercadopago",
-                    "failure": f"{FRONTEND_URL}/billing?status=failure",
-                    "pending": f"{FRONTEND_URL}/billing?status=pending"
-                },
-                "auto_return": "approved",
+                "payer_email": current_user.email,
+                "back_url": f"{FRONTEND_URL}/billing?status=success&provider=mercadopago",
                 "external_reference": external_ref,
-                "metadata": {
-                    "tenant_id": str(current_user.tenant_id),
-                    "plan_name": plan["name"],
-                    "billing_period": req.billing_period,
-                    "user_email": current_user.email
-                }
+                "status": "pending"
             }
         )
 
         if resp.status_code not in (200, 201):
             logger.error("mp_checkout_error", status=resp.status_code, body=resp.text)
-            error_detail = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+            error_detail = resp.text
+            try:
+                error_detail = resp.json()
+            except Exception:
+                pass
             raise HTTPException(status_code=400, detail=f"MercadoPago error: {error_detail}")
 
         data = resp.json()
@@ -456,13 +448,14 @@ async def _create_mp_checkout(plan, req, current_user, db):
     logger.info("mp_checkout_created",
         tenant_id=current_user.tenant_id,
         plan=plan["name"],
-        preference_id=data.get("id"),
+        preapproval_id=data.get("id"),
         init_point=checkout_url,
-        price=price)
+        price=price,
+        frequency=frequency_type)
 
     return {
         "checkout_url": checkout_url,
-        "preference_id": data.get("id"),
+        "preapproval_id": data.get("id"),
         "provider": "mercadopago"
     }
 
