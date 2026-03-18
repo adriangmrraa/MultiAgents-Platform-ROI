@@ -11,8 +11,8 @@ SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASS = os.getenv("SMTP_PASS")
 
 # Anti-Spoofing: Prioritize specialized env vars, fallback to authenticated user
-SENDER_EMAIL = os.getenv("EMAILS_FROM_EMAIL") or os.getenv("SENDER_EMAIL") or SMTP_USER or "noreply@nexus-platform.com"
-SENDER_NAME = os.getenv("SENDER_NAME", "Nexus Protocol")
+SENDER_EMAIL = os.getenv("EMAILS_FROM_EMAIL") or os.getenv("SENDER_EMAIL") or SMTP_USER or "noreply@future-platform.com"
+SENDER_NAME = os.getenv("SENDER_NAME", "Future Platform")
 
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 if not FRONTEND_URL:
@@ -66,7 +66,7 @@ class EmailService:
                     MAIL_FROM=sender or user,
                     MAIL_PORT=port,
                     MAIL_SERVER=host,
-                    MAIL_FROM_NAME="Nexus Protocol",
+                    MAIL_FROM_NAME="Future Platform",
                     MAIL_STARTTLS=use_starttls,
                     MAIL_SSL_TLS=use_ssl,
                     USE_CREDENTIALS=True,
@@ -88,7 +88,7 @@ class EmailService:
 
         logger.info("smtp_attempt_send", to=to_email, server=dynamic_conf.MAIL_SERVER, port=dynamic_conf.MAIL_PORT, sender=dynamic_conf.MAIL_FROM)
 
-        subject = "Activa tu Fábrica de Negocios - Nexus"
+        subject = "Activa tu cuenta - Future Platform"
         verify_link = f"{FRONTEND_URL}/verify?token={token}"
         
         # PROTOCOL OMEGA: Fallback log for manual verification if SMTP is blocked
@@ -152,22 +152,22 @@ class EmailService:
         <body>
             <div class="container">
                 <div class="header">
-                    PROTOCOL OMEGA
+                    FUTURE PLATFORM
                 </div>
                 <div class="content">
-                    <h2>Identidad Requerida</h2>
-                    <p>Has solicitado acceso a la plataforma Nexus.</p>
-                    <p>Para activar tu entorno soberano, verifica que este canal de comunicación es seguro.</p>
-                    
-                    <a href="{verify_link}" class="btn">INITIALIZE PROTOCOL</a>
-                    
+                    <h2>Verifica tu cuenta</h2>
+                    <p>Gracias por registrarte en Future.</p>
+                    <p>Hace click en el boton para activar tu cuenta y comenzar a usar la plataforma.</p>
+
+                    <a href="{verify_link}" class="btn">ACTIVAR MI CUENTA</a>
+
                     <p style="margin-top: 30px; font-size: 12px; color: #cbd5e1;">
-                        O copia este enlace de seguridad:<br>
+                        O copia este enlace:<br>
                         {verify_link}
                     </p>
                 </div>
                 <div class="footer">
-                    &copy; 2025 MultiAgents Platform. Zero Trust Architecture.
+                    &copy; 2026 Future Platform. Todos los derechos reservados.
                 </div>
             </div>
         </body>
@@ -237,7 +237,7 @@ class EmailService:
                 <a href="{dashboard_url}" class="btn">Ir al Chat</a>
                 
                 <p style="font-size: 12px; color: #6b7280; margin-top: 30px;">
-                    Enviado por Nexus Orchestrator • {tenant_name}
+                    Enviado por Future Platform • {tenant_name}
                 </p>
             </div>
         </body>

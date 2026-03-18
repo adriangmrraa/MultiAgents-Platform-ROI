@@ -92,23 +92,23 @@ async def _send_trial_warning_email(to_email: str, store_name: str, days_left: i
         <html>
         <head>
             <style>
-                body {{ font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 40px; }}
-                .container {{ max-width: 600px; margin: 0 auto; background: #1e293b; border: 1px solid #334155; border-radius: 12px; overflow: hidden; }}
-                .header {{ background: linear-gradient(135deg, #f59e0b, #ef4444); padding: 20px; text-align: center; color: white; font-weight: bold; font-size: 18px; }}
+                body {{ font-family: 'Courier New', monospace; background-color: #0f172a; color: #e2e8f0; margin: 0; padding: 40px; }}
+                .container {{ max-width: 600px; margin: 0 auto; background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
+                .header {{ background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 20px; text-align: center; color: white; font-weight: bold; letter-spacing: 2px; font-size: 16px; }}
                 .content {{ padding: 30px; }}
-                .btn {{ display: inline-block; background: linear-gradient(90deg, #3b82f6, #8b5cf6); color: white !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: bold; margin-top: 20px; }}
-                .days {{ font-size: 48px; font-weight: bold; color: #f59e0b; text-align: center; }}
+                .btn {{ display: inline-block; background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%); color: white !important; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: bold; margin-top: 20px; box-shadow: 0 0 15px rgba(139, 92, 246, 0.5); }}
+                .days {{ font-size: 48px; font-weight: bold; color: #a855f7; text-align: center; }}
                 .feature {{ padding: 10px 0; border-bottom: 1px solid #334155; }}
-                .feature-icon {{ font-size: 20px; margin-right: 8px; }}
                 .plan-box {{ background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin: 8px 0; }}
                 .plan-name {{ font-size: 16px; font-weight: bold; color: #a78bfa; }}
                 .plan-price {{ font-size: 22px; font-weight: bold; color: #f59e0b; }}
                 .limits {{ font-size: 12px; color: #94a3b8; margin-top: 8px; }}
+                .footer {{ margin-top: 30px; font-size: 12px; color: #94a3b8; border-top: 1px solid #334155; padding-top: 20px; text-align: center; }}
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="header">Te quedan {days_left} dias gratis en Future</div>
+                <div class="header">FUTURE PLATFORM — {days_left} DIAS RESTANTES</div>
                 <div class="content">
                     <p class="days">{days_left} dias</p>
                     <p style="text-align: center;">Hola! Tu periodo de prueba de <strong>{store_name}</strong> termina en {days_left} dias.</p>
@@ -128,7 +128,7 @@ async def _send_trial_warning_email(to_email: str, store_name: str, days_left: i
                     </div>
 
                     <p style="margin-top: 20px; font-size: 13px; color: #64748b; text-align: center;">
-                        Tu plan gratuito actual incluye: 1 tienda, 1 Instagram, 1 Facebook, 2 WhatsApp, 200 mensajes/mes y 1 agente.
+                        Tu plan gratuito actual incluye: 1 tienda, 1 Instagram, 1 Facebook, 2 WhatsApp, 50 mensajes y 1 agente.
                     </p>
 
                     <hr style="border-color: #334155; margin: 20px 0;">
@@ -154,6 +154,7 @@ async def _send_trial_warning_email(to_email: str, store_name: str, days_left: i
                         Si tenes dudas, responde este email. Estamos para ayudarte.
                     </p>
                 </div>
+                <div class="footer">&copy; 2026 Future Platform. Todos los derechos reservados.</div>
             </div>
         </body>
         </html>
@@ -183,22 +184,23 @@ async def _send_trial_urgent_email(to_email: str, store_name: str):
         <html>
         <head>
             <style>
-                body {{ font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 40px; }}
-                .container {{ max-width: 600px; margin: 0 auto; background: #1e293b; border: 2px solid #ef4444; border-radius: 12px; overflow: hidden; }}
-                .header {{ background: #ef4444; padding: 20px; text-align: center; color: white; font-weight: bold; font-size: 18px; }}
+                body {{ font-family: 'Courier New', monospace; background-color: #0f172a; color: #e2e8f0; margin: 0; padding: 40px; }}
+                .container {{ max-width: 600px; margin: 0 auto; background: rgba(30, 41, 59, 0.7); border: 2px solid #ef4444; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
+                .header {{ background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 20px; text-align: center; color: white; font-weight: bold; letter-spacing: 2px; font-size: 14px; }}
                 .content {{ padding: 30px; }}
-                .btn {{ display: inline-block; background: #ef4444; color: white !important; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: bold; margin-top: 20px; font-size: 16px; }}
+                .btn {{ display: inline-block; background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); color: white !important; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: bold; margin-top: 20px; font-size: 16px; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); }}
                 .lose-item {{ padding: 8px 0; color: #fca5a5; }}
                 .safe-item {{ padding: 8px 0; color: #86efac; }}
-                .plan-box {{ background: #0f172a; border: 2px solid #ef4444; border-radius: 8px; padding: 20px; margin: 16px 0; text-align: center; }}
+                .plan-box {{ background: #0f172a; border: 2px solid #8b5cf6; border-radius: 8px; padding: 20px; margin: 16px 0; text-align: center; }}
                 .plan-name {{ font-size: 18px; font-weight: bold; color: #a78bfa; }}
                 .plan-price {{ font-size: 28px; font-weight: bold; color: #f59e0b; }}
                 .discount {{ background: #059669; color: white; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; display: inline-block; margin-top: 8px; }}
+                .footer {{ margin-top: 30px; font-size: 12px; color: #94a3b8; border-top: 1px solid #334155; padding-top: 20px; text-align: center; }}
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="header">ULTIMO DIA: Tu acceso gratuito a Future vence manana</div>
+                <div class="header">FUTURE PLATFORM — ULTIMO DIA DE PRUEBA</div>
                 <div class="content">
                     <p style="font-size: 18px; text-align: center;">Tu periodo de prueba de <strong>{store_name}</strong> termina <strong>manana</strong>.</p>
 
@@ -232,6 +234,7 @@ async def _send_trial_urgent_email(to_email: str, store_name: str):
                         Tambien disponible: Plan Enterprise ($199/mes) para equipos grandes. Responde este email si necesitas ayuda.
                     </p>
                 </div>
+                <div class="footer">&copy; 2026 Future Platform. Todos los derechos reservados.</div>
             </div>
         </body>
         </html>
@@ -261,23 +264,23 @@ async def _send_trial_expired_email(to_email: str, store_name: str):
         <html>
         <head>
             <style>
-                body {{ font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 40px; }}
-                .container {{ max-width: 600px; margin: 0 auto; background: #1e293b; border: 2px solid #6366f1; border-radius: 12px; overflow: hidden; }}
-                .header {{ background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 24px; text-align: center; color: white; font-weight: bold; font-size: 18px; }}
+                body {{ font-family: 'Courier New', monospace; background-color: #0f172a; color: #e2e8f0; margin: 0; padding: 40px; }}
+                .container {{ max-width: 600px; margin: 0 auto; background: rgba(30, 41, 59, 0.7); border: 2px solid #6366f1; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
+                .header {{ background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 24px; text-align: center; color: white; font-weight: bold; letter-spacing: 2px; font-size: 16px; }}
                 .content {{ padding: 30px; }}
-                .btn {{ display: inline-block; background: linear-gradient(90deg, #3b82f6, #8b5cf6); color: white !important; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: bold; margin-top: 20px; font-size: 16px; }}
+                .btn {{ display: inline-block; background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%); color: white !important; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: bold; margin-top: 20px; font-size: 16px; box-shadow: 0 0 15px rgba(139, 92, 246, 0.5); }}
                 .plan-box {{ background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 20px; margin: 10px 0; }}
                 .plan-name {{ font-size: 16px; font-weight: bold; }}
                 .plan-price {{ font-size: 24px; font-weight: bold; color: #f59e0b; }}
                 .plan-features {{ font-size: 13px; color: #94a3b8; margin-top: 8px; line-height: 1.6; }}
                 .badge {{ display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; }}
                 .safe-msg {{ background: #064e3b; border: 1px solid #059669; border-radius: 8px; padding: 14px; margin: 16px 0; text-align: center; }}
-                .payment-info {{ display: flex; justify-content: center; gap: 16px; margin-top: 12px; font-size: 13px; color: #94a3b8; }}
+                .footer {{ margin-top: 30px; font-size: 12px; color: #94a3b8; border-top: 1px solid #334155; padding-top: 20px; text-align: center; }}
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="header">Tu prueba gratuita finalizo</div>
+                <div class="header">FUTURE PLATFORM — PRUEBA FINALIZADA</div>
                 <div class="content">
                     <p style="text-align: center; font-size: 16px;">Hola! El periodo de prueba gratuito de <strong>{store_name}</strong> ha terminado y tu cuenta fue pausada.</p>
 
@@ -328,6 +331,7 @@ async def _send_trial_expired_email(to_email: str, store_name: str):
                         Si necesitas ayuda o tenes alguna consulta, responde a este email. Estamos para ayudarte.
                     </p>
                 </div>
+                <div class="footer">&copy; 2026 Future Platform. Todos los derechos reservados.</div>
             </div>
         </body>
         </html>
