@@ -1032,7 +1032,7 @@ async def delete_credential(cred_id: str, current_user: User = Depends(get_curre
 # --- META INTEGRATION ENDPOINTS ---
 
 class MetaSyncRequest(BaseModel):
-    tenant_id: str
+    tenant_id: Union[str, int]
     provider: str
     credentials: Dict[str, Any]
 
