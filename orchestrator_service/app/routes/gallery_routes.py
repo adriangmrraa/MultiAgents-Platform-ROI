@@ -70,12 +70,8 @@ class SaveAssetRequest(BaseModel):
 # ==================== HELPERS ====================
 
 async def _get_google_key(tenant_id: int) -> Optional[str]:
-    """Get Google API key for tenant."""
-    key = await get_tenant_credential_by_type(tenant_id, "GOOGLE_API_KEY")
-    if not key:
-        from app.core.config import settings
-        key = settings.GOOGLE_API_KEY
-    return key
+    """Get Google API key for tenant (tenant-owned, no platform fallback)."""
+    return await get_tenant_credential_by_type(tenant_id, "GOOGLE_API_KEY")
 
 
 async def _get_brand_dna(tenant_id: int, db) -> Optional[dict]:
@@ -88,6 +84,104 @@ async def _get_brand_dna(tenant_id: int, db) -> Optional[dict]:
     if row and row["content"]:
         return row["content"] if isinstance(row["content"], dict) else json.loads(row["content"])
     return None
+
+
+# ==================== STUDIO SETUP ====================
+
+@router.get("/setup-status")
+async def gallery_setup_status(
+    current_user: User = Depends(get_current_user)
+):
+    """Check if tenant has Google API key configured for Creative Studio."""
+    key = await _get_google_key(current_user.tenant_id)
+    return {
+        "google_connected": bool(key),
+        "ready": bool(key),
+        "message": "Creative Studio listo" if key else "Conecta tu Google API Key para usar el Creative Studio"
+    }
+
+
+class SetupGoogleKeyRequest(BaseModel):
+    api_key: str
+
+
+@router.post("/setup-google")
+async def setup_google_key(
+    req: SetupGoogleKeyRequest,
+    current_user: User = Depends(get_current_user),
+    db = Depends(get_pool_db)
+):
+    """Save tenant's Google API key for Creative Studio image generation."""
+    # Validate the key by making a test call
+    try:
+        from google import genai
+        client = genai.Client(api_key=req.api_key)
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents='Respond with just "ok"'
+        )
+        if not response.text:
+            raise Exception("Empty response")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"API Key invalida: {str(e)[:100]}")
+
+    # Save via credentials system (encrypted)
+    from utils import encrypt_password
+    encrypted = encrypt_password(req.api_key)
+
+    # Check if credential_types has GOOGLE_API_KEY
+    ct_id = await db.fetchval(
+        "SELECT id FROM credential_types WHERE internal_key = 'GOOGLE_API_KEY'"
+    )
+
+    if ct_id:
+        # Upsert via credentials table with credential_type_id
+        existing = await db.fetchval(
+            "SELECT id FROM credentials WHERE tenant_id = $1 AND credential_type_id = $2",
+            current_user.tenant_id, ct_id
+        )
+        if existing:
+            await db.execute(
+                "UPDATE credentials SET value = $1, is_valid = true, updated_at = NOW() WHERE id = $2",
+                encrypted, existing
+            )
+        else:
+            await db.execute("""
+                INSERT INTO credentials (tenant_id, credential_type_id, name, value, category, is_valid)
+                VALUES ($1, $2, 'Google API Key', $3, 'google', true)
+            """, current_user.tenant_id, ct_id, encrypted)
+    else:
+        # Fallback: save directly with name matching
+        existing = await db.fetchval(
+            "SELECT id FROM credentials WHERE tenant_id = $1 AND name ILIKE '%google%api%key%'",
+            current_user.tenant_id
+        )
+        if existing:
+            await db.execute(
+                "UPDATE credentials SET value = $1, is_valid = true, updated_at = NOW() WHERE id = $2",
+                encrypted, existing
+            )
+        else:
+            await db.execute("""
+                INSERT INTO credentials (tenant_id, name, value, category, scope, is_valid)
+                VALUES ($1, 'GOOGLE_API_KEY', $2, 'google', 'tenant', true)
+            """, current_user.tenant_id, encrypted)
+
+    logger.info("google_key_saved", tenant_id=current_user.tenant_id)
+    return {"message": "Google API Key guardada correctamente", "google_connected": True}
+
+
+@router.delete("/setup-google")
+async def remove_google_key(
+    current_user: User = Depends(get_current_user),
+    db = Depends(get_pool_db)
+):
+    """Remove tenant's Google API key."""
+    await db.execute(
+        "UPDATE credentials SET is_valid = false WHERE tenant_id = $1 AND (name ILIKE '%google%api%key%' OR credential_type_id IN (SELECT id FROM credential_types WHERE internal_key = 'GOOGLE_API_KEY'))",
+        current_user.tenant_id
+    )
+    return {"message": "Google API Key desconectada", "google_connected": False}
 
 
 # ==================== BRAND DNA ====================

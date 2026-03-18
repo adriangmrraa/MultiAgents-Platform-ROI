@@ -27,6 +27,33 @@ export const BusinessForge: React.FC = () => {
     const [products, setProducts] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
+    // Google API Key gate
+    const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
+    const [apiKeyInput, setApiKeyInput] = useState('');
+    const [setupLoading, setSetupLoading] = useState(false);
+    const [setupError, setSetupError] = useState('');
+
+    useEffect(() => {
+        fetchApi('/gallery/setup-status').then(d => setGoogleConnected(d?.google_connected ?? false)).catch(() => setGoogleConnected(false));
+    }, [fetchApi]);
+
+    const handleConnectKey = async () => {
+        if (!apiKeyInput.trim()) return;
+        setSetupLoading(true);
+        setSetupError('');
+        try {
+            await fetchApi('/gallery/setup-google', { method: 'POST', body: { api_key: apiKeyInput.trim() } });
+            setGoogleConnected(true);
+        } catch (e: any) { setSetupError(e.message || 'Error al validar la API Key'); }
+        finally { setSetupLoading(false); }
+    };
+
+    const handleDisconnect = async () => {
+        if (!confirm('Desconectar Google API Key?')) return;
+        await fetchApi('/gallery/setup-google', { method: 'DELETE' });
+        setGoogleConnected(false);
+    };
+
     const loadBrandDNA = useCallback(async () => {
         try {
             const data = await fetchApi('/gallery/brand-dna');
@@ -65,6 +92,70 @@ export const BusinessForge: React.FC = () => {
         { id: 'gallery' as Tab, label: 'Galeria', icon: <Grid size={16} />, desc: 'Todos los assets' }
     ];
 
+    // Loading state for Google setup check
+    if (googleConnected === null) {
+        return <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-purple-400 animate-pulse font-mono">Verificando conexion...</div>;
+    }
+
+    // Setup gate: show setup screen if Google API key not connected
+    if (!googleConnected) {
+        return (
+            <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center p-6">
+                <div className="max-w-lg w-full">
+                    <div className="text-center mb-8">
+                        <div className="inline-flex p-4 bg-purple-900/20 rounded-2xl mb-4">
+                            <Sparkles size={48} className="text-purple-400" />
+                        </div>
+                        <h1 className="text-3xl font-black mb-2">Creative Studio</h1>
+                        <p className="text-slate-400">Genera fotos de estudio, campanas de marketing y Brand DNA con IA</p>
+                    </div>
+
+                    <div className="glass p-6 rounded-2xl border border-purple-500/20">
+                        <h2 className="text-lg font-bold mb-1 flex items-center gap-2">
+                            <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                            Conecta tu Google API Key
+                        </h2>
+                        <p className="text-sm text-slate-400 mb-4">
+                            La generacion de imagenes usa tu propia cuenta de Google AI. El consumo se cobra directamente en tu proyecto de Google Cloud.
+                        </p>
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1 block">Google AI API Key</label>
+                                <input
+                                    type="password"
+                                    value={apiKeyInput}
+                                    onChange={e => setApiKeyInput(e.target.value)}
+                                    placeholder="AIzaSy..."
+                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-slate-600 outline-none focus:border-purple-500/50"
+                                />
+                            </div>
+                            {setupError && <p className="text-red-400 text-xs">{setupError}</p>}
+                            <button
+                                onClick={handleConnectKey}
+                                disabled={setupLoading || !apiKeyInput.trim()}
+                                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold py-3 rounded-lg transition-all disabled:opacity-50"
+                            >
+                                {setupLoading ? 'Validando...' : 'Conectar y activar Creative Studio'}
+                            </button>
+                        </div>
+
+                        <div className="mt-5 pt-4 border-t border-white/5">
+                            <p className="text-[11px] text-slate-500 leading-relaxed">
+                                <strong className="text-slate-400">Como obtener tu API Key:</strong><br />
+                                1. Ve a <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-purple-400 underline">Google AI Studio</a><br />
+                                2. Crea o selecciona un proyecto<br />
+                                3. Click en "Create API Key"<br />
+                                4. Pega la key aqui<br /><br />
+                                <strong className="text-slate-400">Costos aprox:</strong> ~$0.03 USD por imagen generada. El consumo se factura en tu cuenta de Google.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-[#0a0a0a] text-white">
             <div className="view active p-6">
@@ -76,6 +167,11 @@ export const BusinessForge: React.FC = () => {
                         </h1>
                         <p className="text-sm text-slate-500 mt-1">Genera y edita assets de marketing con IA</p>
                     </div>
+                    <div className="flex items-center gap-3">
+                        <button onClick={handleDisconnect} className="text-[10px] text-slate-500 hover:text-red-400 border border-white/5 hover:border-red-500/30 px-2 py-1 rounded transition-colors" title="Desconectar Google API Key">
+                            <svg width="14" height="14" viewBox="0 0 24 24" className="inline mr-1"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                            Conectado
+                        </button>
                     {brandDNA && (
                         <div className="flex items-center gap-2">
                             {brandDNA.colors?.primary?.map((c: string, i: number) => (
@@ -86,6 +182,7 @@ export const BusinessForge: React.FC = () => {
                             ))}
                         </div>
                     )}
+                    </div>
                 </div>
 
                 {/* Tabs */}

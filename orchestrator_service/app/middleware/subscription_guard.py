@@ -37,6 +37,8 @@ EXEMPT_PATHS = {
     "/billing/webhook/mercadopago",
     "/billing/invoices",
     "/billing/change-plan",
+    "/gallery/setup-status",
+    "/gallery/setup-google",
     "/health",
     "/metrics",
     "/docs",
