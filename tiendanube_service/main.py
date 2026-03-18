@@ -257,6 +257,143 @@ async def orders(search: OrderSearch, token: str = Depends(verify_token)):
         logger.error("orders_failed", error=str(e))
         return ToolResponse(ok=False, error=ToolError(code="INTERNAL_ERROR", message=str(e), retryable=False))
 
+class OrdersSummaryRequest(BaseModel):
+    store_id: str
+    access_token: str
+    date_from: Optional[str] = None  # ISO format: 2026-03-01T00:00:00
+    date_to: Optional[str] = None
+    status: Optional[str] = None  # open, closed, cancelled
+    per_page: int = Field(default=200, le=200)
+
+@app.post("/tools/orders_summary", response_model=ToolResponse)
+async def orders_summary(req: OrdersSummaryRequest, token: str = Depends(verify_token)):
+    """Fetch orders with filters and return aggregated summary + order list."""
+    base_url = f"https://api.tiendanube.com/v1/{req.store_id}/orders"
+    params: Dict[str, Any] = {"per_page": req.per_page}
+    if req.date_from:
+        params["created_at_min"] = req.date_from
+    if req.date_to:
+        params["created_at_max"] = req.date_to
+    if req.status:
+        params["status"] = req.status
+
+    all_orders = []
+    page = 1
+    max_pages = 10  # Safety limit
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            while page <= max_pages:
+                params["page"] = page
+                resp = await client.get(base_url, headers=get_tn_headers(req.access_token), params=params)
+                if resp.status_code != 200:
+                    return await handle_tn_response(resp)
+                batch = resp.json()
+                if not batch:
+                    break
+                all_orders.extend(batch)
+                if len(batch) < req.per_page:
+                    break
+                page += 1
+
+        # Aggregate
+        total_revenue = 0.0
+        by_status = {}
+        by_payment = {}
+        order_list = []
+
+        for o in all_orders:
+            total_str = o.get("total", "0")
+            try:
+                total_val = float(total_str)
+            except (ValueError, TypeError):
+                total_val = 0.0
+            total_revenue += total_val
+
+            st = o.get("status", "unknown")
+            by_status[st] = by_status.get(st, 0) + 1
+
+            ps = o.get("payment_status", "unknown")
+            by_payment[ps] = by_payment.get(ps, 0) + 1
+
+            customer = o.get("customer", {}) or {}
+            products = []
+            for item in (o.get("products") or []):
+                products.append({
+                    "name": item.get("name", ""),
+                    "quantity": item.get("quantity", 1),
+                    "price": item.get("price", "0"),
+                })
+
+            order_list.append({
+                "id": o.get("id"),
+                "number": o.get("number"),
+                "created_at": o.get("created_at"),
+                "total": total_str,
+                "currency": o.get("currency", "ARS"),
+                "status": st,
+                "payment_status": ps,
+                "shipping_status": o.get("shipping_status", ""),
+                "customer_phone": customer.get("phone", ""),
+                "customer_email": customer.get("email", ""),
+                "customer_name": customer.get("name", ""),
+                "landing_url": o.get("landing_url", ""),
+                "products": products,
+            })
+
+        summary = {
+            "total_orders": len(all_orders),
+            "total_revenue": total_revenue,
+            "currency": all_orders[0].get("currency", "ARS") if all_orders else "ARS",
+            "by_status": by_status,
+            "by_payment_status": by_payment,
+            "orders": order_list,
+        }
+        return ToolResponse(ok=True, data=summary, meta={"pages_fetched": page})
+
+    except Exception as e:
+        logger.error("orders_summary_failed", error=str(e))
+        return ToolResponse(ok=False, error=ToolError(code="INTERNAL_ERROR", message=str(e), retryable=False))
+
+
+class OrdersRecentRequest(BaseModel):
+    store_id: str
+    access_token: str
+    limit: int = Field(default=10, le=50)
+
+@app.post("/tools/orders_recent", response_model=ToolResponse)
+async def orders_recent(req: OrdersRecentRequest, token: str = Depends(verify_token)):
+    """Fetch the most recent N orders."""
+    url = f"https://api.tiendanube.com/v1/{req.store_id}/orders"
+    params = {"per_page": req.limit, "sort_by": "created_at-desc"}
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=get_tn_headers(req.access_token), params=params)
+            if resp.status_code != 200:
+                return await handle_tn_response(resp)
+            orders_data = resp.json()
+            recent = []
+            for o in orders_data[:req.limit]:
+                customer = o.get("customer", {}) or {}
+                recent.append({
+                    "id": o.get("id"),
+                    "number": o.get("number"),
+                    "created_at": o.get("created_at"),
+                    "total": o.get("total", "0"),
+                    "currency": o.get("currency", "ARS"),
+                    "status": o.get("status"),
+                    "payment_status": o.get("payment_status"),
+                    "customer_name": customer.get("name", ""),
+                    "customer_phone": customer.get("phone", ""),
+                    "customer_email": customer.get("email", ""),
+                    "landing_url": o.get("landing_url", ""),
+                })
+            return ToolResponse(ok=True, data=recent)
+    except Exception as e:
+        logger.error("orders_recent_failed", error=str(e))
+        return ToolResponse(ok=False, error=ToolError(code="INTERNAL_ERROR", message=str(e), retryable=False))
+
+
 @app.post("/tools/sendemail", response_model=ToolResponse)
 async def sendemail(email: Email, token: str = Depends(verify_token)):
     import smtplib

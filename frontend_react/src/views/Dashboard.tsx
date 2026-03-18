@@ -5,22 +5,37 @@ import { Activity, MessageSquare, Target, TrendingUp, Coins, ArrowRight } from '
 import { GlobalStreamLog } from '../components/GlobalStreamLog';
 import { RagGalaxy } from '../components/RagGalaxy';
 import { SystemStatus } from '../components/SystemStatus';
+import { SalesDashboard } from '../components/SalesDashboard';
+import { RoiReal } from '../components/RoiReal';
 
 interface Stats {
     active_tenants: number;
     total_messages: number;
     processed_messages: number;
     roi_metrics: {
+        source?: string;
         total_gmv: number;
         conversions: number;
         last_30_days: number;
         formatted_gmv: string;
+        attributed_gmv?: number;
+        attributed_orders?: number;
+        formatted_attributed?: string;
     };
     assist_metrics?: {
         sales_score: number;
         support_score: number;
         checkpoints: number;
         estimated_savings: string;
+    };
+    sales_metrics?: {
+        tiendanube_connected: boolean;
+        total_orders_30d: number;
+        total_revenue_30d: number;
+        total_revenue_formatted: string;
+        attributed_orders: number;
+        attributed_revenue: number;
+        attributed_revenue_formatted: string;
     };
 }
 
@@ -64,6 +79,9 @@ export const Dashboard: React.FC = () => {
         return () => clearInterval(interval);
     }, [fetchApi]);
 
+    const isLiveData = stats?.roi_metrics?.source === 'tiendanube_live';
+    const hasTN = stats?.sales_metrics?.tiendanube_connected;
+
     return (
         <div className="view active">
             <h1 className="view-title mb-6">{t('dashboard.title')}</h1>
@@ -71,12 +89,19 @@ export const Dashboard: React.FC = () => {
             {/* CEO View: Value Generation (Hero Section) */}
             {stats?.roi_metrics && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                    {/* Hero: GMV */}
+                    {/* Hero: GMV — now shows live vs heuristic */}
                     <div className="bg-white/5 backdrop-blur-xl p-8 rounded-[24px] border border-white/10 relative overflow-hidden group hover:border-red-500/20 transition-colors">
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                             <Activity size={120} className="text-red-600" />
                         </div>
-                        <h2 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] mb-2">{t('dashboard.valueGenerated')}</h2>
+                        <div className="flex items-center gap-2 mb-2">
+                            <h2 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em]">{t('dashboard.valueGenerated')}</h2>
+                            {isLiveData ? (
+                                <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">LIVE</span>
+                            ) : (
+                                <span className="text-[9px] font-bold text-gray-500 bg-gray-500/10 px-2 py-0.5 rounded-full border border-gray-500/20">HEURISTIC</span>
+                            )}
+                        </div>
                         <div className="flex items-baseline gap-4 relative z-10">
                             <span className="text-6xl font-black text-white tracking-tighter">
                                 {stats.roi_metrics.formatted_gmv}
@@ -85,7 +110,19 @@ export const Dashboard: React.FC = () => {
                                 {t('dashboard.conversions', { count: stats.roi_metrics.conversions })}
                             </span>
                         </div>
-                        <p className="text-gray-500 mt-4 text-sm max-w-md font-medium">
+                        {/* Attribution line (when available) */}
+                        {(stats.roi_metrics.attributed_orders ?? 0) > 0 && (
+                            <div className="mt-3 flex items-center gap-2">
+                                <TrendingUp size={12} className="text-emerald-400" />
+                                <span className="text-sm text-emerald-400 font-bold">
+                                    {stats.roi_metrics.formatted_attributed} atribuidos al agente IA
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                    ({stats.roi_metrics.attributed_orders} pedidos)
+                                </span>
+                            </div>
+                        )}
+                        <p className="text-gray-500 mt-3 text-sm max-w-md font-medium">
                             {t('dashboard.heroDesc')}
                         </p>
                     </div>
@@ -138,6 +175,16 @@ export const Dashboard: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* Sales Dashboard — Tienda Nube live data */}
+            <div className="mb-8">
+                <SalesDashboard />
+            </div>
+
+            {/* ROI Real — Channel Attribution */}
+            <div className="mb-8">
+                <RoiReal />
+            </div>
 
             {/* Operational Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">

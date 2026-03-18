@@ -1139,13 +1139,144 @@ CATALOGO:
       AND credential_type_id IS NULL;
     """,
     """
-    UPDATE credentials 
+    UPDATE credentials
     SET credential_type_id = (SELECT id FROM credential_types WHERE internal_key = 'TIENDANUBE_STORE_ID'),
         category = 'tiendanube'
     WHERE name = 'TIENDANUBE_STORE_ID'
       AND credential_type_id IS NULL;
+    """,
+    # 40. Attributed Sales table (ROI Real - v8.0)
+    """
+    CREATE TABLE IF NOT EXISTS attributed_sales (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+        order_id VARCHAR(64) NOT NULL,
+        order_number VARCHAR(32),
+        order_total FLOAT,
+        order_currency VARCHAR(8) DEFAULT 'ARS',
+        order_status VARCHAR(32),
+        payment_status VARCHAR(32),
+        order_created_at TIMESTAMPTZ,
+        customer_phone VARCHAR(50),
+        customer_email VARCHAR(128),
+        customer_name VARCHAR(128),
+        conversation_id UUID,
+        customer_id UUID,
+        channel_source VARCHAR(32),
+        attribution_method VARCHAR(32),
+        attribution_confidence FLOAT DEFAULT 0.0,
+        attribution_details JSONB DEFAULT '{}',
+        attributed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(tenant_id, order_id)
+    );
+    """,
+    """
+    DO $$
+    BEGIN
+        CREATE INDEX IF NOT EXISTS idx_attributed_sales_tenant ON attributed_sales(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_attributed_sales_conversation ON attributed_sales(conversation_id);
+        CREATE INDEX IF NOT EXISTS idx_attributed_sales_created ON attributed_sales(order_created_at);
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Migration 40 indexes skipped: %', SQLERRM;
+    END $$;
     """
 ]
+
+
+# --- Orders Sync & Attribution Job (ROI Real v8.0) ---
+ORDERS_SYNC_INTERVAL = int(os.getenv("ORDERS_SYNC_INTERVAL_MINUTES", "10")) * 60
+
+
+async def orders_sync_loop():
+    """Background job: syncs Tienda Nube orders and attributes them to AI conversations."""
+    await asyncio.sleep(30)  # Wait for full startup
+
+    while True:
+        try:
+            await _sync_all_tenants_orders()
+        except Exception as e:
+            logger.error("orders_sync_loop_error", error=str(e))
+
+        await asyncio.sleep(ORDERS_SYNC_INTERVAL)
+
+
+async def _sync_all_tenants_orders():
+    """Sync orders for all tenants with Tienda Nube connected."""
+    from app.services.token_manager import TokenManager
+    from app.services.sales_attribution import SalesAttributionService
+    from app.core.credentials import get_tenant_credential_by_type
+
+    if not db.pool:
+        return
+
+    # Get tenants with TN credentials
+    rows = await db.pool.fetch("""
+        SELECT DISTINCT tenant_id FROM credentials
+        WHERE category = 'tiendanube'
+          AND name IN ('TIENDANUBE_ACCESS_TOKEN', 'tiendanube_access_token')
+          AND is_valid = true
+    """)
+
+    tn_service_url = os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003")
+    internal_secret = os.getenv("INTERNAL_SECRET_KEY") or os.getenv("INTERNAL_API_TOKEN")
+
+    for row in rows:
+        tenant_id = row["tenant_id"]
+        try:
+            access_token = await TokenManager.get_valid_token(tenant_id, "tiendanube")
+            store_id = await get_tenant_credential_by_type(tenant_id, "TIENDANUBE_USER_ID")
+
+            if not store_id:
+                raw = await db.pool.fetchval(
+                    "SELECT tiendanube_store_id FROM tenants WHERE id = $1", tenant_id
+                )
+                if raw:
+                    from utils import decrypt_password
+                    store_id = decrypt_password(str(raw))
+
+            if not access_token or not store_id:
+                continue
+
+            # Fetch orders from last 24h
+            date_from = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%dT00:00:00")
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{tn_service_url}/tools/orders_summary",
+                    json={
+                        "store_id": str(store_id),
+                        "access_token": access_token,
+                        "date_from": date_from,
+                    },
+                    headers={"X-Internal-Secret": internal_secret}
+                )
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                if not data.get("ok"):
+                    continue
+
+            orders = data["data"].get("orders", [])
+            new_count = 0
+            for order in orders:
+                stored = await SalesAttributionService.process_and_store_order(tenant_id, order)
+                if stored:
+                    new_count += 1
+
+            if new_count > 0:
+                logger.info("orders_synced",
+                            tenant_id=tenant_id,
+                            new_orders=new_count,
+                            total_fetched=len(orders))
+
+            # Rate limit: small delay between tenants
+            await asyncio.sleep(2)
+
+        except Exception as e:
+            logger.error("tenant_order_sync_failed", tenant_id=tenant_id, error=str(e))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1208,6 +1339,7 @@ async def lifespan(app: FastAPI):
         from app.models.agent import Agent # Nexus v3 Agent Support
         from app.models.auth import User # Sovereign Identity
         from app.models.billing import Plan, Subscription, UsageRecord, Invoice, AuditLog  # SaaS Billing
+        from app.models.attributed_sale import AttributedSale  # ROI Real v8.0
         
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -1243,6 +1375,13 @@ async def lifespan(app: FastAPI):
             logger.info("billing_schema_verified")
         except Exception as bm_err:
             logger.debug("billing_migration_note", error=str(bm_err))
+
+        # 9. Orders Sync & Attribution Job (ROI Real v8.0)
+        try:
+            asyncio.create_task(orders_sync_loop())
+            logger.info("orders_sync_job_started")
+        except Exception as os_err:
+            logger.error("orders_sync_start_failed", error=str(os_err))
 
         logger.info("system_startup_complete", port=8000)
         
@@ -2960,12 +3099,20 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             else:
                 final_parts.append(p)
 
+        # ROI Real v8.0: Inject UTM tracking on FB/IG links
+        from app.services.link_tracker import inject_tracking_in_text
+        if channel_source in ('facebook', 'instagram'):
+            final_parts = [
+                inject_tracking_in_text(p, str(conv_id), channel_source, tenant_id)
+                for p in final_parts
+            ]
+
         for idx, text_content in enumerate(final_parts):
             if "HUMAN_HANDOFF_REQUESTED:" in text_content:
                 reason = text_content.split("HUMAN_HANDOFF_REQUESTED:")[1].strip()
                 await trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, customer_name)
                 continue
-            
+
             clean_response = text_content # Already clean
             logger.info(f"✅ AGENT: Bubble prepared | from={from_number} | length={len(clean_response)} | preview={clean_response[:100]}...")
 

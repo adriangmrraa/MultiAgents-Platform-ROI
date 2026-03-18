@@ -2072,15 +2072,64 @@ async def get_stats(current_user: User = Depends(get_current_user)):
         if current_user.role == "SuperAdmin":
             active_tenants = await db.pool.fetchval("SELECT COUNT(*) FROM tenants") or 0
             
+        # Sales Metrics (ROI Real - from Tienda Nube + Attribution)
+        sales_metrics = {
+            "tiendanube_connected": False,
+            "total_orders_30d": 0,
+            "total_revenue_30d": 0.0,
+            "total_revenue_formatted": "$0",
+            "attributed_orders": 0,
+            "attributed_revenue": 0.0,
+            "attributed_revenue_formatted": "$0",
+            "orders_today": 0,
+            "revenue_today": 0.0,
+        }
+        try:
+            tn_summary = await _fetch_tn_orders_summary(tenant_id, 30)
+            if tn_summary:
+                sales_metrics["tiendanube_connected"] = True
+                sales_metrics["total_orders_30d"] = tn_summary.get("total_orders", 0)
+                rev = tn_summary.get("total_revenue", 0.0)
+                sales_metrics["total_revenue_30d"] = rev
+                sales_metrics["total_revenue_formatted"] = f"${rev:,.0f}"
+
+            # Attribution data
+            attr_row = await db.pool.fetchrow("""
+                SELECT COUNT(*) as cnt, COALESCE(SUM(order_total), 0) as rev
+                FROM attributed_sales
+                WHERE tenant_id = $1 AND conversation_id IS NOT NULL
+                  AND order_created_at >= NOW() - INTERVAL '30 days'
+            """, tenant_id)
+            if attr_row:
+                sales_metrics["attributed_orders"] = attr_row["cnt"] or 0
+                attr_rev = float(attr_row["rev"] or 0)
+                sales_metrics["attributed_revenue"] = attr_rev
+                sales_metrics["attributed_revenue_formatted"] = f"${attr_rev:,.0f}"
+        except Exception as sales_err:
+            logger.debug(f"Sales metrics fetch skipped: {sales_err}")
+
+        # ROI: prioritize real data over heuristic
+        roi_source = "heuristic"
+        roi_gmv = gmv
+        roi_conversions = conversions
+        if sales_metrics["tiendanube_connected"] and sales_metrics["total_revenue_30d"] > 0:
+            roi_source = "tiendanube_live"
+            roi_gmv = sales_metrics["total_revenue_30d"]
+            roi_conversions = sales_metrics["total_orders_30d"]
+
         stats_data = {
             "active_tenants": active_tenants,
             "total_messages": total_messages,
             "processed_messages": processed_messages,
             "roi_metrics": {
-                "total_gmv": gmv,
-                "conversions": conversions,
-                "last_30_days": gmv,
-                "formatted_gmv": f"${gmv:,.0f}"
+                "source": roi_source,
+                "total_gmv": roi_gmv,
+                "conversions": roi_conversions,
+                "last_30_days": roi_gmv,
+                "formatted_gmv": f"${roi_gmv:,.0f}",
+                "attributed_gmv": sales_metrics["attributed_revenue"],
+                "attributed_orders": sales_metrics["attributed_orders"],
+                "formatted_attributed": sales_metrics["attributed_revenue_formatted"],
             },
             "assist_metrics": {
                 "sales_score": round(sales_score, 1),
@@ -2088,6 +2137,7 @@ async def get_stats(current_user: User = Depends(get_current_user)):
                 "checkpoints": checkpoints,
                 "estimated_savings": f"${estimated_savings:,.0f}"
             },
+            "sales_metrics": sales_metrics,
             "cached_at": datetime.utcnow().isoformat()
         }
         
@@ -2102,6 +2152,167 @@ async def get_stats(current_user: User = Depends(get_current_user)):
         logger.error(f"❌ Stats: Aggregation failed | error={str(e)}")
         # Low-level fallback
         return {"total_messages": 0, "processed_messages": 0, "roi_metrics": {"total_gmv": 0}}
+
+# --- SALES DASHBOARD (ROI Real - Fase 1) ---
+
+TIENDANUBE_SERVICE_URL = os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003")
+
+async def _fetch_tn_orders_summary(tenant_id: int, days: int = 30) -> Optional[Dict]:
+    """Fetch orders summary from Tienda Nube via tiendanube_service."""
+    from app.services.token_manager import TokenManager
+
+    access_token = await TokenManager.get_valid_token(tenant_id, "tiendanube")
+    store_id = await get_tenant_credential_by_type(tenant_id, "TIENDANUBE_USER_ID")
+    if not store_id:
+        store_id_raw = await db.pool.fetchval("SELECT tiendanube_store_id FROM tenants WHERE id = $1", tenant_id)
+        if store_id_raw:
+            from utils import decrypt_password
+            store_id = decrypt_password(str(store_id_raw))
+
+    if not access_token or not store_id:
+        return None
+
+    date_from = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%dT00:00:00")
+
+    payload = {
+        "store_id": str(store_id),
+        "access_token": access_token,
+        "date_from": date_from,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{TIENDANUBE_SERVICE_URL}/tools/orders_summary",
+                json=payload,
+                headers={"X-Internal-Secret": INTERNAL_API_TOKEN}
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("ok"):
+                    return data["data"]
+    except Exception as e:
+        logger.error(f"Sales dashboard: TN fetch failed | error={str(e)}")
+    return None
+
+
+@router.get("/sales/dashboard")
+@safe_db_call
+async def get_sales_dashboard(current_user: User = Depends(get_current_user), days: int = 30):
+    """
+    Sales Dashboard — Real Tienda Nube data.
+    Returns order totals, revenue, status breakdown, and recent orders.
+    """
+    tenant_id = current_user.tenant_id
+    cache_key = f"sales:dashboard:{tenant_id}:{days}"
+
+    # 1. Try cache
+    try:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+
+    # 2. Fetch from TN
+    summary = await _fetch_tn_orders_summary(tenant_id, days)
+
+    if not summary:
+        return {
+            "period": f"last_{days}_days",
+            "tiendanube_connected": False,
+            "total_orders": 0,
+            "total_revenue": 0.0,
+            "total_revenue_formatted": "$0",
+            "currency": "ARS",
+            "avg_ticket": 0.0,
+            "avg_ticket_formatted": "$0",
+            "by_status": {},
+            "by_payment_status": {},
+            "recent_orders": [],
+        }
+
+    total_orders = summary.get("total_orders", 0)
+    total_revenue = summary.get("total_revenue", 0.0)
+    avg_ticket = total_revenue / total_orders if total_orders > 0 else 0.0
+    currency = summary.get("currency", "ARS")
+
+    # Get recent 5 orders
+    all_orders = summary.get("orders", [])
+    recent = sorted(all_orders, key=lambda o: o.get("created_at", ""), reverse=True)[:5]
+
+    # Attribution stats (from attributed_sales table)
+    attributed = {"orders": 0, "revenue": 0.0}
+    try:
+        attr_row = await db.pool.fetchrow("""
+            SELECT COUNT(*) as cnt, COALESCE(SUM(order_total), 0) as rev
+            FROM attributed_sales
+            WHERE tenant_id = $1
+              AND conversation_id IS NOT NULL
+              AND order_created_at >= NOW() - INTERVAL '%s days'
+        """ % days, tenant_id)
+        if attr_row:
+            attributed["orders"] = attr_row["cnt"] or 0
+            attributed["revenue"] = float(attr_row["rev"] or 0)
+    except Exception:
+        pass  # Table may not exist yet
+
+    result = {
+        "period": f"last_{days}_days",
+        "tiendanube_connected": True,
+        "total_orders": total_orders,
+        "total_revenue": total_revenue,
+        "total_revenue_formatted": f"${total_revenue:,.0f}",
+        "currency": currency,
+        "avg_ticket": round(avg_ticket, 2),
+        "avg_ticket_formatted": f"${avg_ticket:,.0f}",
+        "by_status": summary.get("by_status", {}),
+        "by_payment_status": summary.get("by_payment_status", {}),
+        "recent_orders": recent,
+        "attributed_to_ai": {
+            "orders": attributed["orders"],
+            "revenue": attributed["revenue"],
+            "revenue_formatted": f"${attributed['revenue']:,.0f}",
+            "percentage": round((attributed["orders"] / total_orders * 100) if total_orders > 0 else 0, 1),
+        },
+    }
+
+    # 3. Cache
+    try:
+        await redis_client.setex(cache_key, 300, json.dumps(result))
+    except Exception:
+        pass
+
+    return result
+
+
+@router.get("/sales/orders")
+@safe_db_call
+async def get_sales_orders(
+    current_user: User = Depends(get_current_user),
+    days: int = 30,
+    status: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 20,
+):
+    """Paginated order list from Tienda Nube."""
+    tenant_id = current_user.tenant_id
+    summary = await _fetch_tn_orders_summary(tenant_id, days)
+
+    if not summary:
+        return {"orders": [], "total": 0, "page": page, "tiendanube_connected": False}
+
+    all_orders = summary.get("orders", [])
+    if status:
+        all_orders = [o for o in all_orders if o.get("status") == status or o.get("payment_status") == status]
+
+    all_orders.sort(key=lambda o: o.get("created_at", ""), reverse=True)
+    total = len(all_orders)
+    start = (page - 1) * per_page
+    paginated = all_orders[start:start + per_page]
+
+    return {"orders": paginated, "total": total, "page": page, "per_page": per_page, "tiendanube_connected": True}
+
 
 def sanitize_payload(payload: Any) -> Any:
     """Recursively mask sensitive keys in a dictionary or list."""
@@ -3784,6 +3995,203 @@ async def report_assisted_gmv(tenant_id: Optional[str] = None, days: int = 30):
             },
             "status": "degraded_mode"
         }
+
+# --- ROI REAL (v8.0) ---
+
+@router.get("/roi/real")
+@safe_db_call
+async def get_roi_real(current_user: User = Depends(get_current_user), days: int = 30):
+    """
+    ROI Real: live data from Tienda Nube + attribution breakdown.
+    Replaces heuristic when TN is connected.
+    """
+    tenant_id = current_user.tenant_id
+    cache_key = f"roi:real:{tenant_id}:{days}"
+
+    # Cache
+    try:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+
+    # Total sales from TN
+    tn_summary = await _fetch_tn_orders_summary(tenant_id, days)
+
+    if not tn_summary:
+        # Fallback to heuristic
+        return {
+            "period": f"last_{days}_days",
+            "source": "heuristic",
+            "tiendanube_connected": False,
+            "total_sales": {"orders": 0, "revenue": 0, "formatted": "$0"},
+            "attributed_to_ai": {"orders": 0, "revenue": 0, "formatted": "$0", "percentage": 0},
+            "by_channel": {},
+            "by_method": {},
+        }
+
+    total_orders = tn_summary.get("total_orders", 0)
+    total_revenue = tn_summary.get("total_revenue", 0.0)
+
+    # Attribution breakdown
+    by_channel = {}
+    by_method = {}
+    attr_total_orders = 0
+    attr_total_revenue = 0.0
+
+    try:
+        channel_rows = await db.pool.fetch("""
+            SELECT channel_source, attribution_method,
+                   COUNT(*) as cnt, COALESCE(SUM(order_total), 0) as rev
+            FROM attributed_sales
+            WHERE tenant_id = $1
+              AND conversation_id IS NOT NULL
+              AND order_created_at >= NOW() - make_interval(days => $2)
+            GROUP BY channel_source, attribution_method
+        """, tenant_id, days)
+
+        for r in channel_rows:
+            ch = r["channel_source"] or "unknown"
+            method = r["attribution_method"] or "unknown"
+            cnt = r["cnt"] or 0
+            rev = float(r["rev"] or 0)
+
+            attr_total_orders += cnt
+            attr_total_revenue += rev
+
+            if ch not in by_channel:
+                by_channel[ch] = {"orders": 0, "revenue": 0.0}
+            by_channel[ch]["orders"] += cnt
+            by_channel[ch]["revenue"] += rev
+
+            if method not in by_method:
+                by_method[method] = {"orders": 0}
+            by_method[method]["orders"] += cnt
+
+    except Exception as e:
+        logger.debug(f"ROI real attribution query skipped: {e}")
+
+    pct = round((attr_total_orders / total_orders * 100) if total_orders > 0 else 0, 1)
+
+    result = {
+        "period": f"last_{days}_days",
+        "source": "tiendanube_live",
+        "tiendanube_connected": True,
+        "total_sales": {
+            "orders": total_orders,
+            "revenue": total_revenue,
+            "formatted": f"${total_revenue:,.0f}",
+        },
+        "attributed_to_ai": {
+            "orders": attr_total_orders,
+            "revenue": attr_total_revenue,
+            "formatted": f"${attr_total_revenue:,.0f}",
+            "percentage": pct,
+        },
+        "by_channel": by_channel,
+        "by_method": by_method,
+    }
+
+    try:
+        await redis_client.setex(cache_key, 300, json.dumps(result))
+    except Exception:
+        pass
+
+    return result
+
+
+@router.get("/roi/attributed-orders")
+@safe_db_call
+async def get_attributed_orders(
+    current_user: User = Depends(get_current_user),
+    days: int = 30,
+    channel: Optional[str] = None,
+    method: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 20,
+):
+    """Paginated list of orders attributed to AI agents."""
+    tenant_id = current_user.tenant_id
+
+    conditions = ["tenant_id = $1", "conversation_id IS NOT NULL"]
+    params: list = [tenant_id]
+    idx = 2
+
+    conditions.append(f"order_created_at >= NOW() - make_interval(days => ${idx})")
+    params.append(days)
+    idx += 1
+
+    if channel:
+        conditions.append(f"channel_source = ${idx}")
+        params.append(channel)
+        idx += 1
+
+    if method:
+        conditions.append(f"attribution_method = ${idx}")
+        params.append(method)
+        idx += 1
+
+    where = " AND ".join(conditions)
+
+    total = await db.pool.fetchval(
+        f"SELECT COUNT(*) FROM attributed_sales WHERE {where}", *params
+    )
+
+    offset = (page - 1) * per_page
+    rows = await db.pool.fetch(f"""
+        SELECT id, order_id, order_number, order_total, order_currency,
+               order_status, payment_status, order_created_at,
+               customer_name, customer_phone, customer_email,
+               conversation_id, channel_source,
+               attribution_method, attribution_confidence, attribution_details,
+               attributed_at
+        FROM attributed_sales
+        WHERE {where}
+        ORDER BY order_created_at DESC
+        LIMIT {per_page} OFFSET {offset}
+    """, *params)
+
+    orders = []
+    for r in rows:
+        # Try to get conversation preview
+        conv_preview = None
+        if r["conversation_id"]:
+            try:
+                conv_row = await db.pool.fetchrow("""
+                    SELECT last_message_preview, channel_source as conv_channel
+                    FROM chat_conversations WHERE id = $1
+                """, r["conversation_id"])
+                if conv_row:
+                    conv_preview = conv_row["last_message_preview"]
+            except Exception:
+                pass
+
+        orders.append({
+            "id": str(r["id"]),
+            "order_id": r["order_id"],
+            "order_number": r["order_number"],
+            "order_total": r["order_total"],
+            "order_currency": r["order_currency"],
+            "order_status": r["order_status"],
+            "payment_status": r["payment_status"],
+            "order_created_at": r["order_created_at"].isoformat() if r["order_created_at"] else None,
+            "customer_name": r["customer_name"],
+            "channel_source": r["channel_source"],
+            "attribution_method": r["attribution_method"],
+            "attribution_confidence": r["attribution_confidence"],
+            "conversation_id": str(r["conversation_id"]) if r["conversation_id"] else None,
+            "conversation_preview": conv_preview,
+            "attributed_at": r["attributed_at"].isoformat() if r["attributed_at"] else None,
+        })
+
+    return {
+        "orders": orders,
+        "total": total or 0,
+        "page": page,
+        "per_page": per_page,
+    }
+
 
 # --- AI ASSISTANCE (Nexus v4.5) ---
 class PromptImproveRequest(BaseModel):

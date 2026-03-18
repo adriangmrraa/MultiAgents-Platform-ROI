@@ -23,6 +23,7 @@ import { DynamicAgentWizard } from './views/DynamicAgentWizard'; // v5.15 Dynami
 import { Console } from './views/Console';
 import { Handoff } from './views/Handoff';
 import { AssistAnalytics } from './views/AssistAnalytics'; // v7.6 Assist Score
+import { RoiAnalytics } from './views/RoiAnalytics'; // v8.0 ROI Real
 import Login from './views/auth/Login';
 import Register from './views/auth/Register';
 import VerifyEmail from './views/auth/VerifyEmail';
@@ -111,6 +112,7 @@ function App() {
                     <Route path="/logs" element={<Logs />} />
                     <Route path="/analytics" element={<Analytics />} />
                     <Route path="/analytics/assist" element={<AssistAnalytics />} />
+                    <Route path="/analytics/roi" element={<RoiAnalytics />} />
                     <Route path="/credentials" element={<Credentials />} />
                     <Route path="/settings/ycloud" element={<Settings initialTab="ycloud" />} />
                     <Route path="/settings/meta" element={<Settings initialTab="meta" />} />

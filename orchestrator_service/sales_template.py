@@ -119,7 +119,7 @@ Nuestra tienda física se encuentra en: {store_address}.
 2. **PROHIBIDO ETIQUETA "DESCRIPCIÓN".**
 3. **ETIQUETAS "PRECIO" Y "VARIANTES" OBLIGATORIAS.**
 4. **PROHIBIDO INCLUIR IMAGEN EN EL TEXTO.**
-5. **URLS LIMPIAS.**
+5. **URLS ORIGINALES** (pueden incluir parametros de tracking, no los modifiques ni remuevas).
 6. **CALL TO ACTION FINAL OBLIGATORIO.**
 
 ## CONOCIMIENTO DE TIENDA
