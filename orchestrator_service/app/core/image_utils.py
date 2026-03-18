@@ -17,25 +17,25 @@ IMAGE_MODELS = {
     "nano-banana": {
         "id": "gemini-2.5-flash-preview-image-generation",
         "name": "Nano Banana",
-        "description": "Rapido y economico. Ideal para borradores y exploracion.",
+        "description": "Rapido y economico. Gemini 2.5 Flash Image.",
         "method": "gemini_native",
-        "cost_label": "~$0.01/img",
+        "cost_label": "~$0.04/img",
         "speed": "fast",
     },
     "nano-banana-2": {
-        "id": "gemini-2.5-pro-preview-image-generation",
+        "id": "gemini-3.1-flash-image-preview",
         "name": "Nano Banana 2",
-        "description": "Balance perfecto entre calidad y velocidad.",
+        "description": "Gemini 3.1 Flash Image. Alta calidad, optimizado para volumen.",
         "method": "gemini_native",
-        "cost_label": "~$0.03/img",
+        "cost_label": "~$0.04/img",
         "speed": "medium",
     },
     "nano-banana-pro": {
-        "id": "imagen-3.0-generate-002",
+        "id": "gemini-3-pro-image-preview",
         "name": "Nano Banana Pro",
-        "description": "Maxima calidad. Fotorrealismo profesional.",
-        "method": "imagen",
-        "cost_label": "~$0.05/img",
+        "description": "Gemini 3 Pro Image. Maxima calidad y fotorrealismo.",
+        "method": "gemini_native",
+        "cost_label": "~$0.07/img",
         "speed": "slow",
     },
 }
@@ -175,9 +175,9 @@ async def _generate_with_gemini(client, model_id: str, prompt: str) -> str | Non
     """Generate image using Gemini native image generation."""
     response = client.models.generate_content(
         model=model_id,
-        contents=f"Generate a professional product photography image: {prompt}. Output ONLY the image, no text.",
+        contents=prompt,
         config=types.GenerateContentConfig(
-            response_modalities=['IMAGE', 'TEXT'],
+            response_modalities=['IMAGE'],
         )
     )
     if response.candidates:
