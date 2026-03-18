@@ -77,12 +77,13 @@ Nexus v7.6 uses a **Sovereign Microservices Architecture**, designed to scale ho
 ### 🤖 Artificial Intelligence Layer
 -   **Orchestration**: [LangChain 0.1.0](https://www.langchain.com/) + Custom Agent Factory
 -   **Supported Models**:
-    -   **OpenAI**: `gpt-4o` (Recommended), `gpt-4o-mini` (Default), `gpt-3.5-turbo` (Economy)
-    -   **Google**: `gemini-1.5-pro` (Multimodal, 1M Context), `gemini-1.5-flash` (Fast)
+    -   **OpenAI**: `gpt-4o` (Recommended), `gpt-4o-mini` (Default)
+    -   **Google**: `gemini-2.5-flash` (Vision/Text), `gemini-3.1-flash-image-preview` (Image Gen), `gemini-3-pro-image-preview` (Pro Image Gen)
     -   **Anthropic**: `claude-3.5-sonnet` (Experimental Support)
 -   **RAG Engine**: "Shadow RAG" (Passive Learning) + Tenant-Isolated Collections
 -   **Vector Embeddings**: OpenAI `text-embedding-3-small`
--   **Image Generation**: DALL-E 3, Google Imagen 3 (via Gemini Vision)
+-   **Image Generation**: Gemini 3.x Native (Nano Banana 2 / Pro) — BYOK per tenant
+-   **Authentication**: Google OAuth 2.0 + Email/Password
 
 ### 🔐 Security & Authentication
 -   **Encryption**: AES-256 (Fernet) for credentials at rest
@@ -95,26 +96,28 @@ Nexus v7.6 uses a **Sovereign Microservices Architecture**, designed to scale ho
 
 ## 🧠 AI Models & Capabilities
 
-### Production Models (Tier 1)
+### Chat & Agent Models
 | Model | Provider | Use Case | Context Window | Speed |
 |-------|----------|----------|----------------|-------|
 | `gpt-4o` | OpenAI | Sales Agents, Complex Reasoning | 128k tokens | Medium |
 | `gpt-4o-mini` | OpenAI | **Default**, Support, Classification | 128k tokens | Fast |
-| `gemini-1.5-pro` | Google | Multimodal Analysis, Large Context | 1M tokens | Medium |
-| `gemini-1.5-flash` | Google | High-Speed Tasks, Economy | 1M tokens | Very Fast |
+| `gemini-2.5-flash` | Google | Vision Analysis, Brand DNA, Fast Tasks | 1M tokens | Very Fast |
 
-### Experimental Models (Tier 2)
-| Model | Provider | Use Case | Status |
-|-------|----------|----------|--------|
-| `gpt-3.5-turbo` | OpenAI | Legacy, Simple Tasks | Deprecated |
-| `claude-3.5-sonnet` | Anthropic | Advanced Reasoning | Beta |
+### Image Generation Models (Creative Studio — BYOK)
+| Model ID | Internal Name | Use Case | Image-to-Image | Cost |
+|----------|--------------|----------|:-:|------|
+| `gemini-3.1-flash-image-preview` | **Nano Banana 2** | Fast generation, high volume | Up to 14 refs | ~$0.04/img |
+| `gemini-3-pro-image-preview` | **Nano Banana Pro** | Max quality, photorealism | Up to 14 refs | ~$0.07/img |
 
 ### AI Capabilities
 - **Polymorphic Agents**: Sales, Support, Logistics, Creative Director
 - **Tool Usage**: Product search, stock check, order tracking, email sending
 - **RAG (Retrieval-Augmented Generation)**: PDF/DOCX ingestion, semantic search
 - **Image Analysis**: Product recognition via Gemini Vision
-- **Text-to-Image**: Ad generation via DALL-E 3 / Imagen 3
+- **Image Generation**: Gemini 3.x native with image-to-image reference support (tenant-owned API keys)
+- **AI Prompt Enhancer**: Transforms basic prompts into professional art-director-level instructions
+- **Brand DNA Extraction**: Automatic brand identity analysis from websites
+- **Conversion Copy**: Campaign text generation using AIDA/FOMO/exclusivity frameworks
 - **Multilingual**: Spanish, English (i18n support)
 
 ---
@@ -148,11 +151,14 @@ Nexus v7.6 uses a **Sovereign Microservices Architecture**, designed to scale ho
 - **UI Masking**: Credentials displayed as `Nexus_Key_*****`
 - **Audit Trail**: Track credential usage and changes
 
-### 🎨 Creative Automation Studio
-- **Brand Archetype Wizard**: AI-powered brand identity generation
-- **Ad Fusion Engine**: Generate marketing assets from product data
-- **Image Generation**: DALL-E 3 / Imagen 3 integration
-- **Multi-Asset Export**: Download as PNG, JPG, or JSON
+### 🎨 Creative Studio (Business Forge)
+- **Brand DNA Extraction**: AI analyzes website + TiendaNube data to extract brand identity (colors, typography, personality, tone)
+- **Photoshoot Studio**: 5 professional templates (Studio, Floating, Lifestyle, In Use, Ingredient) with image-to-image reference
+- **Model Shoot**: 8 scene templates (Urban, Cozy Home, Outdoor, Cafe, Fitness, Workspace, Night Out, Beach) — upload model photo for face/body replication
+- **Campaign Generator**: Multi-channel campaigns (Instagram, Facebook, WhatsApp, Email, Web) with parallel generation and conversion-optimized copy (AIDA, FOMO, exclusivity frameworks)
+- **AI Prompt Enhancer**: Transforms basic prompts into art-director-level instructions incorporating Brand DNA
+- **BYOK Image Generation**: Each tenant uses their own Google AI API key — Nano Banana 2 (gemini-3.1-flash) or Nano Banana Pro (gemini-3-pro) with image-to-image support
+- **Asset Gallery**: Browse, search, filter, edit, and download all generated assets
 
 ### 📊 ROI & Analytics
 - **Assist Score Protocol**: Real-time AI performance quantification
@@ -161,11 +167,29 @@ Nexus v7.6 uses a **Sovereign Microservices Architecture**, designed to scale ho
 - **Frustration Gauge**: Monitor customer sentiment
 - **Conversation Analytics**: Message count, response time, resolution rate
 
-### 🔗 E-Commerce Integrations
+### 💳 SaaS Billing System
+- **Plans**: Free Trial (10 days), Pro, Enterprise — with Stripe & MercadoPago support
+- **Subscription Guard**: Middleware blocks API access when trial expired, subscription canceled, or plan limits exceeded
+- **Usage Tracking**: Per-tenant message count, token consumption, LLM cost tracking
+- **Trial Manager**: Background service sends warning emails at day 7, 9, 10 + auto-expires
+- **Invoices**: Full invoice history with payment provider tracking
+- **Startup Hydration**: Existing tenants auto-receive Pro plan; new users get 10-day trial
+
+### 🛡️ Platform Control Tower (Super Admin)
+- **God Mode Dashboard**: Real-time MRR, revenue, costs, margins, trial expiration alerts
+- **Tenant Management**: Search, filter, edit, suspend, activate, archive, delete tenants
+- **Plan Management**: Change tenant plans, extend trials, view subscriber counts
+- **Infrastructure Monitor**: Redis memory, DB size, table stats
+- **Audit Logs**: Full history of admin actions with IP tracking
+- **Access**: `SUPER_ADMIN_EMAIL` env var auto-promotes on startup
+
+### 🔗 E-Commerce & Channel Integrations
 - **Tienda Nube**: Full OAuth, catalog sync, order management
-- **Meta Business Suite**: Page/IG account discovery, messaging
+- **Meta Embedded Signup**: Connect WhatsApp, Instagram, Facebook via popup — auto webhook subscription, per-asset token persistence (ClinicForge-grade encryption)
 - **YCloud**: Alternative WhatsApp gateway
-- **Chatwoot**: Omnichannel inbox for human agents
+- **Chatwoot**: Omnichannel inbox for human agents (WA, IG, FB)
+- **Google OAuth**: Login/Register with Google for zero-friction onboarding
+- **Multi-Channel**: Up to 3 WhatsApps, 2 Instagrams, 2 Facebooks per tenant
 
 ---
 
@@ -242,7 +266,35 @@ Nexus is designed under the "Clone & Run" philosophy. You don't need to install 
     Nexus uses a "Sovereign Vault", so you only need the master bootstrap credentials.
     ```bash
     cp .env.example .env
-    # Edit .env with your Master Keys (OPENAI_API_KEY, etc.)
+    # Edit .env with your Master Keys
+    ```
+
+    **Required Environment Variables**:
+    ```bash
+    # Core
+    SECRET_KEY=your-secret-key-32chars
+    POSTGRES_DSN=postgresql+asyncpg://user:pass@postgres:5432/platform_ai
+    REDIS_URL=redis://redis:6379/0
+
+    # AI (for agents — tenant brings their own for Creative Studio)
+    OPENAI_API_KEY=sk-...
+
+    # Google OAuth (login/register with Google)
+    GOOGLE_OAUTH_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+
+    # Meta Integration (WhatsApp, Instagram, Facebook)
+    META_APP_ID=your-meta-app-id
+    META_APP_SECRET=your-meta-app-secret
+    META_VERIFY_TOKEN=your-webhook-verify-token
+
+    # SaaS Admin
+    SUPER_ADMIN_EMAIL=admin@yourdomain.com
+
+    # Frontend
+    VITE_FACEBOOK_APP_ID=your-meta-app-id
+    VITE_META_CONFIG_ID=your-login-config-id
+    VITE_META_EMBEDDED_SIGNUP=true
+    VITE_GOOGLE_OAUTH_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
     ```
 
 3.  **Start Engines**:
