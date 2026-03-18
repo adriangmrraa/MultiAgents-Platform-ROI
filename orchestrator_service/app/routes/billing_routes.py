@@ -151,19 +151,23 @@ async def list_plans(db = Depends(get_pool_db)):
                         updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
                     )
                 """)
-                # Fix default if missing
+                # Fix schema: ensure defaults and nullable columns
                 await conn.execute("ALTER TABLE plans ALTER COLUMN id SET DEFAULT gen_random_uuid()")
-                # Seed each plan individually to avoid multi-statement issues
+                await conn.execute("ALTER TABLE plans ALTER COLUMN billing_period SET DEFAULT 'monthly'")
+                await conn.execute("ALTER TABLE plans ALTER COLUMN billing_period DROP NOT NULL")
+                await conn.execute("ALTER TABLE plans ALTER COLUMN is_active SET DEFAULT true")
+                await conn.execute("ALTER TABLE plans ALTER COLUMN is_active DROP NOT NULL")
+                # Seed each plan individually
                 for plan in [
-                    ('free', 'Free Trial', '10 dias gratis con acceso moderado a la plataforma.', 0, 0, 0, 0, 1, 200, 5, 1, 1, 25000, '{"analytics": false, "custom_branding": false, "api_access": false, "priority_support": false, "whatsapp_templates": false, "multi_channel": false}', 0),
-                    ('pro', 'Pro', 'Para negocios en crecimiento. Todo lo que necesitas para escalar.', 49, 45000, 470, 432000, 5, 5000, 50, 3, 5, 500000, '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": false, "whatsapp_templates": true, "multi_channel": true}', 1),
-                    ('enterprise', 'Enterprise', 'Para grandes equipos. Soporte prioritario y features exclusivas.', 199, 180000, 1910, 1728000, -1, -1, -1, -1, -1, -1, '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": true, "whatsapp_templates": true, "multi_channel": true, "dedicated_support": true, "sla": true}', 2),
+                    ('free', 'Free Trial', '10 dias gratis con acceso moderado a la plataforma.', 0, 0, 0, 0, 'monthly', 1, 200, 5, 1, 1, 25000, '{"analytics": false, "custom_branding": false, "api_access": false, "priority_support": false, "whatsapp_templates": false, "multi_channel": false}', True, 0),
+                    ('pro', 'Pro', 'Para negocios en crecimiento. Todo lo que necesitas para escalar.', 49, 45000, 470, 432000, 'monthly', 5, 5000, 50, 3, 5, 500000, '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": false, "whatsapp_templates": true, "multi_channel": true}', True, 1),
+                    ('enterprise', 'Enterprise', 'Para grandes equipos. Soporte prioritario y features exclusivas.', 199, 180000, 1910, 1728000, 'monthly', -1, -1, -1, -1, -1, -1, '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": true, "whatsapp_templates": true, "multi_channel": true, "dedicated_support": true, "sla": true}', True, 2),
                 ]:
                     await conn.execute("""
                         INSERT INTO plans (id, name, display_name, description, price_usd, price_ars, price_usd_yearly, price_ars_yearly,
-                            max_agents, max_messages_per_month, max_knowledge_docs, max_channels, max_team_members, max_tokens_per_month,
-                            features, sort_order)
-                        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15)
+                            billing_period, max_agents, max_messages_per_month, max_knowledge_docs, max_channels, max_team_members, max_tokens_per_month,
+                            features, is_active, sort_order)
+                        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17)
                         ON CONFLICT (name) DO NOTHING
                     """, *plan)
             rows = await db.fetch(PLANS_SELECT)
