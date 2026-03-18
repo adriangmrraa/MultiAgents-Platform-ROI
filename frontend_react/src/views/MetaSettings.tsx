@@ -66,9 +66,9 @@ export const MetaSettings: React.FC = () => {
 
     const connectWithBackend = async (code: string) => {
         try {
-            // Dynamic Redirect URI (Origin + Slash) to match Meta's strict requirement
-            // UPDATE: Removed trailing slash per Meta 400 Error (Redirect Mismatch)
-            const redirectUri = window.location.origin;
+            // FB.login() with config_id uses the FULL page URL as redirect_uri internally.
+            // We must send the exact same URL for the code exchange to succeed.
+            const redirectUri = window.location.href.split('?')[0].split('#')[0];
 
             const res = await fetchApi('/admin/meta/connect', {
                 method: 'POST',

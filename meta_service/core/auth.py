@@ -23,11 +23,25 @@ class MetaAuthService:
         Tries redirect_uri with and without trailing slash (Meta is strict about exact match).
         Flow: code → short-lived token → long-lived token (fb_exchange_token)
         """
-        uris_to_try = [redirect_uri]
+        # Build all possible URI variants Meta might expect
+        from urllib.parse import urlparse
+        parsed = urlparse(redirect_uri)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+
+        uris_to_try = []
+        # 1. Exact as received (full page URL)
+        uris_to_try.append(redirect_uri)
+        # 2. With/without trailing slash
         if redirect_uri.endswith("/"):
             uris_to_try.append(redirect_uri.rstrip("/"))
         else:
             uris_to_try.append(redirect_uri + "/")
+        # 3. Origin only (no path)
+        if origin != redirect_uri and origin + "/" != redirect_uri:
+            uris_to_try.append(origin)
+            uris_to_try.append(origin + "/")
+        # Deduplicate while preserving order
+        uris_to_try = list(dict.fromkeys(uris_to_try))
 
         url = f"{self.base_url}/oauth/access_token"
         last_error = None
