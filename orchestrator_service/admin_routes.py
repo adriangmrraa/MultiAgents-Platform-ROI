@@ -3514,34 +3514,35 @@ async def list_available_models():
 # Consolidado en línea 1549
 pass
 
-@router.get("/analytics/summary", dependencies=[Depends(verify_admin_token)])
+@router.get("/analytics/summary")
 @require_role('SuperAdmin')
-async def analytics_summary(tenant_id: int = 1, from_date: str = None, to_date: str = None):
+async def analytics_summary(current_user: User = Depends(get_current_user), tenant_id: Optional[int] = None):
     """
-    Advanced Analytics derived strictly from PostgreSQL with Aggregated Cache (Redis).
+    Advanced Analytics — SuperAdmin can pass tenant_id, otherwise sees own tenant.
     """
-    # Cache Key
-    cache_key = f"analytics:summary:{tenant_id}"
-    
-    # Try Cache
+    tid = tenant_id or current_user.tenant_id
+    cache_key = f"analytics:summary:{tid}"
+
     try:
         cached = await redis_client.get(cache_key)
         if cached:
             return json.loads(cached)
     except Exception:
-        pass # Fail silently on cache error
+        pass
 
     try:
-        # 1. Conversation KPIs
-        active_convs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations WHERE status = 'open'")
-        blocked_convs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_conversations WHERE status = 'human_override'")
-        
-        # 2. Message KPIs
-        total_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages")
-        ai_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'assistant'")
-        human_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE role = 'human_supervisor'")
-        
-        return {
+        active_convs = await db.pool.fetchval(
+            "SELECT COUNT(*) FROM chat_conversations WHERE tenant_id = $1 AND status = 'open'", tid)
+        blocked_convs = await db.pool.fetchval(
+            "SELECT COUNT(*) FROM chat_conversations WHERE tenant_id = $1 AND status = 'human_override'", tid)
+        total_msgs = await db.pool.fetchval(
+            "SELECT COUNT(*) FROM chat_messages WHERE tenant_id = $1", tid)
+        ai_msgs = await db.pool.fetchval(
+            "SELECT COUNT(*) FROM chat_messages WHERE tenant_id = $1 AND role = 'assistant'", tid)
+        human_msgs = await db.pool.fetchval(
+            "SELECT COUNT(*) FROM chat_messages WHERE tenant_id = $1 AND role = 'human_supervisor'", tid)
+
+        res = {
             "kpis": {
                 "conversations": {
                     "active": active_convs or 0,
@@ -3554,13 +3555,12 @@ async def analytics_summary(tenant_id: int = 1, from_date: str = None, to_date: 
                 }
             }
         }
-        
-        # Set Cache (TTL 5 minutes)
+
         try:
             await redis_client.setex(cache_key, 300, json.dumps(res))
-        except:
+        except Exception:
             pass
-            
+
         return res
     except Exception as e:
         print(f"ERROR analytics_summary: {str(e)}")
@@ -3849,22 +3849,34 @@ async def console_events(limit: int = 50):
         events.append(evt)
         
     return {"events": events}
-@router.get("/analytics/kpis", dependencies=[Depends(verify_admin_token)])
-async def get_analytics_kpis():
-    """Get high-level KPIs for the dashboard."""
+@router.get("/analytics/kpis")
+async def get_analytics_kpis(current_user: User = Depends(get_current_user)):
+    """Get high-level KPIs for the dashboard — scoped by tenant."""
+    tenant_id = current_user.tenant_id
     try:
-        # 1. Total Messages (All time)
-        total_msgs = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages")
-        
+        # 1. Total Messages (tenant-scoped)
+        total_msgs = await db.pool.fetchval(
+            "SELECT COUNT(*) FROM chat_messages WHERE tenant_id = $1", tenant_id)
+
         # 2. Messages Today
-        msgs_today = await db.pool.fetchval("SELECT COUNT(*) FROM chat_messages WHERE created_at > CURRENT_DATE")
-        
+        msgs_today = await db.pool.fetchval(
+            "SELECT COUNT(*) FROM chat_messages WHERE tenant_id = $1 AND created_at > CURRENT_DATE", tenant_id)
+
         # 3. Active Users (Unique phones in last 24h)
-        active_users = await db.pool.fetchval("SELECT COUNT(DISTINCT from_number) FROM chat_messages WHERE role='user' AND created_at > NOW() - INTERVAL '24 hours'")
-        
-        # 4. Error Rate (System events with severity ERROR in last 24h)
-        errors_today = await db.pool.fetchval("SELECT COUNT(*) FROM system_events WHERE severity='ERROR' AND occurred_at > CURRENT_DATE")
-        
+        active_users = await db.pool.fetchval(
+            "SELECT COUNT(DISTINCT from_number) FROM chat_messages WHERE tenant_id = $1 AND role='user' AND created_at > NOW() - INTERVAL '24 hours'", tenant_id)
+
+        # 4. Error Rate (System events — tenant-scoped if column exists, else global for SuperAdmin)
+        errors_today = 0
+        try:
+            errors_today = await db.pool.fetchval(
+                "SELECT COUNT(*) FROM system_events WHERE tenant_id = $1 AND severity='ERROR' AND occurred_at > CURRENT_DATE", tenant_id) or 0
+        except Exception:
+            # system_events may not have tenant_id column — only show for SuperAdmin
+            if current_user.role == 'SuperAdmin':
+                errors_today = await db.pool.fetchval(
+                    "SELECT COUNT(*) FROM system_events WHERE severity='ERROR' AND occurred_at > CURRENT_DATE") or 0
+
         return {
             "total_messages": total_msgs or 0,
             "messages_today": msgs_today or 0,
@@ -3875,20 +3887,21 @@ async def get_analytics_kpis():
         print(f"Error fetching KPIs: {e}")
         return {"total_messages": 0, "messages_today": 0, "active_users_24h": 0, "errors_today": 0}
 
-@router.get("/analytics/daily", dependencies=[Depends(verify_admin_token)])
-async def get_analytics_daily():
-    """Get daily message volume for the last 7 days."""
+@router.get("/analytics/daily")
+async def get_analytics_daily(current_user: User = Depends(get_current_user)):
+    """Get daily message volume for the last 7 days — scoped by tenant."""
+    tenant_id = current_user.tenant_id
     try:
         query = """
-        SELECT 
+        SELECT
             to_char(created_at, 'YYYY-MM-DD') as date,
             COUNT(*) as count
         FROM chat_messages
-        WHERE created_at > NOW() - INTERVAL '7 days'
+        WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '7 days'
         GROUP BY date
         ORDER BY date ASC
         """
-        rows = await db.pool.fetch(query)
+        rows = await db.pool.fetch(query, tenant_id)
         return [{"date": r["date"], "count": r["count"]} for r in rows]
     except Exception as e:
         print(f"Error fetching daily analytics: {e}")
@@ -3905,46 +3918,35 @@ pass
 
 # --- Reports ---
 
-@router.get("/reports/assisted-gmv", dependencies=[Depends(verify_admin_token)])
-async def report_assisted_gmv(tenant_id: Optional[str] = None, days: int = 30):
+@router.get("/reports/assisted-gmv")
+async def report_assisted_gmv(current_user: User = Depends(get_current_user), days: int = 30):
     """
     Calculates Estimated GMV based on 'Assisted Success' heuristics.
-    Protocol Omega Compliance:
-    1. Thermal Shield: Redis Cache (TTL 300s).
-    2. Fallback: Graceful degradation on DB/Cache failure.
-    3. Identity: Uses UUIDs from Source of Truth (chat_messages).
+    Always scoped by tenant of the logged-in user.
     """
-    # Cache Key Construction (Multi-tenant aware)
-    CACHE_KEY = f"roi:gmv:{tenant_id or 'global'}:{days}"
-    
-    # 1. Configurable Average Ticket
-    AVG_TICKET_ARS = 45000.0 
-    
+    tenant_id = current_user.tenant_id
+    CACHE_KEY = f"roi:gmv:{tenant_id}:{days}"
+
+    AVG_TICKET_ARS = 45000.0
+
     async def fetch_roi_from_db():
         date_limit = datetime.now() - timedelta(days=days)
-        
-        # Heuristic Query (Source of Truth: chat_messages)
-        # We rely on existing tables (Sovereignty of Data) rather than creating new ones 
-        # to avoid Schema Drift risks in this Phase 7 ignition.
+
         q_success = """
             SELECT COUNT(DISTINCT c.id)
             FROM chat_conversations c
             JOIN chat_messages m ON c.id = m.conversation_id
-            WHERE c.last_message_at >= $1
+            WHERE c.tenant_id = $1
+            AND c.last_message_at >= $2
             AND (
-                m.content ILIKE '%tu pedido es el #%' OR 
+                m.content ILIKE '%tu pedido es el #%' OR
                 m.content ILIKE '%gracias por tu compra%' OR
                 m.content ILIKE '%pago recibido%' OR
                 m.content ILIKE '%link de pago generado%'
             )
         """
-        
-        params = [date_limit]
-        if tenant_id:
-            q_success += " AND c.tenant_id = $2"
-            params.append(tenant_id)
-            
-        conversions = await db.pool.fetchval(q_success, *params)
+
+        conversions = await db.pool.fetchval(q_success, tenant_id, date_limit)
         
         # Calculate
         estimated_revenue = conversions * AVG_TICKET_ARS
