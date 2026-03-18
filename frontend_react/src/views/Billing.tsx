@@ -59,7 +59,10 @@ export const Billing: React.FC = () => {
                     fetchApi('/billing/usage').catch(() => null),
                     fetchApi('/billing/invoices').catch(() => [])
                 ]);
-                setPlans(p || []);
+                setPlans((p || []).map((plan: any) => ({
+                    ...plan,
+                    features: typeof plan.features === 'string' ? (() => { try { return JSON.parse(plan.features); } catch { return {}; } })() : (plan.features || {})
+                })));
                 setSubscription(s);
                 setUsage(u);
                 setInvoices(i || []);
