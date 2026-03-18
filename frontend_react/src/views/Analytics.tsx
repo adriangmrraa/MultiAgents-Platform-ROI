@@ -43,7 +43,7 @@ export const Analytics: React.FC = () => {
             <h1 className="view-title">Métricas y Rendimiento</h1>
 
             {/* KPI Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
                 <div className="stat-card glass p-6 relative overflow-hidden group">
                     <div className="absolute right-4 top-4 opacity-10 group-hover:opacity-20 transition-opacity">
                         <MessageSquare size={48} />
@@ -81,7 +81,7 @@ export const Analytics: React.FC = () => {
             </div>
 
             {/* Custom Bar Chart - Messages Last 7 Days */}
-            <div className="glass p-8">
+            <div className="glass p-4 md:p-8">
                 <div className="flex items-center justify-between mb-8">
                     <h2 className="text-xl font-bold flex items-center gap-2">
                         <BarChart3 className="text-accent" /> Volumen de Mensajes (7 Días)
@@ -89,7 +89,7 @@ export const Analytics: React.FC = () => {
                 </div>
 
                 {dailyData.length > 0 ? (
-                    <div className="flex items-end justify-between h-[300px] gap-4">
+                    <div className="flex items-end justify-between h-[200px] sm:h-[300px] gap-2 sm:gap-4">
                         {dailyData.map((d) => {
                             const heightPercent = (d.count / maxCount) * 100;
                             return (

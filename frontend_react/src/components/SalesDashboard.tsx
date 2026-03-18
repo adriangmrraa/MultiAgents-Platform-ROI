@@ -197,7 +197,7 @@ export const SalesDashboard: React.FC = () => {
                                                     </div>
                                                 )}
                                                 <div className="min-w-0">
-                                                    <div className="text-xs text-white font-medium truncate max-w-[180px]">{prod.name}</div>
+                                                    <div className="text-xs text-white font-medium truncate max-w-[120px] sm:max-w-[180px]">{prod.name}</div>
                                                     <div className="text-[10px] text-gray-500">
                                                         {prod.quantity > 1 && `${prod.quantity}x `}${parseFloat(prod.price).toLocaleString()}
                                                     </div>

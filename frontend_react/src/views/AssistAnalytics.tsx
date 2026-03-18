@@ -66,7 +66,7 @@ export const AssistAnalytics: React.FC = () => {
             </div>
 
             {/* Matrix Header */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
                 <div className="bg-white/5 border border-white/10 rounded-3xl p-6 relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-5">
                         <TrendingUp size={80} className="text-emerald-500" />
@@ -96,7 +96,7 @@ export const AssistAnalytics: React.FC = () => {
             </div>
 
             {/* Neural Logic explanation */}
-            <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-3xl p-8 mb-8 flex flex-col md:flex-row gap-8 items-center">
+            <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-2xl md:rounded-3xl p-5 md:p-8 mb-8 flex flex-col md:flex-row gap-5 md:gap-8 items-center">
                 <div className="bg-emerald-500/20 p-4 rounded-full">
                     <Lightbulb size={32} className="text-emerald-400" />
                 </div>
@@ -112,43 +112,65 @@ export const AssistAnalytics: React.FC = () => {
 
             {/* Audit Log */}
             <h2 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-4 px-2">Log de Auditoría Neuronal Reciente</h2>
-            <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden">
-                <table className="w-full text-left text-sm">
-                    <thead className="bg-white/5 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/10">
-                        <tr>
-                            <th className="px-6 py-4">Timestamp</th>
-                            <th className="px-6 py-4">Tipo</th>
-                            <th className="px-6 py-4">Score</th>
-                            <th className="px-6 py-4">Razonamiento de la IA</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                        {data.recent_audits.length > 0 ? data.recent_audits.map((audit, i) => (
-                            <tr key={i} className="hover:bg-white/[0.02] transition-colors">
-                                <td className="px-6 py-4 font-mono text-[10px] text-gray-500">
-                                    {new Date(audit.timestamp).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-4">
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${audit.type === 'sales' ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                                        {audit.type}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 font-black">
-                                    +{audit.score}
-                                </td>
-                                <td className="px-6 py-4 text-gray-400 text-xs italic">
-                                    "{audit.reasoning}"
-                                </td>
-                            </tr>
-                        )) : (
+            <div className="bg-white/5 border border-white/10 rounded-2xl md:rounded-3xl overflow-hidden">
+                {/* Mobile: card layout / Desktop: table */}
+                <div className="hidden md:block">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-white/5 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/10">
                             <tr>
-                                <td colSpan={4} className="px-6 py-12 text-center text-gray-600 font-medium italic">
-                                    Iniciando motor de auditoría... Se mostrarán datos en tiempo real al finalizar las próximas interacciones.
-                                </td>
+                                <th className="px-6 py-4">Timestamp</th>
+                                <th className="px-6 py-4">Tipo</th>
+                                <th className="px-6 py-4">Score</th>
+                                <th className="px-6 py-4">Razonamiento de la IA</th>
                             </tr>
-                        )}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                            {data.recent_audits.length > 0 ? data.recent_audits.map((audit, i) => (
+                                <tr key={i} className="hover:bg-white/[0.02] transition-colors">
+                                    <td className="px-6 py-4 font-mono text-[10px] text-gray-500">
+                                        {new Date(audit.timestamp).toLocaleString()}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${audit.type === 'sales' ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                                            {audit.type}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 font-black">
+                                        +{audit.score}
+                                    </td>
+                                    <td className="px-6 py-4 text-gray-400 text-xs italic">
+                                        "{audit.reasoning}"
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr>
+                                    <td colSpan={4} className="px-6 py-12 text-center text-gray-600 font-medium italic">
+                                        Iniciando motor de auditoría...
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                {/* Mobile card layout */}
+                <div className="md:hidden divide-y divide-white/5">
+                    {data.recent_audits.length > 0 ? data.recent_audits.map((audit, i) => (
+                        <div key={i} className="p-4 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${audit.type === 'sales' ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                                    {audit.type}
+                                </span>
+                                <span className="font-black text-white">+{audit.score}</span>
+                            </div>
+                            <p className="text-xs text-gray-400 italic">"{audit.reasoning}"</p>
+                            <span className="text-[10px] text-gray-600 font-mono">{new Date(audit.timestamp).toLocaleString()}</span>
+                        </div>
+                    )) : (
+                        <div className="p-8 text-center text-gray-600 text-sm italic">
+                            Iniciando motor de auditoría...
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -104,7 +104,7 @@ export const RoiAnalytics: React.FC = () => {
 
     return (
         <div className="view active">
-            <div className="flex items-center gap-4 mb-6">
+            <div className="flex flex-wrap items-center gap-3 mb-6">
                 <Link to="/" className="text-gray-500 hover:text-white transition-colors">
                     <ArrowLeft size={20} />
                 </Link>
@@ -123,7 +123,7 @@ export const RoiAnalytics: React.FC = () => {
 
             {/* Attribution Detail — Summary Cards */}
             {roi && (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                     <div className="bg-white/5 p-6 rounded-[20px] border border-white/10">
                         <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Ventas Totales (30d)</span>
                         <div className="text-3xl font-black text-white mt-1">{roi.total_sales.formatted}</div>
@@ -150,12 +150,12 @@ export const RoiAnalytics: React.FC = () => {
             )}
 
             {/* Filters */}
-            <div className="flex items-center gap-4 mb-6">
+            <div className="flex flex-wrap items-center gap-3 mb-6">
                 <Filter size={16} className="text-gray-500" />
                 <select
                     value={channelFilter}
                     onChange={e => { setChannelFilter(e.target.value); setPage(1); }}
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+                    className="flex-1 min-w-[140px] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500/50"
                 >
                     <option value="">Todos los canales</option>
                     <option value="whatsapp">WhatsApp</option>
@@ -165,7 +165,7 @@ export const RoiAnalytics: React.FC = () => {
                 <select
                     value={methodFilter}
                     onChange={e => { setMethodFilter(e.target.value); setPage(1); }}
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+                    className="flex-1 min-w-[140px] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500/50"
                 >
                     <option value="">Todos los metodos</option>
                     <option value="phone_match">Telefono</option>
@@ -190,8 +190,8 @@ export const RoiAnalytics: React.FC = () => {
                         {orders.map(order => (
                             <div key={order.id} className="p-4 hover:bg-white/5 transition-colors">
                                 {/* Order header row */}
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center gap-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <span className="text-sm font-mono text-gray-400">#{order.order_number}</span>
                                         <span className="text-sm text-white font-medium">{order.customer_name || '-'}</span>
                                         <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
@@ -202,7 +202,7 @@ export const RoiAnalytics: React.FC = () => {
                                             {order.payment_status}
                                         </span>
                                     </div>
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                                         <div className="flex items-center gap-1.5">
                                             {channelIcons[order.channel_source] || <MessageCircle size={12} className="text-gray-400" />}
                                             <span className="text-xs text-gray-300 capitalize">{order.channel_source}</span>
@@ -236,7 +236,7 @@ export const RoiAnalytics: React.FC = () => {
                                                     </div>
                                                 )}
                                                 <div className="min-w-0">
-                                                    <div className="text-xs text-white font-medium truncate max-w-[220px]">{prod.name}</div>
+                                                    <div className="text-xs text-white font-medium truncate max-w-[150px] sm:max-w-[220px]">{prod.name}</div>
                                                     <div className="text-[10px] text-gray-500">
                                                         {prod.quantity > 1 && <span>{prod.quantity}x </span>}
                                                         ${parseFloat(prod.price).toLocaleString()}
@@ -252,7 +252,7 @@ export const RoiAnalytics: React.FC = () => {
 
                                 {/* Conversation preview */}
                                 {order.conversation_preview && (
-                                    <div className="mt-2 text-[10px] text-gray-600 truncate max-w-[500px] italic">
+                                    <div className="mt-2 text-[10px] text-gray-600 truncate max-w-full italic">
                                         Conversacion: "{order.conversation_preview}"
                                     </div>
                                 )}

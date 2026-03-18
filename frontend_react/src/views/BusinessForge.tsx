@@ -123,7 +123,7 @@ export const BusinessForge: React.FC = () => {
                     </div>
 
                     {/* Feature Preview */}
-                    <div className="grid grid-cols-3 gap-3 mb-10">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-10">
                         {[
                             { icon: <Camera size={20} />, label: 'Photoshoot IA', desc: 'Fotos de estudio sin fotografo' },
                             { icon: <Megaphone size={20} />, label: 'Campanas', desc: 'Ads para todos los canales' },
@@ -284,13 +284,13 @@ export const BusinessForge: React.FC = () => {
                         </h1>
                         <p className="text-sm text-slate-500 mt-1">Genera y edita assets de marketing con IA</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                         <button onClick={handleDisconnect} className="text-[10px] text-slate-500 hover:text-red-400 border border-white/5 hover:border-red-500/30 px-2 py-1 rounded transition-colors" title="Desconectar Google API Key">
                             <svg width="14" height="14" viewBox="0 0 24 24" className="inline mr-1"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                             Conectado
                         </button>
                     {brandDNA && (
-                        <div className="flex items-center gap-2">
+                        <div className="hidden sm:flex items-center gap-2">
                             {brandDNA.colors?.primary?.map((c: string, i: number) => (
                                 <div key={i} className="w-6 h-6 rounded-full border border-white/20" style={{ background: c }} title={c} />
                             ))}
@@ -303,7 +303,7 @@ export const BusinessForge: React.FC = () => {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex gap-1 mb-6 bg-black/40 p-1 rounded-xl w-fit">
+                <div className="flex gap-1 mb-6 bg-black/40 p-1 rounded-xl overflow-x-auto w-full">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
@@ -351,7 +351,7 @@ const BrandDNATab = ({ brandDNA, fetchApi, onRefresh }: any) => {
             <div className="glass p-6 rounded-xl border border-purple-500/20">
                 <h3 className="text-lg font-bold mb-3 flex items-center gap-2"><Palette className="text-purple-400" /> Extraer Brand DNA</h3>
                 <p className="text-sm text-slate-400 mb-4">Escaneamos tu tienda online y TiendaNube para extraer colores, tipografias, tono de voz y estilo visual.</p>
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                     <input type="url" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="URL de tu tienda (opcional)" className="flex-1 bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:border-purple-500/50" />
                     <button onClick={() => handleExtract(true)} disabled={extracting} className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-50">
                         {extracting ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
@@ -817,10 +817,10 @@ const GalleryTab = ({ assets, fetchApi, onRefresh, brandDNA }: any) => {
     };
 
     return (
-        <div className="flex gap-6">
+        <div className="flex flex-col lg:flex-row gap-6">
             <div className={selectedAsset ? 'flex-1' : 'w-full'}>
                 <div className="flex flex-wrap gap-3 mb-4">
-                    <div className="relative flex-1 min-w-[200px] max-w-sm"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Buscar..." className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm outline-none" /></div>
+                    <div className="relative flex-1 min-w-0 max-w-full sm:max-w-sm"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Buscar..." className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm outline-none" /></div>
                     <div className="flex gap-1 flex-wrap">
                         <button onClick={() => setFilter('')} className={`px-3 py-1.5 rounded text-xs font-medium ${!filter ? 'bg-purple-900/30 text-purple-400' : 'text-slate-500'}`}>Todos ({assets.length})</button>
                         {assetTypes.map((t: string) => (<button key={t} onClick={() => setFilter(t)} className={`px-3 py-1.5 rounded text-xs font-medium capitalize ${filter === t ? 'bg-purple-900/30 text-purple-400' : 'text-slate-500'}`}>{t.replace(/_/g, ' ')}</button>))}
@@ -842,7 +842,7 @@ const GalleryTab = ({ assets, fetchApi, onRefresh, brandDNA }: any) => {
             </div>
 
             {selectedAsset && (
-                <div className="w-96 glass p-4 rounded-xl max-h-[80vh] overflow-y-auto flex-shrink-0">
+                <div className="w-full lg:w-96 glass p-4 rounded-xl max-h-[80vh] overflow-y-auto flex-shrink-0">
                     <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold">Detalle</h3><button onClick={() => setSelectedAsset(null)} className="text-slate-500 hover:text-white"><X size={16} /></button></div>
                     {isImg(selectedAsset) && <img src={selectedAsset.content.image_url} alt="" className="w-full rounded-lg mb-3" />}
                     {!isImg(selectedAsset) && <div className="bg-black/30 p-3 rounded-lg mb-3 text-sm text-slate-300 whitespace-pre-wrap max-h-48 overflow-y-auto">{selectedAsset.content?.text || selectedAsset.content?.body || selectedAsset.content?.headline || selectedAsset.content?.texts?.[0]?.body || JSON.stringify(selectedAsset.content, null, 2).substring(0, 500)}</div>}
