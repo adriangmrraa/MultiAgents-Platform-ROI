@@ -232,11 +232,11 @@ export const PlatformTower: React.FC = () => {
 
             <div className="view active p-6 relative z-10">
                 {/* Header */}
-                <div className="flex justify-between items-center mb-6 border-b border-red-900/30 pb-4">
-                    <h1 className="text-2xl font-black tracking-widest text-red-500 flex items-center gap-3 uppercase">
-                        <ShieldAlert /> Platform Control Tower
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 border-b border-red-900/30 pb-4">
+                    <h1 className="text-lg sm:text-2xl font-black tracking-widest text-red-500 flex items-center gap-2 sm:gap-3 uppercase">
+                        <ShieldAlert size={20} /> <span className="hidden sm:inline">Platform Control Tower</span><span className="sm:hidden">Control Tower</span>
                     </h1>
-                    <div className="flex items-center gap-4 text-xs">
+                    <div className="flex items-center gap-3 text-xs">
                         <span className="text-amber-500 animate-pulse">LIVE</span>
                         <button onClick={handleForceTrialCheck} className="text-xs bg-red-900/30 hover:bg-red-900/50 px-3 py-1 rounded border border-red-500/30 flex items-center gap-1">
                             <Clock size={12} /> Check Trials
@@ -245,12 +245,12 @@ export const PlatformTower: React.FC = () => {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex gap-1 mb-6 bg-black/30 p-1 rounded-lg w-fit">
+                <div className="flex gap-1 mb-6 bg-black/30 p-1 rounded-lg overflow-x-auto w-full">
                     {(['overview', 'tenants', 'revenue', 'costs', 'audit'] as Tab[]).map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`px-4 py-2 text-xs uppercase font-bold rounded transition-all ${
+                            className={`px-3 sm:px-4 py-2 text-[10px] sm:text-xs uppercase font-bold rounded transition-all whitespace-nowrap ${
                                 activeTab === tab
                                     ? 'bg-red-600/30 text-red-400 border border-red-500/30'
                                     : 'text-slate-500 hover:text-white hover:bg-white/5'
@@ -432,7 +432,7 @@ const TenantsTab = ({
         <>
             {/* Filters */}
             <div className="flex flex-wrap gap-3 mb-6">
-                <div className="relative flex-1 min-w-[200px] max-w-md">
+                <div className="relative flex-1 min-w-0 sm:min-w-[200px] max-w-full sm:max-w-md">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                     <input
                         type="text"
@@ -467,10 +467,11 @@ const TenantsTab = ({
                 <span className="self-center text-xs text-slate-500">{tenantsTotal} total</span>
             </div>
 
-            <div className="flex gap-6">
-                {/* Tenant Table */}
+            <div className="flex flex-col lg:flex-row gap-6">
+                {/* Tenant List */}
                 <div className={`glass p-0 overflow-hidden ${selectedTenant ? 'flex-1' : 'w-full'}`}>
-                    <div className="max-h-[600px] overflow-y-auto">
+                    {/* Desktop: Table */}
+                    <div className="hidden md:block max-h-[600px] overflow-y-auto">
                         <table className="w-full text-left text-sm">
                             <thead className="text-[10px] text-slate-500 bg-black/40 uppercase sticky top-0 backdrop-blur-sm z-10">
                                 <tr>
@@ -558,11 +559,41 @@ const TenantsTab = ({
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Mobile: Card Layout */}
+                    <div className="md:hidden divide-y divide-white/5 max-h-[600px] overflow-y-auto">
+                        {tenants.map((t: TenantData) => (
+                            <div key={t.id} className={`p-4 ${selectedTenant?.tenant?.id === t.id ? 'bg-red-900/10' : ''}`}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <button onClick={() => loadTenantDetail(t.id)} className="font-bold text-white hover:text-red-400 text-left text-sm">
+                                        {t.store_name}
+                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        {getStatusBadge(t.sub_status || t.tenant_status)}
+                                        <span className="text-[10px] text-purple-400 font-bold capitalize">{t.plan_name || '-'}</span>
+                                    </div>
+                                </div>
+                                <div className="text-xs text-slate-500 mb-2">{t.owner_email}</div>
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="text-slate-400">{t.messages_this_month.toLocaleString()} msgs</span>
+                                    <span className="text-orange-400 font-mono">${t.cost_this_month.toFixed(2)}</span>
+                                    <div className="flex gap-1">
+                                        {t.sub_status !== 'suspended' ? (
+                                            <button onClick={() => onAction(t.id, 'suspend')} disabled={actionLoading === t.id} className="p-1.5 hover:bg-orange-900/30 rounded text-orange-400" title="Suspender"><Pause size={14} /></button>
+                                        ) : (
+                                            <button onClick={() => onAction(t.id, 'activate')} disabled={actionLoading === t.id} className="p-1.5 hover:bg-green-900/30 rounded text-green-400" title="Activar"><Play size={14} /></button>
+                                        )}
+                                        <button onClick={() => loadTenantDetail(t.id)} className="p-1.5 hover:bg-white/10 rounded text-slate-400" title="Ver detalle"><Eye size={14} /></button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Tenant Detail Panel */}
                 {selectedTenant && (
-                    <div className="w-96 glass p-4 max-h-[600px] overflow-y-auto">
+                    <div className="w-full lg:w-96 glass p-4 max-h-[600px] overflow-y-auto flex-shrink-0">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-sm font-bold text-white">Detalle #{selectedTenant.tenant.id}</h3>
                             <button onClick={() => setSelectedTenant(null)} className="text-slate-500 hover:text-white">&times;</button>
@@ -713,16 +744,16 @@ const TenantsTab = ({
 // ============== REVENUE TAB ==============
 const RevenueTab = ({ revenue, overview }: any) => (
     <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
             <MetricCard label="MRR" value={overview?.revenue?.formatted_mrr} icon={<DollarSign size={18} className="text-emerald-400" />} sub="Monthly Recurring" highlight />
             <MetricCard label="30 DIAS" value={overview?.revenue?.formatted_30d} icon={<TrendingUp size={18} className="text-blue-400" />} sub="Ingresos reales" />
             <MetricCard label="TOTAL HISTORICO" value={overview?.revenue?.formatted_total} icon={<Database size={18} className="text-purple-400" />} sub="Desde el inicio" />
         </div>
 
         {revenue?.daily_revenue && revenue.daily_revenue.length > 0 ? (
-            <div className="glass p-4">
+            <div className="glass p-4 overflow-x-auto">
                 <h3 className="text-xs font-bold text-slate-400 uppercase mb-3">Ingresos Diarios (30d)</h3>
-                <table className="w-full text-sm">
+                <table className="w-full text-sm min-w-[400px]">
                     <thead className="text-[10px] text-slate-500 uppercase">
                         <tr>
                             <th className="text-left p-2">Fecha</th>
@@ -756,16 +787,16 @@ const RevenueTab = ({ revenue, overview }: any) => (
 // ============== COSTS TAB ==============
 const CostsTab = ({ costs, overview }: any) => (
     <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
             <MetricCard label="COSTO MES" value={overview?.costs?.formatted_cost} icon={<BarChart3 size={18} className="text-orange-400" />} sub="LLM tokens" />
             <MetricCard label="TOKENS MES" value={(overview?.costs?.tokens_month || 0).toLocaleString()} icon={<Zap size={18} className="text-yellow-400" />} sub="Consumidos" />
             <MetricCard label="MARGEN" value={`$${(overview?.costs?.margin || 0).toFixed(0)}`} icon={<TrendingUp size={18} className="text-cyan-400" />} sub="MRR - Costos" highlight />
         </div>
 
         {costs?.records && costs.records.length > 0 ? (
-            <div className="glass p-4">
+            <div className="glass p-4 overflow-x-auto">
                 <h3 className="text-xs font-bold text-slate-400 uppercase mb-3">Costo por Tenant</h3>
-                <table className="w-full text-sm">
+                <table className="w-full text-sm min-w-[500px]">
                     <thead className="text-[10px] text-slate-500 uppercase">
                         <tr>
                             <th className="text-left p-2">Tenant</th>
@@ -811,30 +842,46 @@ const AuditTab = ({ logs }: { logs: any[] }) => (
             </h3>
         </div>
         {logs.length > 0 ? (
-            <div className="max-h-[500px] overflow-y-auto">
-                <table className="w-full text-sm">
-                    <thead className="text-[10px] text-slate-500 uppercase sticky top-0 bg-black/60 backdrop-blur">
-                        <tr>
-                            <th className="text-left p-3">Fecha</th>
-                            <th className="text-left p-3">Accion</th>
-                            <th className="text-left p-3">Usuario</th>
-                            <th className="text-left p-3">Tenant</th>
-                            <th className="text-left p-3">Detalles</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                        {logs.map((log: any) => (
-                            <tr key={log.id} className="hover:bg-white/5">
-                                <td className="p-3 text-xs text-slate-400">{new Date(log.created_at).toLocaleString()}</td>
-                                <td className="p-3 font-mono text-xs text-amber-400">{log.action}</td>
-                                <td className="p-3 text-xs">{log.user_email || '-'}</td>
-                                <td className="p-3 text-xs text-slate-500">#{log.tenant_id || '-'}</td>
-                                <td className="p-3 text-[10px] text-slate-500 max-w-[200px] truncate">{JSON.stringify(log.details)}</td>
+            <>
+                {/* Desktop table */}
+                <div className="hidden md:block max-h-[500px] overflow-y-auto">
+                    <table className="w-full text-sm">
+                        <thead className="text-[10px] text-slate-500 uppercase sticky top-0 bg-black/60 backdrop-blur">
+                            <tr>
+                                <th className="text-left p-3">Fecha</th>
+                                <th className="text-left p-3">Accion</th>
+                                <th className="text-left p-3">Usuario</th>
+                                <th className="text-left p-3">Tenant</th>
+                                <th className="text-left p-3">Detalles</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                            {logs.map((log: any) => (
+                                <tr key={log.id} className="hover:bg-white/5">
+                                    <td className="p-3 text-xs text-slate-400">{new Date(log.created_at).toLocaleString()}</td>
+                                    <td className="p-3 font-mono text-xs text-amber-400">{log.action}</td>
+                                    <td className="p-3 text-xs">{log.user_email || '-'}</td>
+                                    <td className="p-3 text-xs text-slate-500">#{log.tenant_id || '-'}</td>
+                                    <td className="p-3 text-[10px] text-slate-500 max-w-[200px] truncate">{JSON.stringify(log.details)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                {/* Mobile cards */}
+                <div className="md:hidden max-h-[500px] overflow-y-auto divide-y divide-white/5">
+                    {logs.map((log: any) => (
+                        <div key={log.id} className="p-3 space-y-1">
+                            <div className="flex items-center justify-between">
+                                <span className="font-mono text-xs text-amber-400">{log.action}</span>
+                                <span className="text-[10px] text-slate-500">#{log.tenant_id || '-'}</span>
+                            </div>
+                            <div className="text-xs text-slate-300">{log.user_email || '-'}</div>
+                            <div className="text-[10px] text-slate-600">{new Date(log.created_at).toLocaleString()}</div>
+                        </div>
+                    ))}
+                </div>
+            </>
         ) : (
             <div className="p-8 text-center text-slate-500 text-sm">No hay logs de auditoria aun.</div>
         )}
