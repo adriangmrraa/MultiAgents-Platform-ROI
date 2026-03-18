@@ -11,71 +11,97 @@ from io import BytesIO
 
 logger = structlog.get_logger()
 
-# Configure Google AI Client (Nano Banana)
+# ==================== MODEL CATALOG ====================
+
+IMAGE_MODELS = {
+    "nano-banana": {
+        "id": "gemini-2.5-flash-preview-image-generation",
+        "name": "Nano Banana",
+        "description": "Rapido y economico. Ideal para borradores y exploracion.",
+        "method": "gemini_native",
+        "cost_label": "~$0.01/img",
+        "speed": "fast",
+    },
+    "nano-banana-2": {
+        "id": "gemini-2.5-pro-preview-image-generation",
+        "name": "Nano Banana 2",
+        "description": "Balance perfecto entre calidad y velocidad.",
+        "method": "gemini_native",
+        "cost_label": "~$0.03/img",
+        "speed": "medium",
+    },
+    "nano-banana-pro": {
+        "id": "imagen-3.0-generate-002",
+        "name": "Nano Banana Pro",
+        "description": "Maxima calidad. Fotorrealismo profesional.",
+        "method": "imagen",
+        "cost_label": "~$0.05/img",
+        "speed": "slow",
+    },
+}
+
+DEFAULT_MODEL = "nano-banana"
+
+
+def get_image_models():
+    """Return catalog of available image models for frontend."""
+    return [
+        {"key": k, **{f: v[f] for f in ("name", "description", "cost_label", "speed")}}
+        for k, v in IMAGE_MODELS.items()
+    ]
+
+
+# ==================== GOOGLE CLIENT ====================
+
 def get_google_client(api_key: str = None):
-    """Returns a GenAI client using the provided key or the global one (Lazy Resolution)."""
+    """Returns a GenAI client using the provided key or the global one."""
     from app.core.config import settings
     target_key = api_key or settings.GOOGLE_API_KEY
     if not target_key:
         return None
-    # We create a new client for each request if a specific key is used to ensure isolation
     return genai.Client(api_key=target_key)
 
+
+# ==================== VISION ANALYSIS ====================
+
 async def analyze_image_with_gpt4o(image_url: str, prompt_context: str, google_api_key: str = None) -> str:
-    """
-    Renamed wrapper: Actually uses Google Gemini 1.5 Flash (Nano Banana Vision) 
-    to analyze the product image. Kept function name to avoid breaking engine.py import.
-    """
+    """Analyze a product image using Gemini Vision."""
     target_client = get_google_client(google_api_key)
     if not target_client:
-        raise Exception("Missing GOOGLE_API_KEY for Nano Banana (Gemini)")
+        raise Exception("Missing GOOGLE_API_KEY")
 
     try:
-        # 1. Download Image (Gemini Needs Blob or Pilot)
         async with httpx.AsyncClient() as http_client:
             resp = await http_client.get(image_url)
             resp.raise_for_status()
             image_bytes = resp.content
-            
-        # 2. Convert to PIL for SDK
-        img = Image.open(BytesIO(image_bytes))
 
-        # 3. Call Gemini Vision (Nano Banana)
+        img = Image.open(BytesIO(image_bytes))
         prompt = f"Analyze this product image deeply. Context: {prompt_context}. Describe the MAIN PRODUCT (colors, materials, shape, key features) so it can be recreated. Output a concise paragraph."
-        
-        # Upgrade to gemini-2.5-flash (Available per Runtime Logs) to bypass 2.0-flash Quota/429
+
         response = target_client.models.generate_content(
-            model='gemini-2.5-flash', 
+            model='gemini-2.5-flash',
             contents=[prompt, img]
         )
         return response.text
     except Exception as e:
         logger.error("gemini_vision_failed", error=str(e))
-        # Fallback to simple context if vision fails
         return f"A distinct product related to {prompt_context}"
 
+
+# ==================== AD GENERATION (LEGACY) ====================
+
 async def generate_ad_from_product(base64_product: str, prompt: str, google_api_key: str = None) -> str:
-    """
-    Multimodal Transformation: Vision (1.5 Flash) -> Image Generation (Imagen 3)
-    Transforms a real product image into a professional ad based on analysis.
-    Protocol Omega: Stabilized Strategy (v5.9.108).
-    """
+    """Multimodal: Vision Analysis -> Image Generation."""
     target_client = get_google_client(google_api_key)
     if not target_client:
-        raise Exception("Missing GOOGLE_API_KEY for Multimodal Transformation")
+        raise Exception("Missing GOOGLE_API_KEY")
 
-    # Strategy Change: Multimodal Preview is hitting extreme 429 in logs.
-    # Protocol Omega Switch: Vision Analysis (Gemini 1.5 Flash) -> Image Generation (Imagen 3)
     try:
-        # 1. Vision Analysis (Reusing analyze_image_with_gpt4o logic but with base64)
         logger.info("gemini_stable_analysis_start")
-
-        from PIL import Image
-        from io import BytesIO
         img = Image.open(BytesIO(base64.b64decode(base64_product)))
-        
+
         analysis_prompt = f"Describe este producto detalladamente para un anuncio de {prompt}. Enfócate en la estética, colores y marca."
-        
         response = target_client.models.generate_content(
             model='gemini-2.5-flash',
             contents=[analysis_prompt, img]
@@ -83,64 +109,85 @@ async def generate_ad_from_product(base64_product: str, prompt: str, google_api_
         visual_description = response.text
         logger.info("gemini_stable_analysis_done", desc_sample=visual_description[:50])
 
-        # 2. Image Generation (Imagen 3) with Subject Reference
         final_prompt = f"Professional commercial advertisement for {prompt}. Realistic product photography, high quality, 8k. Context: {visual_description}"
-        return await generate_image_dalle3(final_prompt, reference_image=img, google_api_key=google_api_key)
+        return await generate_image(final_prompt, google_api_key=google_api_key)
 
     except Exception as e:
         logger.error("gemini_stable_strategy_failed", error=str(e))
         return "https://placehold.co/1024x1024/1e293b/FFF.png?text=Creative+Director+Offline"
 
-async def generate_image_dalle3(full_prompt: str, reference_image: Image.Image = None, google_api_key: str = None) -> str:
+
+# ==================== IMAGE GENERATION ====================
+
+async def generate_image(full_prompt: str, model_tier: str = None, google_api_key: str = None) -> str:
     """
-    Image Generation with fallback chain:
-    1. Imagen 3.0-generate-002 (Gemini API)
-    2. Imagen 3.0-generate-001 (Vertex AI)
-    3. Gemini native image generation (gemini-2.5-flash)
+    Generate an image using the specified Nano Banana model tier.
+    Falls back through models if the selected one fails.
     """
     target_client = get_google_client(google_api_key)
     if not target_client:
-         raise Exception("Missing GOOGLE_API_KEY for image generation")
+        raise Exception("Missing GOOGLE_API_KEY for image generation")
 
-    # Strategy 1: Try Imagen models (newest first)
-    for model_id in ['imagen-3.0-generate-002', 'imagen-3.0-generate-001']:
+    tier = model_tier or DEFAULT_MODEL
+    model_config = IMAGE_MODELS.get(tier, IMAGE_MODELS[DEFAULT_MODEL])
+
+    # Build fallback chain: selected model first, then others
+    all_tiers = [tier] + [k for k in IMAGE_MODELS if k != tier]
+
+    for t in all_tiers:
+        cfg = IMAGE_MODELS[t]
+        model_id = cfg["id"]
+        method = cfg["method"]
+
         try:
-            config = {
-                'number_of_images': 1,
-                'output_mime_type': 'image/png'
-            }
-            response = target_client.models.generate_images(
-                model=model_id,
-                prompt=full_prompt,
-                config=config
-            )
-            if response.generated_images:
-                img_bytes = response.generated_images[0].image_bytes
-                b64_img = base64.b64encode(img_bytes).decode('utf-8')
-                logger.info("image_generated", model=model_id)
-                return f"data:image/png;base64,{b64_img}"
-        except Exception as e:
-            logger.warning("imagen_model_unavailable", model=model_id, error=str(e)[:100])
-            continue
+            if method == "imagen":
+                result = await _generate_with_imagen(target_client, model_id, full_prompt)
+            else:
+                result = await _generate_with_gemini(target_client, model_id, full_prompt)
 
-    # Strategy 2: Gemini native image generation (gemini-2.5-flash with image output)
-    try:
-        response = target_client.models.generate_content(
-            model='gemini-2.5-flash-exp',
-            contents=f"Generate a professional product photography image: {full_prompt}. Output ONLY the image, no text.",
-            config=types.GenerateContentConfig(
-                response_modalities=['IMAGE', 'TEXT'],
-            )
-        )
-        # Extract image from multimodal response
-        if response.candidates:
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.mime_type.startswith('image/'):
-                    b64_img = base64.b64encode(part.inline_data.data).decode('utf-8')
-                    logger.info("image_generated", model="gemini-2.5-flash-exp")
-                    return f"data:image/{part.inline_data.mime_type.split('/')[-1]};base64,{b64_img}"
-    except Exception as e:
-        logger.warning("gemini_image_gen_failed", error=str(e)[:100])
+            if result:
+                logger.info("image_generated", model=model_id, tier=t)
+                return result
+
+        except Exception as e:
+            logger.warning("image_model_failed", tier=t, model=model_id, error=str(e)[:120])
+            continue
 
     logger.error("all_image_generation_failed", prompt_preview=full_prompt[:50])
     return "https://placehold.co/1024x1024/1e293b/FFF.png?text=Image+Generation+Unavailable"
+
+
+async def _generate_with_imagen(client, model_id: str, prompt: str) -> str | None:
+    """Generate image using Imagen 3 API."""
+    response = client.models.generate_images(
+        model=model_id,
+        prompt=prompt,
+        config={'number_of_images': 1, 'output_mime_type': 'image/png'}
+    )
+    if response.generated_images:
+        img_bytes = response.generated_images[0].image_bytes
+        b64 = base64.b64encode(img_bytes).decode('utf-8')
+        return f"data:image/png;base64,{b64}"
+    return None
+
+
+async def _generate_with_gemini(client, model_id: str, prompt: str) -> str | None:
+    """Generate image using Gemini native image generation."""
+    response = client.models.generate_content(
+        model=model_id,
+        contents=f"Generate a professional product photography image: {prompt}. Output ONLY the image, no text.",
+        config=types.GenerateContentConfig(
+            response_modalities=['IMAGE', 'TEXT'],
+        )
+    )
+    if response.candidates:
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.mime_type.startswith('image/'):
+                b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
+                mime = part.inline_data.mime_type.split('/')[-1]
+                return f"data:image/{mime};base64,{b64}"
+    return None
+
+
+# Backward compatibility alias
+generate_image_dalle3 = generate_image

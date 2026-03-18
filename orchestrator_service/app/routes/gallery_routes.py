@@ -36,6 +36,7 @@ class PhotoshootRequest(BaseModel):
     product_name: str
     template: str = "studio"  # studio, floating, lifestyle, in_use, ingredient
     custom_prompt: Optional[str] = None
+    model: Optional[str] = None  # nano-banana, nano-banana-2, nano-banana-pro
 
 
 class CampaignRequest(BaseModel):
@@ -45,12 +46,14 @@ class CampaignRequest(BaseModel):
     channels: Optional[List[str]] = None
     custom_prompt: Optional[str] = None
     num_variations: int = 3
+    model: Optional[str] = None
 
 
 class EditImageRequest(BaseModel):
     asset_id: str
     edit_prompt: str
     original_image_url: Optional[str] = None  # If not from DB
+    model: Optional[str] = None
 
 
 class EditTextRequest(BaseModel):
@@ -184,6 +187,15 @@ async def remove_google_key(
     return {"message": "Google API Key desconectada", "google_connected": False}
 
 
+# ==================== IMAGE MODELS ====================
+
+@router.get("/models")
+async def list_image_models():
+    """List available image generation models."""
+    from app.core.image_utils import get_image_models
+    return get_image_models()
+
+
 # ==================== BRAND DNA ====================
 
 @router.post("/brand-dna/extract")
@@ -301,7 +313,8 @@ async def generate_photoshoot(
         product_name=req.product_name,
         template=req.template,
         brand_dna=brand_dna,
-        custom_prompt=req.custom_prompt
+        custom_prompt=req.custom_prompt,
+        model_tier=req.model
     )
 
     # Auto-save as asset
@@ -347,7 +360,8 @@ async def generate_campaign(
         channels=req.channels,
         brand_dna=brand_dna,
         custom_prompt=req.custom_prompt,
-        num_variations=req.num_variations
+        num_variations=req.num_variations,
+        model_tier=req.model
     )
 
     # Auto-save each channel asset
@@ -412,7 +426,8 @@ async def edit_image_asset(
         original_image_url=original_url,
         edit_prompt=req.edit_prompt,
         product_name=product_name,
-        brand_dna=brand_dna
+        brand_dna=brand_dna,
+        model_tier=req.model
     )
 
     # Save as new version

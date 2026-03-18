@@ -16,7 +16,7 @@ import httpx
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-from app.core.image_utils import get_google_client, generate_image_dalle3
+from app.core.image_utils import get_google_client, generate_image, generate_image_dalle3
 
 logger = structlog.get_logger()
 
@@ -75,7 +75,8 @@ class CreativeStudio:
         product_name: str,
         template: str = "studio",
         brand_dna: Dict = None,
-        custom_prompt: str = None
+        custom_prompt: str = None,
+        model_tier: str = None
     ) -> Dict[str, Any]:
         """
         Transform a product photo into a studio-quality shot.
@@ -108,12 +109,13 @@ class CreativeStudio:
         final_prompt += f"{brand_context}{tmpl['prompt_suffix']}"
 
         # 3. Generate image
-        image_url = await generate_image_dalle3(final_prompt, google_api_key=self.google_api_key)
+        image_url = await generate_image(final_prompt, model_tier=model_tier, google_api_key=self.google_api_key)
 
         return {
             "image_url": image_url,
             "template": template,
             "template_name": tmpl["name"],
+            "model_tier": model_tier or "nano-banana",
             "prompt_used": final_prompt,
             "product_name": product_name,
             "product_description": product_description
@@ -129,7 +131,8 @@ class CreativeStudio:
         channels: List[str] = None,
         brand_dna: Dict = None,
         custom_prompt: str = None,
-        num_variations: int = 3
+        num_variations: int = 3,
+        model_tier: str = None
     ) -> Dict[str, Any]:
         """
         Generate a multi-channel marketing campaign.
@@ -171,7 +174,7 @@ class CreativeStudio:
                 img_prompt = f"Marketing {channel['name']} creative for {product_name}. {product_desc}. {brand_context}. {campaign_goal}. Professional advertising photography, commercial quality, 8k, no text on image"
                 if custom_prompt:
                     img_prompt = f"{custom_prompt}. {img_prompt}"
-                image_url = await generate_image_dalle3(img_prompt, google_api_key=self.google_api_key)
+                image_url = await generate_image(img_prompt, model_tier=model_tier, google_api_key=self.google_api_key)
 
             campaign_assets.append({
                 "channel": channel_key,
@@ -195,7 +198,8 @@ class CreativeStudio:
         original_image_url: str,
         edit_prompt: str,
         product_name: str = None,
-        brand_dna: Dict = None
+        brand_dna: Dict = None,
+        model_tier: str = None
     ) -> Dict[str, Any]:
         """
         Edit an existing image asset using natural language prompt.
@@ -236,7 +240,7 @@ class CreativeStudio:
         final_prompt += f"{brand_context}Professional quality, 8k, commercial photography, no text."
 
         # 3. Generate edited image
-        new_image = await generate_image_dalle3(final_prompt, google_api_key=self.google_api_key)
+        new_image = await generate_image(final_prompt, model_tier=model_tier, google_api_key=self.google_api_key)
 
         return {
             "image_url": new_image,

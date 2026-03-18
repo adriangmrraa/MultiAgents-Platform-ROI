@@ -408,6 +408,24 @@ const BrandDNATab = ({ brandDNA, fetchApi, onRefresh }: any) => {
 };
 
 // ==================== PHOTOSHOOT TAB ====================
+// ==================== MODEL SELECTOR ====================
+const ModelSelector = ({ value, onChange, models }: { value: string; onChange: (v: string) => void; models: any[] }) => {
+    const speedIcons: Record<string, string> = { fast: '⚡', medium: '🎯', slow: '💎' };
+    return (
+        <div className="space-y-1.5">
+            <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">Modelo IA</label>
+            <div className="flex gap-1.5">
+                {models.map((m: any) => (
+                    <button key={m.key} onClick={() => onChange(m.key)} className={`flex-1 p-2 rounded-lg text-left transition-all border ${value === m.key ? 'bg-purple-900/30 border-purple-500/40' : 'bg-black/20 border-white/5 hover:border-white/15'}`}>
+                        <div className="text-[10px] font-bold text-white flex items-center gap-1">{speedIcons[m.speed] || ''} {m.name}</div>
+                        <div className="text-[9px] text-slate-500 mt-0.5">{m.cost_label}</div>
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const PhotoshootTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) => {
     const [templates, setTemplates] = useState<any[]>([]);
     const [selectedProduct, setSelectedProduct] = useState<any>(null);
@@ -416,8 +434,13 @@ const PhotoshootTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) =>
     const [generating, setGenerating] = useState(false);
     const [result, setResult] = useState<any>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [models, setModels] = useState<any[]>([]);
+    const [selectedModel, setSelectedModel] = useState('nano-banana');
 
-    useEffect(() => { fetchApi('/gallery/photoshoot/templates').then(setTemplates).catch(() => {}); }, [fetchApi]);
+    useEffect(() => {
+        fetchApi('/gallery/photoshoot/templates').then(setTemplates).catch(() => {});
+        fetchApi('/gallery/models').then(setModels).catch(() => {});
+    }, [fetchApi]);
 
     const filteredProducts = products.filter((p: any) => { const name = p.name?.es || p.name?.en || p.name || ''; return name.toLowerCase().includes(searchQuery.toLowerCase()); });
 
@@ -427,7 +450,7 @@ const PhotoshootTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) =>
         try {
             const imageUrl = selectedProduct.images?.[0]?.src || selectedProduct.image_url;
             const name = selectedProduct.name?.es || selectedProduct.name?.en || selectedProduct.name || 'Producto';
-            const data = await fetchApi('/gallery/photoshoot/generate', { method: 'POST', body: { product_image_url: imageUrl, product_name: name, template: selectedTemplate, custom_prompt: customPrompt || undefined } });
+            const data = await fetchApi('/gallery/photoshoot/generate', { method: 'POST', body: { product_image_url: imageUrl, product_name: name, template: selectedTemplate, custom_prompt: customPrompt || undefined, model: selectedModel } });
             setResult(data); onAssetCreated();
         } catch (e: any) { alert(e.message); } finally { setGenerating(false); }
     };
@@ -455,6 +478,7 @@ const PhotoshootTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) =>
                 </div>
                 <label className="text-[10px] text-slate-500 uppercase mb-1 block">Prompt adicional</label>
                 <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="ej: con fondo de playa tropical..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none resize-none h-20 mb-3" />
+                {models.length > 0 && <div className="mb-3"><ModelSelector value={selectedModel} onChange={setSelectedModel} models={models} /></div>}
                 <button onClick={handleGenerate} disabled={!selectedProduct || generating} className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40">
                     {generating ? <><RefreshCw size={16} className="animate-spin" /> Generando...</> : <><Camera size={16} /> Generar Photoshoot</>}
                 </button>
@@ -464,7 +488,7 @@ const PhotoshootTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) =>
                 {result ? (
                     <div className="space-y-3">
                         <img src={result.image_url} alt={result.product_name} className="w-full rounded-lg border border-white/10" />
-                        <div className="text-xs text-slate-500"><span className="text-emerald-400 font-bold">{result.template_name}</span> | {result.product_name}</div>
+                        <div className="text-xs text-slate-500"><span className="text-emerald-400 font-bold">{result.template_name}</span> | {result.product_name} | <span className="text-purple-400">{result.model_tier || selectedModel}</span></div>
                         <div className="flex gap-2">
                             <a href={result.image_url} download className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded text-xs text-center flex items-center justify-center gap-1"><Download size={12} /> Descargar</a>
                             <InlineEditButton assetId={result.asset_id} imageUrl={result.image_url} fetchApi={fetchApi} onEdited={(r: any) => setResult({ ...result, ...r })} />
@@ -487,8 +511,13 @@ const CampaignsTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) => 
     const [customPrompt, setCustomPrompt] = useState('');
     const [generating, setGenerating] = useState(false);
     const [result, setResult] = useState<any>(null);
+    const [models, setModels] = useState<any[]>([]);
+    const [selectedModel, setSelectedModel] = useState('nano-banana');
 
-    useEffect(() => { fetchApi('/gallery/campaigns/channels').then(setChannels).catch(() => {}); }, [fetchApi]);
+    useEffect(() => {
+        fetchApi('/gallery/campaigns/channels').then(setChannels).catch(() => {});
+        fetchApi('/gallery/models').then(setModels).catch(() => {});
+    }, [fetchApi]);
 
     const channelIcons: Record<string, React.ReactNode> = { instagram_post: <Smartphone size={14} />, instagram_story: <Smartphone size={14} />, facebook_ad: <Globe size={14} />, whatsapp_promo: <MessageSquare size={14} />, email_banner: <Mail size={14} />, web_hero: <Layout size={14} /> };
 
@@ -498,7 +527,7 @@ const CampaignsTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) => 
         try {
             const name = selectedProduct.name?.es || selectedProduct.name?.en || selectedProduct.name || 'Producto';
             const img = selectedProduct.images?.[0]?.src || selectedProduct.image_url;
-            const data = await fetchApi('/gallery/campaigns/generate', { method: 'POST', body: { product_name: name, product_image_url: img, campaign_goal: campaignGoal, channels: selectedChannels, custom_prompt: customPrompt || undefined, num_variations: 3 } });
+            const data = await fetchApi('/gallery/campaigns/generate', { method: 'POST', body: { product_name: name, product_image_url: img, campaign_goal: campaignGoal, channels: selectedChannels, custom_prompt: customPrompt || undefined, num_variations: 3, model: selectedModel } });
             setResult(data); onAssetCreated();
         } catch (e: any) { alert(e.message); } finally { setGenerating(false); }
     };
@@ -513,6 +542,7 @@ const CampaignsTab = ({ products, fetchApi, brandDNA, onAssetCreated }: any) => 
                     <div><label className="text-[10px] text-slate-500 uppercase mb-1 block">Instrucciones</label><input type="text" value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="ej: enfocate en el precio..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm outline-none" /></div>
                 </div>
                 <div className="mt-4"><label className="text-[10px] text-slate-500 uppercase mb-2 block">Canales</label><div className="flex flex-wrap gap-2">{channels.map((ch: any) => { const sel = selectedChannels.includes(ch.id); return (<button key={ch.id} onClick={() => setSelectedChannels(prev => sel ? prev.filter(c => c !== ch.id) : [...prev, ch.id])} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${sel ? 'bg-orange-900/30 text-orange-400 border border-orange-500/30' : 'bg-black/20 text-slate-500 border border-white/5'}`}>{channelIcons[ch.id]}{ch.name}</button>); })}</div></div>
+                {models.length > 0 && <div className="mt-4"><ModelSelector value={selectedModel} onChange={setSelectedModel} models={models} /></div>}
                 <button onClick={handleGenerate} disabled={!selectedProduct || generating || selectedChannels.length === 0} className="mt-4 px-8 py-3 bg-gradient-to-r from-orange-600 to-red-600 rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-40">
                     {generating ? <><RefreshCw size={16} className="animate-spin" /> Generando...</> : <><Zap size={16} /> Generar Campana</>}
                 </button>
