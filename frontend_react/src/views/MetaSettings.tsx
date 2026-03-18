@@ -24,27 +24,30 @@ export const MetaSettings: React.FC = () => {
 
         setStatus('loading');
 
-        // Business Login Flow with config_id
-        // Try-catch for immediate sync errors
         try {
             if (!(window as any).FB) {
                 throw new Error("El SDK de Facebook no pudo cargarse (bloqueado por navegador/red).");
             }
 
             (window as any).FB.login((response: any) => {
-                // For Code Flow, we look for 'code' in authResponse or root
+                console.log('FB.login full response:', JSON.stringify(response));
+
+                // Strategy 1: Code flow (FB Login for Business)
                 const code = response.authResponse?.code || response.code;
+                // Strategy 2: Direct token flow (some embedded signup configs)
+                const accessToken = response.authResponse?.accessToken;
 
                 if (code) {
-                    console.log('FB Code Received', code);
-                    // Critical: Redirect URI must match exactly what Meta expects (usually Origin + /)
-                    // We send it so backend uses the same one.
-                    connectWithBackend(code);
+                    console.log('FB Code Received');
+                    connectWithBackend(code, 'code');
+                } else if (accessToken) {
+                    console.log('FB Access Token Received directly');
+                    connectWithBackend(accessToken, 'token');
                 } else {
-                    console.log('User cancelled login or did not fully authorize.', response);
+                    console.log('User cancelled or no auth data.', response);
                     setStatus('idle');
                     if (response.status !== 'connected' && response.status !== 'unknown') {
-                        setErrorMsg("No se recibió el código de autorización.");
+                        setErrorMsg("No se recibió autorización de Meta.");
                         setStatus('error');
                     }
                 }
@@ -64,16 +67,14 @@ export const MetaSettings: React.FC = () => {
         }
     };
 
-    const connectWithBackend = async (code: string) => {
+    const connectWithBackend = async (credential: string, type: 'code' | 'token' = 'code') => {
         try {
-            // FB.login() with config_id uses the FULL page URL as redirect_uri internally.
-            // We must send the exact same URL for the code exchange to succeed.
             const redirectUri = window.location.href.split('?')[0].split('#')[0];
 
             const res = await fetchApi('/admin/meta/connect', {
                 method: 'POST',
                 body: {
-                    code: code,
+                    ...(type === 'code' ? { code: credential } : { access_token: credential }),
                     redirect_uri: redirectUri
                 }
             });

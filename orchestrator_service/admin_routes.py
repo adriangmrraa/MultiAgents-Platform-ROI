@@ -5826,10 +5826,11 @@ async def connect_meta_account(request: Request, current_user: User = Depends(ge
     try:
         body = await request.json()
         code = body.get("code")
+        access_token = body.get("access_token")
         redirect_uri = body.get("redirect_uri")
-        
-        if not code:
-            raise HTTPException(400, "Missing code")
+
+        if not code and not access_token:
+            raise HTTPException(400, "Missing code or access_token")
 
         # 1. Tenant Resolution Logic
         requested_tenant_id = body.get("tenant_id")
@@ -5852,10 +5853,13 @@ async def connect_meta_account(request: Request, current_user: User = Depends(ge
         
         # Prepare payload for Meta Service (Diplomat)
         payload = {
-            "code": code,
-            "redirect_uri": redirect_uri,
-            "tenant_id": target_tenant_id
+            "tenant_id": target_tenant_id,
+            "redirect_uri": redirect_uri
         }
+        if code:
+            payload["code"] = code
+        if access_token:
+            payload["access_token"] = access_token
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(f"{meta_service_url}/connect", json=payload)

@@ -23,23 +23,23 @@ class MetaAuthService:
         Tries redirect_uri with and without trailing slash (Meta is strict about exact match).
         Flow: code → short-lived token → long-lived token (fb_exchange_token)
         """
-        # Build all possible URI variants Meta might expect
+        # For FB.login() via JS SDK, Meta internally uses a special redirect_uri.
+        # We try multiple known variants in priority order.
         from urllib.parse import urlparse
         parsed = urlparse(redirect_uri)
         origin = f"{parsed.scheme}://{parsed.netloc}"
 
-        uris_to_try = []
-        # 1. Exact as received (full page URL)
-        uris_to_try.append(redirect_uri)
-        # 2. With/without trailing slash
-        if redirect_uri.endswith("/"):
-            uris_to_try.append(redirect_uri.rstrip("/"))
-        else:
-            uris_to_try.append(redirect_uri + "/")
-        # 3. Origin only (no path)
-        if origin != redirect_uri and origin + "/" != redirect_uri:
-            uris_to_try.append(origin)
-            uris_to_try.append(origin + "/")
+        uris_to_try = [
+            # 1. The standard SDK redirect (what FB.login popup uses internally)
+            "https://www.facebook.com/connect/login_success.html",
+            # 2. Exact as received from frontend
+            redirect_uri,
+            # 3. With/without trailing slash
+            redirect_uri.rstrip("/") if redirect_uri.endswith("/") else redirect_uri + "/",
+            # 4. Origin only
+            origin,
+            origin + "/",
+        ]
         # Deduplicate while preserving order
         uris_to_try = list(dict.fromkeys(uris_to_try))
 
