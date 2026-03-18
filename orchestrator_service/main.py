@@ -19,7 +19,7 @@ import smtplib
 import asyncio
 from email.mime.text import MIMEText
 from email.utils import formatdate
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union, Literal
 from fastapi import FastAPI, HTTPException, Header, Depends, status, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
