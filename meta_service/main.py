@@ -149,7 +149,10 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
 @app.post("/subscribe")
 async def subscribe_asset(data: dict):
     """
-    Subscribes a Facebook Page to webhooks.
+    Subscribes assets to webhooks.
+    - Facebook Page: subscribes app to page messaging events
+    - Instagram: uses page subscription (IG DMs come through page webhooks)
+    - WhatsApp: subscribes WABA to the app at app-level (done in Meta Developer Dashboard)
     """
     asset_id = data.get("asset_id")
     access_token = data.get("access_token")
@@ -158,14 +161,27 @@ async def subscribe_asset(data: dict):
     if not all([asset_id, access_token, asset_type]):
         raise HTTPException(400, "Missing asset_id, access_token, or asset_type")
 
-    if asset_type == "facebook_page":
-        async with httpx.AsyncClient() as client:
-            await auth_service.subscribe_page(client, asset_id, access_token)
-            return {"status": "ok", "message": f"Subscribed to {asset_id}"}
-    
-    # Instagram and WhatsApp subscriptions are usually handled at the App Level 
-    # or don't require this specific 'page' subscription call.
-    return {"status": "ignored", "message": f"Subscription not required for {asset_type}"}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        if asset_type in ("facebook_page", "instagram_account"):
+            # Both FB Messenger and IG Direct use page-level subscription
+            page_id = data.get("linked_page_id") or asset_id
+            await auth_service.subscribe_page(client, page_id, access_token)
+            return {"status": "ok", "message": f"Subscribed page {page_id} for {asset_type}"}
+
+        elif asset_type == "whatsapp_waba":
+            # WhatsApp Cloud API: register the phone number for webhooks
+            phone_number_id = data.get("phone_number_id")
+            if phone_number_id:
+                api_version = os.getenv("META_GRAPH_API_VERSION", "v22.0")
+                url = f"https://graph.facebook.com/{api_version}/{phone_number_id}/register"
+                resp = await client.post(url, json={
+                    "messaging_product": "whatsapp",
+                    "pin": "123456"  # Required but not used for Cloud API
+                }, headers={"Authorization": f"Bearer {access_token}"})
+                logger.info("whatsapp_phone_register", phone_number_id=phone_number_id, status=resp.status_code)
+            return {"status": "ok", "message": f"WhatsApp WABA {asset_id} configured"}
+
+    return {"status": "ignored", "message": f"No subscription action for {asset_type}"}
 
 @app.post("/messages/send")
 async def send_message_proxy(data: dict):
@@ -187,7 +203,7 @@ async def send_message_proxy(data: dict):
         raise HTTPException(400, "Missing required fields")
 
     # Call Graph API
-    url = f"https://graph.facebook.com/v19.0/me/messages"
+    url = f"https://graph.facebook.com/v22.0/me/messages"
     params = {"access_token": access_token}
     payload = {
         "recipient": {"id": recipient_id},
@@ -227,7 +243,7 @@ async def send_whatsapp_message_proxy(data: dict):
         raise HTTPException(400, "Missing required fields (recipient_id, text, access_token, phone_number_id)")
 
     # WhatsApp Cloud API URL
-    url = f"https://graph.facebook.com/v19.0/{phone_number_id}/messages"
+    url = f"https://graph.facebook.com/v22.0/{phone_number_id}/messages"
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"

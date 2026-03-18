@@ -21,7 +21,7 @@ export const useFacebookSdk = () => {
             appId: appId,
             cookie: true,
             xfbml: true,
-            version: import.meta.env.VITE_FACEBOOK_API_VERSION || 'v20.0'
+            version: import.meta.env.VITE_FACEBOOK_API_VERSION || 'v22.0'
         };
 
         // 1. If already loaded, Force Init to ensure it's configured

@@ -1052,69 +1052,114 @@ async def internal_credential_sync(
     try:
         tenant_id = int(data.tenant_id)
         creds = data.credentials
-        
-        # 2. Store User Access Token (Global for Tenant)
-        user_access_token = creds.get("user_access_token") or creds.get("value")
-        if user_access_token:
-            from utils import encrypt_password
-            enc_token = encrypt_password(user_access_token)
-            
-            # Identify category and name based on provider
-            category = "tiendanube" if data.provider == "tiendanube" else ("meta_whatsapp" if data.provider == "meta" else "general")
-            name = creds.get("name", "tiendanube_access_token") if data.provider == "tiendanube" else ("meta_user_token" if data.provider == "meta" else creds.get("name"))
-            
-            # Lookup credential_type_id if internal_key is known
-            internal_key_map = {
-                "meta_user_token": "META_ACCESS_TOKEN",
-                "tiendanube_access_token": "TIENDANUBE_ACCESS_TOKEN",
-                "TIENDANUBE_ACCESS_TOKEN": "TIENDANUBE_ACCESS_TOKEN",
-                "TIENDANUBE_STORE_ID": "TIENDANUBE_STORE_ID"
-            }
-            internal_key = internal_key_map.get(name)
+        from utils import encrypt_password
+
+        async def save_credential(name: str, value: str, category: str, internal_key: str = None):
+            """Save an encrypted credential with proper credential_type lookup."""
+            enc_val = encrypt_password(value)
             type_id = None
             if internal_key:
-                type_id = await db.pool.fetchval("SELECT id FROM credential_types WHERE internal_key = $1", internal_key)
+                type_id = await db.pool.fetchval(
+                    "SELECT id FROM credential_types WHERE internal_key = $1", internal_key
+                )
 
-            logger.info("internal_sync_upsert", tenant_id=tenant_id, name=name, type_id=type_id, val_len=len(user_access_token))
+            # Upsert by tenant_id + name
+            existing = await db.pool.fetchval(
+                "SELECT id FROM credentials WHERE tenant_id = $1 AND name = $2", tenant_id, name
+            )
+            if existing:
+                await db.pool.execute("""
+                    UPDATE credentials SET value = $1, category = $2, credential_type_id = $3,
+                    is_valid = true, updated_at = NOW() WHERE id = $4
+                """, enc_val, category, type_id, existing)
+            else:
+                await db.pool.execute("""
+                    INSERT INTO credentials (name, value, category, scope, tenant_id, credential_type_id, is_valid, updated_at)
+                    VALUES ($1, $2, $3, 'tenant', $4, $5, true, NOW())
+                """, name, enc_val, category, tenant_id, type_id)
 
-            await db.pool.execute("""
-                INSERT INTO credentials (name, value, category, scope, tenant_id, description, credential_type_id, updated_at)
-                VALUES ($1, $2, $3, 'tenant', $4, $5, $6, NOW())
-                ON CONFLICT (scope, name) WHERE scope='tenant' AND tenant_id IS NOT NULL
-                DO UPDATE SET value = EXCLUDED.value, credential_type_id = EXCLUDED.credential_type_id, updated_at = NOW()
-            """, name, enc_token, category, tenant_id, f"Auto-synced via {data.provider}", type_id)
+            logger.info("credential_saved", tenant_id=tenant_id, name=name, has_type=bool(type_id))
+
+        # ==================== META PROVIDER ====================
+        if data.provider == "meta":
+            # 2a. Store long-lived user token
+            user_token = creds.get("user_access_token")
+            if user_token:
+                await save_credential("META_USER_LONG_TOKEN", user_token, "meta", "META_USER_ACCESS_TOKEN")
+
+            # 2b. Store individual page tokens (for FB Messenger + IG)
+            assets = creds.get("assets", {})
+            for page in assets.get("pages", []):
+                if page.get("access_token"):
+                    await save_credential(
+                        f"META_PAGE_TOKEN_{page['id']}", page["access_token"],
+                        "meta", "META_PAGE_ACCESS_TOKEN"
+                    )
+
+            # 2c. Store IG tokens (use linked page token)
+            for ig in assets.get("instagram", []):
+                if ig.get("access_token"):
+                    await save_credential(
+                        f"META_IG_TOKEN_{ig['id']}", ig["access_token"],
+                        "meta", "META_INSTAGRAM_TOKEN"
+                    )
+
+            # 2d. Store WhatsApp tokens
+            for waba in assets.get("whatsapp", []):
+                if waba.get("access_token"):
+                    await save_credential(
+                        f"META_WA_TOKEN_{waba['id']}", waba["access_token"],
+                        "meta", "META_WHATSAPP_TOKEN"
+                    )
+
+        # ==================== TIENDANUBE PROVIDER ====================
+        elif data.provider == "tiendanube":
+            token = creds.get("user_access_token") or creds.get("value")
+            name = creds.get("name", "TIENDANUBE_ACCESS_TOKEN")
+            if token:
+                await save_credential(name, token, "tiendanube", name)
+
+        # ==================== GENERIC PROVIDER ====================
+        else:
+            token = creds.get("user_access_token") or creds.get("value")
+            name = creds.get("name", f"{data.provider}_token")
+            if token:
+                await save_credential(name, token, data.provider)
 
         # 3. Store Raw Assets in 'business_assets' table
         assets = creds.get("assets", {})
-        
-        # Helper to store assets (Corrected Schema)
+
         async def store_asset_batch(asset_list, asset_type):
             for item in asset_list:
-                item['status'] = 'pending'
-                external_id = item['id']
-                
-                # Check existence via JSONB
+                # Don't persist access_token in business_assets (it's in credentials)
+                safe_item = {k: v for k, v in item.items() if k != "access_token"}
+                safe_item["status"] = "active"
+                external_id = str(item["id"])
+
                 existing = await db.pool.fetchrow("""
-                    SELECT id FROM business_assets 
+                    SELECT id FROM business_assets
                     WHERE tenant_id = $1 AND asset_type = $2 AND content->>'id' = $3
                 """, str(tenant_id), asset_type, external_id)
-                
+
                 if existing:
                     await db.pool.execute("""
-                        UPDATE business_assets SET content = $1, updated_at = NOW() WHERE id = $2
-                    """, json.dumps(item), existing['id'])
+                        UPDATE business_assets SET content = $1, is_active = true, updated_at = NOW() WHERE id = $2
+                    """, json.dumps(safe_item), existing["id"])
                 else:
-                    new_id = str(uuid.uuid4())
                     await db.pool.execute("""
                         INSERT INTO business_assets (id, tenant_id, asset_type, content, is_active, created_at)
                         VALUES ($1, $2, $3, $4, true, NOW())
-                    """, new_id, str(tenant_id), asset_type, json.dumps(item))
+                    """, str(uuid.uuid4()), str(tenant_id), asset_type, json.dumps(safe_item))
 
         if "pages" in assets: await store_asset_batch(assets["pages"], "facebook_page")
         if "instagram" in assets: await store_asset_batch(assets["instagram"], "instagram_account")
         if "whatsapp" in assets: await store_asset_batch(assets["whatsapp"], "whatsapp_waba")
 
-        return {"status": "ok", "message": "Synced"}
+        return {"status": "ok", "message": "Synced", "assets_count": {
+            "pages": len(assets.get("pages", [])),
+            "instagram": len(assets.get("instagram", [])),
+            "whatsapp": len(assets.get("whatsapp", []))
+        }}
         
     except Exception as e:
         logger.error(f"Internal Sync Error: {e}")

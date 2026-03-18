@@ -9,12 +9,12 @@ logger = structlog.get_logger()
 class MetaAuthService:
     """
     Handles Meta Graph API for OAuth 2.0 Token Exchange and Asset Discovery.
-    Version: v19.0
+    ClinicForge-grade token management: code → short-lived → long-lived → page tokens.
     """
     def __init__(self):
         self.app_id = os.getenv("META_APP_ID")
         self.app_secret = os.getenv("META_APP_SECRET")
-        self.api_version = "v19.0"
+        self.api_version = os.getenv("META_GRAPH_API_VERSION", "v22.0")
         self.base_url = f"https://graph.facebook.com/{self.api_version}"
 
     async def exchange_code(self, code: str, redirect_uri: str) -> str:
@@ -105,105 +105,130 @@ class MetaAuthService:
 
     async def get_accounts(self, access_token: str):
         """
-        Fetches Pages, Instagram Business Accounts, and WhatsApp Business Accounts associated with the user/token.
-        Also subscribes the App to the Pages' webhooks.
+        Fetches Pages, Instagram Business Accounts, and WhatsApp Business Accounts.
+        - Auto-subscribes pages to webhooks for messaging
+        - Fetches WhatsApp phone numbers for each WABA
+        - Page tokens from /me/accounts are already long-lived when user token is long-lived
         """
-        # 1. Fetch Pages
-        url_pages = f"{self.base_url}/me/accounts"
-        params = {
-            "access_token": access_token,
-            "fields": "id,name,access_token,instagram_business_account{id,username},tasks"
-        }
-
         assets = {
             "pages": [],
             "instagram": [],
             "whatsapp": []
         }
 
-        async with httpx.AsyncClient() as client:
-            # 1. Get Pages
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            # ==================== 1. PAGES + INSTAGRAM ====================
             try:
-                resp = await client.get(url_pages, params=params)
+                resp = await client.get(f"{self.base_url}/me/accounts", params={
+                    "access_token": access_token,
+                    "fields": "id,name,access_token,instagram_business_account{id,username,profile_picture_url},tasks"
+                })
                 data = resp.json()
-                
+
                 if "error" in data:
-                    logger.error("meta_assets_fetch_error", error=data["error"])
-                    # Don't crash entirely, but maybe warn? 
-                    # Actually, if we can't fetch pages, something is wrong with the token/perms.
+                    logger.error("meta_pages_error", error=data["error"])
                     raise HTTPException(400, f"Meta API Error: {data['error'].get('message')}")
 
-                if "data" in data:
-                    for page in data["data"]:
-                        # Filter for ADMIN/MODERATE tasks to ensure we can manage
-                        tasks = page.get("tasks", [])
-                        if "MANAGE" in tasks or "MODERATE" in tasks or "CREATE_CONTENT" in tasks:
-                            # Page Asset
-                            assets["pages"].append({
-                                "id": page["id"],
-                                "name": page["name"],
-                                "access_token": page["access_token"]
-                            })
-                            
-                            # Note: We NO LONGER auto-subscribe here. 
-                            # Orchestrator will call subscribe_page for selected assets.
+                for page in data.get("data", []):
+                    tasks = page.get("tasks", [])
+                    if not any(t in tasks for t in ["MANAGE", "MODERATE", "CREATE_CONTENT"]):
+                        continue
 
-                            # IG Asset
-                            if "instagram_business_account" in page:
-                                ig = page["instagram_business_account"]
-                                assets["instagram"].append({
-                                    "id": ig["id"],
-                                    "username": ig.get("username"),
-                                    "linked_page_id": page["id"]
-                                })
-            except httpx.ConnectError as e:
-                logger.error("meta_connection_error_pages", url=url_pages, error=str(e))
-                raise HTTPException(status_code=503, detail=f"Could not resolve {url_pages}. DNS error?")
+                    page_token = page["access_token"]
 
-            # 2. Get WABA (WhatsApp Business Accounts)
-            # This requires 'whatsapp_business_management' permission which is included in the Tech Provider Config
-            url_waba = f"{self.base_url}/me/whatsapp_business_accounts"
-            params_waba = {
-                "access_token": access_token,
-                "fields": "id,name,currency,timezone_id,message_template_namespace"
-            }
-            
-            try:
-                resp_waba = await client.get(url_waba, params=params_waba)
-                data_waba = resp_waba.json()
-                
-                if "data" in data_waba:
-                    for waba in data_waba["data"]:
-                        assets["whatsapp"].append({
-                            "id": waba["id"],
-                            "name": waba["name"],
-                            "currency": waba.get("currency"),
-                            "timezone_id": waba.get("timezone_id"),
-                            "namespace": waba.get("message_template_namespace")
+                    # Auto-subscribe page to webhooks (messages, reads, postbacks)
+                    try:
+                        await self.subscribe_page(client, page["id"], page_token)
+                    except Exception as sub_err:
+                        logger.warning("page_auto_subscribe_failed", page_id=page["id"], error=str(sub_err))
+
+                    assets["pages"].append({
+                        "id": page["id"],
+                        "name": page["name"],
+                        "access_token": page_token  # Long-lived (derived from long-lived user token)
+                    })
+
+                    # Instagram Business Account linked to this page
+                    if "instagram_business_account" in page:
+                        ig = page["instagram_business_account"]
+                        assets["instagram"].append({
+                            "id": ig["id"],
+                            "username": ig.get("username"),
+                            "profile_picture_url": ig.get("profile_picture_url"),
+                            "linked_page_id": page["id"],
+                            "access_token": page_token  # IG uses the page token
                         })
-                        # Note: We likely need to fetch Phone Numbers for this WABA separately
+
             except httpx.ConnectError as e:
-                logger.error("meta_connection_error_waba", url=url_waba, error=str(e))
-                # We don't necessarily want to crash the whole thing if only WABA fails, but logging is vital
+                logger.error("meta_connection_error_pages", error=str(e))
+                raise HTTPException(503, "Could not connect to Meta API")
+
+            # ==================== 2. WHATSAPP BUSINESS ACCOUNTS ====================
+            try:
+                resp_waba = await client.get(f"{self.base_url}/me/whatsapp_business_accounts", params={
+                    "access_token": access_token,
+                    "fields": "id,name,currency,timezone_id,message_template_namespace"
+                })
+                data_waba = resp_waba.json()
+
+                for waba in data_waba.get("data", []):
+                    waba_id = waba["id"]
+
+                    # Fetch phone numbers for this WABA
+                    phone_numbers = []
+                    try:
+                        resp_phones = await client.get(f"{self.base_url}/{waba_id}/phone_numbers", params={
+                            "access_token": access_token,
+                            "fields": "id,display_phone_number,verified_name,quality_rating,code_verification_status"
+                        })
+                        phones_data = resp_phones.json()
+                        for phone in phones_data.get("data", []):
+                            phone_numbers.append({
+                                "id": phone["id"],  # This is the phone_number_id needed for sending
+                                "display_phone_number": phone.get("display_phone_number"),
+                                "verified_name": phone.get("verified_name"),
+                                "quality_rating": phone.get("quality_rating"),
+                                "status": phone.get("code_verification_status")
+                            })
+                    except Exception as ph_err:
+                        logger.warning("waba_phone_fetch_failed", waba_id=waba_id, error=str(ph_err))
+
+                    assets["whatsapp"].append({
+                        "id": waba_id,
+                        "name": waba["name"],
+                        "currency": waba.get("currency"),
+                        "timezone_id": waba.get("timezone_id"),
+                        "namespace": waba.get("message_template_namespace"),
+                        "phone_numbers": phone_numbers,
+                        "access_token": access_token  # WABA uses the user token
+                    })
+
             except Exception as e:
                 logger.warning("waba_fetch_failed", error=str(e))
-            
+
+            logger.info("assets_discovered",
+                pages=len(assets["pages"]),
+                instagram=len(assets["instagram"]),
+                whatsapp=len(assets["whatsapp"])
+            )
             return assets
 
     async def subscribe_page(self, client: httpx.AsyncClient, page_id: str, page_token: str):
         """
-        Subscribes the App to the Page's `messages` and `messaging_postbacks` events.
+        Subscribes the App to the Page's webhook events.
+        Includes messaging fields for both Facebook Messenger AND Instagram Direct.
         """
         url = f"{self.base_url}/{page_id}/subscribed_apps"
         params = {
             "access_token": page_token,
-            "subscribed_fields": "messages,messaging_postbacks,message_reads"
+            "subscribed_fields": "messages,messaging_postbacks,message_reads,message_deliveries"
         }
         try:
             resp = await client.post(url, params=params)
-            if resp.status_code == 200:
-                logger.info("webhook_subscribed", page_id=page_id, success=True)
+            data = resp.json()
+            if resp.status_code == 200 and data.get("success"):
+                logger.info("webhook_subscribed", page_id=page_id)
             else:
-                logger.warning("webhook_subscribe_failed", page_id=page_id, status=resp.status_code, error=resp.text)
+                logger.warning("webhook_subscribe_failed", page_id=page_id, status=resp.status_code, response=data)
         except Exception as e:
-            logger.error("webhook_subscribe_error", error=str(e))
+            logger.error("webhook_subscribe_error", page_id=page_id, error=str(e))
