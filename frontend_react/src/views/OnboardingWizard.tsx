@@ -119,6 +119,7 @@ export const OnboardingWizard: React.FC = () => {
     const [activeSectionButtons, setActiveSectionButtons] = useState<{label: string, accion: string, estilo: string}[]>([]);
     const [dynamicCards, setDynamicCards] = useState<{tipo: string, titulo: string, valor: string, icono?: string}[]>([]);
     const [micPaused, setMicPaused] = useState(false);
+    const micPausedRef = useRef(false);
 
     // Step 6 (Test)
     const [testMessage, setTestMessage] = useState('');
@@ -945,6 +946,8 @@ export const OnboardingWizard: React.FC = () => {
         realtimeProcessorRef.current = processor;
 
         processor.onaudioprocess = (e) => {
+            // Skip sending audio when mic is paused
+            if (micPausedRef.current) return;
             if (ws.readyState === WebSocket.OPEN) {
                 const input = e.inputBuffer.getChannelData(0);
                 const pcm16 = new Int16Array(input.length);
@@ -1009,25 +1012,19 @@ export const OnboardingWizard: React.FC = () => {
         setRealtimeConnected(false);
         setVoiceState('idle');
         setMicPaused(false);
+        micPausedRef.current = false;
     };
 
     const pauseMic = () => {
         const newPaused = !micPaused;
         setMicPaused(newPaused);
-        // Mute all audio tracks
+        micPausedRef.current = newPaused;
+        // Mute audio tracks as visual indicator
         if (realtimeStreamRef.current) {
             realtimeStreamRef.current.getAudioTracks().forEach(track => { track.enabled = !newPaused; });
         }
-        // Also disconnect/reconnect the processor to stop sending data
-        if (newPaused && realtimeProcessorRef.current) {
-            try { realtimeProcessorRef.current.disconnect(); } catch(e) {}
-        } else if (!newPaused && realtimeProcessorRef.current && realtimeAudioCtxRef.current && realtimeStreamRef.current) {
-            try {
-                const source = realtimeAudioCtxRef.current.createMediaStreamSource(realtimeStreamRef.current);
-                source.connect(realtimeProcessorRef.current);
-                realtimeProcessorRef.current.connect(realtimeAudioCtxRef.current.destination);
-            } catch(e) {}
-        }
+        // The processor checks micPausedRef and skips sending when paused
+        // No disconnect/reconnect needed — simpler and more reliable
     };
 
     const forceFinish = async () => {
