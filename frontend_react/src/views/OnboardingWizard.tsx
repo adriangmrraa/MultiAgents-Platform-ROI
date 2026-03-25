@@ -1657,22 +1657,29 @@ export const OnboardingWizard: React.FC = () => {
                                 <div className="glass p-3 rounded-xl border border-white/5">
                                     <Store size={14} className="text-blue-400 mb-1" />
                                     <p className="text-[10px] font-bold text-slate-400">Tienda</p>
-                                    <p className="text-xs text-white truncate">{stepData.step_1?.tiendanube_connected ? 'Conectada' : 'Pendiente'}</p>
+                                    <p className="text-xs text-white truncate flex items-center gap-1">
+                                        {tnConnected || stepData.step_1?.tiendanube_connected ? <><Check size={10} className="text-green-400" /> Conectada</> : 'Pendiente'}
+                                    </p>
                                 </div>
                                 <div className="glass p-3 rounded-xl border border-white/5">
                                     <Facebook size={14} className="text-[#1877F2] mb-1" />
                                     <p className="text-[10px] font-bold text-slate-400">Meta</p>
-                                    <p className="text-xs text-white truncate">{stepData.step_2?.meta_connected || metaConnected ? 'Conectado' : 'Pendiente'}</p>
+                                    <p className="text-xs text-white truncate flex items-center gap-1">
+                                        {metaConnected || ycloudSaved || stepData.step_2?.meta_connected || stepData.step_2?.ycloud_connected ? <><Check size={10} className="text-green-400" /> Conectado</> : 'Pendiente'}
+                                    </p>
                                 </div>
                                 <div className="glass p-3 rounded-xl border border-white/5">
                                     <Volume2 size={14} className="text-violet-400 mb-1" />
                                     <p className="text-[10px] font-bold text-slate-400">Tono</p>
-                                    <p className="text-xs text-white truncate">{stepData.step_3?.completed ? 'Configurado' : 'Pendiente'}</p>
+                                    <p className="text-xs text-white truncate flex items-center gap-1">
+                                        {step >= 4 || stepData.step_3?.completed || savedSections.guardar_tono ? <><Check size={10} className="text-green-400" /> Configurado</> : 'Pendiente'}
+                                    </p>
                                 </div>
                                 <div className="glass p-3 rounded-xl border border-white/5">
                                     <Zap size={14} className="text-amber-400 mb-1" />
                                     <p className="text-[10px] font-bold text-slate-400">Reglas</p>
-                                    <p className="text-xs text-white truncate">{stepData.step_4?.completed ? 'Configuradas' : 'Pendiente'}</p>
+                                    <p className="text-xs text-white truncate flex items-center gap-1">
+                                        {step >= 5 || stepData.step_4?.completed || savedSections.guardar_reglas ? <><Check size={10} className="text-green-400" /> Configuradas</> : 'Pendiente'}
                                 </div>
                             </div>
 
