@@ -1,11 +1,13 @@
+import os
+import json
+import re
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from app.core.prompts import ONBOARDING_ARCHITECT_PROMPT
 from app.core.credentials import get_tenant_credential_by_type
 import openai
-import json
-import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
