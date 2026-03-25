@@ -737,7 +737,23 @@ async def extract_meta_data(tenant_id: int = Body(0, embed=True)):
                 if item["posts"]:
                     context_parts.append(f"ULTIMOS POSTS DE INSTAGRAM: " + " | ".join(item["posts"][:3]))
 
+        # FALLBACK: If Graph API calls failed but we have DB data, use that
+        if not context_parts and assets:
+            logger.info("extract_meta_data: using DB fallback (Graph API failed)")
+            for asset in assets:
+                asset_type = asset["asset_type"]
+                content = asset["content"] if isinstance(asset["content"], dict) else json.loads(asset["content"] or "{}")
+                name = content.get("name", "") or content.get("username", "")
+                if asset_type == "facebook_page" and name:
+                    context_parts.append(f"PAGINA DE FACEBOOK: {name}. Categoria: {content.get('category', 'N/A')}.")
+                    extracted.append({"type": "facebook_page", "name": name, "category": content.get("category", ""), "fans": 0})
+                elif asset_type == "instagram_account" and (name or content.get("id")):
+                    ig_name = name or content.get("username", content.get("id", ""))
+                    context_parts.append(f"PERFIL DE INSTAGRAM: @{ig_name}.")
+                    extracted.append({"type": "instagram_profile", "name": ig_name, "username": ig_name, "followers": 0})
+
         context = "\n".join(context_parts)
+        logger.info(f"extract_meta_data: context_length={len(context)}, extracted_count={len(extracted)}")
         return {"context": context, "assets": extracted}
 
     except Exception as e:
