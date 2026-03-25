@@ -759,3 +759,99 @@ async def extract_meta_data(tenant_id: int = Body(0, embed=True)):
     except Exception as e:
         logger.error(f"Meta data extraction error: {e}")
         return {"context": "", "assets": [], "error": str(e)}
+
+
+# --- Web Research (scrape user's website) ---
+
+@router.post("/research-web")
+async def research_web(
+    url: str = Body(..., embed=True),
+    tenant_id: int = Body(0, embed=True),
+):
+    """Scrape a website URL and extract business information.
+    Saves results in onboarding_progress.step_data for Nova to use.
+    Returns structured context for the architect.
+    """
+    from db import db
+    import httpx
+    import re
+
+    if not url:
+        return {"context": "", "error": "URL vacia"}
+
+    # Ensure URL has protocol
+    if not url.startswith("http"):
+        url = "https://" + url
+
+    try:
+        # 1. Scrape the website
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 FuturePlatform/1.0"})
+            if resp.status_code != 200:
+                return {"context": "", "error": f"HTTP {resp.status_code}"}
+
+        html = resp.text[:30000]
+
+        # 2. Extract useful text (strip HTML)
+        text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL)
+        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
+        text = re.sub(r'<[^>]+>', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        # 3. Extract meta tags
+        title_match = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
+        title = title_match.group(1).strip() if title_match else ""
+
+        desc_match = re.search(r'<meta[^>]*name=["\']description["\'][^>]*content=["\'](.*?)["\']', html, re.IGNORECASE)
+        description = desc_match.group(1).strip() if desc_match else ""
+
+        og_title = re.search(r'<meta[^>]*property=["\']og:title["\'][^>]*content=["\'](.*?)["\']', html, re.IGNORECASE)
+        og_desc = re.search(r'<meta[^>]*property=["\']og:description["\'][^>]*content=["\'](.*?)["\']', html, re.IGNORECASE)
+
+        # 4. Build context
+        context_parts = []
+        context_parts.append(f"SITIO WEB: {url}")
+        if title:
+            context_parts.append(f"TITULO: {title}")
+        if description:
+            context_parts.append(f"DESCRIPCION: {description}")
+        if og_title:
+            context_parts.append(f"OG TITULO: {og_title.group(1)}")
+        if og_desc:
+            context_parts.append(f"OG DESCRIPCION: {og_desc.group(1)}")
+
+        # 5. Extract meaningful text (first 3000 chars)
+        clean_text = text[:3000]
+        if clean_text:
+            context_parts.append(f"CONTENIDO DE LA WEB: {clean_text}")
+
+        context = "\n".join(context_parts)
+
+        # 6. Save to onboarding_progress if tenant_id available
+        if tenant_id:
+            try:
+                await db.pool.execute("""
+                    UPDATE onboarding_progress
+                    SET step_data = jsonb_set(
+                        COALESCE(step_data, '{}'),
+                        '{web_research}',
+                        $1::jsonb
+                    ),
+                    updated_at = NOW()
+                    WHERE tenant_id = $2
+                """, json.dumps({
+                    "url": url,
+                    "title": title,
+                    "description": description,
+                    "content_preview": clean_text[:500],
+                    "full_context": context
+                }), tenant_id)
+                logger.info("web_research_saved", url=url, tenant_id=tenant_id, context_len=len(context))
+            except Exception as e:
+                logger.error("web_research_save_error", error=str(e))
+
+        return {"context": context, "title": title, "description": description, "url": url}
+
+    except Exception as e:
+        logger.error(f"Web research error: {e}")
+        return {"context": "", "error": str(e)}

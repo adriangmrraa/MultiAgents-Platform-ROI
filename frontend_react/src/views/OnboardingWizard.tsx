@@ -61,6 +61,12 @@ export const OnboardingWizard: React.FC = () => {
     const [showTnHelp, setShowTnHelp] = useState(false);
     const [tnCopied, setTnCopied] = useState(false);
 
+    // Step 1 (Web research)
+    const [webUrl, setWebUrl] = useState('');
+    const [webResearching, setWebResearching] = useState(false);
+    const [webResearchDone, setWebResearchDone] = useState(false);
+    const [webResearchContext, setWebResearchContext] = useState('');
+
     // Step 2 (Meta + WhatsApp provider)
     const [waProvider, setWaProvider] = useState<'meta' | 'ycloud' | null>(null);
     const [metaConnected, setMetaConnected] = useState(false);
@@ -209,6 +215,9 @@ export const OnboardingWizard: React.FC = () => {
                     setTnConnected(true);
                     setTnStoreName(sd.step_1.store_id || '');
                 }
+                // Restore web research
+                if (sd.web_research?.url) { setWebUrl(sd.web_research.url); setWebResearchDone(true); }
+                if (sd.web_research?.full_context) setWebResearchContext(sd.web_research.full_context);
                 // Restore step 2 state
                 if (sd.step_2?.wa_provider) setWaProvider(sd.step_2.wa_provider);
                 if (sd.step_2?.ycloud_connected) setYcloudSaved(true);
@@ -736,6 +745,19 @@ export const OnboardingWizard: React.FC = () => {
 
     const extractMetaData = async () => {
         if (metaContext) return metaContext;
+        // Include web research if available
+        let webContext = webResearchContext;
+        if (!webContext) {
+            // Try to load from DB step_data
+            try {
+                const prog = await fetchApi('/admin/onboarding-wizard/progress');
+                if (prog?.step_data?.web_research?.full_context) {
+                    webContext = prog.step_data.web_research.full_context;
+                    setWebResearchContext(webContext);
+                    setWebResearchDone(true);
+                }
+            } catch(e) {}
+        }
         let tid = tenantId;
         if (!tid) {
             try {
@@ -748,7 +770,9 @@ export const OnboardingWizard: React.FC = () => {
                 method: 'POST', body: { tenant_id: tid || 0 }
             });
             if (res?.context) {
-                setMetaContext(res.context);
+                // Combine meta context + web research context
+                const combined = [res.context, webContext].filter(Boolean).join('\n\n');
+                setMetaContext(combined);
                 // Build research cards from assets
                 const cards: {tipo: string, titulo: string, valor: string, icono: string}[] = [];
                 if (res.assets) {
@@ -1279,6 +1303,44 @@ export const OnboardingWizard: React.FC = () => {
                                     className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold rounded-xl transition-all active:scale-[0.98]">
                                     {tnConnected ? <span className="flex items-center justify-center gap-2"><CheckCircle size={16} /> Conectada: {tnStoreName}</span> : 'Conectar Tienda'}
                                 </button>
+                            </div>
+
+                            {/* Web URL for research */}
+                            <div className="glass p-5 rounded-xl border border-white/5 space-y-3">
+                                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                                    <Globe size={16} className="text-cyan-400" /> URL de tu Tienda
+                                </h3>
+                                <p className="text-[10px] text-slate-500">Pega la URL publica de tu tienda para que Nova investigue tu negocio antes de la conversacion.</p>
+                                <input value={webUrl} onChange={e => setWebUrl(e.target.value)}
+                                    placeholder="https://www.mitienda.com" className={inputClass} />
+                                <button onClick={async () => {
+                                    if (!webUrl.trim()) return;
+                                    setWebResearching(true);
+                                    try {
+                                        const res = await fetchApi('/admin/onboarding/research-web', {
+                                            method: 'POST', body: { url: webUrl.trim(), tenant_id: tenantId || 0 }
+                                        });
+                                        if (res?.context) {
+                                            setWebResearchContext(res.context);
+                                            setWebResearchDone(true);
+                                        } else {
+                                            setError(res?.error || 'No se pudo analizar la web');
+                                        }
+                                    } catch(e: any) { setError(e.message || 'Error al investigar'); }
+                                    setWebResearching(false);
+                                }} disabled={webResearching || !webUrl.trim() || webResearchDone}
+                                    className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-40 text-white font-bold rounded-xl transition-all active:scale-[0.98] text-sm flex items-center justify-center gap-2">
+                                    {webResearching ? (
+                                        <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Investigando...</>
+                                    ) : webResearchDone ? (
+                                        <><CheckCircle size={14} /> Web analizada</>
+                                    ) : (
+                                        <><Globe size={14} /> Analizar mi web</>
+                                    )}
+                                </button>
+                                {webResearchDone && (
+                                    <p className="text-[9px] text-cyan-400">Nova usara esta info en la conversacion del paso 3.</p>
+                                )}
                             </div>
 
                             {/* Help Section */}
