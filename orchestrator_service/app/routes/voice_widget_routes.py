@@ -81,8 +81,11 @@ async def _get_tenant_id(current_user: User) -> int:
     return row["id"]
 
 
-async def _check_plan_allows_voice(tenant_id: int):
-    """Voice Widget only available for Pro/Enterprise plans."""
+async def _check_plan_allows_voice(tenant_id: int, current_user: User = None):
+    """Voice Widget only available for Pro/Enterprise plans. Super admins bypass."""
+    if current_user and current_user.role == "super_admin":
+        return "enterprise"  # super_admin gets full access
+
     row = await db.pool.fetchrow("""
         SELECT p.name as plan_name
         FROM subscriptions s
@@ -139,7 +142,7 @@ async def get_voice_widget(config_id: int, current_user: User = Depends(get_curr
 async def create_voice_widget(body: VoiceWidgetCreate, current_user: User = Depends(get_current_user)):
     """Create a new voice widget config."""
     tenant_id = await _get_tenant_id(current_user)
-    await _check_plan_allows_voice(tenant_id)
+    await _check_plan_allows_voice(tenant_id, current_user)
 
     # Validate agent belongs to tenant
     agent = await db.pool.fetchrow(
