@@ -1699,16 +1699,27 @@ export const OnboardingWizard: React.FC = () => {
                                     <button onClick={async () => {
                                         setTestLoading(true);
                                         try {
-                                            const res = await fetchApi('/admin/onboarding/interview-step', {
+                                            // Use test-agent endpoint (no session, no reset) to refine
+                                            const res = await fetchApi('/admin/onboarding-wizard/test-agent', {
                                                 method: 'POST',
                                                 body: {
-                                                    session_id: chatSessionId + '_refine',
-                                                    user_message: `Transforma el siguiente draft en un system prompt PROFESIONAL con la estructura y densidad de Pointe Coach. Debe tener secciones claras: IDENTIDAD, TONO Y PERSONALIDAD (con estilo, pronombres, puntuacion, prohibido, naturalidad, emojis), REGLAS DE NEGOCIO (imperativos numerados), DICCIONARIO DE SINONIMOS. Cada seccion debe ser densa y especifica. No simplifiques. Emite el resultado dentro de <SECTION_COMPLETE>{"section":"final","draft":"...el prompt completo..."}</SECTION_COMPLETE>.\n\nDRAFT ACTUAL:\n${systemPrompt}`,
-                                                    step: 3, tenant_id: tenantId || 0, reset: true
+                                                    message: `Transforma el siguiente draft en un system prompt PROFESIONAL y COMPLETO con la estructura y densidad de Pointe Coach.
+
+REGLAS:
+- Debe tener secciones claras: IDENTIDAD DEL NEGOCIO, TONO Y PERSONALIDAD, REGLAS DE NEGOCIO, DICCIONARIO DE SINONIMOS
+- Cada seccion debe ser DENSA y ESPECIFICA. NO simplifiques. NO resumas. NO elimines informacion.
+- El prompt refinado debe ser MAS LARGO que el draft original, no mas corto.
+- Usa formato con asteriscos y negritas para estructura.
+- Las reglas deben ser imperativos claros y numerados.
+- El diccionario debe tener minimo 5 sinonimos por categoria.
+- Conserva TODA la informacion del draft original y mejora la estructura.
+
+DRAFT ACTUAL:
+${systemPrompt}`,
+                                                    system_prompt: 'Sos un experto en ingenieria de prompts para agentes de IA de ventas. Tu trabajo es tomar un draft con informacion de un negocio y transformarlo en un system prompt profesional, denso y completo. NUNCA simplifiques ni elimines informacion. El resultado debe ser MAS detallado que el input. Responde SOLO con el prompt refinado, sin explicaciones ni comentarios adicionales.'
                                                 }
                                             });
-                                            if (res?.extracted_draft) { setSystemPrompt(res.extracted_draft); }
-                                            else if (res?.ai_message) { setSystemPrompt(res.ai_message); }
+                                            if (res?.response) { setSystemPrompt(res.response); }
                                         } catch(e) { console.error('Refine error:', e); }
                                         setTestLoading(false);
                                     }} disabled={testLoading || !systemPrompt}
