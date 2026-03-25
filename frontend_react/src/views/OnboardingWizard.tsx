@@ -938,24 +938,46 @@ export const OnboardingWizard: React.FC = () => {
         }
     };
 
+    // Separate ref for capture AudioContext (different from playback)
+    const captureAudioCtxRef = useRef<AudioContext | null>(null);
+
     const startRealtimeAudioCapture = (stream: MediaStream, ws: WebSocket) => {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-        realtimeAudioCtxRef.current = audioCtx;
+        // Use native sample rate for capture (browser default, usually 48000)
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        captureAudioCtxRef.current = audioCtx;
+        const nativeSampleRate = audioCtx.sampleRate;
+        const targetSampleRate = 24000; // OpenAI Realtime expects 24kHz PCM16
+        console.log(`[Realtime] Capture: native=${nativeSampleRate}Hz, target=${targetSampleRate}Hz`);
+
         const source = audioCtx.createMediaStreamSource(stream);
         const processor = audioCtx.createScriptProcessor(4096, 1, 1);
         realtimeProcessorRef.current = processor;
 
         processor.onaudioprocess = (e) => {
-            // Skip sending audio when mic is paused
             if (micPausedRef.current) return;
-            if (ws.readyState === WebSocket.OPEN) {
-                const input = e.inputBuffer.getChannelData(0);
-                const pcm16 = new Int16Array(input.length);
-                for (let i = 0; i < input.length; i++) {
-                    pcm16[i] = Math.max(-32768, Math.min(32767, input[i] * 32768));
+            if (ws.readyState !== WebSocket.OPEN) return;
+
+            const input = e.inputBuffer.getChannelData(0);
+
+            // Resample from native rate to 24kHz
+            let resampled: Float32Array;
+            if (nativeSampleRate === targetSampleRate) {
+                resampled = input;
+            } else {
+                const ratio = nativeSampleRate / targetSampleRate;
+                const newLength = Math.floor(input.length / ratio);
+                resampled = new Float32Array(newLength);
+                for (let i = 0; i < newLength; i++) {
+                    resampled[i] = input[Math.floor(i * ratio)];
                 }
-                ws.send(pcm16.buffer);
             }
+
+            // Convert to PCM16
+            const pcm16 = new Int16Array(resampled.length);
+            for (let i = 0; i < resampled.length; i++) {
+                pcm16[i] = Math.max(-32768, Math.min(32767, resampled[i] * 32768));
+            }
+            ws.send(pcm16.buffer);
         };
         source.connect(processor);
         processor.connect(audioCtx.destination);
@@ -1005,7 +1027,9 @@ export const OnboardingWizard: React.FC = () => {
         if (realtimeStreamRef.current) { realtimeStreamRef.current.getTracks().forEach(t => t.stop()); realtimeStreamRef.current = null; }
         // 3. Disconnect processor
         if (realtimeProcessorRef.current) { try { realtimeProcessorRef.current.disconnect(); } catch(e) {} realtimeProcessorRef.current = null; }
-        // 4. Cancel all playback (closes AudioContext + resets queue)
+        // 4. Close capture AudioContext
+        if (captureAudioCtxRef.current) { try { captureAudioCtxRef.current.close(); } catch(e) {} captureAudioCtxRef.current = null; }
+        // 5. Cancel all playback (closes playback AudioContext + resets queue)
         cancelPlayback();
         pendingTranscriptRef.current = '';
         // 6. Reset states
