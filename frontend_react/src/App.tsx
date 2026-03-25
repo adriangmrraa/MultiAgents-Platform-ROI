@@ -201,7 +201,7 @@ function App() {
                       <Route path="/setup" element={<Setup />} />
                       <Route path="/nexus-setup" element={<SetupExperience />} />
                       <Route path="/magic" element={<Navigate to="/onboarding-wizard" replace />} />
-                    <Route path="/onboarding" element={<OnboardingChat />} /> {/* Hyper-Onboarding v7.2 */}
+                    <Route path="/onboarding" element={<Navigate to="/onboarding-wizard" replace />} /> {/* Redirect to new wizard */}
                     <Route path="/forge" element={<BusinessForge />} />
                     <Route path="/stores" element={<Stores />} />
                     <Route path="/agents" element={<Agents />} />
