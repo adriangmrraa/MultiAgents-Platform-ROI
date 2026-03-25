@@ -798,6 +798,8 @@ export const OnboardingWizard: React.FC = () => {
                                 setVoiceState('speaking');
                                 pendingTranscriptRef.current += msg.text;
                             } else if (msg.role === 'user') {
+                                // BARGE-IN: user is speaking → cancel all Nova audio
+                                cancelPlayback();
                                 setVoiceState('processing');
                                 setChatMessages(prev => [...prev, { role: 'user', content: msg.text }]);
                             }
@@ -882,10 +884,21 @@ export const OnboardingWizard: React.FC = () => {
         processor.connect(audioCtx.destination);
     };
 
-    // Audio playback queue — schedule chunks sequentially, not overlapping
+    // Cancel all currently playing/scheduled audio (barge-in)
+    const cancelPlayback = () => {
+        if (realtimeAudioCtxRef.current && realtimeAudioCtxRef.current.state !== 'closed') {
+            try { realtimeAudioCtxRef.current.close(); } catch(e) {}
+        }
+        realtimeAudioCtxRef.current = null;
+        nextPlayTimeRef.current = 0;
+    };
+
+    // Audio playback — sequential queue with barge-in support
     const playRealtimeAudio = (arrayBuffer: ArrayBuffer) => {
-        if (!realtimeAudioCtxRef.current) {
+        // Create fresh AudioContext if needed (after cancel or first time)
+        if (!realtimeAudioCtxRef.current || realtimeAudioCtxRef.current.state === 'closed') {
             realtimeAudioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+            nextPlayTimeRef.current = 0;
         }
         const ctx = realtimeAudioCtxRef.current;
         const pcm16 = new Int16Array(arrayBuffer);
@@ -899,7 +912,6 @@ export const OnboardingWizard: React.FC = () => {
         src.buffer = buffer;
         src.connect(ctx.destination);
 
-        // Schedule this chunk AFTER the previous one finishes (no overlap)
         const now = ctx.currentTime;
         const startTime = Math.max(now, nextPlayTimeRef.current);
         src.start(startTime);
@@ -916,10 +928,8 @@ export const OnboardingWizard: React.FC = () => {
         if (realtimeStreamRef.current) { realtimeStreamRef.current.getTracks().forEach(t => t.stop()); realtimeStreamRef.current = null; }
         // 3. Disconnect processor
         if (realtimeProcessorRef.current) { try { realtimeProcessorRef.current.disconnect(); } catch(e) {} realtimeProcessorRef.current = null; }
-        // 4. Close AudioContext (cancels ALL pending scheduled audio)
-        if (realtimeAudioCtxRef.current) { try { realtimeAudioCtxRef.current.close(); } catch(e) {} realtimeAudioCtxRef.current = null; }
-        // 5. Reset audio queue
-        nextPlayTimeRef.current = 0;
+        // 4. Cancel all playback (closes AudioContext + resets queue)
+        cancelPlayback();
         pendingTranscriptRef.current = '';
         // 6. Reset states
         setRealtimeConnected(false);
