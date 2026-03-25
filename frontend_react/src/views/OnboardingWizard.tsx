@@ -693,12 +693,13 @@ export const OnboardingWizard: React.FC = () => {
         // 1. Get mic permission
         let stream: MediaStream;
         try {
-            stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000 } });
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             realtimeStreamRef.current = stream;
         } catch(e) {
-            console.error('[Realtime] Mic denied');
+            console.error('[Realtime] Mic denied:', e);
+            setError('Necesitamos acceso al microfono. Toca el candado en la barra de direccion, permite el microfono, y recarga la pagina.');
             setVoiceMode(false);
-            initChat(chatStep);
+            setVoiceConsent(false); // Show consent card again
             return;
         }
 
