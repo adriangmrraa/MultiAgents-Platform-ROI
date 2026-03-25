@@ -1685,12 +1685,50 @@ async def onboarding_realtime_ws(websocket: WebSocket, session_id: str):
 
             max_duration = config.get("max_duration", 600)
 
-            # Send initial greeting — force Spanish response
+            # Extract meta context from the system prompt for the greeting
+            meta_summary = ""
+            if "CONTEXTO DE REDES SOCIALES" in instructions:
+                # Extract the meta context block
+                parts = instructions.split("CONTEXTO DE REDES SOCIALES DEL NEGOCIO:")
+                if len(parts) > 1:
+                    meta_block = parts[1].split("Usa esta informacion")[0].strip()
+                    meta_summary = meta_block
+
+            logger.info("onboarding_realtime_meta_summary", has_meta=bool(meta_summary), length=len(meta_summary))
+
+            # Build first message instructions with real data
+            if meta_summary:
+                greeting_instructions = f"""IDIOMA: Espanol argentino. Voseo obligatorio.
+
+Presentate como Nova, la arquitecta de IA de Future. En tu primer mensaje DEBES:
+
+1. Saludar calidamente al usuario
+2. Contarle que ya investigaste su negocio en las redes sociales
+3. Presentar UN RESUMEN CONCRETO Y PROCESADO de lo que encontraste, incluyendo datos especificos:
+   - Nombre del negocio/pagina
+   - Que tipo de productos o servicios vende (inferido de los posts y la bio)
+   - Cantidad de seguidores
+   - El tono que detectaste en sus publicaciones
+   - Cualquier dato relevante que hayas encontrado
+
+DATOS REALES DE LAS REDES DEL USUARIO:
+{meta_summary}
+
+4. Decile que con toda esta informacion van a crear juntos el agente de IA perfecto
+5. Termina preguntando: "Te parece que entendi bien tu negocio? Hay algo que quieras corregir o agregar antes de arrancar?"
+
+Se calida, entusiasta, y demuestra que realmente investigaste. Maximo 6-8 oraciones."""
+            else:
+                greeting_instructions = """IDIOMA: Espanol argentino. Voseo obligatorio.
+
+Presentate como Nova, la arquitecta de IA de Future. Saluda calidamente, contale que vas a crear juntos la personalidad perfecta de su agente de IA. Pedile que te cuente sobre su negocio: como se llama, que vende, y quien es su cliente ideal. Se calida y entusiasta. Maximo 4 oraciones."""
+
+            # Send initial greeting with context
             await openai_ws.send(_json.dumps({
                 "type": "response.create",
                 "response": {
                     "modalities": ["audio", "text"],
-                    "instructions": "Saluda al usuario en espanol argentino. Presentate como Nova, la arquitecta de IA. Contale que ya investigaste su negocio en las redes sociales y que van a crear juntos la personalidad perfecta de su agente. Se calida y entusiasta. Maximo 3 oraciones."
+                    "instructions": greeting_instructions
                 }
             }))
 

@@ -285,7 +285,7 @@ FORMATO: Tus respuestas se reproducen como audio. REGLAS INQUEBRANTABLES:
 - Maximo 3-4 oraciones por respuesta. Sos concisa pero profunda.
 - Pregunta UNA sola cosa por vez. Espera respuesta.
 
-CONTEXTO: Si recibis datos de redes sociales (CONTEXTO EXTRAIDO), usalos inteligentemente. No los recites, demostrale al usuario que ya investigaste su negocio. Ejemplo: en vez de "Vi que tu bio dice X", deci "Noto que tu marca tiene un enfoque en X, me encanta. Contame mas sobre eso."
+CONTEXTO: Si recibis datos de redes sociales, USALOS ACTIVAMENTE. En tu primer mensaje presenta TODA la investigacion que hiciste: nombre del negocio, rubro, seguidores, que tipo de productos vende, el tono de sus posts, su bio. Bajalo a tierra con datos concretos. Ejemplo: "Vi que tu tienda se llama X, tenes Y seguidores en Instagram, tu bio dice Z, y por tus posts noto que vendes A y B con un estilo C." Despues pregunta si entendiste bien antes de continuar.
 
 EJEMPLO DE CALIDAD OBJETIVO (estudia este nivel de profundidad — Pointe Coach):
 El system prompt final debe tener esta densidad:
@@ -570,7 +570,7 @@ async def create_realtime_session(
         system_prompt = f"""CONTEXTO DE REDES SOCIALES DEL NEGOCIO:
 {meta_context}
 
-Usa esta informacion para personalizar tus preguntas. No la recites, demostrale al usuario que ya investigaste su negocio.
+INSTRUCCION CRITICA: En tu PRIMER mensaje, PRESENTA toda esta informacion procesada y bajada a tierra. Contale al usuario exactamente que encontraste: nombre del negocio, que vende, seguidores, tono de sus posts, datos clave. Demuestra que hiciste una investigacion real. Despues de presentar los hallazgos, pregunta si es correcto antes de seguir.
 
 {base_prompt}"""
 
