@@ -729,30 +729,34 @@ export const OnboardingWizard: React.FC = () => {
             realtimeWsRef.current = ws;
 
             ws.onopen = () => {
+                console.log('[Realtime] WebSocket connected');
                 setRealtimeConnected(true);
-                setVoiceState('listening');
+                setVoiceState('speaking'); // Nova speaks first
                 // Start sending mic audio
                 startRealtimeAudioCapture(stream, ws);
             };
 
             ws.onmessage = (evt) => {
                 if (evt.data instanceof ArrayBuffer) {
-                    // Audio from Nova — play it
-                    setVoiceState('speaking');
+                    // Audio from Nova — play it and show "Nova hablando..."
+                    if (voiceState !== 'speaking') setVoiceState('speaking');
                     playRealtimeAudio(evt.data);
                 } else {
-                    // Text message (transcript)
+                    // Text message (transcript or event)
                     try {
                         const msg = JSON.parse(evt.data);
                         if (msg.type === 'transcript') {
                             if (msg.role === 'assistant') {
+                                // Nova is speaking — accumulate transcript
+                                setVoiceState('speaking');
                                 pendingTranscriptRef.current += msg.text;
                             } else if (msg.role === 'user') {
+                                // User spoke — show in chat + switch to processing
+                                setVoiceState('processing');
                                 setChatMessages(prev => [...prev, { role: 'user', content: msg.text }]);
-                                saveChatToDb([...chatMessages, { role: 'user', content: msg.text }]);
                             }
                         } else if (msg.type === 'response_done') {
-                            // Full assistant response done — add to chat
+                            // Nova finished speaking — add full text to chat + switch to listening
                             if (pendingTranscriptRef.current) {
                                 const fullText = pendingTranscriptRef.current;
                                 pendingTranscriptRef.current = '';
@@ -762,6 +766,7 @@ export const OnboardingWizard: React.FC = () => {
                                     return updated;
                                 });
                             }
+                            // Now Nova is listening for user response
                             setVoiceState('listening');
                         }
                     } catch(e) {}
@@ -1304,29 +1309,38 @@ export const OnboardingWizard: React.FC = () => {
                                 </div>
                             ) : !sectionComplete ? (
                                 <>
-                                    {/* Voice State Indicator */}
-                                    {voiceMode && voiceState !== 'idle' && (
-                                        <div className="mb-3 flex items-center justify-center gap-2 py-2">
-                                            {voiceState === 'speaking' && (
-                                                <div className="flex items-center gap-2 text-violet-400">
-                                                    <div className="flex gap-0.5 items-center h-5">
-                                                        {[1,2,3,4,5].map(i => (
-                                                            <div key={i} className="w-1 bg-violet-500 rounded-full animate-pulse" style={{ height: `${8 + Math.random()*12}px`, animationDelay: `${i*0.1}s` }} />
+                                    {/* Voice State Indicator — prominent, always visible when voice active */}
+                                    {(voiceConsent && (voiceState !== 'idle' || realtimeConnected)) && (
+                                        <div className="mb-4">
+                                            {(voiceState === 'speaking' || (realtimeConnected && voiceState !== 'listening' && voiceState !== 'processing')) && (
+                                                <div className="flex flex-col items-center gap-3 py-4 px-6 bg-violet-500/10 border border-violet-500/20 rounded-2xl animate-fade-in">
+                                                    <div className="flex gap-1 items-end h-8">
+                                                        {[1,2,3,4,5,6,7].map(i => (
+                                                            <div key={i} className="w-1.5 bg-gradient-to-t from-violet-600 to-violet-400 rounded-full" style={{
+                                                                animation: `pulse ${0.5 + i * 0.15}s ease-in-out infinite alternate`,
+                                                                height: `${10 + Math.sin(i * 1.2) * 18}px`,
+                                                            }} />
                                                         ))}
                                                     </div>
-                                                    <span className="text-xs font-medium">La arquitecta esta hablando...</span>
+                                                    <span className="text-sm font-bold text-violet-300">Nova hablando...</span>
                                                 </div>
                                             )}
                                             {voiceState === 'listening' && (
-                                                <div className="flex items-center gap-2 text-red-400">
-                                                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                                                    <span className="text-xs font-medium">Te escucho...</span>
+                                                <div className="flex flex-col items-center gap-3 py-4 px-6 bg-red-500/10 border border-red-500/20 rounded-2xl animate-fade-in">
+                                                    <div className="relative">
+                                                        <div className="w-10 h-10 bg-red-500 rounded-full animate-pulse flex items-center justify-center">
+                                                            <Mic size={20} className="text-white" />
+                                                        </div>
+                                                        <div className="absolute inset-0 w-10 h-10 bg-red-500/30 rounded-full animate-ping" />
+                                                    </div>
+                                                    <span className="text-sm font-bold text-red-300">Nova esta escuchando...</span>
+                                                    <span className="text-[10px] text-red-400/60">15 seg de silencio para pausar</span>
                                                 </div>
                                             )}
                                             {voiceState === 'processing' && (
-                                                <div className="flex items-center gap-2 text-amber-400">
-                                                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                                    <span className="text-xs font-medium">Procesando...</span>
+                                                <div className="flex flex-col items-center gap-3 py-4 px-6 bg-amber-500/10 border border-amber-500/20 rounded-2xl animate-fade-in">
+                                                    <svg className="animate-spin h-8 w-8 text-amber-400" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                                    <span className="text-sm font-bold text-amber-300">Nova procesando...</span>
                                                 </div>
                                             )}
                                         </div>
