@@ -714,16 +714,18 @@ export const OnboardingWizard: React.FC = () => {
             });
             if (!sessionRes?.session_id) throw new Error('No session');
 
-            // 4. Connect WebSocket
+            // 4. Connect WebSocket via nginx proxy (/api/ → orchestrator)
+            const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const hostname = window.location.hostname;
-            let wsBase = '';
+            const port = window.location.port ? `:${window.location.port}` : '';
+            let wsUrl = '';
             if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                wsBase = 'ws://localhost:3000';
+                wsUrl = `ws://localhost:3000/admin/onboarding/realtime-ws/${sessionRes.session_id}`;
             } else {
-                const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                wsBase = `${proto}//${hostname.includes('frontend') ? hostname.replace('frontend', 'orchestrator-service') : hostname}`;
+                // Use same-origin /api/ proxy (nginx handles WS upgrade)
+                wsUrl = `${proto}//${hostname}${port}/api/admin/onboarding/realtime-ws/${sessionRes.session_id}`;
             }
-            const wsUrl = `${wsBase}/admin/onboarding/realtime-ws/${sessionRes.session_id}`;
+            console.log('[Realtime] Connecting WS:', wsUrl);
 
             const ws = new WebSocket(wsUrl);
             ws.binaryType = 'arraybuffer';
