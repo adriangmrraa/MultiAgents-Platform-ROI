@@ -21,7 +21,7 @@ from email.mime.text import MIMEText
 from email.utils import formatdate
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union, Literal
-from fastapi import FastAPI, HTTPException, Header, Depends, status, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Header, Depends, status, Request, BackgroundTasks, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from contextvars import ContextVar
@@ -148,6 +148,8 @@ from app.routes.platform_routes import router as platform_router
 from app.routes.billing_routes import router as billing_router  # SaaS Billing
 from app.routes.gallery_routes import router as gallery_router  # Smart Gallery (Pomelli-style)
 from app.routes.ingest_routes import router as ingest_router # NEW
+from app.routes.voice_widget_routes import router as voice_widget_router, public_router as voice_widget_public_router  # Voice Widget v1.0
+from app.routes.voice_widget_ws import voice_websocket_handler  # Voice Widget WebSocket
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
 
@@ -1181,6 +1183,61 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Migration 40 indexes skipped: %', SQLERRM;
     END $$;
+    """,
+    # 41. Voice Widget Configs table (Voice Widget v1.0)
+    """
+    CREATE TABLE IF NOT EXISTS voice_widget_configs (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        widget_name VARCHAR(100) DEFAULT 'Asistente de Voz',
+        brand_color VARCHAR(7) DEFAULT '#8B5CF6',
+        button_size VARCHAR(10) DEFAULT 'md',
+        button_position VARCHAR(20) DEFAULT 'bottom-right',
+        button_icon VARCHAR(20) DEFAULT 'phone',
+        avatar_url TEXT DEFAULT NULL,
+        welcome_message TEXT DEFAULT '¡Hola! Toca para hablar conmigo.',
+        voice_provider VARCHAR(50) DEFAULT 'openai',
+        voice_model VARCHAR(100) DEFAULT 'alloy',
+        stt_provider VARCHAR(50) DEFAULT 'openai',
+        stt_model VARCHAR(100) DEFAULT 'whisper-1',
+        language VARCHAR(10) DEFAULT 'es',
+        voice_pipeline VARCHAR(20) DEFAULT 'realtime',
+        realtime_provider VARCHAR(50) DEFAULT 'openai',
+        system_prompt_override TEXT DEFAULT NULL,
+        temperature_override FLOAT DEFAULT NULL,
+        max_call_duration INTEGER DEFAULT 300,
+        api_key_mode VARCHAR(10) DEFAULT 'platform',
+        widget_token VARCHAR(64) NOT NULL UNIQUE,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    """,
+    # 42. Voice Usage Records table (Voice Widget v1.0)
+    """
+    CREATE TABLE IF NOT EXISTS voice_usage_records (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+        widget_id INTEGER REFERENCES voice_widget_configs(id),
+        session_id VARCHAR(64) NOT NULL,
+        duration_seconds INTEGER DEFAULT 0,
+        api_key_mode VARCHAR(10) DEFAULT 'platform',
+        provider VARCHAR(50),
+        visitor_ip VARCHAR(45),
+        abuse_detected BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    """,
+    """
+    DO $$
+    BEGIN
+        CREATE INDEX IF NOT EXISTS idx_voice_widget_tenant ON voice_widget_configs(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_voice_widget_token ON voice_widget_configs(widget_token);
+        CREATE INDEX IF NOT EXISTS idx_voice_usage_tenant ON voice_usage_records(tenant_id, created_at);
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Migration 41-42 indexes skipped: %', SQLERRM;
+    END $$;
     """
 ]
 
@@ -1340,7 +1397,8 @@ async def lifespan(app: FastAPI):
         from app.models.auth import User # Sovereign Identity
         from app.models.billing import Plan, Subscription, UsageRecord, Invoice, AuditLog  # SaaS Billing
         from app.models.attributed_sale import AttributedSale  # ROI Real v8.0
-        
+        from app.models.voice_widget import VoiceWidgetConfig, VoiceUsageRecord  # Voice Widget v1.0
+
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
             
@@ -1532,6 +1590,21 @@ async def health_check():
 app.include_router(admin_router)
 app.include_router(onboarding_router, prefix="/admin/onboarding")
 app.include_router(ingest_router)  # Meta Direct Messaging Ingestion
+app.include_router(voice_widget_router)  # Voice Widget Admin CRUD
+app.include_router(voice_widget_public_router)  # Voice Widget Public SDK Endpoints
+
+
+@app.websocket("/public/voice-widget/ws/{session_id}")
+async def voice_ws_endpoint(websocket: WebSocket, session_id: str):
+    """Voice Widget WebSocket endpoint for bidirectional audio."""
+    await voice_websocket_handler(websocket, session_id)
+
+# Mount static files for Voice Widget SDK
+import os as _os
+_static_dir = _os.path.join(_os.path.dirname(__file__), "static")
+if _os.path.isdir(_static_dir):
+    from starlette.staticfiles import StaticFiles
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 # Metrics
 SERVICE_NAME = "orchestrator_service"
@@ -2878,9 +2951,11 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
              last_msg_at = conv_status_row['last_message_at']
              # If last_msg_at is None, assume open (newly created) or closed? Assume open for safety if new.
              if last_msg_at:
-                 # Check delta
-                 # Ensure timezone awareness if needed, assuming naive UTC or same TZ
-                 if (datetime.utcnow() - last_msg_at).total_seconds() > 24 * 3600:
+                 # Check delta (timezone-safe: both sides must be aware)
+                 now_utc = datetime.now(timezone.utc)
+                 if last_msg_at.tzinfo is None:
+                     last_msg_at = last_msg_at.replace(tzinfo=timezone.utc)
+                 if (now_utc - last_msg_at).total_seconds() > 24 * 3600:
                      logger.warning("agent_execution_blocked_24h_policy", conv_id=str(conv_id))
                      yield {"type": "error", "content": "SESSION_CLOSED_24H_POLICY"}
                      

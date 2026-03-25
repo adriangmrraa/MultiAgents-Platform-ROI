@@ -32,6 +32,7 @@ import ResetPassword from './views/auth/ResetPassword';
 import { Profile } from './views/Profile';
 import { PlatformTower } from './views/PlatformTower';
 import { Billing } from './views/Billing';
+import { VoiceWidget } from './views/VoiceWidget';
 import { Landing } from './views/Landing';
 import { Pricing } from './views/Pricing';
 import { PrivacyPolicy } from './views/PrivacyPolicy';
@@ -136,6 +137,7 @@ function App() {
                     <Route path="/channels" element={<Channels />} />
                     <Route path="/console" element={<Console />} />
                     <Route path="/handoff" element={<Handoff />} />
+                    <Route path="/voice-widget" element={<VoiceWidget />} />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/billing" element={<Billing />} />
                     <Route path="/platform" element={

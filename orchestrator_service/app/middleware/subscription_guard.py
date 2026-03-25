@@ -54,6 +54,7 @@ EXEMPT_PREFIXES = (
     "/webhook/",
     "/auth/",
     "/admin/",
+    "/public/",  # Voice Widget SDK public endpoints
 )
 
 
