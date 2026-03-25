@@ -116,6 +116,10 @@ export const OnboardingWizard: React.FC = () => {
 
     // Step 6 (Test)
     const [testMessage, setTestMessage] = useState('');
+    // Knowledge collections
+    const [knowledgeCollections, setKnowledgeCollections] = useState<string[]>([]);
+    const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
+    const [knowledgeFiles, setKnowledgeFiles] = useState<{id: string, filename: string, status: string, collection: string}[]>([]);
     const [testResponse, setTestResponse] = useState('');
     const [testLoading, setTestLoading] = useState(false);
 
@@ -1015,6 +1019,18 @@ export const OnboardingWizard: React.FC = () => {
         return () => { stopRealtimeAudio(); };
     }, [step]);
 
+    // Load knowledge collections when reaching step 6
+    useEffect(() => {
+        if (step === 6) {
+            fetchApi('/admin/knowledge/collections').then(cols => {
+                if (Array.isArray(cols)) setKnowledgeCollections(cols);
+            }).catch(() => {});
+            fetchApi('/admin/knowledge/list').then(files => {
+                if (Array.isArray(files)) setKnowledgeFiles(files.filter((f: any) => f.status === 'active'));
+            }).catch(() => {});
+        }
+    }, [step]);
+
     // Research cards cascade timer (3 sec each)
     useEffect(() => {
         if (!showingResearch || researchCards.length === 0) return;
@@ -1126,14 +1142,25 @@ export const OnboardingWizard: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            // Save the latest system prompt first
+            // Save the latest system prompt + knowledge collections
             await fetchApi('/admin/onboarding-wizard/progress', {
                 method: 'PUT',
-                body: { step: 6, system_prompt_draft: systemPrompt }
+                body: {
+                    step: 6,
+                    system_prompt_draft: systemPrompt,
+                    step_data: { knowledge_sources: selectedCollections }
+                }
             }).catch(() => {});
             // Create agent + mark wizard completed (sets completed_at)
             const res = await fetchApi('/admin/onboarding-wizard/complete', { method: 'POST' });
             if (res?.agent_id) {
+                // Update agent with knowledge sources if selected
+                if (selectedCollections.length > 0) {
+                    await fetchApi(`/admin/agents/${res.agent_id}`, {
+                        method: 'PUT',
+                        body: { knowledge_sources: selectedCollections, system_prompt_template: systemPrompt, name: 'Agente IA', role: 'sales', model_provider: 'openai', model_version: 'gpt-4o', temperature: 0.3, enabled_tools: ['search_specific_products', 'search_by_category', 'browse_general_storefront', 'orders', 'derivhumano'], channels: ['whatsapp', 'instagram', 'facebook', 'web'], is_active: true }
+                    }).catch(() => {});
+                }
                 setStep(7); // Show pricing
             } else {
                 setError('Error al activar el agente');
@@ -1740,6 +1767,49 @@ export const OnboardingWizard: React.FC = () => {
                                     </p>
                                 </div>
                             </div>
+
+                            {/* Knowledge Collections Selector */}
+                            {(knowledgeCollections.length > 0 || knowledgeFiles.length > 0) && (
+                                <div className="glass p-4 rounded-xl border border-white/5 space-y-3">
+                                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                                        <Globe size={14} className="text-cyan-400" /> Base de Conocimiento (RAG)
+                                    </h3>
+                                    <p className="text-[10px] text-slate-500">Selecciona las colecciones que tu agente debe consultar para responder con contexto real.</p>
+
+                                    {knowledgeCollections.length > 0 && (
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-bold text-slate-400">Colecciones</label>
+                                            {knowledgeCollections.map(col => (
+                                                <label key={col} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
+                                                    <input type="checkbox" checked={selectedCollections.includes(col)}
+                                                        onChange={() => setSelectedCollections(prev => prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col])}
+                                                        className="w-4 h-4 rounded border-white/20 bg-white/5 text-violet-600 focus:ring-violet-500" />
+                                                    <span className="text-xs text-white">{col}</span>
+                                                    <span className="text-[9px] text-slate-500 ml-auto">{knowledgeFiles.filter(f => f.collection === col).length} docs</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {knowledgeFiles.length > 0 && knowledgeCollections.length === 0 && (
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-bold text-slate-400">Documentos</label>
+                                            {knowledgeFiles.map(file => (
+                                                <label key={file.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
+                                                    <input type="checkbox" checked={selectedCollections.includes(file.id)}
+                                                        onChange={() => setSelectedCollections(prev => prev.includes(file.id) ? prev.filter(c => c !== file.id) : [...prev, file.id])}
+                                                        className="w-4 h-4 rounded border-white/20 bg-white/5 text-violet-600 focus:ring-violet-500" />
+                                                    <span className="text-xs text-white truncate">{file.filename}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {selectedCollections.length > 0 && (
+                                        <p className="text-[9px] text-cyan-400">{selectedCollections.length} coleccion(es) seleccionada(s) — el agente consultara estos documentos</p>
+                                    )}
+                                </div>
+                            )}
 
                             {/* System Prompt + Refine Button */}
                             <div className="glass p-4 rounded-xl border border-white/5 space-y-3">
