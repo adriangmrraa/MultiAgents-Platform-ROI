@@ -1683,11 +1683,33 @@ export const OnboardingWizard: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* System Prompt */}
-                            <div className="glass p-4 rounded-xl border border-white/5">
-                                <label className="block text-xs font-bold text-slate-400 mb-2">System Prompt Completo</label>
-                                <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} rows={6}
-                                    className={`${inputClass} resize-none font-mono text-[10px] leading-relaxed`} />
+                            {/* System Prompt + Refine Button */}
+                            <div className="glass p-4 rounded-xl border border-white/5 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-slate-400">System Prompt</label>
+                                    <button onClick={async () => {
+                                        setTestLoading(true);
+                                        try {
+                                            const res = await fetchApi('/admin/onboarding/interview-step', {
+                                                method: 'POST',
+                                                body: {
+                                                    session_id: chatSessionId + '_refine',
+                                                    user_message: `Transforma el siguiente draft en un system prompt PROFESIONAL con la estructura y densidad de Pointe Coach. Debe tener secciones claras: IDENTIDAD, TONO Y PERSONALIDAD (con estilo, pronombres, puntuacion, prohibido, naturalidad, emojis), REGLAS DE NEGOCIO (imperativos numerados), DICCIONARIO DE SINONIMOS. Cada seccion debe ser densa y especifica. No simplifiques. Emite el resultado dentro de <SECTION_COMPLETE>{"section":"final","draft":"...el prompt completo..."}</SECTION_COMPLETE>.\n\nDRAFT ACTUAL:\n${systemPrompt}`,
+                                                    step: 3, tenant_id: tenantId || 0, reset: true
+                                                }
+                                            });
+                                            if (res?.extracted_draft) { setSystemPrompt(res.extracted_draft); }
+                                            else if (res?.ai_message) { setSystemPrompt(res.ai_message); }
+                                        } catch(e) { console.error('Refine error:', e); }
+                                        setTestLoading(false);
+                                    }} disabled={testLoading || !systemPrompt}
+                                        className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-[10px] font-bold rounded-lg transition-all active:scale-95 flex items-center gap-1">
+                                        <Sparkles size={10} /> {testLoading ? 'Refinando...' : 'Refinar con IA'}
+                                    </button>
+                                </div>
+                                <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} rows={10}
+                                    className={`${inputClass} resize-y font-mono text-[10px] leading-relaxed`} />
+                                <p className="text-[9px] text-slate-600">Toca "Refinar con IA" para transformar el draft en un prompt profesional estilo Pointe Coach.</p>
                             </div>
 
                             {/* Test Agent */}
