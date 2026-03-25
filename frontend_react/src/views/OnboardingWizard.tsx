@@ -881,8 +881,6 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     // Audio playback queue — schedule chunks sequentially, not overlapping
-    const nextPlayTimeRef = useRef(0);
-
     const playRealtimeAudio = (arrayBuffer: ArrayBuffer) => {
         if (!realtimeAudioCtxRef.current) {
             realtimeAudioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
