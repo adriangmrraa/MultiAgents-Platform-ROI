@@ -3,8 +3,8 @@ import { useApi } from '../hooks/useApi';
 import { useAuth } from '../contexts/AuthContext';
 import {
     Phone, Mic, Headphones, Palette, Globe, Settings, Copy, Check,
-    Plus, Trash2, Edit2, ChevronDown, ChevronUp, AlertCircle, Zap,
-    Volume2, Radio
+    Plus, Trash2, ChevronDown, ChevronUp, AlertCircle, Zap,
+    Volume2, Radio, Eye, Code, ArrowLeft
 } from 'lucide-react';
 
 // --- Interfaces ---
@@ -88,6 +88,10 @@ const DEFAULT_CONFIG: VoiceWidgetConfig = {
     is_active: true,
 };
 
+// Fix for native <select> on dark backgrounds: options need dark bg + white text
+const selectClass = "w-full bg-[#1a1a2e] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 outline-none appearance-none cursor-pointer";
+const inputClass = "w-full bg-[#1a1a2e] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 outline-none";
+
 // --- Main Component ---
 
 export const VoiceWidget: React.FC = () => {
@@ -107,6 +111,9 @@ export const VoiceWidget: React.FC = () => {
     const [planBlocked, setPlanBlocked] = useState(false);
     const [ngcKeyInput, setNgcKeyInput] = useState('');
     const [error, setError] = useState<string | null>(null);
+    // Mobile: tab navigation
+    const [mobileTab, setMobileTab] = useState<'config' | 'preview'>('config');
+    const [showEditor, setShowEditor] = useState(false);
 
     useEffect(() => { loadAll(); }, []);
 
@@ -141,6 +148,7 @@ export const VoiceWidget: React.FC = () => {
             setIsEditing(false);
             setSelectedWidgetId(null);
             setFormData({ ...DEFAULT_CONFIG });
+            setShowEditor(false);
         } catch (err: any) {
             setError(err.message || 'Error al guardar');
         } finally {
@@ -149,13 +157,14 @@ export const VoiceWidget: React.FC = () => {
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('¿Eliminar este widget? Esta acción no se puede deshacer.')) return;
+        if (!confirm('¿Eliminar este widget?')) return;
         await fetchApi(`/admin/voice-widget/config/${id}`, { method: 'DELETE' });
         loadAll();
         if (selectedWidgetId === id) {
             setSelectedWidgetId(null);
             setIsEditing(false);
             setFormData({ ...DEFAULT_CONFIG });
+            setShowEditor(false);
         }
     };
 
@@ -163,12 +172,14 @@ export const VoiceWidget: React.FC = () => {
         setFormData({ ...w });
         setSelectedWidgetId(w.id || null);
         setIsEditing(true);
+        setShowEditor(true);
     };
 
     const startNew = () => {
         setFormData({ ...DEFAULT_CONFIG });
         setSelectedWidgetId(null);
         setIsEditing(false);
+        setShowEditor(true);
     };
 
     const handleSaveNgcKey = async () => {
@@ -197,17 +208,19 @@ export const VoiceWidget: React.FC = () => {
     };
 
     const selectedAgent = agents.find(a => a.id === formData.agent_id);
-    const currentVoices = providers?.voices?.[formData.realtime_provider] || providers?.voices?.['openai'] || [];
+    const currentVoices = providers?.voices?.[formData.voice_pipeline === 'realtime' ? formData.realtime_provider : formData.voice_provider] || providers?.voices?.['openai'] || [];
 
     // --- Plan Blocked ---
     if (planBlocked) {
         return (
-            <div className="max-w-2xl mx-auto mt-20 text-center animate-fade-in">
-                <div className="glass p-12 rounded-2xl border border-white/5">
-                    <Phone size={48} className="text-violet-400 mx-auto mb-4" />
-                    <h2 className="text-2xl font-bold text-white mb-2">Voice Widget</h2>
-                    <p className="text-slate-400 mb-6">Disponible en planes Pro y Enterprise</p>
-                    <a href="/billing" className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-lg transition-colors inline-block">
+            <div className="max-w-2xl mx-auto mt-12 lg:mt-20 text-center animate-fade-in px-4">
+                <div className="glass p-8 lg:p-12 rounded-2xl border border-white/5">
+                    <div className="w-16 h-16 bg-violet-600/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <Phone size={32} className="text-violet-400" />
+                    </div>
+                    <h2 className="text-xl lg:text-2xl font-bold text-white mb-2">Voice Widget</h2>
+                    <p className="text-slate-400 mb-6 text-sm">Disponible en planes Pro y Enterprise</p>
+                    <a href="/billing" className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-colors inline-block text-sm">
                         Ver Planes
                     </a>
                 </div>
@@ -215,18 +228,372 @@ export const VoiceWidget: React.FC = () => {
         );
     }
 
-    return (
-        <div className="max-w-7xl mx-auto space-y-6 animate-fade-in p-4 lg:p-0">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-violet-600/20 to-indigo-600/20 border border-violet-500/30 rounded-2xl p-6 lg:p-8">
-                <div className="flex items-start gap-4 lg:gap-6">
-                    <div className="bg-violet-600 p-3 lg:p-4 rounded-xl shadow-lg shadow-violet-500/30">
-                        <Phone size={28} className="text-white" />
+    // --- Preview Component (reusable for desktop & mobile) ---
+    const PreviewSection = () => (
+        <div className="space-y-4">
+            <div className="glass p-4 lg:p-5 rounded-xl border border-white/5">
+                <h3 className="text-sm font-bold mb-3 text-white flex items-center gap-2">
+                    <Eye size={16} className="text-green-400" /> Preview
+                </h3>
+                <div className="relative h-52 lg:h-64 bg-white rounded-xl overflow-hidden border border-white/10">
+                    <div className="absolute top-0 w-full h-7 bg-gray-100 border-b flex items-center px-3 gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-red-400" />
+                        <div className="w-2 h-2 rounded-full bg-yellow-400" />
+                        <div className="w-2 h-2 rounded-full bg-green-400" />
+                        <div className="mx-auto w-20 lg:w-24 h-3 bg-gray-200 rounded-full" />
+                    </div>
+                    <div className="flex items-center justify-center h-full text-gray-200 font-bold text-base lg:text-lg tracking-widest">
+                        TU TIENDA
+                    </div>
+                    <div className={`absolute bottom-3 lg:bottom-4 flex flex-col items-end gap-1.5 lg:gap-2 ${formData.button_position === 'bottom-right' ? 'right-3 lg:right-4' : 'left-3 lg:left-4'}`}>
+                        <div className="bg-white text-black text-[9px] lg:text-[10px] px-2 py-1 lg:px-2.5 lg:py-1.5 rounded-l-xl rounded-t-xl shadow-lg border border-gray-100 max-w-[120px] lg:max-w-[130px] leading-tight">
+                            {formData.welcome_message}
+                        </div>
+                        <div
+                            style={{ backgroundColor: formData.brand_color }}
+                            className={`rounded-full shadow-xl flex items-center justify-center text-white transition-all ${
+                                formData.button_size === 'sm' ? 'w-9 h-9 lg:w-10 lg:h-10' :
+                                formData.button_size === 'lg' ? 'w-13 h-13 lg:w-14 lg:h-14' : 'w-11 h-11 lg:w-12 lg:h-12'
+                            }`}
+                        >
+                            {formData.avatar_url ? (
+                                <img src={formData.avatar_url} className="w-full h-full rounded-full object-cover" alt="" />
+                            ) : (
+                                formData.button_icon === 'mic' ? <Mic size={18} /> :
+                                formData.button_icon === 'headset' ? <Headphones size={18} /> :
+                                <Phone size={18} />
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Embed Code */}
+            <div className="glass p-4 lg:p-5 rounded-xl border border-white/5 bg-black/40">
+                <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Code size={14} className="text-green-400" /> Instalacion
+                    </h3>
+                    {formData.widget_token && (
+                        <button onClick={copySnippet}
+                            className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all ${
+                                copied ? 'bg-green-500/20 border-green-500 text-green-400' : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
+                            }`}>
+                            {copied ? <Check size={12} /> : <Copy size={12} />}
+                            {copied ? 'Copiado' : 'Copiar'}
+                        </button>
+                    )}
+                </div>
+                <div className="bg-[#0a0a0a] p-3 rounded-lg border border-white/5 overflow-x-auto">
+                    <pre className="text-[10px] lg:text-[11px] font-mono text-slate-400 leading-relaxed whitespace-pre-wrap break-all">
+                        {formData.widget_token
+                            ? `<script>\n  (function(d,t) {\n    var s=d.createElement(t);\n    s.src="API_URL/static/voice-widget-sdk.js";\n    s.defer=true;s.async=true;\n    s.dataset.token="${formData.widget_token}";\n    d.head.appendChild(s);\n  })(document,"script");\n</script>`
+                            : 'Guarda el widget primero para obtener tu codigo.'
+                        }
+                    </pre>
+                </div>
+                <p className="mt-2 text-[10px] text-slate-600">
+                    Pega antes de &lt;/body&gt; en tu Tienda Nube.
+                </p>
+            </div>
+        </div>
+    );
+
+    // --- Editor Form ---
+    const EditorForm = () => (
+        <div className="space-y-3 lg:space-y-4">
+            {error && (
+                <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-xl flex items-center gap-2 text-red-300 text-sm">
+                    <AlertCircle size={14} /> {error}
+                </div>
+            )}
+
+            {/* Agent Selector */}
+            <div className="glass p-4 lg:p-5 rounded-xl border border-white/5">
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
+                    <Zap size={16} className="text-violet-400" /> Agente
+                </h3>
+                {agents.length === 0 ? (
+                    <div className="text-center py-6">
+                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center mx-auto mb-3">
+                            <Zap size={20} className="text-slate-500" />
+                        </div>
+                        <p className="text-slate-500 text-sm mb-2">No tienes agentes activos</p>
+                        <a href="/agents" className="text-violet-400 text-sm hover:underline font-medium">Crear un agente</a>
+                    </div>
+                ) : (
+                    <>
+                        <select
+                            value={formData.agent_id}
+                            onChange={e => setFormData({ ...formData, agent_id: parseInt(e.target.value) })}
+                            className={selectClass}
+                        >
+                            <option value={0} className="bg-[#1a1a2e] text-slate-400">Selecciona un agente...</option>
+                            {agents.map(a => <option key={a.id} value={a.id} className="bg-[#1a1a2e] text-white">{a.name} ({a.role})</option>)}
+                        </select>
+                        {selectedAgent && (
+                            <div className="mt-2 p-3 bg-violet-500/5 border border-violet-500/10 rounded-lg text-xs space-y-1">
+                                <p className="text-slate-400">Modelo: <span className="text-violet-300 font-medium">{selectedAgent.model_version}</span></p>
+                                <p className="text-slate-400">Tools: <span className="text-violet-300 font-medium">{(Array.isArray(selectedAgent.enabled_tools) ? selectedAgent.enabled_tools : []).join(', ') || 'Ninguna'}</span></p>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+
+            {/* Voice Config */}
+            <div className="glass p-4 lg:p-5 rounded-xl border border-white/5">
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
+                    <Volume2 size={16} className="text-violet-400" /> Voz
+                </h3>
+
+                {/* Pipeline */}
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                    {['realtime', 'cascaded'].map(p => (
+                        <button key={p} onClick={() => setFormData({ ...formData, voice_pipeline: p })}
+                            className={`p-3 rounded-xl border text-left transition-all active:scale-[0.98] ${
+                                formData.voice_pipeline === p ? 'border-violet-500 bg-violet-500/10 shadow-lg shadow-violet-500/5' : 'border-white/5 hover:bg-white/5 active:bg-white/10'
+                            }`}>
+                            <p className="font-bold text-white text-xs">{p === 'realtime' ? 'Realtime' : 'Cascaded'}</p>
+                            <p className="text-slate-500 text-[10px] mt-0.5">{p === 'realtime' ? 'Baja latencia' : 'Multi-provider'}</p>
+                            {p === 'realtime' && <span className="inline-block mt-1 text-[9px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded-full font-bold">RECOMENDADO</span>}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Provider */}
+                {formData.voice_pipeline === 'realtime' && (
+                    <div className="space-y-3 mb-3">
+                        <label className="block text-xs font-bold text-slate-400">Proveedor</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {['openai', 'nvidia'].map(prov => {
+                                const hasKey = providers?.has_keys?.[prov];
+                                return (
+                                    <button key={prov}
+                                        onClick={() => hasKey && setFormData({ ...formData, realtime_provider: prov, voice_model: prov === 'nvidia' ? 'magpie-tts-es' : 'alloy' })}
+                                        disabled={!hasKey}
+                                        className={`p-3 rounded-xl border text-left transition-all active:scale-[0.98] ${
+                                            formData.realtime_provider === prov
+                                                ? 'border-violet-500 bg-violet-500/10'
+                                                : hasKey ? 'border-white/5 hover:bg-white/5' : 'border-white/5 opacity-40'
+                                        }`}>
+                                        <p className="font-bold text-white text-xs">{prov === 'openai' ? 'OpenAI' : 'NVIDIA Riva'}</p>
+                                        <p className="text-slate-500 text-[10px] mt-0.5">{prov === 'openai' ? '~300ms' : 'Sub-25ms ASR'}</p>
+                                        {!hasKey && <a href="/credentials" className="text-violet-400 text-[10px] hover:underline mt-1 block" onClick={e => e.stopPropagation()}>Agregar Key</a>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {formData.voice_pipeline === 'cascaded' && (
+                    <div className="space-y-3 mb-3">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">TTS</label>
+                            <select value={formData.voice_provider} onChange={e => setFormData({ ...formData, voice_provider: e.target.value })} className={selectClass}>
+                                {(providers?.tts_providers || ['openai']).map(p => <option key={p} value={p} className="bg-[#1a1a2e] text-white">{p}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">STT</label>
+                            <select value={formData.stt_provider} onChange={e => setFormData({ ...formData, stt_provider: e.target.value })} className={selectClass}>
+                                {(providers?.stt_providers || ['openai']).map(p => <option key={p} value={p} className="bg-[#1a1a2e] text-white">{p}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                )}
+
+                {/* Voice + Lang + Duration */}
+                <div className="space-y-3">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 mb-1">Voz</label>
+                        <select value={formData.voice_model} onChange={e => setFormData({ ...formData, voice_model: e.target.value })} className={selectClass}>
+                            {currentVoices.map((v: string) => <option key={v} value={v} className="bg-[#1a1a2e] text-white">{v}</option>)}
+                        </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">Idioma</label>
+                            <select value={formData.language} onChange={e => setFormData({ ...formData, language: e.target.value })} className={selectClass}>
+                                <option value="es" className="bg-[#1a1a2e] text-white">Espanol</option>
+                                <option value="en" className="bg-[#1a1a2e] text-white">English</option>
+                                <option value="pt" className="bg-[#1a1a2e] text-white">Portugues</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">Max (seg)</label>
+                            <input type="number" min={60} max={600} value={formData.max_call_duration}
+                                onChange={e => setFormData({ ...formData, max_call_duration: parseInt(e.target.value) || 300 })}
+                                className={inputClass} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Visual */}
+            <div className="glass p-4 lg:p-5 rounded-xl border border-white/5">
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
+                    <Palette size={16} className="text-violet-400" /> Visual
+                </h3>
+                <div className="space-y-3">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 mb-1">Nombre</label>
+                        <input type="text" value={formData.widget_name}
+                            onChange={e => setFormData({ ...formData, widget_name: e.target.value })}
+                            className={inputClass} />
                     </div>
                     <div>
-                        <h2 className="text-xl lg:text-2xl font-bold text-white mb-1">Voice Widget</h2>
-                        <p className="text-slate-300 text-sm lg:text-base max-w-xl">
-                            Configura un asistente de voz embebible en tu tienda. Los visitantes podrán hablar directamente con tu agente IA.
+                        <label className="block text-xs font-bold text-slate-400 mb-1">Color</label>
+                        <div className="flex gap-2">
+                            <input type="color" value={formData.brand_color}
+                                onChange={e => setFormData({ ...formData, brand_color: e.target.value })}
+                                className="h-10 w-14 rounded-lg cursor-pointer bg-transparent border border-white/10" />
+                            <input type="text" value={formData.brand_color}
+                                onChange={e => setFormData({ ...formData, brand_color: e.target.value })}
+                                className={`flex-1 font-mono ${inputClass}`} />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1.5">Tamano</label>
+                            <div className="flex gap-1.5">
+                                {['sm', 'md', 'lg'].map(s => (
+                                    <button key={s} onClick={() => setFormData({ ...formData, button_size: s })}
+                                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 ${formData.button_size === s ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}>
+                                        {s.toUpperCase()}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1.5">Posicion</label>
+                            <div className="flex gap-1.5">
+                                {[{ k: 'bottom-right', l: 'Der' }, { k: 'bottom-left', l: 'Izq' }].map(p => (
+                                    <button key={p.k} onClick={() => setFormData({ ...formData, button_position: p.k })}
+                                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 ${formData.button_position === p.k ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}>
+                                        {p.l}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 mb-1.5">Icono</label>
+                        <div className="flex gap-2">
+                            {[
+                                { key: 'phone', icon: <Phone size={18} />, label: 'Telefono' },
+                                { key: 'mic', icon: <Mic size={18} />, label: 'Microfono' },
+                                { key: 'headset', icon: <Headphones size={18} />, label: 'Headset' },
+                            ].map(opt => (
+                                <button key={opt.key} onClick={() => setFormData({ ...formData, button_icon: opt.key })}
+                                    className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-xl border transition-all active:scale-95 ${formData.button_icon === opt.key ? 'border-violet-500 bg-violet-500/15 text-white shadow-lg shadow-violet-500/10' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}>
+                                    {opt.icon}
+                                    <span className="text-[9px]">{opt.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 mb-1">Avatar (opcional)</label>
+                        <input type="text" value={formData.avatar_url || ''} placeholder="https://..."
+                            onChange={e => setFormData({ ...formData, avatar_url: e.target.value || null })}
+                            className={inputClass} />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 mb-1">Mensaje</label>
+                        <input type="text" value={formData.welcome_message}
+                            onChange={e => setFormData({ ...formData, welcome_message: e.target.value })}
+                            className={inputClass} />
+                    </div>
+                </div>
+            </div>
+
+            {/* Override (Collapsible) */}
+            <div className="glass rounded-xl border border-white/5 overflow-hidden">
+                <button onClick={() => setShowOverride(!showOverride)}
+                    className="w-full p-4 flex items-center justify-between text-white active:bg-white/5 transition-colors">
+                    <span className="text-sm font-bold flex items-center gap-2">
+                        <Settings size={16} className="text-slate-500" /> Override (Opcional)
+                    </span>
+                    <ChevronDown size={16} className={`text-slate-500 transition-transform ${showOverride ? 'rotate-180' : ''}`} />
+                </button>
+                {showOverride && (
+                    <div className="px-4 pb-4 space-y-3 border-t border-white/5 pt-3">
+                        <p className="text-[10px] text-slate-600">Deja vacio para usar la config del agente.</p>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">System Prompt</label>
+                            <textarea value={formData.system_prompt_override || ''} rows={3}
+                                placeholder="Override del prompt del agente..."
+                                onChange={e => setFormData({ ...formData, system_prompt_override: e.target.value || null })}
+                                className={`${inputClass} resize-none`} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">Temperatura: {formData.temperature_override ?? 'Auto'}</label>
+                            <input type="range" min={0} max={1} step={0.1} value={formData.temperature_override ?? 0.3}
+                                onChange={e => setFormData({ ...formData, temperature_override: parseFloat(e.target.value) })}
+                                className="w-full accent-violet-500" />
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* API Mode */}
+            <div className="glass p-4 lg:p-5 rounded-xl border border-white/5">
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
+                    <Radio size={16} className="text-violet-400" /> API
+                </h3>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                    {[
+                        { key: 'platform', label: 'Future API', desc: `${usage?.voice_minutes_included || 0} min/mes` },
+                        { key: 'byok', label: 'Tu API Key', desc: 'Ilimitado' },
+                    ].map(m => (
+                        <button key={m.key} onClick={() => setFormData({ ...formData, api_key_mode: m.key })}
+                            className={`p-3 rounded-xl border text-left transition-all active:scale-[0.98] ${
+                                formData.api_key_mode === m.key ? 'border-violet-500 bg-violet-500/10' : 'border-white/5 hover:bg-white/5'
+                            }`}>
+                            <p className="font-bold text-white text-xs">{m.label}</p>
+                            <p className="text-slate-500 text-[10px] mt-0.5">{m.desc}</p>
+                        </button>
+                    ))}
+                </div>
+                {formData.api_key_mode === 'byok' && formData.realtime_provider === 'nvidia' && !providers?.has_keys?.nvidia && (
+                    <div className="space-y-2 mt-3 p-3 bg-white/5 rounded-lg">
+                        <label className="block text-xs font-bold text-slate-400">NGC API Key</label>
+                        <textarea value={ngcKeyInput} rows={2} placeholder="Pega tu NGC API Key..."
+                            onChange={e => setNgcKeyInput(e.target.value)}
+                            className={`${inputClass} text-xs font-mono resize-none`} />
+                        <button onClick={handleSaveNgcKey}
+                            className="w-full py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-colors active:scale-[0.98]">
+                            Guardar Key
+                        </button>
+                    </div>
+                )}
+                {formData.api_key_mode === 'byok' && formData.realtime_provider === 'openai' && (
+                    <p className="text-[10px] text-slate-600 mt-1">Usa tu OpenAI Key de Credenciales.</p>
+                )}
+            </div>
+
+            {/* Save */}
+            <button onClick={handleSave} disabled={isSaving || !formData.agent_id}
+                className="w-full py-3.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-violet-600/20 text-sm">
+                {isSaving ? 'Guardando...' : isEditing ? 'Actualizar Widget' : 'Crear Widget'}
+            </button>
+        </div>
+    );
+
+    return (
+        <div className="max-w-7xl mx-auto animate-fade-in px-3 lg:px-0 pb-28 lg:pb-8">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-violet-600/20 to-indigo-600/20 border border-violet-500/30 rounded-2xl p-5 lg:p-8 mb-4 lg:mb-6">
+                <div className="flex items-center gap-3 lg:gap-6">
+                    <div className="bg-violet-600 p-2.5 lg:p-4 rounded-xl shadow-lg shadow-violet-500/30 shrink-0">
+                        <Phone size={22} className="text-white" />
+                    </div>
+                    <div className="min-w-0">
+                        <h2 className="text-lg lg:text-2xl font-bold text-white">Voice Widget</h2>
+                        <p className="text-slate-300 text-xs lg:text-sm mt-0.5 truncate lg:whitespace-normal">
+                            Asistente de voz embebible para tu tienda
                         </p>
                     </div>
                 </div>
@@ -234,17 +601,17 @@ export const VoiceWidget: React.FC = () => {
 
             {/* Usage Bar */}
             {usage && usage.plan !== 'free' && (
-                <div className="glass p-4 rounded-xl border border-white/5">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-slate-400">Consumo de Voz</span>
-                        <span className="text-xs text-slate-500">
-                            {formData.api_key_mode === 'byok' ? 'Modo BYOK — uso ilimitado' : `${usage.voice_minutes_used} / ${usage.voice_minutes_included} min`}
+                <div className="glass p-3 lg:p-4 rounded-xl border border-white/5 mb-4 lg:mb-6">
+                    <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] lg:text-xs font-bold text-slate-400">Consumo</span>
+                        <span className="text-[10px] lg:text-xs text-slate-500">
+                            {formData.api_key_mode === 'byok' ? 'BYOK ilimitado' : `${usage.voice_minutes_used} / ${usage.voice_minutes_included} min`}
                         </span>
                     </div>
                     {formData.api_key_mode !== 'byok' && (
-                        <div className="w-full bg-white/5 rounded-full h-2">
+                        <div className="w-full bg-white/5 rounded-full h-1.5 lg:h-2">
                             <div
-                                className={`h-2 rounded-full transition-all ${
+                                className={`h-full rounded-full transition-all ${
                                     usage.voice_minutes_used / usage.voice_minutes_included > 0.95 ? 'bg-red-500' :
                                     usage.voice_minutes_used / usage.voice_minutes_included > 0.8 ? 'bg-yellow-500' : 'bg-green-500'
                                 }`}
@@ -255,419 +622,91 @@ export const VoiceWidget: React.FC = () => {
                 </div>
             )}
 
-            {/* Widget List */}
-            <div className="glass p-4 lg:p-6 rounded-xl border border-white/5">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-white">Mis Widgets</h3>
-                    <button onClick={startNew} className="flex items-center gap-2 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold rounded-lg transition-colors">
-                        <Plus size={14} /> Nuevo Widget
-                    </button>
-                </div>
-                {widgets.length === 0 ? (
-                    <p className="text-slate-500 text-sm">No tienes widgets creados. Crea el primero.</p>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {widgets.map(w => (
-                            <div
-                                key={w.id}
-                                onClick={() => selectWidget(w)}
-                                className={`p-4 rounded-lg border cursor-pointer transition-all hover:bg-white/5 ${
-                                    selectedWidgetId === w.id ? 'border-violet-500 bg-violet-500/10' : 'border-white/5'
-                                }`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: w.brand_color }}>
-                                        <Phone size={14} className="text-white" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-bold text-white truncate">{w.widget_name}</p>
-                                        <p className="text-xs text-slate-500">{w.agent_name || `Agent #${w.agent_id}`}</p>
-                                    </div>
-                                    <span className={`w-2 h-2 rounded-full ${w.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
-                                </div>
-                                <div className="mt-2 flex gap-1">
-                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(w.id!); }} className="text-red-400 hover:text-red-300 p-1">
-                                        <Trash2 size={12} />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Editor + Preview */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left: Editor */}
-                <div className="space-y-4">
-                    {error && (
-                        <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg flex items-center gap-2 text-red-300 text-sm">
-                            <AlertCircle size={14} /> {error}
+            {/* Mobile: show list or editor */}
+            {!showEditor ? (
+                <>
+                    {/* Widget List */}
+                    <div className="glass p-4 lg:p-6 rounded-xl border border-white/5 mb-4 lg:mb-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base lg:text-lg font-bold text-white">Mis Widgets</h3>
+                            <button onClick={startNew} className="flex items-center gap-1.5 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-xl transition-all active:scale-95 shadow-lg shadow-violet-600/20">
+                                <Plus size={14} /> Nuevo
+                            </button>
                         </div>
-                    )}
-
-                    {/* Section 1: Agent Selector */}
-                    <div className="glass p-5 rounded-xl border border-white/5">
-                        <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
-                            <Zap size={16} className="text-violet-400" /> Agente
-                        </h3>
-                        {agents.length === 0 ? (
-                            <div className="text-center py-4">
-                                <p className="text-slate-500 text-sm mb-2">No tienes agentes activos</p>
-                                <a href="/agents" className="text-violet-400 text-sm hover:underline">Crear un agente →</a>
+                        {widgets.length === 0 ? (
+                            <div className="text-center py-8">
+                                <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                    <Phone size={24} className="text-slate-600" />
+                                </div>
+                                <p className="text-slate-500 text-sm mb-1">Sin widgets</p>
+                                <p className="text-slate-600 text-xs">Crea tu primer widget de voz</p>
                             </div>
                         ) : (
-                            <>
-                                <select
-                                    value={formData.agent_id}
-                                    onChange={e => setFormData({ ...formData, agent_id: parseInt(e.target.value) })}
-                                    className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-violet-500 outline-none"
-                                >
-                                    <option value={0}>Selecciona un agente...</option>
-                                    {agents.map(a => <option key={a.id} value={a.id}>{a.name} ({a.role})</option>)}
-                                </select>
-                                {selectedAgent && (
-                                    <div className="mt-2 p-3 bg-white/5 rounded-lg text-xs text-slate-400 space-y-1">
-                                        <p>Modelo: <span className="text-white">{selectedAgent.model_version}</span></p>
-                                        <p>Tools: <span className="text-white">{(Array.isArray(selectedAgent.enabled_tools) ? selectedAgent.enabled_tools : []).join(', ') || 'Ninguna'}</span></p>
+                            <div className="space-y-2 lg:grid lg:grid-cols-3 lg:gap-3 lg:space-y-0">
+                                {widgets.map(w => (
+                                    <div key={w.id} onClick={() => selectWidget(w)}
+                                        className={`p-3.5 rounded-xl border cursor-pointer transition-all active:scale-[0.98] hover:bg-white/5 ${
+                                            selectedWidgetId === w.id ? 'border-violet-500 bg-violet-500/10' : 'border-white/5'
+                                        }`}>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: w.brand_color }}>
+                                                <Phone size={16} className="text-white" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-bold text-white truncate">{w.widget_name}</p>
+                                                <p className="text-[11px] text-slate-500 truncate">{w.agent_name || `Agent #${w.agent_id}`}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <span className={`w-2 h-2 rounded-full ${w.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
+                                                <button onClick={(e) => { e.stopPropagation(); handleDelete(w.id!); }} className="text-red-400/60 hover:text-red-400 p-1.5 -mr-1">
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
-                            </>
-                        )}
-                    </div>
-
-                    {/* Section 2: Voice Pipeline + Provider */}
-                    <div className="glass p-5 rounded-xl border border-white/5">
-                        <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
-                            <Volume2 size={16} className="text-violet-400" /> Configuración de Voz
-                        </h3>
-
-                        {/* Pipeline Toggle */}
-                        <div className="grid grid-cols-2 gap-2 mb-4">
-                            {['realtime', 'cascaded'].map(p => (
-                                <button
-                                    key={p}
-                                    onClick={() => setFormData({ ...formData, voice_pipeline: p })}
-                                    className={`p-3 rounded-lg border text-xs text-left transition-all ${
-                                        formData.voice_pipeline === p ? 'border-violet-500 bg-violet-500/10' : 'border-white/5 hover:bg-white/5'
-                                    }`}
-                                >
-                                    <p className="font-bold text-white">{p === 'realtime' ? 'Realtime' : 'Cascaded'}</p>
-                                    <p className="text-slate-500 mt-1">{p === 'realtime' ? 'Baja latencia' : 'Multi-provider'}</p>
-                                    {p === 'realtime' && <span className="text-[10px] text-violet-400 font-bold">RECOMENDADO</span>}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Provider Selector */}
-                        {formData.voice_pipeline === 'realtime' && (
-                            <div className="space-y-3">
-                                <label className="block text-xs font-bold text-slate-400">Proveedor Realtime</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {['openai', 'nvidia'].map(prov => {
-                                        const hasKey = providers?.has_keys?.[prov];
-                                        return (
-                                            <button
-                                                key={prov}
-                                                onClick={() => hasKey && setFormData({
-                                                    ...formData,
-                                                    realtime_provider: prov,
-                                                    voice_model: prov === 'nvidia' ? 'magpie-tts-es' : 'alloy'
-                                                })}
-                                                disabled={!hasKey}
-                                                className={`p-3 rounded-lg border text-xs text-left transition-all ${
-                                                    formData.realtime_provider === prov
-                                                        ? 'border-violet-500 bg-violet-500/10'
-                                                        : hasKey ? 'border-white/5 hover:bg-white/5' : 'border-white/5 opacity-40 cursor-not-allowed'
-                                                }`}
-                                            >
-                                                <p className="font-bold text-white">{prov === 'openai' ? 'OpenAI Realtime' : 'NVIDIA Riva NIM'}</p>
-                                                <p className="text-slate-500 mt-1">
-                                                    {prov === 'openai' ? '~200-500ms latencia' : 'ASR sub-25ms + tu LLM'}
-                                                </p>
-                                                {!hasKey && (
-                                                    <a href="/credentials" className="text-violet-400 hover:underline mt-1 block" onClick={e => e.stopPropagation()}>
-                                                        Agregar API Key →
-                                                    </a>
-                                                )}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Cascaded: separate STT/TTS selectors */}
-                        {formData.voice_pipeline === 'cascaded' && (
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-400 mb-1">Proveedor TTS</label>
-                                    <select value={formData.voice_provider} onChange={e => setFormData({ ...formData, voice_provider: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-violet-500 outline-none">
-                                        {(providers?.tts_providers || ['openai']).map(p => <option key={p} value={p}>{p}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-400 mb-1">Proveedor STT</label>
-                                    <select value={formData.stt_provider} onChange={e => setFormData({ ...formData, stt_provider: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-violet-500 outline-none">
-                                        {(providers?.stt_providers || ['openai']).map(p => <option key={p} value={p}>{p}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Voice Model */}
-                        <div className="mt-3">
-                            <label className="block text-xs font-bold text-slate-400 mb-1">Voz</label>
-                            <select value={formData.voice_model} onChange={e => setFormData({ ...formData, voice_model: e.target.value })}
-                                className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-violet-500 outline-none">
-                                {currentVoices.map((v: string) => <option key={v} value={v}>{v}</option>)}
-                            </select>
-                        </div>
-
-                        {/* Language + Duration */}
-                        <div className="grid grid-cols-2 gap-3 mt-3">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1">Idioma</label>
-                                <select value={formData.language} onChange={e => setFormData({ ...formData, language: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-violet-500 outline-none">
-                                    <option value="es">Español</option>
-                                    <option value="en">English</option>
-                                    <option value="pt">Português</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1">Duración máx (seg)</label>
-                                <input type="number" min={60} max={600} value={formData.max_call_duration}
-                                    onChange={e => setFormData({ ...formData, max_call_duration: parseInt(e.target.value) || 300 })}
-                                    className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-violet-500 outline-none" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Section 3: Visual Customization */}
-                    <div className="glass p-5 rounded-xl border border-white/5">
-                        <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
-                            <Palette size={16} className="text-violet-400" /> Personalización
-                        </h3>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1">Nombre del Widget</label>
-                                <input type="text" value={formData.widget_name}
-                                    onChange={e => setFormData({ ...formData, widget_name: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-violet-500 outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1">Color de Marca</label>
-                                <div className="flex gap-2">
-                                    <input type="color" value={formData.brand_color}
-                                        onChange={e => setFormData({ ...formData, brand_color: e.target.value })}
-                                        className="h-10 w-16 rounded cursor-pointer bg-transparent border-none" />
-                                    <input type="text" value={formData.brand_color}
-                                        onChange={e => setFormData({ ...formData, brand_color: e.target.value })}
-                                        className="flex-1 bg-white/5 border border-white/10 rounded px-3 text-sm text-white font-mono" />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1">Tamaño</label>
-                                <div className="flex gap-2">
-                                    {['sm', 'md', 'lg'].map(s => (
-                                        <button key={s} onClick={() => setFormData({ ...formData, button_size: s })}
-                                            className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${formData.button_size === s ? 'bg-violet-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}>
-                                            {s.toUpperCase()}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1">Posición</label>
-                                <div className="flex gap-2">
-                                    {['bottom-right', 'bottom-left'].map(pos => (
-                                        <button key={pos} onClick={() => setFormData({ ...formData, button_position: pos })}
-                                            className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${formData.button_position === pos ? 'bg-violet-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}>
-                                            {pos === 'bottom-right' ? 'Derecha' : 'Izquierda'}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1">Icono</label>
-                                <div className="flex gap-2">
-                                    {[
-                                        { key: 'phone', icon: <Phone size={16} /> },
-                                        { key: 'mic', icon: <Mic size={16} /> },
-                                        { key: 'headset', icon: <Headphones size={16} /> },
-                                    ].map(opt => (
-                                        <button key={opt.key} onClick={() => setFormData({ ...formData, button_icon: opt.key })}
-                                            className={`p-2.5 rounded-lg border transition-all ${formData.button_icon === opt.key ? 'border-violet-500 bg-violet-500/20 text-white' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}>
-                                            {opt.icon}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1">Avatar URL (opcional)</label>
-                                <input type="text" value={formData.avatar_url || ''} placeholder="https://..."
-                                    onChange={e => setFormData({ ...formData, avatar_url: e.target.value || null })}
-                                    className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-violet-500 outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-1">Mensaje de Bienvenida</label>
-                                <input type="text" value={formData.welcome_message}
-                                    onChange={e => setFormData({ ...formData, welcome_message: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-violet-500 outline-none" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Section 4: Agent Override (Collapsible) */}
-                    <div className="glass rounded-xl border border-white/5">
-                        <button onClick={() => setShowOverride(!showOverride)}
-                            className="w-full p-5 flex items-center justify-between text-white">
-                            <span className="text-sm font-bold flex items-center gap-2">
-                                <Settings size={16} className="text-violet-400" /> Override de Agente (Opcional)
-                            </span>
-                            {showOverride ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                        </button>
-                        {showOverride && (
-                            <div className="px-5 pb-5 space-y-3">
-                                <p className="text-[10px] text-slate-500">Si dejas vacío, se usa la config del agente seleccionado.</p>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-400 mb-1">System Prompt Override</label>
-                                    <textarea value={formData.system_prompt_override || ''} rows={4}
-                                        placeholder="Dejar vacío para usar el prompt del agente..."
-                                        onChange={e => setFormData({ ...formData, system_prompt_override: e.target.value || null })}
-                                        className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white focus:border-violet-500 outline-none resize-none" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-400 mb-1">Temperatura: {formData.temperature_override ?? 'Auto'}</label>
-                                    <input type="range" min={0} max={1} step={0.1} value={formData.temperature_override ?? 0.3}
-                                        onChange={e => setFormData({ ...formData, temperature_override: parseFloat(e.target.value) })}
-                                        className="w-full" />
-                                </div>
+                                ))}
                             </div>
                         )}
                     </div>
-
-                    {/* Section 5: Billing Mode */}
-                    <div className="glass p-5 rounded-xl border border-white/5">
-                        <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
-                            <Radio size={16} className="text-violet-400" /> Modo de API
-                        </h3>
-                        <div className="grid grid-cols-2 gap-2 mb-3">
-                            {[
-                                { key: 'platform', label: 'API de Future', desc: `${usage?.voice_minutes_included || 0} min/mes incluidos` },
-                                { key: 'byok', label: 'Mi propia API Key', desc: 'Uso ilimitado' },
-                            ].map(m => (
-                                <button key={m.key} onClick={() => setFormData({ ...formData, api_key_mode: m.key })}
-                                    className={`p-3 rounded-lg border text-xs text-left transition-all ${
-                                        formData.api_key_mode === m.key ? 'border-violet-500 bg-violet-500/10' : 'border-white/5 hover:bg-white/5'
-                                    }`}>
-                                    <p className="font-bold text-white">{m.label}</p>
-                                    <p className="text-slate-500 mt-1">{m.desc}</p>
-                                </button>
-                            ))}
-                        </div>
-                        {formData.api_key_mode === 'byok' && formData.realtime_provider === 'nvidia' && !providers?.has_keys?.nvidia && (
-                            <div className="space-y-2">
-                                <label className="block text-xs font-bold text-slate-400">NGC API Key</label>
-                                <textarea value={ngcKeyInput} rows={2} placeholder="Pega aquí tu NGC API Key (se almacenará encriptada)"
-                                    onChange={e => setNgcKeyInput(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-xs text-white font-mono focus:border-violet-500 outline-none resize-none" />
-                                <p className="text-[10px] text-slate-500">Obtenla en org.ngc.nvidia.com/setup/api-keys</p>
-                                <button onClick={handleSaveNgcKey}
-                                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded transition-colors">
-                                    Guardar API Key
-                                </button>
-                            </div>
-                        )}
-                        {formData.api_key_mode === 'byok' && formData.realtime_provider === 'openai' && (
-                            <p className="text-[10px] text-slate-500">Se usará tu OpenAI API Key de Credenciales.</p>
-                        )}
-                    </div>
-
-                    {/* Save Button */}
-                    <button onClick={handleSave} disabled={isSaving || !formData.agent_id}
-                        className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-bold rounded-xl transition-colors">
-                        {isSaving ? 'Guardando...' : isEditing ? 'Actualizar Widget' : 'Crear Widget'}
+                </>
+            ) : (
+                <>
+                    {/* Mobile Back Button */}
+                    <button onClick={() => setShowEditor(false)}
+                        className="lg:hidden flex items-center gap-2 text-slate-400 text-sm mb-3 active:text-white transition-colors">
+                        <ArrowLeft size={16} /> Volver a widgets
                     </button>
-                </div>
 
-                {/* Right: Preview + Snippet */}
-                <div className="space-y-4">
-                    {/* Live Preview */}
-                    <div className="glass p-5 rounded-xl border border-white/5">
-                        <h3 className="text-sm font-bold mb-3 text-white flex items-center gap-2">
-                            <Globe size={16} className="text-green-400" /> Preview
-                        </h3>
-                        <div className="relative h-64 bg-white rounded-xl overflow-hidden border border-white/10 opacity-90">
-                            <div className="absolute top-0 w-full h-7 bg-gray-100 border-b flex items-center px-3 gap-1.5">
-                                <div className="w-2 h-2 rounded-full bg-red-400" />
-                                <div className="w-2 h-2 rounded-full bg-yellow-400" />
-                                <div className="w-2 h-2 rounded-full bg-green-400" />
-                                <div className="mx-auto w-24 h-3 bg-gray-200 rounded-full" />
-                            </div>
-                            <div className="flex items-center justify-center h-full text-gray-300 font-bold text-lg tracking-widest">
-                                TU TIENDA
-                            </div>
-                            {/* Widget Button */}
-                            <div className={`absolute bottom-4 flex flex-col items-end gap-2 ${formData.button_position === 'bottom-right' ? 'right-4' : 'left-4'}`}>
-                                <div className="bg-white text-black text-[10px] px-2.5 py-1.5 rounded-l-xl rounded-t-xl shadow-lg border border-gray-100 max-w-[130px]">
-                                    {formData.welcome_message}
-                                </div>
-                                <div
-                                    style={{ backgroundColor: formData.brand_color }}
-                                    className={`rounded-full shadow-xl flex items-center justify-center text-white ${
-                                        formData.button_size === 'sm' ? 'w-10 h-10' :
-                                        formData.button_size === 'lg' ? 'w-14 h-14' : 'w-12 h-12'
-                                    }`}
-                                >
-                                    {formData.avatar_url ? (
-                                        <img src={formData.avatar_url} className="w-full h-full rounded-full object-cover" alt="" />
-                                    ) : (
-                                        formData.button_icon === 'mic' ? <Mic size={20} /> :
-                                        formData.button_icon === 'headset' ? <Headphones size={20} /> :
-                                        <Phone size={20} />
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+                    {/* Mobile Tab Switcher */}
+                    <div className="lg:hidden flex gap-1 mb-4 bg-white/5 p-1 rounded-xl">
+                        <button onClick={() => setMobileTab('config')}
+                            className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${mobileTab === 'config' ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-400'}`}>
+                            Configurar
+                        </button>
+                        <button onClick={() => setMobileTab('preview')}
+                            className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${mobileTab === 'preview' ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-400'}`}>
+                            Preview & Codigo
+                        </button>
                     </div>
 
-                    {/* Embed Code */}
-                    <div className="glass p-5 rounded-xl border border-white/5 bg-black/40">
-                        <div className="flex justify-between items-center mb-3">
-                            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                                <Globe size={14} className="text-green-400" /> Código de Instalación
-                            </h3>
-                            {formData.widget_token && (
-                                <button onClick={copySnippet}
-                                    className={`text-xs px-2.5 py-1 rounded-lg border flex items-center gap-1.5 transition-all ${
-                                        copied ? 'bg-green-500/20 border-green-500 text-green-400' : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
-                                    }`}>
-                                    {copied ? <Check size={12} /> : <Copy size={12} />}
-                                    {copied ? 'Copiado' : 'Copiar'}
-                                </button>
-                            )}
+                    {/* Desktop: 2 columns / Mobile: tabs */}
+                    <div className="lg:grid lg:grid-cols-2 lg:gap-6">
+                        <div className={`${mobileTab !== 'config' ? 'hidden lg:block' : ''}`}>
+                            <EditorForm />
                         </div>
-                        <div className="bg-[#0f0f0f] p-3 rounded-lg border border-white/5 overflow-x-auto">
-                            <pre className="text-[10px] font-mono text-slate-300 leading-relaxed whitespace-pre-wrap break-all">
-                                {formData.widget_token
-                                    ? `<script>\n  (function(d,t) {\n    var s=d.createElement(t);\n    s.src="YOUR_API_URL/static/voice-widget-sdk.js";\n    s.defer=true;s.async=true;\n    s.dataset.token="${formData.widget_token}";\n    d.head.appendChild(s);\n  })(document,"script");\n</script>`
-                                    : 'Guarda el widget primero para obtener tu código de instalación.'
-                                }
-                            </pre>
-                        </div>
-                        <div className="mt-3 flex items-start gap-2 p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                            <Phone size={14} className="text-blue-400 shrink-0 mt-0.5" />
-                            <p className="text-[10px] text-blue-200">
-                                Copia este código y pégalo antes de <code>&lt;/body&gt;</code> en el HTML de tu Tienda Nube.
-                            </p>
+                        <div className={`${mobileTab !== 'preview' ? 'hidden lg:block' : ''}`}>
+                            <PreviewSection />
                         </div>
                     </div>
+                </>
+            )}
+
+            {/* Desktop: always show editor below list when not in mobile edit mode */}
+            {!showEditor && widgets.length > 0 && (
+                <div className="hidden lg:block">
+                    <p className="text-slate-600 text-sm text-center py-4">Selecciona un widget para editarlo o crea uno nuevo.</p>
                 </div>
-            </div>
+            )}
         </div>
     );
 };
