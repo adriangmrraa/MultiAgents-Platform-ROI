@@ -101,6 +101,18 @@ export const OnboardingWizard: React.FC = () => {
     const realtimeProcessorRef = useRef<ScriptProcessorNode | null>(null);
     const [realtimeConnected, setRealtimeConnected] = useState(false);
     const pendingTranscriptRef = useRef<string>('');
+    const nextPlayTimeRef = useRef(0);
+    // Research cards cascade
+    const [researchCards, setResearchCards] = useState<{tipo: string, titulo: string, valor: string, icono: string}[]>([]);
+    const [currentCardIndex, setCurrentCardIndex] = useState(0);
+    const [showingResearch, setShowingResearch] = useState(false);
+    // Section badges + dynamic UI from tools
+    const [savedSections, setSavedSections] = useState<Record<string, boolean>>({});
+    const [activeSectionTitle, setActiveSectionTitle] = useState('');
+    const [activeSectionDesc, setActiveSectionDesc] = useState('');
+    const [activeSectionButtons, setActiveSectionButtons] = useState<{label: string, accion: string, estilo: string}[]>([]);
+    const [dynamicCards, setDynamicCards] = useState<{tipo: string, titulo: string, valor: string, icono?: string}[]>([]);
+    const [micPaused, setMicPaused] = useState(false);
 
     // Step 6 (Test)
     const [testMessage, setTestMessage] = useState('');
@@ -188,6 +200,8 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     const goNext = async () => {
+        // ALWAYS stop realtime before advancing
+        stopRealtimeAudio();
         // Save current chat history before moving
         if (step >= 3 && step <= 5 && chatMessages.length > 0) {
             setChatHistories(prev => ({ ...prev, [step]: chatMessages }));
@@ -676,8 +690,7 @@ export const OnboardingWizard: React.FC = () => {
     const [metaContext, setMetaContext] = useState('');
 
     const extractMetaData = async () => {
-        if (metaContext) return metaContext; // already extracted
-        // Resolve tenant_id — try state, then fetch from progress
+        if (metaContext) return metaContext;
         let tid = tenantId;
         if (!tid) {
             try {
@@ -691,6 +704,21 @@ export const OnboardingWizard: React.FC = () => {
             });
             if (res?.context) {
                 setMetaContext(res.context);
+                // Build research cards from assets
+                const cards: {tipo: string, titulo: string, valor: string, icono: string}[] = [];
+                if (res.assets) {
+                    for (const a of res.assets) {
+                        if (a.type === 'instagram_profile') cards.push({ tipo: 'instagram', titulo: `@${a.username || a.name}`, valor: `${a.followers || 0} seguidores · ${a.bio || ''}`, icono: 'instagram' });
+                        if (a.type === 'facebook_page') cards.push({ tipo: 'facebook', titulo: a.name, valor: `${a.fans || 0} fans · ${a.category || ''}`, icono: 'facebook' });
+                        if (a.type === 'instagram_posts' && a.posts?.length) cards.push({ tipo: 'post', titulo: 'Ultimo post IG', valor: a.posts[0].substring(0, 120) + '...', icono: 'instagram' });
+                        if (a.type === 'facebook_posts' && a.posts?.length) cards.push({ tipo: 'post', titulo: 'Ultimo post FB', valor: a.posts[0].substring(0, 120) + '...', icono: 'facebook' });
+                    }
+                }
+                if (cards.length > 0) {
+                    setResearchCards(cards);
+                    setShowingResearch(true);
+                    setCurrentCardIndex(0);
+                }
                 return res.context;
             }
         } catch(e) { console.warn('Meta extraction failed:', e); }
@@ -698,6 +726,14 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     const connectRealtime = async (chatStep: number) => {
+        // GUARD: never have two sessions
+        if (realtimeWsRef.current && realtimeWsRef.current.readyState === WebSocket.OPEN) {
+            console.warn('[Realtime] Session already active');
+            return;
+        }
+        // CLEANUP any residual
+        stopRealtimeAudio();
+
         // 1. Get mic permission
         let stream: MediaStream;
         try {
@@ -707,12 +743,13 @@ export const OnboardingWizard: React.FC = () => {
             console.error('[Realtime] Mic denied:', e);
             setError('Necesitamos acceso al microfono. Toca el candado en la barra de direccion, permite el microfono, y recarga la pagina.');
             setVoiceMode(false);
-            setVoiceConsent(false); // Show consent card again
+            setVoiceConsent(false);
             return;
         }
 
-        // 2. Extract Meta context
+        // 2. Extract Meta context + show research cards
         const context = metaContext || await extractMetaData();
+        // extractMetaData also sets researchCards for cascade display
 
         // 3. Create realtime session
         try {
@@ -722,7 +759,7 @@ export const OnboardingWizard: React.FC = () => {
             });
             if (!sessionRes?.session_id) throw new Error('No session');
 
-            // 4. Connect WebSocket via nginx proxy (/api/ → orchestrator)
+            // 4. Connect WebSocket via nginx proxy
             const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const hostname = window.location.hostname;
             const port = window.location.port ? `:${window.location.port}` : '';
@@ -730,7 +767,6 @@ export const OnboardingWizard: React.FC = () => {
             if (hostname === 'localhost' || hostname === '127.0.0.1') {
                 wsUrl = `ws://localhost:3000/public/onboarding/realtime-ws/${sessionRes.session_id}`;
             } else {
-                // Use same-origin /api/ proxy (nginx handles WS upgrade)
                 wsUrl = `${proto}//${hostname}${port}/api/public/onboarding/realtime-ws/${sessionRes.session_id}`;
             }
             console.log('[Realtime] Connecting WS:', wsUrl);
@@ -742,32 +778,28 @@ export const OnboardingWizard: React.FC = () => {
             ws.onopen = () => {
                 console.log('[Realtime] WebSocket connected');
                 setRealtimeConnected(true);
-                setVoiceState('speaking'); // Nova speaks first
-                // Start sending mic audio
+                setShowingResearch(false); // Stop research cards, Nova takes over
+                setVoiceState('speaking');
                 startRealtimeAudioCapture(stream, ws);
             };
 
             ws.onmessage = (evt) => {
                 if (evt.data instanceof ArrayBuffer) {
-                    // Audio from Nova — play it and show "Nova hablando..."
-                    if (voiceState !== 'speaking') setVoiceState('speaking');
+                    setVoiceState('speaking');
                     playRealtimeAudio(evt.data);
                 } else {
-                    // Text message (transcript or event)
                     try {
                         const msg = JSON.parse(evt.data);
+
                         if (msg.type === 'transcript') {
                             if (msg.role === 'assistant') {
-                                // Nova is speaking — accumulate transcript
                                 setVoiceState('speaking');
                                 pendingTranscriptRef.current += msg.text;
                             } else if (msg.role === 'user') {
-                                // User spoke — show in chat + switch to processing
                                 setVoiceState('processing');
                                 setChatMessages(prev => [...prev, { role: 'user', content: msg.text }]);
                             }
                         } else if (msg.type === 'response_done') {
-                            // Nova finished speaking — add full text to chat + switch to listening
                             if (pendingTranscriptRef.current) {
                                 const fullText = pendingTranscriptRef.current;
                                 pendingTranscriptRef.current = '';
@@ -777,8 +809,32 @@ export const OnboardingWizard: React.FC = () => {
                                     return updated;
                                 });
                             }
-                            // Now Nova is listening for user response
                             setVoiceState('listening');
+
+                        // TOOL CALLS from Nova
+                        } else if (msg.type === 'tool_call') {
+                            const { name, args } = msg;
+                            console.log('[Realtime] Tool call:', name, args);
+
+                            // Save section → badge verde
+                            if (name.startsWith('guardar_')) {
+                                setSavedSections(prev => ({ ...prev, [name]: true }));
+                            }
+                            // Change UI section
+                            if (name === 'cambiar_seccion') {
+                                setActiveSectionTitle(args.titulo || '');
+                                setActiveSectionDesc(args.descripcion || '');
+                                if (args.botones) setActiveSectionButtons(args.botones);
+                            }
+                            // Show data card
+                            if (name === 'mostrar_dato_extraido') {
+                                setDynamicCards(prev => [...prev, { tipo: args.tipo || '', titulo: args.titulo || '', valor: args.valor || '', icono: args.icono || '' }]);
+                            }
+                            // Finalize → close WS, show summary
+                            if (name === 'finalizar_configuracion') {
+                                stopRealtimeAudio();
+                                setSectionComplete(true);
+                            }
                         }
                     } catch(e) {}
                 }
@@ -851,11 +907,43 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     const stopRealtimeAudio = () => {
-        if (realtimeProcessorRef.current) { try { realtimeProcessorRef.current.disconnect(); } catch(e) {} realtimeProcessorRef.current = null; }
-        if (realtimeStreamRef.current) { realtimeStreamRef.current.getTracks().forEach(t => t.stop()); realtimeStreamRef.current = null; }
-        if (realtimeAudioCtxRef.current) { try { realtimeAudioCtxRef.current.close(); } catch(e) {} realtimeAudioCtxRef.current = null; }
+        console.log('[Realtime] Stopping all audio + WS');
+        // 1. Close WS first
         if (realtimeWsRef.current) { try { realtimeWsRef.current.close(); } catch(e) {} realtimeWsRef.current = null; }
+        // 2. Stop mic
+        if (realtimeStreamRef.current) { realtimeStreamRef.current.getTracks().forEach(t => t.stop()); realtimeStreamRef.current = null; }
+        // 3. Disconnect processor
+        if (realtimeProcessorRef.current) { try { realtimeProcessorRef.current.disconnect(); } catch(e) {} realtimeProcessorRef.current = null; }
+        // 4. Close AudioContext (cancels ALL pending audio)
+        if (realtimeAudioCtxRef.current) { try { realtimeAudioCtxRef.current.close(); } catch(e) {} realtimeAudioCtxRef.current = null; }
+        // 5. Reset audio queue
+        nextPlayTimeRef.current = 0;
+        pendingTranscriptRef.current = '';
+        // 6. Reset states
         setRealtimeConnected(false);
+        setVoiceState('idle');
+        setMicPaused(false);
+    };
+
+    const pauseMic = () => {
+        if (realtimeStreamRef.current) {
+            const track = realtimeStreamRef.current.getAudioTracks()[0];
+            if (track) { track.enabled = !track.enabled; setMicPaused(!track.enabled); }
+        }
+    };
+
+    const forceFinish = async () => {
+        stopRealtimeAudio();
+        // Generate summary via text endpoint
+        const allMessages = chatMessages.map((m: any) => ({ role: m.role, content: m.content }));
+        try {
+            const res = await fetchApi('/admin/onboarding/interview-step', {
+                method: 'POST',
+                body: { session_id: chatSessionId + `_s${step}`, user_message: 'GENERA EL RESUMEN FINAL con toda la info de la conversacion.', step, tenant_id: tenantId || 0, reset: true, chat_history: allMessages }
+            });
+            if (res?.extracted_draft) { setSectionDraft(res.extracted_draft); setSectionComplete(true); }
+            else if (res?.ai_message) { setSectionDraft(res.ai_message); setSectionComplete(true); }
+        } catch(e) { console.error('[ForceFinish] Error:', e); }
     };
 
     const acceptVoice = async () => {
@@ -875,6 +963,21 @@ export const OnboardingWizard: React.FC = () => {
     useEffect(() => {
         return () => { stopRealtimeAudio(); };
     }, [step]);
+
+    // Research cards cascade timer (3 sec each)
+    useEffect(() => {
+        if (!showingResearch || researchCards.length === 0) return;
+        const timer = setInterval(() => {
+            setCurrentCardIndex(prev => {
+                if (prev >= researchCards.length - 1) {
+                    // Keep last card showing until WS connects
+                    return prev;
+                }
+                return prev + 1;
+            });
+        }, 3000);
+        return () => clearInterval(timer);
+    }, [showingResearch, researchCards.length]);
 
     const initChatWithVoice = async (chatStep: number) => {
         const savedHistory = chatHistories[chatStep];
@@ -1328,6 +1431,71 @@ export const OnboardingWizard: React.FC = () => {
                                 </div>
                             ) : !sectionComplete ? (
                                 <>
+                                    {/* Research Cards Cascade */}
+                                    {showingResearch && researchCards.length > 0 && (
+                                        <div className="mb-4 flex items-center justify-center min-h-[120px]">
+                                            {researchCards[currentCardIndex] && (
+                                                <div key={currentCardIndex} className="glass p-5 rounded-2xl border border-violet-500/20 text-center max-w-sm animate-fade-in">
+                                                    <div className="mb-2">
+                                                        {researchCards[currentCardIndex].icono === 'instagram' && <Instagram size={24} className="text-[#E1306C] mx-auto" />}
+                                                        {researchCards[currentCardIndex].icono === 'facebook' && <Facebook size={24} className="text-[#1877F2] mx-auto" />}
+                                                    </div>
+                                                    <p className="text-sm font-bold text-white">{researchCards[currentCardIndex].titulo}</p>
+                                                    <p className="text-xs text-slate-400 mt-1">{researchCards[currentCardIndex].valor}</p>
+                                                    <p className="text-[9px] text-violet-400 mt-2">Investigando redes sociales...</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Section Badges */}
+                                    {Object.keys(savedSections).length > 0 && (
+                                        <div className="flex gap-1.5 flex-wrap mb-3">
+                                            {[
+                                                { key: 'guardar_identidad', label: 'Identidad' },
+                                                { key: 'guardar_tono', label: 'Tono' },
+                                                { key: 'guardar_reglas', label: 'Reglas' },
+                                                { key: 'guardar_diccionario', label: 'Diccionario' },
+                                            ].map(s => (
+                                                <span key={s.key} className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 ${
+                                                    savedSections[s.key] ? 'bg-violet-600 text-white' : 'bg-white/5 text-slate-600'
+                                                }`}>
+                                                    {savedSections[s.key] && <Check size={10} />} {s.label}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Dynamic Section Title from Nova */}
+                                    {activeSectionTitle && (
+                                        <div className="glass p-3 rounded-xl border border-white/5 mb-3">
+                                            <h3 className="text-sm font-bold text-white">{activeSectionTitle}</h3>
+                                            {activeSectionDesc && <p className="text-[10px] text-slate-400 mt-0.5">{activeSectionDesc}</p>}
+                                            {activeSectionButtons.length > 0 && (
+                                                <div className="flex gap-2 mt-2">
+                                                    {activeSectionButtons.map((btn: any, i: number) => (
+                                                        <button key={i} onClick={() => btn.accion === 'confirmar' ? forceFinish() : null}
+                                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 ${
+                                                                btn.estilo === 'primary' ? 'bg-violet-600 text-white' : 'bg-white/5 text-slate-400'
+                                                            }`}>{btn.label}</button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Dynamic Data Cards from Nova tools */}
+                                    {dynamicCards.length > 0 && (
+                                        <div className="flex gap-2 overflow-x-auto mb-3 pb-1">
+                                            {dynamicCards.map((card, i) => (
+                                                <div key={i} className="glass p-3 rounded-xl border border-white/5 min-w-[140px] shrink-0 text-center">
+                                                    <p className="text-[10px] font-bold text-violet-300">{card.titulo}</p>
+                                                    <p className="text-[9px] text-slate-400 mt-0.5">{card.valor}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
                                     {/* Voice State Indicator — prominent, always visible when voice active */}
                                     {(voiceConsent && (voiceState !== 'idle' || realtimeConnected)) && (
                                         <div className="mb-4">
@@ -1436,9 +1604,15 @@ export const OnboardingWizard: React.FC = () => {
                                             className="flex-1 py-2 text-xs text-slate-500 hover:text-white transition-colors flex items-center justify-center gap-1">
                                             <ArrowLeft size={12} /> Atras
                                         </button>
-                                        <button onClick={() => { const msg = 'Ya tengo todo listo, genera el resumen.'; voiceMode ? sendAndSpeak(msg) : sendChatMessage(msg); }}
+                                        {realtimeConnected && (
+                                            <button onClick={pauseMic}
+                                                className={`flex-1 py-2 text-xs transition-colors flex items-center justify-center gap-1 ${micPaused ? 'text-red-400 hover:text-red-300' : 'text-slate-500 hover:text-white'}`}>
+                                                {micPaused ? <><Mic size={12} /> Activar mic</> : <><MicOff size={12} /> Pausar mic</>}
+                                            </button>
+                                        )}
+                                        <button onClick={forceFinish}
                                             className="flex-1 py-2 text-xs text-slate-500 hover:text-violet-400 transition-colors">
-                                            Ya termine esta seccion
+                                            Ya termine
                                         </button>
                                     </div>
                                 </>

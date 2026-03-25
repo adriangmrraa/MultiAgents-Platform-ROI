@@ -1662,8 +1662,31 @@ async def onboarding_realtime_ws(websocket: WebSocket, session_id: str):
 
         logger.info("onboarding_realtime_instructions", length=len(instructions), first_100=instructions[:100])
 
+        # Define Nova's tools for saving prompt sections + controlling UI
+        nova_tools = [
+            {"type": "function", "name": "guardar_identidad", "description": "Guardar la seccion IDENTIDAD del system prompt. Llamar cuando tengas nombre del negocio, rubro, cliente ideal y diferencial.", "parameters": {"type": "object", "properties": {"nombre_negocio": {"type": "string"}, "rubro": {"type": "string"}, "cliente_ideal": {"type": "string"}, "diferencial": {"type": "string"}, "prompt_seccion": {"type": "string", "description": "Texto completo de la seccion IDENTIDAD con densidad Pointe Coach"}}, "required": ["prompt_seccion"]}},
+            {"type": "function", "name": "guardar_tono", "description": "Guardar la seccion TONO Y PERSONALIDAD. Llamar cuando tengas pronombres, formalidad, emojis, muletillas, frases prohibidas.", "parameters": {"type": "object", "properties": {"prompt_seccion": {"type": "string", "description": "Texto completo de la seccion TONO Y PERSONALIDAD"}}, "required": ["prompt_seccion"]}},
+            {"type": "function", "name": "guardar_reglas", "description": "Guardar REGLAS DE NEGOCIO. Llamar cuando tengas envios, cambios, horarios, pagos, prohibiciones.", "parameters": {"type": "object", "properties": {"prompt_seccion": {"type": "string", "description": "Texto completo de la seccion REGLAS como imperativos"}}, "required": ["prompt_seccion"]}},
+            {"type": "function", "name": "guardar_diccionario", "description": "Guardar DICCIONARIO DE SINONIMOS. Llamar cuando tengas sinonimos de productos, jerga, abreviaciones.", "parameters": {"type": "object", "properties": {"prompt_seccion": {"type": "string", "description": "Texto completo del DICCIONARIO con minimo 5 sinonimos por categoria"}}, "required": ["prompt_seccion"]}},
+            {"type": "function", "name": "finalizar_configuracion", "description": "Llamar cuando TODAS las secciones estan guardadas. Cierra la conversacion.", "parameters": {"type": "object", "properties": {"resumen_final": {"type": "string"}}, "required": ["resumen_final"]}},
+            {"type": "function", "name": "cambiar_seccion", "description": "Cambiar la seccion visible en la UI. Mostrar titulo, descripcion y botones al usuario.", "parameters": {"type": "object", "properties": {"seccion_activa": {"type": "string"}, "titulo": {"type": "string"}, "descripcion": {"type": "string"}, "botones": {"type": "array", "items": {"type": "object", "properties": {"label": {"type": "string"}, "accion": {"type": "string"}, "estilo": {"type": "string"}}}}}, "required": ["seccion_activa"]}},
+            {"type": "function", "name": "mostrar_dato_extraido", "description": "Mostrar un dato de las redes sociales como card visual. Usar al inicio para presentar la investigacion.", "parameters": {"type": "object", "properties": {"tipo": {"type": "string"}, "titulo": {"type": "string"}, "valor": {"type": "string"}, "icono": {"type": "string"}}, "required": ["titulo", "valor"]}}
+        ]
+
+        # Extract meta summary for greeting
+        meta_summary = ""
+        if "CONTEXTO DE REDES SOCIALES" in instructions:
+            parts = instructions.split("CONTEXTO DE REDES SOCIALES DEL NEGOCIO:")
+            if len(parts) > 1:
+                meta_block = parts[1].split("INSTRUCCION CRITICA")[0].strip()
+                if not meta_block:
+                    meta_block = parts[1].split("Usa esta informacion")[0].strip()
+                meta_summary = meta_block
+
+        logger.info("onboarding_realtime_v2", has_meta=bool(meta_summary), meta_len=len(meta_summary), tools=len(nova_tools))
+
         async with websockets.connect(url, additional_headers=headers) as openai_ws:
-            # Configure session with Nova's prompt + forced Spanish
+            # Configure session with tools + VAD tuned
             await openai_ws.send(_json.dumps({
                 "type": "session.update",
                 "session": {
@@ -1671,65 +1694,30 @@ async def onboarding_realtime_ws(websocket: WebSocket, session_id: str):
                     "voice": "coral",
                     "input_audio_format": "pcm16",
                     "output_audio_format": "pcm16",
-                    "input_audio_transcription": {
-                        "model": "whisper-1"
-                    },
+                    "input_audio_transcription": {"model": "whisper-1"},
+                    "tools": nova_tools,
+                    "tool_choice": "auto",
                     "turn_detection": {
                         "type": "server_vad",
-                        "threshold": 0.5,
-                        "prefix_padding_ms": 300,
-                        "silence_duration_ms": 1500
+                        "threshold": 0.7,
+                        "prefix_padding_ms": 500,
+                        "silence_duration_ms": 2000
                     }
                 }
             }))
 
             max_duration = config.get("max_duration", 600)
+            tenant_id = config.get("tenant_id", 0)
 
-            # Extract meta context from the system prompt for the greeting
-            meta_summary = ""
-            if "CONTEXTO DE REDES SOCIALES" in instructions:
-                # Extract the meta context block
-                parts = instructions.split("CONTEXTO DE REDES SOCIALES DEL NEGOCIO:")
-                if len(parts) > 1:
-                    meta_block = parts[1].split("Usa esta informacion")[0].strip()
-                    meta_summary = meta_block
-
-            logger.info("onboarding_realtime_meta_summary", has_meta=bool(meta_summary), length=len(meta_summary))
-
-            # Build first message instructions with real data
+            # Greeting with meta data
             if meta_summary:
-                greeting_instructions = f"""IDIOMA: Espanol argentino. Voseo obligatorio.
-
-Presentate como Nova, la arquitecta de IA de Future. En tu primer mensaje DEBES:
-
-1. Saludar calidamente al usuario
-2. Contarle que ya investigaste su negocio en las redes sociales
-3. Presentar UN RESUMEN CONCRETO Y PROCESADO de lo que encontraste, incluyendo datos especificos:
-   - Nombre del negocio/pagina
-   - Que tipo de productos o servicios vende (inferido de los posts y la bio)
-   - Cantidad de seguidores
-   - El tono que detectaste en sus publicaciones
-   - Cualquier dato relevante que hayas encontrado
-
-DATOS REALES DE LAS REDES DEL USUARIO:
-{meta_summary}
-
-4. Decile que con toda esta informacion van a crear juntos el agente de IA perfecto
-5. Termina preguntando: "Te parece que entendi bien tu negocio? Hay algo que quieras corregir o agregar antes de arrancar?"
-
-Se calida, entusiasta, y demuestra que realmente investigaste. Maximo 6-8 oraciones."""
+                greeting = f"IDIOMA: Espanol argentino. Voseo. Primero usa la tool mostrar_dato_extraido para mostrar los datos de redes que encontraste. Despues saluda y presenta los hallazgos. DATOS:\n{meta_summary}"
             else:
-                greeting_instructions = """IDIOMA: Espanol argentino. Voseo obligatorio.
+                greeting = "IDIOMA: Espanol argentino. Voseo. Presentate como Nova. Saluda y pedile que cuente sobre su negocio."
 
-Presentate como Nova, la arquitecta de IA de Future. Saluda calidamente, contale que vas a crear juntos la personalidad perfecta de su agente de IA. Pedile que te cuente sobre su negocio: como se llama, que vende, y quien es su cliente ideal. Se calida y entusiasta. Maximo 4 oraciones."""
-
-            # Send initial greeting with context
             await openai_ws.send(_json.dumps({
                 "type": "response.create",
-                "response": {
-                    "modalities": ["audio", "text"],
-                    "instructions": greeting_instructions
-                }
+                "response": {"modalities": ["audio", "text"], "instructions": greeting}
             }))
 
             async def client_to_openai():
@@ -1737,22 +1725,16 @@ Presentate como Nova, la arquitecta de IA de Future. Saluda calidamente, contale
                     while True:
                         data = await websocket.receive()
                         if "bytes" in data and data["bytes"]:
-                            audio_b64 = _b64.b64encode(data["bytes"]).decode()
                             await openai_ws.send(_json.dumps({
                                 "type": "input_audio_buffer.append",
-                                "audio": audio_b64
+                                "audio": _b64.b64encode(data["bytes"]).decode()
                             }))
                         elif "text" in data and data["text"]:
-                            # Text message from client (transcription display, etc)
                             msg = _json.loads(data["text"])
                             if msg.get("type") == "text_message":
                                 await openai_ws.send(_json.dumps({
                                     "type": "conversation.item.create",
-                                    "item": {
-                                        "type": "message",
-                                        "role": "user",
-                                        "content": [{"type": "input_text", "text": msg.get("text", "")}]
-                                    }
+                                    "item": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": msg.get("text", "")}]}
                                 }))
                                 await openai_ws.send(_json.dumps({"type": "response.create"}))
                 except Exception:
@@ -1764,38 +1746,66 @@ Presentate como Nova, la arquitecta de IA de Future. Saluda calidamente, contale
                         event = _json.loads(message)
                         etype = event.get("type", "")
 
-                        # Audio delta → forward to browser
                         if etype == "response.audio.delta":
                             audio_b64 = event.get("delta", "")
                             if audio_b64:
                                 await websocket.send_bytes(_b64.b64decode(audio_b64))
 
-                        # Text transcript (what the AI says) → send to client for display
                         elif etype == "response.audio_transcript.delta":
                             text = event.get("delta", "")
                             if text:
-                                await websocket.send_text(_json.dumps({
-                                    "type": "transcript",
-                                    "role": "assistant",
-                                    "text": text
-                                }))
+                                await websocket.send_text(_json.dumps({"type": "transcript", "role": "assistant", "text": text}))
 
-                        # User speech transcript → send to client for display
                         elif etype == "conversation.item.input_audio_transcription.completed":
                             text = event.get("transcript", "")
                             if text:
-                                await websocket.send_text(_json.dumps({
-                                    "type": "transcript",
-                                    "role": "user",
-                                    "text": text
-                                }))
+                                await websocket.send_text(_json.dumps({"type": "transcript", "role": "user", "text": text}))
 
-                        # Response done
                         elif etype == "response.done":
                             await websocket.send_text(_json.dumps({"type": "response_done"}))
 
-                except Exception:
-                    pass
+                        # FUNCTION CALLING — Nova executed a tool
+                        elif etype == "response.function_call_arguments.done":
+                            fn_name = event.get("name", "")
+                            fn_args_str = event.get("arguments", "{}")
+                            call_id = event.get("call_id", "")
+
+                            try:
+                                fn_args = _json.loads(fn_args_str)
+                            except Exception:
+                                fn_args = {}
+
+                            logger.info("nova_tool_call", tool=fn_name, args_len=len(fn_args_str))
+
+                            # Execute tool
+                            result = {"status": "ok"}
+                            if fn_name in ("guardar_identidad", "guardar_tono", "guardar_reglas", "guardar_diccionario"):
+                                prompt_seccion = fn_args.get("prompt_seccion", "")
+                                if prompt_seccion and tenant_id:
+                                    try:
+                                        await db.pool.execute(
+                                            "UPDATE onboarding_progress SET system_prompt_draft = COALESCE(system_prompt_draft, '') || E'\\n\\n' || $1, updated_at = NOW() WHERE tenant_id = $2",
+                                            prompt_seccion, tenant_id
+                                        )
+                                        result = {"status": "guardado", "seccion": fn_name}
+                                    except Exception as e:
+                                        logger.error("tool_save_error", tool=fn_name, error=str(e))
+                                        result = {"status": "error", "detail": str(e)}
+
+                            # Send result back to OpenAI
+                            await openai_ws.send(_json.dumps({
+                                "type": "conversation.item.create",
+                                "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}
+                            }))
+                            await openai_ws.send(_json.dumps({"type": "response.create"}))
+
+                            # Forward tool event to frontend for UI update
+                            await websocket.send_text(_json.dumps({
+                                "type": "tool_call", "name": fn_name, "args": fn_args, "result": result
+                            }))
+
+                except Exception as e:
+                    logger.error("openai_to_client_error", error=str(e))
 
             async def timeout():
                 await _aio.sleep(max_duration)
