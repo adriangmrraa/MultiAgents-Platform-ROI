@@ -210,23 +210,7 @@ export const VoiceWidget: React.FC = () => {
     const selectedAgent = agents.find(a => a.id === formData.agent_id);
     const currentVoices = providers?.voices?.[formData.voice_pipeline === 'realtime' ? formData.realtime_provider : formData.voice_provider] || providers?.voices?.['openai'] || [];
 
-    // --- Plan Blocked ---
-    if (planBlocked) {
-        return (
-            <div className="max-w-2xl mx-auto mt-12 lg:mt-20 text-center animate-fade-in px-4">
-                <div className="glass p-8 lg:p-12 rounded-2xl border border-white/5">
-                    <div className="w-16 h-16 bg-violet-600/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                        <Phone size={32} className="text-violet-400" />
-                    </div>
-                    <h2 className="text-xl lg:text-2xl font-bold text-white mb-2">Voice Widget</h2>
-                    <p className="text-slate-400 mb-6 text-sm">Disponible en planes Pro y Enterprise</p>
-                    <a href="/billing" className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-colors inline-block text-sm">
-                        Ver Planes
-                    </a>
-                </div>
-            </div>
-        );
-    }
+    // planBlocked = demo mode (Free users can see but not save)
 
     // --- Preview Component (reusable for desktop & mobile) ---
     const PreviewSection = () => (
@@ -574,11 +558,24 @@ export const VoiceWidget: React.FC = () => {
                 )}
             </div>
 
-            {/* Save */}
-            <button onClick={handleSave} disabled={isSaving || !formData.agent_id}
-                className="w-full py-3.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-violet-600/20 text-sm">
-                {isSaving ? 'Guardando...' : isEditing ? 'Actualizar Widget' : 'Crear Widget'}
-            </button>
+            {/* Save / Upgrade CTA */}
+            {planBlocked ? (
+                <div className="space-y-2">
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
+                        <p className="text-amber-300 text-xs font-medium mb-1">Modo vista previa</p>
+                        <p className="text-slate-500 text-[10px]">Suscribite a Pro o Enterprise para activar Voice Widget</p>
+                    </div>
+                    <a href="/billing"
+                        className="block w-full py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-violet-600/20 text-sm text-center">
+                        Activar Voice Widget
+                    </a>
+                </div>
+            ) : (
+                <button onClick={handleSave} disabled={isSaving || !formData.agent_id}
+                    className="w-full py-3.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-violet-600/20 text-sm">
+                    {isSaving ? 'Guardando...' : isEditing ? 'Actualizar Widget' : 'Crear Widget'}
+                </button>
+            )}
         </div>
     );
 
@@ -599,8 +596,25 @@ export const VoiceWidget: React.FC = () => {
                 </div>
             </div>
 
+            {/* Demo Banner for Free users */}
+            {planBlocked && (
+                <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-xl p-3 lg:p-4 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center shrink-0">
+                            <Zap size={14} className="text-amber-400" />
+                        </div>
+                        <p className="text-xs text-amber-200 truncate lg:whitespace-normal">
+                            <span className="font-bold">Vista previa</span> — Explora la configuracion del Voice Widget
+                        </p>
+                    </div>
+                    <a href="/billing" className="shrink-0 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold rounded-lg transition-colors">
+                        Activar
+                    </a>
+                </div>
+            )}
+
             {/* Usage Bar */}
-            {usage && usage.plan !== 'free' && (
+            {usage && usage.plan !== 'free' && !planBlocked && (
                 <div className="glass p-3 lg:p-4 rounded-xl border border-white/5 mb-4 lg:mb-6">
                     <div className="flex items-center justify-between mb-1.5">
                         <span className="text-[10px] lg:text-xs font-bold text-slate-400">Consumo</span>
