@@ -213,7 +213,9 @@ export const VoiceWidget: React.FC = () => {
     // planBlocked = demo mode (Free users can see but not save)
 
     // --- Preview Component (reusable for desktop & mobile) ---
-    const PreviewSection = () => (
+    // IMPORTANT: Use fragments directly instead of inline component functions
+    // to avoid React re-mounting on every state change (which causes input focus loss).
+    const previewContent = (
         <div className="space-y-4">
             <div className="glass p-4 lg:p-5 rounded-xl border border-white/5">
                 <h3 className="text-sm font-bold mb-3 text-white flex items-center gap-2">
@@ -284,7 +286,7 @@ export const VoiceWidget: React.FC = () => {
     );
 
     // --- Editor Form ---
-    const EditorForm = () => (
+    const editorContent = (
         <div className="space-y-3 lg:space-y-4">
             {error && (
                 <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-xl flex items-center gap-2 text-red-300 text-sm">
@@ -706,10 +708,10 @@ export const VoiceWidget: React.FC = () => {
                     {/* Desktop: 2 columns / Mobile: tabs */}
                     <div className="lg:grid lg:grid-cols-2 lg:gap-6">
                         <div className={`${mobileTab !== 'config' ? 'hidden lg:block' : ''}`}>
-                            <EditorForm />
+                            {editorContent}
                         </div>
                         <div className={`${mobileTab !== 'preview' ? 'hidden lg:block' : ''}`}>
-                            <PreviewSection />
+                            {previewContent}
                         </div>
                     </div>
                 </>
