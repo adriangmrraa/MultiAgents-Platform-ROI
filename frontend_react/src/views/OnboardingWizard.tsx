@@ -1727,20 +1727,37 @@ export const OnboardingWizard: React.FC = () => {
                                             const res = await fetchApi('/admin/onboarding-wizard/test-agent', {
                                                 method: 'POST',
                                                 body: {
-                                                    message: `Transforma el siguiente draft en un system prompt PROFESIONAL y COMPLETO con la estructura y densidad de Pointe Coach.
+                                                    message: `Sos un experto en ingenieria de prompts. Toma el siguiente texto que es una conversacion/draft de configuracion de un agente de ventas para WhatsApp/Instagram/Facebook. Tu trabajo es TRANSFORMARLO en un system prompt PROFESIONAL para el agente.
 
-REGLAS:
-- Debe tener secciones claras: IDENTIDAD DEL NEGOCIO, TONO Y PERSONALIDAD, REGLAS DE NEGOCIO, DICCIONARIO DE SINONIMOS
-- Cada seccion debe ser DENSA y ESPECIFICA. NO simplifiques. NO resumas. NO elimines informacion.
-- El prompt refinado debe ser MAS LARGO que el draft original, no mas corto.
-- Usa formato con asteriscos y negritas para estructura.
-- Las reglas deben ser imperativos claros y numerados.
-- El diccionario debe tener minimo 5 sinonimos por categoria.
-- Conserva TODA la informacion del draft original y mejora la estructura.
+REGLAS ABSOLUTAS:
+1. USA SOLO la informacion que esta en el draft. NUNCA inventes datos, nombres, politicas ni reglas que no esten en el texto.
+2. Si el draft menciona un nombre de negocio, usalo. Si menciona productos especificos, usalos. Si menciona reglas, transcribi las exactas.
+3. Si hay informacion que falta (como plazos de cambio, metodos de envio), NO los inventes. Escribi "[COMPLETAR]" en su lugar.
+4. El resultado debe ser un SYSTEM PROMPT directo, escrito como instrucciones para un agente de IA que atendera clientes por chat.
+5. Formato: texto plano con secciones ## y listas con *. No uses codigo, no uses JSON.
 
-DRAFT ACTUAL:
+ESTRUCTURA OBLIGATORIA:
+
+## IDENTIDAD
+(nombre del negocio, que vende, cliente ideal, diferencial — TODO sacado del draft)
+
+## TONO Y PERSONALIDAD
+(pronombres, formalidad, emojis, muletillas, frases prohibidas — TODO sacado del draft)
+
+## REGLAS DE NEGOCIO
+(reglas numeradas como imperativos: 1. ENVIOS: ... 2. CAMBIOS: ... etc — TODO sacado del draft)
+
+## DICCIONARIO DE SINONIMOS
+(productos con sinonimos especificos del rubro del negocio — sacados del draft, NO genericos)
+
+## REGLAS DE SEGURIDAD
+1. VERACIDAD ABSOLUTA: PROHIBIDO inventar precios, stock o variantes. Toda info debe venir de las tools.
+2. DERIVACION: Usar derivhumano si el cliente esta enojado o pide hablar con persona.
+3. ANTI-REPETICION: No repetir productos ya mostrados.
+
+DRAFT/CONVERSACION DEL NEGOCIO:
 ${systemPrompt}`,
-                                                    system_prompt: 'Sos un experto en ingenieria de prompts para agentes de IA de ventas. Tu trabajo es tomar un draft con informacion de un negocio y transformarlo en un system prompt profesional, denso y completo. NUNCA simplifiques ni elimines informacion. El resultado debe ser MAS detallado que el input. Responde SOLO con el prompt refinado, sin explicaciones ni comentarios adicionales.'
+                                                    system_prompt: 'Transforma el draft en un system prompt para un agente de ventas de WhatsApp. USA SOLO la info del draft. NUNCA inventes datos. Si falta algo, escribe [COMPLETAR]. Responde SOLO con el prompt, sin explicaciones.'
                                                 }
                                             });
                                             if (res?.response) { setSystemPrompt(res.response); }
