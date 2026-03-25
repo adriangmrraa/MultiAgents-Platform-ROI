@@ -1658,6 +1658,18 @@ async def onboarding_realtime_ws(websocket: WebSocket, session_id: str):
 
         instructions = f"""IDIOMA OBLIGATORIO: Habla SIEMPRE en espanol argentino. NUNCA cambies de idioma. Usa voseo (vos, sos, tenes).
 
+TOOLS DISPONIBLES — USA ESTAS HERRAMIENTAS PROACTIVAMENTE:
+- investigar_web: Si el usuario te da una URL (web, redes sociales, tienda), USALA para scrapear y extraer info del negocio. Pedile URLs si no las tenes.
+- guardar_identidad: Cuando tengas nombre + rubro + cliente ideal + diferencial, guarda la seccion.
+- guardar_tono: Cuando tengas pronombres + formalidad + emojis + muletillas, guarda.
+- guardar_reglas: Cuando tengas envios + cambios + horarios + pagos + prohibiciones, guarda.
+- guardar_diccionario: Cuando tengas sinonimos de productos + jerga + abreviaciones, guarda.
+- cambiar_seccion: Para actualizar la UI del usuario con titulo y botones.
+- mostrar_dato_extraido: Para mostrar datos visuales al usuario.
+- finalizar_configuracion: Cuando TODO este completo.
+
+ESTRATEGIA: Al inicio, pedi al usuario su sitio web, Instagram o Facebook si no tenes contexto. Usa investigar_web para scrapear y obtener info antes de preguntar. Demuestra que investigaste.
+
 {base_instructions}"""
 
         logger.info("onboarding_realtime_instructions", length=len(instructions), first_100=instructions[:100])
@@ -1670,7 +1682,8 @@ async def onboarding_realtime_ws(websocket: WebSocket, session_id: str):
             {"type": "function", "name": "guardar_diccionario", "description": "Guardar DICCIONARIO DE SINONIMOS. Llamar cuando tengas sinonimos de productos, jerga, abreviaciones.", "parameters": {"type": "object", "properties": {"prompt_seccion": {"type": "string", "description": "Texto completo del DICCIONARIO con minimo 5 sinonimos por categoria"}}, "required": ["prompt_seccion"]}},
             {"type": "function", "name": "finalizar_configuracion", "description": "Llamar cuando TODAS las secciones estan guardadas. Cierra la conversacion.", "parameters": {"type": "object", "properties": {"resumen_final": {"type": "string"}}, "required": ["resumen_final"]}},
             {"type": "function", "name": "cambiar_seccion", "description": "Cambiar la seccion visible en la UI. Mostrar titulo, descripcion y botones al usuario.", "parameters": {"type": "object", "properties": {"seccion_activa": {"type": "string"}, "titulo": {"type": "string"}, "descripcion": {"type": "string"}, "botones": {"type": "array", "items": {"type": "object", "properties": {"label": {"type": "string"}, "accion": {"type": "string"}, "estilo": {"type": "string"}}}}}, "required": ["seccion_activa"]}},
-            {"type": "function", "name": "mostrar_dato_extraido", "description": "Mostrar un dato de las redes sociales como card visual. Usar al inicio para presentar la investigacion.", "parameters": {"type": "object", "properties": {"tipo": {"type": "string"}, "titulo": {"type": "string"}, "valor": {"type": "string"}, "icono": {"type": "string"}}, "required": ["titulo", "valor"]}}
+            {"type": "function", "name": "mostrar_dato_extraido", "description": "Mostrar un dato de las redes sociales como card visual. Usar al inicio para presentar la investigacion.", "parameters": {"type": "object", "properties": {"tipo": {"type": "string"}, "titulo": {"type": "string"}, "valor": {"type": "string"}, "icono": {"type": "string"}}, "required": ["titulo", "valor"]}},
+            {"type": "function", "name": "investigar_web", "description": "Scrapear una URL web para extraer informacion del negocio. Usar cuando el usuario comparte una URL de su sitio web, redes sociales, o tienda online. Devuelve el contenido de la pagina.", "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL completa a investigar (ej: https://www.ejemplo.com)"}}, "required": ["url"]}}
         ]
 
         # Extract meta summary for greeting
@@ -1699,9 +1712,9 @@ async def onboarding_realtime_ws(websocket: WebSocket, session_id: str):
                     "tool_choice": "auto",
                     "turn_detection": {
                         "type": "server_vad",
-                        "threshold": 0.7,
+                        "threshold": 0.8,
                         "prefix_padding_ms": 500,
-                        "silence_duration_ms": 2000
+                        "silence_duration_ms": 3000
                     }
                 }
             }))
@@ -1791,6 +1804,31 @@ async def onboarding_realtime_ws(websocket: WebSocket, session_id: str):
                                     except Exception as e:
                                         logger.error("tool_save_error", tool=fn_name, error=str(e))
                                         result = {"status": "error", "detail": str(e)}
+
+                            elif fn_name == "investigar_web":
+                                url = fn_args.get("url", "")
+                                if url:
+                                    try:
+                                        import httpx as _httpx
+                                        async with _httpx.AsyncClient(timeout=15.0, follow_redirects=True) as http:
+                                            resp = await http.get(url, headers={"User-Agent": "Mozilla/5.0 FuturePlatform/1.0"})
+                                            if resp.status_code == 200:
+                                                # Extract text content (strip HTML tags)
+                                                import re as _re
+                                                html = resp.text[:15000]  # Limit to 15KB
+                                                text = _re.sub(r'<script[^>]*>.*?</script>', '', html, flags=_re.DOTALL)
+                                                text = _re.sub(r'<style[^>]*>.*?</style>', '', text, flags=_re.DOTALL)
+                                                text = _re.sub(r'<[^>]+>', ' ', text)
+                                                text = _re.sub(r'\s+', ' ', text).strip()[:5000]
+                                                result = {"status": "ok", "url": url, "contenido": text}
+                                                logger.info("investigar_web_ok", url=url, content_len=len(text))
+                                            else:
+                                                result = {"status": "error", "detail": f"HTTP {resp.status_code}"}
+                                    except Exception as e:
+                                        logger.error("investigar_web_error", url=url, error=str(e))
+                                        result = {"status": "error", "detail": str(e)}
+                                else:
+                                    result = {"status": "error", "detail": "URL vacia"}
 
                             # Send result back to OpenAI
                             await openai_ws.send(_json.dumps({
