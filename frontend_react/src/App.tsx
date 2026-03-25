@@ -99,23 +99,23 @@ function OnboardingGate({ children }: { children: JSX.Element }) {
   useEffect(() => {
     if (isLoading || !user) return;
     if (location.pathname === '/onboarding-wizard') { setChecked(true); return; }
-    if ((user as any)?.role === 'super_admin') { setChecked(true); return; }
 
+    // Super admin never sees wizard
+    if (user.role === 'super_admin') { setChecked(true); return; }
+
+    // Simple client-side check: use fetchApi from useApi pattern
     const checkOnboarding = async () => {
       try {
-        const { ADMIN_TOKEN } = await import('./hooks/useApi');
+        const { useApi: _u, ADMIN_TOKEN } = await import('./hooks/useApi');
 
-        // Same API base detection as useApi
+        // Detect API base (same as useApi)
         const hostname = window.location.hostname;
         let base = '/api';
         if (hostname === 'localhost' || hostname === '127.0.0.1') base = 'http://localhost:3000';
         else if (hostname.includes('platform-ui')) base = window.location.protocol + '//' + hostname.replace('platform-ui', 'orchestrator-service');
 
         const res = await fetch(`${base}/admin/onboarding-wizard/progress`, {
-          headers: {
-            'x-admin-token': ADMIN_TOKEN || '',
-            'Content-Type': 'application/json'
-          },
+          headers: { 'x-admin-token': ADMIN_TOKEN || '', 'Content-Type': 'application/json' },
           credentials: 'include'
         });
 
@@ -123,11 +123,23 @@ function OnboardingGate({ children }: { children: JSX.Element }) {
           const data = await res.json();
           if (data.should_show_wizard === true) {
             setNeedsWizard(true);
+            setChecked(true);
+            return;
           }
         }
       } catch (e) {
-        console.warn('[OnboardingGate] Check failed:', e);
+        // If backend check fails, fallback to client-side heuristic
+        console.warn('[OnboardingGate] Backend check failed, using client heuristic');
       }
+
+      // CLIENT-SIDE FALLBACK: If user has no store_name or it looks provisional, show wizard
+      // This catches the case where backend endpoint is unreachable
+      if (!user.store_name || user.store_name === '' || user.store_name.startsWith('Tienda de ')) {
+        // Check if user was recently created (no meaningful data yet)
+        // A user with no store_name and no super_admin role is likely new
+        setNeedsWizard(true);
+      }
+
       setChecked(true);
     };
     checkOnboarding();
