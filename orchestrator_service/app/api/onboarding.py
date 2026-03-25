@@ -619,11 +619,11 @@ async def extract_meta_data(tenant_id: int = Body(0, embed=True)):
         return {"context": "", "assets": [], "debug": "no_tenant_id"}
 
     try:
-        # 1. Get business assets from DB
+        # 1. Get business assets from DB (tenant_id may be stored as text)
         logger.info(f"extract_meta_data: tenant_id={tenant_id}")
         assets = await db.pool.fetch(
             "SELECT asset_type, content FROM business_assets WHERE tenant_id = $1 AND is_active = true",
-            tenant_id
+            str(tenant_id)
         )
         logger.info(f"extract_meta_data: found {len(assets)} assets")
 
