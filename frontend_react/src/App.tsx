@@ -121,7 +121,9 @@ function OnboardingGate({ children }: { children: JSX.Element }) {
 
         if (res.ok) {
           const data = await res.json();
-          if (data.should_show_wizard === true) {
+          // If step >= 6, user is almost done — let them access dashboard
+          // They can go back to wizard via sidebar "Wizard" link
+          if (data.should_show_wizard === true && (data.current_step || 0) < 6) {
             setNeedsWizard(true);
             setChecked(true);
             return;

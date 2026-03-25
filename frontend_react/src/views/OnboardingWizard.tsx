@@ -156,10 +156,24 @@ export const OnboardingWizard: React.FC = () => {
                     return;
                 }
                 const sd = data.step_data || {};
-                setStep(data.current_step || 0);
+                const draft = data.system_prompt_draft || '';
                 setStepData(sd);
-                setSystemPrompt(data.system_prompt_draft || '');
+                setSystemPrompt(draft);
                 setTenantId(data.tenant_id);
+
+                // URL param ?step=6 to jump to review
+                const urlParams = new URLSearchParams(window.location.search);
+                const forceStep = urlParams.get('step');
+                if (forceStep && parseInt(forceStep) >= 0) {
+                    setStep(parseInt(forceStep));
+                }
+                // If user has a draft and is past step 5, go to review
+                else if (draft && draft.length > 100 && (data.current_step || 0) >= 5) {
+                    setStep(6);
+                }
+                else {
+                    setStep(data.current_step || 0);
+                }
 
                 // Restore step 1 state
                 if (sd.step_1?.tiendanube_connected) {
