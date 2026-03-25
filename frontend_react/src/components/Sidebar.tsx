@@ -83,7 +83,7 @@ export const Sidebar: React.FC = () => {
                     <NavItem to="/voice-widget" icon={<Phone size={20} />} label="Voice Widget" desc="Asistente de voz para tu tienda" />
                     <NavItem to="/settings/ycloud" icon={<Mail size={20} />} label={t('sidebar.ycloud')} desc={t('sidebar.ycloudDesc')} />
                     <NavItem to="/nexus-setup" icon={<Zap size={20} />} label={t('sidebar.nexusEngine')} desc={t('sidebar.nexusEngineDesc')} />
-                    <NavItem to="/magic" icon={<Sparkles size={20} />} label={t('sidebar.magic')} desc={t('sidebar.magicDesc')} />
+                    <NavItem to="/onboarding-wizard" icon={<Sparkles size={20} />} label="Wizard" desc="Configuracion Guiada de Agente" />
                     <NavItem to="/onboarding" icon={<MessageCircle size={20} />} label="Hyper Onboarding" desc="Entrevista IA para crear Agentes" />
 
                     <div className="h-px bg-white/5 w-8 mx-auto my-4" />

@@ -149,6 +149,7 @@ from app.routes.billing_routes import router as billing_router  # SaaS Billing
 from app.routes.gallery_routes import router as gallery_router  # Smart Gallery (Pomelli-style)
 from app.routes.ingest_routes import router as ingest_router # NEW
 from app.routes.voice_widget_routes import router as voice_widget_router, public_router as voice_widget_public_router  # Voice Widget v1.0
+from app.routes.onboarding_wizard_routes import router as onboarding_wizard_router  # Onboarding Wizard v1.0
 from app.routes.voice_widget_ws import voice_websocket_handler  # Voice Widget WebSocket
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
@@ -1238,6 +1239,28 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Migration 41-42 indexes skipped: %', SQLERRM;
     END $$;
+    """,
+    # 43. Onboarding Progress table (Onboarding Wizard v1.0)
+    """
+    CREATE TABLE IF NOT EXISTS onboarding_progress (
+        id SERIAL PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tenant_id INTEGER REFERENCES tenants(id),
+        current_step INTEGER DEFAULT 0,
+        step_data JSONB DEFAULT '{}',
+        system_prompt_draft TEXT DEFAULT '',
+        completed_at TIMESTAMPTZ DEFAULT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    """,
+    """
+    DO $$
+    BEGIN
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_onboarding_user ON onboarding_progress(user_id);
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Migration 43 index skipped: %', SQLERRM;
+    END $$;
     """
 ]
 
@@ -1398,6 +1421,7 @@ async def lifespan(app: FastAPI):
         from app.models.billing import Plan, Subscription, UsageRecord, Invoice, AuditLog  # SaaS Billing
         from app.models.attributed_sale import AttributedSale  # ROI Real v8.0
         from app.models.voice_widget import VoiceWidgetConfig, VoiceUsageRecord  # Voice Widget v1.0
+        from app.models.onboarding import OnboardingProgress  # Onboarding Wizard v1.0
 
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -1591,6 +1615,7 @@ app.include_router(admin_router)
 app.include_router(onboarding_router, prefix="/admin/onboarding")
 app.include_router(ingest_router)  # Meta Direct Messaging Ingestion
 app.include_router(voice_widget_router)  # Voice Widget Admin CRUD
+app.include_router(onboarding_wizard_router)  # Onboarding Wizard
 app.include_router(voice_widget_public_router)  # Voice Widget Public SDK Endpoints
 
 

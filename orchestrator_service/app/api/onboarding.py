@@ -231,3 +231,137 @@ async def onboarding_draft(
     except Exception as e:
         logger.error(f"Failed to save draft: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Wizard Interview Step (Section-Scoped Chat) ---
+
+WIZARD_STEP_SESSIONS = {}
+
+WIZARD_STEP_PROMPTS = {
+    3: """Eres el Arquitecto de Tono del agente de IA. Tu mision es extraer la IDENTIDAD UNICA del negocio.
+
+CHECKLIST INTERNO (no lo muestres al usuario, pero necesitas toda esta info):
+- Nombre del negocio y que vende
+- Que lo hace especial/diferente de la competencia
+- Pronombres: vos / tu / usted
+- Nivel de formalidad: casual / profesional / barrio
+- Emojis: si/no, cuales
+- Frases prohibidas o que deben evitarse
+- Muletillas o frases puente del sector (ej: "Mira", "Fijate", "Dale")
+
+ADAPTACION POR SECTOR:
+- Ropa/moda: pregunta sobre estilos, temporadas, tallas
+- Comida: pregunta sobre tipo de cocina, delivery, alergenos
+- Tecnologia: pregunta sobre soporte tecnico, garantias
+- Servicios: pregunta sobre turnos, reservas, presupuestos
+
+ESTILO DE ENTREVISTA: Sos amigable y directo. Pregunta de a una cosa por vez. Usa ejemplos concretos: "Cuando entra un cliente a tu tienda, lo recibis con 'Hola, en que puedo ayudarte?' o con 'Ey! Que buscas?'"
+
+Cuando tengas TODOS los items del checklist, genera un resumen estructurado y emiti:
+<SECTION_COMPLETE>{"section": "tone", "draft": "## TONO Y PERSONALIDAD\\n..."}</SECTION_COMPLETE>""",
+
+    4: """Eres el Arquitecto de Reglas del agente de IA. Tu mision es extraer las REGLAS OPERATIVAS del negocio.
+
+CHECKLIST INTERNO:
+- Politica de envios: gratis? desde que monto? zonas? tiempos?
+- Politica de cambios/devoluciones: plazo, excepciones, condiciones
+- Horarios de atencion: dias, franjas horarias, feriados
+- Formas de pago: MercadoPago, tarjeta, transferencia, efectivo, cuotas
+- Que cosas el agente NO debe hacer NUNCA
+- Politica de precios: descuentos? negociacion? mayorista?
+- Proceso de compra: como se cierra una venta?
+
+ESTILO: Pregunta con escenarios reales: "Si un cliente pide devolver algo usado, que le decimos?" Convierte respuestas vagas en reglas concretas.
+
+Cuando tengas TODO, genera reglas como imperativos claros y emiti:
+<SECTION_COMPLETE>{"section": "rules", "draft": "## REGLAS DE NEGOCIO\\n1. ENVIOS: ...\\n2. CAMBIOS: ..."}</SECTION_COMPLETE>""",
+
+    5: """Eres el Arquitecto de Diccionario del agente de IA. Tu mision es mapear el LENGUAJE REAL de los clientes.
+
+CHECKLIST INTERNO:
+- Sinonimos de categorias de productos (ej: "remera" = "playera" = "franela")
+- Jerga del sector o region (argentinismos, mexicanismos, etc)
+- Abreviaciones comunes que usan los clientes en WhatsApp
+- Nombres alternativos de metodos de pago (ej: "Merca" = MercadoPago)
+- Errores de ortografia frecuentes de los clientes
+
+ESTILO: "Hay palabras que tus clientes usen mal o diferente? Por ejemplo, le dicen 'mallas' a los leotardos?"
+
+Cuando tengas suficiente, genera tabla de sinonimos y emiti:
+<SECTION_COMPLETE>{"section": "dictionary", "draft": "## DICCIONARIO DE SINONIMOS\\nCATEGORIA: sinonimo1, sinonimo2\\n..."}</SECTION_COMPLETE>"""
+}
+
+
+@router.post("/interview-step")
+async def onboarding_interview_step(
+    session_id: str = Body(..., embed=True),
+    user_message: str = Body(..., embed=True),
+    step: int = Body(..., embed=True),
+    tenant_id: int = Body(0, embed=True),
+    reset: bool = Body(False, embed=True),
+):
+    """
+    Section-scoped interview for wizard steps 3, 4, 5.
+    Each step uses a different prompt focused on that section.
+    """
+    if step not in WIZARD_STEP_PROMPTS:
+        raise HTTPException(status_code=400, detail=f"Invalid step {step}. Must be 3, 4, or 5.")
+
+    try:
+        # Initialize or reset session
+        step_session_key = f"{session_id}_step{step}"
+        if reset or step_session_key not in WIZARD_STEP_SESSIONS:
+            WIZARD_STEP_SESSIONS[step_session_key] = [
+                {"role": "system", "content": WIZARD_STEP_PROMPTS[step]}
+            ]
+            if reset:
+                user_message = "Hola, estoy listo para configurar esta seccion."
+
+        # Append user message
+        WIZARD_STEP_SESSIONS[step_session_key].append({"role": "user", "content": user_message})
+
+        # Use platform API key (company pays for onboarding)
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Platform API key not configured")
+
+        client = openai.AsyncOpenAI(api_key=api_key)
+
+        response = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=WIZARD_STEP_SESSIONS[step_session_key],
+            temperature=0.7
+        )
+
+        ai_text = response.choices[0].message.content
+        WIZARD_STEP_SESSIONS[step_session_key].append({"role": "assistant", "content": ai_text})
+
+        # Check for section completion
+        import re
+        section_complete = False
+        extracted_draft = None
+
+        pattern = re.compile(r"<SECTION_COMPLETE>(.*?)</SECTION_COMPLETE>", re.DOTALL | re.IGNORECASE)
+        match = pattern.search(ai_text)
+
+        if match:
+            section_complete = True
+            try:
+                json_str = re.sub(r"```(?:json)?\n?|\n?```", "", match.group(1).strip()).strip()
+                data = json.loads(json_str)
+                extracted_draft = data.get("draft", "")
+                ai_text = pattern.sub("", ai_text).strip()
+            except Exception as e:
+                logger.error(f"Section complete parse error: {e}")
+                section_complete = False
+
+        return {
+            "ai_message": ai_text,
+            "section_complete": section_complete,
+            "extracted_draft": extracted_draft,
+            "step": step
+        }
+
+    except Exception as e:
+        logger.error(f"Interview step error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
