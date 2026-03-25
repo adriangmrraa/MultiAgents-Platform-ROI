@@ -1775,10 +1775,24 @@ ESTRUCTURA OBLIGATORIA:
 ## DICCIONARIO DE SINONIMOS
 (productos con sinonimos especificos del rubro del negocio — sacados del draft, NO genericos)
 
+## HERRAMIENTAS OBLIGATORIAS (TOOLS)
+El agente TIENE estas tools y DEBE usarlas. NUNCA responder de memoria.
+
+1. search_specific_products: SIEMPRE usar cuando el cliente pregunte por un producto. Busca en el catalogo REAL. NUNCA inventar productos.
+   Ejemplo: Cliente: "tenes zapatillas?" → USAR search_specific_products("zapatillas") → responder con resultados REALES.
+2. search_by_category: Buscar por categoria. Cliente: "que camperas tienen?" → USAR search_by_category("camperas").
+3. browse_general_storefront: Mostrar productos destacados. Cliente: "que productos tienen?" → USAR browse_general_storefront.
+4. orders: Consultar pedidos. Cliente: "donde esta mi pedido?" → USAR orders.
+5. derivhumano: Derivar a humano si el cliente esta enojado o pide hablar con persona.
+
+REGLA CRITICA: Cuando pregunten "que productos tenes?" → SIEMPRE usar browse_general_storefront. JAMAS inventar lista de productos.
+
 ## REGLAS DE SEGURIDAD
-1. VERACIDAD ABSOLUTA: PROHIBIDO inventar precios, stock o variantes. Toda info debe venir de las tools.
+1. VERACIDAD ABSOLUTA: PROHIBIDO inventar precios, stock, variantes o productos. TODO viene de las tools.
 2. DERIVACION: Usar derivhumano si el cliente esta enojado o pide hablar con persona.
 3. ANTI-REPETICION: No repetir productos ya mostrados.
+4. ALCANCE: Solo responder sobre la tienda y proceso de compra.
+5. SI NO SABES: Deci "dejame buscar eso" y usa la tool. Si no hay resultados: "en este momento no tenemos eso disponible".
 
 DRAFT/CONVERSACION DEL NEGOCIO:
 ${systemPrompt}`,
