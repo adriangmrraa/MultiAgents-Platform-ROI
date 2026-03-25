@@ -609,12 +609,14 @@ async def extract_meta_data(tenant_id: int = Body(0, embed=True)):
     import httpx
 
     # If no tenant_id provided, try to find the most recent one
+    # If no tenant_id, try multiple fallbacks
     if not tenant_id:
+        # Try all tenants that have business_assets
         row = await db.pool.fetchrow(
-            "SELECT tenant_id FROM onboarding_progress WHERE tenant_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1"
+            "SELECT DISTINCT tenant_id FROM business_assets WHERE is_active = true AND asset_type IN ('facebook_page', 'instagram_account') ORDER BY tenant_id DESC LIMIT 1"
         )
         if row:
-            tenant_id = row["tenant_id"]
+            tenant_id = int(row["tenant_id"]) if row["tenant_id"] else 0
     if not tenant_id:
         return {"context": "", "assets": [], "debug": "no_tenant_id"}
 

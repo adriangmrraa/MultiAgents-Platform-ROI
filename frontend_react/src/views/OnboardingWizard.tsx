@@ -677,9 +677,17 @@ export const OnboardingWizard: React.FC = () => {
 
     const extractMetaData = async () => {
         if (metaContext) return metaContext; // already extracted
+        // Resolve tenant_id — try state, then fetch from progress
+        let tid = tenantId;
+        if (!tid) {
+            try {
+                const prog = await fetchApi('/admin/onboarding-wizard/progress');
+                if (prog?.tenant_id) { tid = prog.tenant_id; setTenantId(prog.tenant_id); }
+            } catch(e) {}
+        }
         try {
             const res = await fetchApi('/admin/onboarding/extract-meta-data', {
-                method: 'POST', body: { tenant_id: tenantId || 0 }
+                method: 'POST', body: { tenant_id: tid || 0 }
             });
             if (res?.context) {
                 setMetaContext(res.context);
