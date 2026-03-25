@@ -1205,10 +1205,14 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     const activateAgent = async () => {
+        if (!systemPrompt || systemPrompt.trim().length < 20) {
+            setError('El system prompt esta vacio. Conversa con Nova o escribe el prompt antes de activar.');
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
-            // Save the latest system prompt + knowledge collections
+            // Save the latest system prompt + knowledge collections FIRST
             await fetchApi('/admin/onboarding-wizard/progress', {
                 method: 'PUT',
                 body: {
@@ -1216,8 +1220,8 @@ export const OnboardingWizard: React.FC = () => {
                     system_prompt_draft: systemPrompt,
                     step_data: { knowledge_sources: selectedCollections }
                 }
-            }).catch(() => {});
-            // Create agent + mark wizard completed (sets completed_at)
+            });
+            // Create/update agent + mark wizard completed
             const res = await fetchApi('/admin/onboarding-wizard/complete', { method: 'POST' });
             if (res?.agent_id) {
                 // Update agent with knowledge sources if selected

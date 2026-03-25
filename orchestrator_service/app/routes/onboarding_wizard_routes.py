@@ -227,35 +227,75 @@ async def create_tenant_for_wizard(body: CreateTenant, current_user = Depends(ge
 
 @router.post("/complete", dependencies=[Depends(get_wizard_user)])
 async def complete_wizard(current_user = Depends(get_wizard_user)):
-    """Complete the wizard: create agent with accumulated system prompt and mark done."""
+    """Complete the wizard: create or UPDATE agent with the real system prompt."""
     progress = await _get_or_create_progress(current_user)
     tenant_id = current_user.tenant_id or progress.get("tenant_id")
 
     if not tenant_id:
         raise HTTPException(status_code=400, detail="No tenant associated. Complete step 1 first.")
 
-    system_prompt = progress["system_prompt_draft"]
+    system_prompt = progress["system_prompt_draft"] or ""
     if not system_prompt or len(system_prompt.strip()) < 20:
         system_prompt = "Eres un asistente virtual de ventas amable y profesional."
 
     step_data = progress["step_data"] if isinstance(progress["step_data"], dict) else {}
     store_name = step_data.get("step_1", {}).get("store_name", "Mi Tienda")
+    knowledge_sources = step_data.get("knowledge_sources", [])
 
-    # Create agent
-    agent = await db.pool.fetchrow("""
-        INSERT INTO agents (name, role, tenant_id, model_provider, model_version, is_active,
-                            enabled_tools, system_prompt_template, temperature)
-        VALUES ($1, $2, $3, $4, $5, true, $6, $7, 0.3)
-        RETURNING id
-    """,
-        f"Agente {store_name}",
-        "sales",
-        tenant_id,
-        "openai",
-        "gpt-4o",
-        json.dumps(["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"]),
-        system_prompt
+    tools = json.dumps(["search_specific_products", "search_by_category", "browse_general_storefront", "orders", "derivhumano"])
+
+    # Check if agent already exists for this tenant (update instead of duplicate)
+    existing = await db.pool.fetchrow(
+        "SELECT id FROM agents WHERE tenant_id = $1 AND role = 'sales' ORDER BY created_at DESC LIMIT 1",
+        tenant_id
     )
+
+    if existing:
+        # UPDATE existing agent with the wizard's prompt
+        await db.pool.execute("""
+            UPDATE agents SET
+                system_prompt_template = $1,
+                enabled_tools = $2,
+                is_active = true,
+                updated_at = NOW()
+            WHERE id = $3
+        """, system_prompt, tools, existing["id"])
+
+        # Update knowledge sources if selected
+        if knowledge_sources:
+            await db.pool.execute(
+                "UPDATE agents SET knowledge_sources = $1 WHERE id = $2",
+                json.dumps(knowledge_sources), existing["id"]
+            )
+
+        agent_id = existing["id"]
+        logger.info("wizard_agent_updated", tenant_id=tenant_id, agent_id=agent_id, prompt_len=len(system_prompt))
+    else:
+        # CREATE new agent
+        agent = await db.pool.fetchrow("""
+            INSERT INTO agents (name, role, tenant_id, model_provider, model_version, is_active,
+                                enabled_tools, system_prompt_template, temperature)
+            VALUES ($1, $2, $3, $4, $5, true, $6, $7, 0.3)
+            RETURNING id
+        """,
+            f"Agente {store_name}",
+            "sales",
+            tenant_id,
+            "openai",
+            "gpt-4o",
+            tools,
+            system_prompt
+        )
+        agent_id = agent["id"]
+
+        # Save knowledge sources
+        if knowledge_sources:
+            await db.pool.execute(
+                "UPDATE agents SET knowledge_sources = $1 WHERE id = $2",
+                json.dumps(knowledge_sources), agent_id
+            )
+
+        logger.info("wizard_agent_created", tenant_id=tenant_id, agent_id=agent_id, prompt_len=len(system_prompt))
 
     # Mark wizard complete
     await db.pool.execute("""
@@ -263,8 +303,7 @@ async def complete_wizard(current_user = Depends(get_wizard_user)):
         WHERE user_id = $1
     """, str(current_user.id))
 
-    logger.info("wizard_completed", tenant_id=tenant_id, agent_id=agent["id"])
-    return {"agent_id": agent["id"], "status": "active", "tenant_id": tenant_id}
+    return {"agent_id": agent_id, "status": "active", "tenant_id": tenant_id}
 
 
 @router.post("/test-agent", dependencies=[Depends(get_wizard_user)])
