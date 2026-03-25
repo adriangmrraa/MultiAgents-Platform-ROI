@@ -76,6 +76,14 @@ export const OnboardingWizard: React.FC = () => {
     const recognitionRef = useRef<any>(null);
     const silenceTimerRef = useRef<any>(null);
 
+    // Voice Architect
+    const [voiceMode, setVoiceMode] = useState(false);
+    const [voiceConsent, setVoiceConsent] = useState(false);
+    const [voiceState, setVoiceState] = useState<'idle' | 'speaking' | 'listening' | 'processing'>('idle');
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const [chatHistories, setChatHistories] = useState<Record<number, { role: string; content: string; confirmSection?: string }[]>>({});
+    const [confirmedSections, setConfirmedSections] = useState<Record<string, boolean>>({});
+
     // Step 6 (Test)
     const [testMessage, setTestMessage] = useState('');
     const [testResponse, setTestResponse] = useState('');
@@ -139,35 +147,62 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     const goNext = async () => {
+        // Save current chat history before moving
+        if (step >= 3 && step <= 5 && chatMessages.length > 0) {
+            setChatHistories(prev => ({ ...prev, [step]: chatMessages }));
+        }
         const next = step + 1;
         await saveProgress(next);
         setStep(next);
-        // Reset chat for new step
         if (next >= 3 && next <= 5) {
-            setChatMessages([]);
             setSectionDraft('');
             setSectionComplete(false);
-            initChat(next);
+            // Load history if exists, otherwise fresh start
+            if (chatHistories[next] && chatHistories[next].length > 0) {
+                setChatMessages(chatHistories[next]);
+            } else {
+                setChatMessages([]);
+                if (voiceConsent) {
+                    initChatWithVoice(next);
+                } else {
+                    initChat(next);
+                }
+            }
         }
     };
 
     const goBack = () => {
         if (step > 1) {
-            setStep(step - 1);
-            // Reset chat state when going back to a chat step
-            setChatMessages([]);
+            // Save current chat history
+            if (step >= 3 && step <= 5 && chatMessages.length > 0) {
+                setChatHistories(prev => ({ ...prev, [step]: chatMessages }));
+            }
+            const prev = step - 1;
+            setStep(prev);
             setSectionDraft('');
             setSectionComplete(false);
+            // Restore history if going back to a chat step
+            if (prev >= 3 && prev <= 5 && chatHistories[prev]) {
+                setChatMessages(chatHistories[prev]);
+            } else {
+                setChatMessages([]);
+            }
         }
     };
 
     const goToStep = (targetStep: number) => {
-        // Can only go to completed steps or current step
         if (targetStep < step && targetStep >= 1) {
+            if (step >= 3 && step <= 5 && chatMessages.length > 0) {
+                setChatHistories(prev => ({ ...prev, [step]: chatMessages }));
+            }
             setStep(targetStep);
-            setChatMessages([]);
             setSectionDraft('');
             setSectionComplete(false);
+            if (targetStep >= 3 && targetStep <= 5 && chatHistories[targetStep]) {
+                setChatMessages(chatHistories[targetStep]);
+            } else {
+                setChatMessages([]);
+            }
         }
     };
 
@@ -234,9 +269,7 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     useEffect(() => {
-        if (step >= 3 && step <= 5 && chatMessages.length === 0) {
-            initChat(step);
-        }
+        // Chat init is now handled by consent card (acceptVoice/declineVoice) or goNext
     }, [step]);
 
     const sendChatMessage = async (text?: string) => {
@@ -314,6 +347,199 @@ export const OnboardingWizard: React.FC = () => {
         clearTimeout(silenceTimerRef.current);
         setIsRecording(false);
     };
+
+    // --- Voice Architect: TTS + Auto-cycle ---
+
+    const getApiBase = () => {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1') return 'http://localhost:3000';
+        if (hostname.includes('platform-ui')) return window.location.protocol + '//' + hostname.replace('platform-ui', 'orchestrator-service');
+        return '/api';
+    };
+
+    const playTTS = async (text: string): Promise<void> => {
+        if (!text || text.length < 2) return;
+        setVoiceState('speaking');
+        try {
+            const { ADMIN_TOKEN } = await import('../hooks/useApi');
+            const res = await fetch(`${getApiBase()}/admin/onboarding/tts`, {
+                method: 'POST',
+                headers: { 'x-admin-token': ADMIN_TOKEN || '', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+                credentials: 'include'
+            });
+            if (!res.ok) { setVoiceState('idle'); return; }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audioRef.current = audio;
+            await new Promise<void>((resolve) => {
+                audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+                audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+                audio.play().catch(() => resolve());
+            });
+        } catch (e) {
+            console.warn('[VoiceArchitect] TTS failed:', e);
+        }
+        setVoiceState('idle');
+    };
+
+    const startAutoListen = () => {
+        if (!voiceMode) return;
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (!SpeechRecognition) return;
+
+        setVoiceState('listening');
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'es-AR';
+        recognition.continuous = true;
+        recognition.interimResults = false;
+
+        let lastResultTime = Date.now();
+        let accumulated = '';
+
+        recognition.onresult = (event: any) => {
+            const text = event.results[event.results.length - 1][0].transcript;
+            accumulated += (accumulated ? ' ' : '') + text;
+            lastResultTime = Date.now();
+
+            // Reset silence timers
+            clearTimeout(silenceTimerRef.current);
+            // 2s silence → send what we have
+            silenceTimerRef.current = setTimeout(() => {
+                if (accumulated.trim()) {
+                    const toSend = accumulated.trim();
+                    accumulated = '';
+                    recognition.stop();
+                    recognitionRef.current = null;
+                    setIsRecording(false);
+                    setVoiceState('processing');
+                    sendAndSpeak(toSend);
+                }
+            }, 2000);
+        };
+
+        // 15s total silence → stop mic
+        const totalSilenceTimer = setTimeout(() => {
+            if (recognitionRef.current) {
+                recognition.stop();
+                recognitionRef.current = null;
+                setIsRecording(false);
+                setVoiceState('idle');
+            }
+        }, 15000);
+
+        recognition.onend = () => {
+            clearTimeout(totalSilenceTimer);
+            setIsRecording(false);
+            if (voiceState === 'listening') setVoiceState('idle');
+        };
+
+        recognition.onerror = () => {
+            clearTimeout(totalSilenceTimer);
+            setIsRecording(false);
+            setVoiceState('idle');
+        };
+
+        recognition.start();
+        recognitionRef.current = recognition;
+        setIsRecording(true);
+    };
+
+    const sendAndSpeak = async (text: string) => {
+        if (!text.trim()) return;
+        setChatMessages(prev => [...prev, { role: 'user', content: text }]);
+        setChatLoading(true);
+        setVoiceState('processing');
+        try {
+            const res = await fetchApi('/admin/onboarding/interview-step', {
+                method: 'POST',
+                body: { session_id: chatSessionId + `_s${step}`, user_message: text, step, tenant_id: tenantId || 0 }
+            });
+            if (res?.ai_message) {
+                const msg: any = { role: 'assistant', content: res.ai_message };
+                if (res.confirm_section) msg.confirmSection = res.confirm_section;
+                setChatMessages(prev => [...prev, msg]);
+
+                if (res.section_complete && res.extracted_draft) {
+                    setSectionComplete(true);
+                    setSectionDraft(res.extracted_draft);
+                }
+
+                // Play TTS and then auto-listen
+                if (voiceMode && !res.section_complete) {
+                    setChatLoading(false);
+                    await playTTS(res.ai_message);
+                    startAutoListen();
+                    return;
+                }
+            }
+        } catch (e) {
+            setChatMessages(prev => [...prev, { role: 'assistant', content: 'Error de conexion. Intenta de nuevo.' }]);
+        }
+        setChatLoading(false);
+        setVoiceState('idle');
+    };
+
+    const acceptVoice = async () => {
+        setVoiceConsent(true);
+        try {
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+            setVoiceMode(true);
+        } catch (e) {
+            // Mic denied — TTS only mode
+            setVoiceMode(false);
+        }
+        // Start the chat and speak the first message
+        await initChatWithVoice(step);
+    };
+
+    const declineVoice = () => {
+        setVoiceConsent(true);
+        setVoiceMode(false);
+        initChat(step);
+    };
+
+    const initChatWithVoice = async (chatStep: number) => {
+        // Check if we have history for this step
+        if (chatHistories[chatStep] && chatHistories[chatStep].length > 0) {
+            setChatMessages(chatHistories[chatStep]);
+            return; // Don't re-init, resume
+        }
+        setChatLoading(true);
+        try {
+            const res = await fetchApi('/admin/onboarding/interview-step', {
+                method: 'POST',
+                body: { session_id: chatSessionId + `_s${chatStep}`, user_message: 'INIT', step: chatStep, tenant_id: tenantId || 0, reset: true }
+            });
+            if (res?.ai_message) {
+                setChatMessages([{ role: 'assistant', content: res.ai_message }]);
+                setChatLoading(false);
+                if (voiceMode) {
+                    await playTTS(res.ai_message);
+                    startAutoListen();
+                }
+                return;
+            }
+        } catch (e) { /* fallback */ }
+        setChatLoading(false);
+    };
+
+    const handleConfirm = (section: string) => {
+        setConfirmedSections(prev => ({ ...prev, [section]: true }));
+        if (voiceMode) {
+            sendAndSpeak(`CONFIRMADO: ${section}`);
+        }
+    };
+
+    // Save chat history when leaving a step
+    useEffect(() => {
+        return () => {
+            if (step >= 3 && step <= 5 && chatMessages.length > 0) {
+                setChatHistories(prev => ({ ...prev, [step]: chatMessages }));
+            }
+        };
+    }, [step, chatMessages]);
 
     // --- Step 6: Test Agent ---
     const testAgent = async () => {
@@ -533,35 +759,122 @@ export const OnboardingWizard: React.FC = () => {
                         </div>
                     )}
 
-                    {/* === STEPS 3-4-5: Chat === */}
+                    {/* === STEPS 3-4-5: Voice Architect Chat === */}
                     {step >= 3 && step <= 5 && (
                         <div className="flex flex-col h-[calc(100vh-160px)] animate-fade-in">
-                            <div className="text-center mb-4">
-                                <h2 className="text-lg font-bold text-white">
-                                    {step === 3 ? 'Identidad de tu Negocio' : step === 4 ? 'Reglas de Negocio' : 'Diccionario de Sinonimos'}
-                                </h2>
-                                <p className="text-slate-500 text-xs mt-1">Conversa con el arquitecto para configurar esta seccion</p>
+                            {/* Header with voice toggle */}
+                            <div className="flex items-center justify-between mb-3">
+                                <div>
+                                    <h2 className="text-lg font-bold text-white">
+                                        {step === 3 ? 'Identidad de tu Negocio' : step === 4 ? 'Reglas de Negocio' : 'Diccionario de Sinonimos'}
+                                    </h2>
+                                    <p className="text-slate-500 text-xs mt-0.5">Conversa con la arquitecta de tu agente</p>
+                                </div>
+                                {voiceConsent && (
+                                    <button onClick={() => { setVoiceMode(!voiceMode); if (voiceMode) stopRecording(); }}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-all active:scale-95 ${
+                                            voiceMode ? 'bg-violet-600 text-white' : 'bg-white/5 text-slate-500 hover:bg-white/10'
+                                        }`}>
+                                        {voiceMode ? <Volume2 size={12} /> : <Mic size={12} />}
+                                        {voiceMode ? 'Voz activa' : 'Modo texto'}
+                                    </button>
+                                )}
                             </div>
 
-                            {!sectionComplete ? (
+                            {/* Consent Card (first time only) */}
+                            {!voiceConsent ? (
+                                <div className="flex-1 flex items-center justify-center">
+                                    <div className="glass p-6 rounded-2xl border border-violet-500/20 max-w-sm text-center space-y-4">
+                                        <div className="w-16 h-16 bg-violet-600/20 rounded-2xl flex items-center justify-center mx-auto">
+                                            <Mic size={28} className="text-violet-400" />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-white">Experiencia de voz</h3>
+                                        <p className="text-slate-400 text-sm leading-relaxed">
+                                            Vamos a conversar por voz con tu arquitecta de IA para crear la personalidad perfecta de tu agente.
+                                        </p>
+                                        <p className="text-slate-600 text-[10px]">
+                                            Los datos de voz se usan exclusivamente para configurar tu agente.
+                                        </p>
+                                        <button onClick={acceptVoice}
+                                            className="w-full py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-violet-600/20 flex items-center justify-center gap-2">
+                                            <Mic size={16} /> Iniciar experiencia de voz
+                                        </button>
+                                        <button onClick={declineVoice}
+                                            className="w-full py-2 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                                            Prefiero escribir
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : !sectionComplete ? (
                                 <>
-                                    {/* Chat Messages */}
-                                    <div className="flex-1 overflow-y-auto space-y-3 mb-3 px-1">
-                                        {chatMessages.map((msg, i) => (
-                                            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${
-                                                    msg.role === 'user'
-                                                        ? 'bg-violet-600 text-white rounded-br-sm'
-                                                        : 'bg-white/5 border border-white/5 text-slate-200 rounded-bl-sm'
-                                                }`}>
-                                                    {msg.content}
+                                    {/* Voice State Indicator */}
+                                    {voiceMode && voiceState !== 'idle' && (
+                                        <div className="mb-3 flex items-center justify-center gap-2 py-2">
+                                            {voiceState === 'speaking' && (
+                                                <div className="flex items-center gap-2 text-violet-400">
+                                                    <div className="flex gap-0.5 items-center h-5">
+                                                        {[1,2,3,4,5].map(i => (
+                                                            <div key={i} className="w-1 bg-violet-500 rounded-full animate-pulse" style={{ height: `${8 + Math.random()*12}px`, animationDelay: `${i*0.1}s` }} />
+                                                        ))}
+                                                    </div>
+                                                    <span className="text-xs font-medium">La arquitecta esta hablando...</span>
                                                 </div>
+                                            )}
+                                            {voiceState === 'listening' && (
+                                                <div className="flex items-center gap-2 text-red-400">
+                                                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                                                    <span className="text-xs font-medium">Te escucho...</span>
+                                                </div>
+                                            )}
+                                            {voiceState === 'processing' && (
+                                                <div className="flex items-center gap-2 text-amber-400">
+                                                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                                    <span className="text-xs font-medium">Procesando...</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Chat Messages with inline confirm buttons */}
+                                    <div className="flex-1 overflow-y-auto space-y-3 mb-3 px-1">
+                                        {chatMessages.map((msg: any, i: number) => (
+                                            <div key={i}>
+                                                <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                                    <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${
+                                                        msg.role === 'user'
+                                                            ? 'bg-violet-600 text-white rounded-br-sm'
+                                                            : 'bg-white/5 border border-white/5 text-slate-200 rounded-bl-sm'
+                                                    }`}>
+                                                        {msg.content}
+                                                    </div>
+                                                </div>
+                                                {/* Inline confirm button */}
+                                                {msg.confirmSection && (
+                                                    <div className="flex justify-start mt-1.5 ml-2">
+                                                        {confirmedSections[msg.confirmSection] ? (
+                                                            <div className="flex items-center gap-1.5 text-green-400 text-xs px-3 py-1.5 bg-green-500/10 rounded-lg">
+                                                                <CheckCircle size={12} /> {msg.confirmSection} confirmado
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => handleConfirm(msg.confirmSection)}
+                                                                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-all active:scale-95">
+                                                                    <Check size={12} /> Confirmar {msg.confirmSection}
+                                                                </button>
+                                                                <button onClick={() => { if (voiceMode) sendAndSpeak('Quiero cambiar algo de esto'); else sendChatMessage('Quiero cambiar algo de esto'); }}
+                                                                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-400 rounded-lg transition-all active:scale-95">
+                                                                    Cambiar algo
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                         {chatLoading && (
                                             <div className="flex justify-start">
                                                 <div className="bg-white/5 rounded-2xl px-4 py-3 text-sm text-slate-500 animate-pulse">
-                                                    Escribiendo...
+                                                    Pensando...
                                                 </div>
                                             </div>
                                         )}
@@ -570,33 +883,32 @@ export const OnboardingWizard: React.FC = () => {
 
                                     {/* Chat Input */}
                                     <div className="flex gap-2 shrink-0 pb-2">
-                                        {hasSpeechAPI && (
-                                            <button onClick={toggleRecording}
-                                                className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all active:scale-90 shrink-0 ${
-                                                    isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white/5 text-slate-400 hover:bg-white/10'
-                                                }`}>
-                                                {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
-                                            </button>
-                                        )}
+                                        <button onClick={() => { if (voiceMode && voiceState === 'idle') startAutoListen(); else if (isRecording) stopRecording(); else toggleRecording(); }}
+                                            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all active:scale-90 shrink-0 ${
+                                                isRecording || voiceState === 'listening' ? 'bg-red-500 text-white animate-pulse' : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                                            }`}>
+                                            {isRecording || voiceState === 'listening' ? <MicOff size={18} /> : <Mic size={18} />}
+                                        </button>
                                         <input value={chatInput} onChange={e => setChatInput(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && sendChatMessage()}
-                                            placeholder="Escribe o habla..."
+                                            onKeyDown={e => { if (e.key === 'Enter') { voiceMode ? sendAndSpeak(chatInput) : sendChatMessage(); setChatInput(''); } }}
+                                            placeholder={voiceMode ? 'Habla o escribe...' : 'Escribe tu respuesta...'}
                                             className={`${inputClass} flex-1`} />
-                                        <button onClick={() => sendChatMessage()} disabled={chatLoading || !chatInput.trim()}
+                                        <button onClick={() => { const t = chatInput.trim(); setChatInput(''); if (t) { voiceMode ? sendAndSpeak(t) : sendChatMessage(t); } }}
+                                            disabled={chatLoading || !chatInput.trim()}
                                             className="w-11 h-11 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white rounded-xl flex items-center justify-center transition-all active:scale-90 shrink-0">
                                             <Send size={16} />
                                         </button>
                                     </div>
 
-                                    {/* Manual "Listo" button */}
+                                    {/* Bottom actions */}
                                     <div className="flex gap-2 mt-1">
                                         <button onClick={goBack}
                                             className="flex-1 py-2 text-xs text-slate-500 hover:text-white transition-colors flex items-center justify-center gap-1">
                                             <ArrowLeft size={12} /> Atras
                                         </button>
-                                        <button onClick={() => sendChatMessage('Ya tengo todo listo, genera el resumen.')}
+                                        <button onClick={() => { const msg = 'Ya tengo todo listo, genera el resumen.'; voiceMode ? sendAndSpeak(msg) : sendChatMessage(msg); }}
                                             className="flex-1 py-2 text-xs text-slate-500 hover:text-violet-400 transition-colors">
-                                            Ya termine esta seccion →
+                                            Ya termine esta seccion
                                         </button>
                                     </div>
                                 </>

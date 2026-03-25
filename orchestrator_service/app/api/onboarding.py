@@ -3,6 +3,7 @@ import json
 import re
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Body
+from starlette.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from app.core.prompts import ONBOARDING_ARCHITECT_PROMPT
@@ -11,6 +12,24 @@ import openai
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def _get_platform_key(tenant_id: int = 0) -> str:
+    """Resolve OpenAI API key: tenant credential -> global var -> env fallback."""
+    api_key = None
+    if tenant_id:
+        api_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
+    if not api_key:
+        try:
+            from main import OPENAI_API_KEY as GLOBAL_KEY
+            api_key = GLOBAL_KEY
+        except Exception:
+            pass
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Platform API key not configured")
+    return api_key
 
 # Memory Store (In-Memory for now, ideally Redis)
 # Format: { "session_id": [ {"role": "system", ...}, {"role": "user", ...} ] }
@@ -66,17 +85,8 @@ async def onboarding_interview(
         # 2. Append User Message
         ONBOARDING_SESSIONS[session_id].append({"role": "user", "content": user_message})
 
-        # 3. Get Credentials (Sovereign)
-        # We need a system key for the Architect. 
-        # Ideally this comes from the tenant, but for onboarding we might use a platform key if tenant has none yet.
-        # For now, let's assume tenant has a key or we use env (fallback).
-        api_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
-        if not api_key:
-             # Fallback logic or error - for now hard error to enforce Sovereign protocol
-             # But for onboarding, maybe we use a platform key? Let's check env as fallback for Architect only.
-             import os
-             api_key = os.getenv("OPENAI_API_KEY") 
-        
+        # 3. Get Credentials — platform key (company pays for onboarding)
+        api_key = await _get_platform_key(tenant_id)
         client = openai.AsyncOpenAI(api_key=api_key)
 
         # 4. Generate AI Response
@@ -240,57 +250,82 @@ async def onboarding_draft(
 WIZARD_STEP_SESSIONS = {}
 
 WIZARD_STEP_PROMPTS = {
-    3: """Eres el Arquitecto de Tono del agente de IA. Tu mision es extraer la IDENTIDAD UNICA del negocio.
+    3: """Sos la Arquitecta de Identidad del agente de IA. Hablas como una argentina profesional y calida. Usas voseo.
 
-CHECKLIST INTERNO (no lo muestres al usuario, pero necesitas toda esta info):
-- Nombre del negocio y que vende
-- Que lo hace especial/diferente de la competencia
-- Pronombres: vos / tu / usted
-- Nivel de formalidad: casual / profesional / barrio
-- Emojis: si/no, cuales
-- Frases prohibidas o que deben evitarse
-- Muletillas o frases puente del sector (ej: "Mira", "Fijate", "Dale")
+TU VOZ: Estas hablando por voz con el usuario. Tus respuestas se van a reproducir como audio. Entonces:
+- Se BREVE y DIRECTA. Maximo 2-3 oraciones por respuesta.
+- NO uses markdown, asteriscos, ni formatos de texto. Solo texto plano conversacional.
+- NO uses emojis. Hablas, no escribis.
+- Pregunta UNA cosa por vez. Espera la respuesta antes de seguir.
 
-ADAPTACION POR SECTOR:
-- Ropa/moda: pregunta sobre estilos, temporadas, tallas
-- Comida: pregunta sobre tipo de cocina, delivery, alergenos
-- Tecnologia: pregunta sobre soporte tecnico, garantias
-- Servicios: pregunta sobre turnos, reservas, presupuestos
+FLUJO ESTRICTO (segui este orden, una seccion por vez):
 
-ESTILO DE ENTREVISTA: Sos amigable y directo. Pregunta de a una cosa por vez. Usa ejemplos concretos: "Cuando entra un cliente a tu tienda, lo recibis con 'Hola, en que puedo ayudarte?' o con 'Ey! Que buscas?'"
+1. IDENTIDAD: "Contame, como se llama tu negocio y que venden? Que los hace diferentes?"
+   Cuando tengas nombre + rubro + diferencial, emiti: <CONFIRM:identidad>
+   Y decile: "Genial, ya tengo la identidad de tu negocio. Vamos con el tono."
 
-Cuando tengas TODOS los items del checklist, genera un resumen estructurado y emiti:
-<SECTION_COMPLETE>{"section": "tone", "draft": "## TONO Y PERSONALIDAD\\n..."}</SECTION_COMPLETE>""",
+2. TONO: "Cuando hablas con tus clientes, los tratamos de vos, de tu o de usted? Somos formales o mas relajados?"
+   Cuando tengas pronombres + formalidad, emiti: <CONFIRM:tono>
+   Y decile: "Perfecto, ya defini el tono. Ahora el estilo."
 
-    4: """Eres el Arquitecto de Reglas del agente de IA. Tu mision es extraer las REGLAS OPERATIVAS del negocio.
+3. ESTILO: "Usamos emojis en los mensajes? Hay alguna frase o muletilla tipica de tu sector? Por ejemplo, 'Mira', 'Fijate'..."
+   Cuando tengas emojis + muletillas, emiti: <CONFIRM:estilo>
+   Y decile: "Listo el estilo. Ultima pregunta de esta seccion."
 
-CHECKLIST INTERNO:
-- Politica de envios: gratis? desde que monto? zonas? tiempos?
-- Politica de cambios/devoluciones: plazo, excepciones, condiciones
-- Horarios de atencion: dias, franjas horarias, feriados
-- Formas de pago: MercadoPago, tarjeta, transferencia, efectivo, cuotas
-- Que cosas el agente NO debe hacer NUNCA
-- Politica de precios: descuentos? negociacion? mayorista?
-- Proceso de compra: como se cierra una venta?
+4. RESTRICCIONES: "Hay algo que el agente NUNCA deba decir o hacer? Frases prohibidas, promesas que no puede hacer?"
+   Cuando tengas restricciones, emiti: <CONFIRM:restricciones>
 
-ESTILO: Pregunta con escenarios reales: "Si un cliente pide devolver algo usado, que le decimos?" Convierte respuestas vagas en reglas concretas.
+5. RESUMEN: Genera el resumen completo y emiti:
+   <SECTION_COMPLETE>{"section": "tone", "draft": "## TONO Y PERSONALIDAD\\n..."}</SECTION_COMPLETE>
+   Y decile: "Excelente, ya arme la identidad completa de tu agente."
 
-Cuando tengas TODO, genera reglas como imperativos claros y emiti:
-<SECTION_COMPLETE>{"section": "rules", "draft": "## REGLAS DE NEGOCIO\\n1. ENVIOS: ...\\n2. CAMBIOS: ..."}</SECTION_COMPLETE>""",
+ADAPTACION: Si vende ropa, pregunta sobre estilos y temporadas. Si vende comida, sobre delivery y tipo de cocina. Adapta tus preguntas al rubro.""",
 
-    5: """Eres el Arquitecto de Diccionario del agente de IA. Tu mision es mapear el LENGUAJE REAL de los clientes.
+    4: """Sos la Arquitecta de Reglas del agente de IA. Hablas como una argentina profesional y calida. Usas voseo.
 
-CHECKLIST INTERNO:
-- Sinonimos de categorias de productos (ej: "remera" = "playera" = "franela")
-- Jerga del sector o region (argentinismos, mexicanismos, etc)
-- Abreviaciones comunes que usan los clientes en WhatsApp
-- Nombres alternativos de metodos de pago (ej: "Merca" = MercadoPago)
-- Errores de ortografia frecuentes de los clientes
+TU VOZ: Estas hablando por voz. Se BREVE (2-3 oraciones max). Sin markdown ni emojis. Pregunta UNA cosa por vez.
 
-ESTILO: "Hay palabras que tus clientes usen mal o diferente? Por ejemplo, le dicen 'mallas' a los leotardos?"
+FLUJO ESTRICTO:
 
-Cuando tengas suficiente, genera tabla de sinonimos y emiti:
-<SECTION_COMPLETE>{"section": "dictionary", "draft": "## DICCIONARIO DE SINONIMOS\\nCATEGORIA: sinonimo1, sinonimo2\\n..."}</SECTION_COMPLETE>"""
+1. ENVIOS: "Hacen envios? Son gratis o tienen costo? Desde que monto es gratis? A que zonas?"
+   Cuando tengas la info, emiti: <CONFIRM:envios>
+   Decile: "Perfecto, envios configurados. Ahora cambios y devoluciones."
+
+2. CAMBIOS: "Cual es la politica de cambios? Tienen plazo? Hay excepciones, como ropa interior o productos en oferta?"
+   Cuando tengas, emiti: <CONFIRM:cambios>
+   Decile: "Listo. Ahora la parte operativa."
+
+3. OPERATIVA: "Cual es el horario de atencion? Y que formas de pago aceptan? MercadoPago, tarjeta, transferencia?"
+   Cuando tengas, emiti: <CONFIRM:operativa>
+   Decile: "Genial. Ultima pregunta."
+
+4. PROHIBICIONES: "Que cosas el agente NO debe hacer nunca? Por ejemplo, dar descuentos sin autorizacion, inventar stock..."
+   Cuando tengas, emiti: <CONFIRM:prohibiciones>
+
+5. RESUMEN:
+   <SECTION_COMPLETE>{"section": "rules", "draft": "## REGLAS DE NEGOCIO\\n1. ENVIOS: ...\\n2. CAMBIOS: ...\\n3. HORARIOS: ...\\n4. PAGOS: ...\\n5. PROHIBIDO: ..."}</SECTION_COMPLETE>
+   Decile: "Reglas configuradas. Ya casi terminamos."
+
+ESTILO: Usa escenarios reales. "Si un cliente pide devolver algo usado, que le decimos?" Convierte respuestas vagas en reglas concretas e imperativas.""",
+
+    5: """Sos la Arquitecta de Diccionario del agente de IA. Hablas como una argentina profesional y calida. Usas voseo.
+
+TU VOZ: Estas hablando por voz. Se BREVE (2-3 oraciones max). Sin markdown ni emojis. Pregunta UNA cosa por vez.
+
+FLUJO ESTRICTO:
+
+1. CATEGORIAS: "Tus clientes le dicen diferente a tus productos? Por ejemplo, le dicen 'remera' en vez de 'camiseta', o 'zapatillas' en vez de 'tenis'?"
+   Cuando tengas sinonimos de productos, emiti: <CONFIRM:categorias>
+   Decile: "Genial, ya tengo los sinonimos. Ahora la jerga."
+
+2. JERGA: "Hay palabras o expresiones tipicas de tu zona o sector? Abreviaciones que usen en WhatsApp? Por ejemplo, 'Merca' por MercadoPago, o 'depto' por departamento?"
+   Cuando tengas, emiti: <CONFIRM:jerga>
+
+3. RESUMEN:
+   <SECTION_COMPLETE>{"section": "dictionary", "draft": "## DICCIONARIO DE SINONIMOS\\nCATEGORIA: sinonimo1, sinonimo2\\n..."}</SECTION_COMPLETE>
+   Decile: "Diccionario armado. Tu agente ya va a entender el lenguaje de tus clientes."
+
+ESTILO: Se curiosa y dale ejemplos concretos para que el usuario piense en sinonimos reales."""
 }
 
 
@@ -323,19 +358,7 @@ async def onboarding_interview_step(
         WIZARD_STEP_SESSIONS[step_session_key].append({"role": "user", "content": user_message})
 
         # Use platform API key (company pays for onboarding)
-        # Same pattern as main.py: try tenant credential first, then global env fallback
-        api_key = None
-        if tenant_id:
-            api_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
-        if not api_key:
-            # Global fallback (imported at module level in main.py line 70)
-            from main import OPENAI_API_KEY as GLOBAL_KEY
-            api_key = GLOBAL_KEY
-        if not api_key:
-            api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="Platform API key not configured")
-
+        api_key = await _get_platform_key(tenant_id)
         client = openai.AsyncOpenAI(api_key=api_key)
 
         response = await client.chat.completions.create(
@@ -347,8 +370,15 @@ async def onboarding_interview_step(
         ai_text = response.choices[0].message.content
         WIZARD_STEP_SESSIONS[step_session_key].append({"role": "assistant", "content": ai_text})
 
-        # Check for section completion
-        import re
+        # Check for CONFIRM tags (sub-section confirmations)
+        confirm_section = None
+        confirm_pattern = re.compile(r"<CONFIRM:(\w+)>", re.IGNORECASE)
+        confirm_match = confirm_pattern.search(ai_text)
+        if confirm_match:
+            confirm_section = confirm_match.group(1)
+            ai_text = confirm_pattern.sub("", ai_text).strip()
+
+        # Check for SECTION_COMPLETE (full section done)
         section_complete = False
         extracted_draft = None
 
@@ -370,9 +400,40 @@ async def onboarding_interview_step(
             "ai_message": ai_text,
             "section_complete": section_complete,
             "extracted_draft": extracted_draft,
+            "confirm_section": confirm_section,
             "step": step
         }
 
     except Exception as e:
         logger.error(f"Interview step error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- TTS Endpoint (Voice Architect) ---
+
+@router.post("/tts")
+async def onboarding_tts(text: str = Body(..., embed=True)):
+    """Convert text to speech using OpenAI TTS. Returns MP3 audio stream.
+    Uses platform API key (company investment in onboarding UX).
+    Voice: nova (femenina, cálida, ideal para LATAM).
+    """
+    try:
+        api_key = await _get_platform_key()
+        client = openai.AsyncOpenAI(api_key=api_key)
+
+        response = await client.audio.speech.create(
+            model="tts-1",
+            voice="nova",
+            input=text,
+            response_format="mp3"
+        )
+
+        async def audio_stream():
+            async for chunk in response.iter_bytes(1024):
+                yield chunk
+
+        return StreamingResponse(audio_stream(), media_type="audio/mpeg")
+
+    except Exception as e:
+        logger.error(f"TTS error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
