@@ -98,30 +98,36 @@ function OnboardingGate({ children }: { children: JSX.Element }) {
 
   useEffect(() => {
     if (isLoading || !user) return;
-    // Skip check if already on the wizard page
     if (location.pathname === '/onboarding-wizard') { setChecked(true); return; }
-    // Super admin skips
     if ((user as any)?.role === 'super_admin') { setChecked(true); return; }
 
     const checkOnboarding = async () => {
       try {
         const { ADMIN_TOKEN } = await import('./hooks/useApi');
+
+        // Same API base detection as useApi
         const hostname = window.location.hostname;
-        let API_BASE = '/api';
-        if (hostname === 'localhost' || hostname === '127.0.0.1') API_BASE = 'http://localhost:3000';
-        else if (hostname.includes('platform-ui')) API_BASE = window.location.protocol + '//' + hostname.replace('platform-ui', 'orchestrator-service');
-        const token = ADMIN_TOKEN || '';
-        const res = await fetch(`${API_BASE}/admin/onboarding-wizard/progress`, {
-          headers: { 'x-admin-token': token, 'Content-Type': 'application/json' },
+        let base = '/api';
+        if (hostname === 'localhost' || hostname === '127.0.0.1') base = 'http://localhost:3000';
+        else if (hostname.includes('platform-ui')) base = window.location.protocol + '//' + hostname.replace('platform-ui', 'orchestrator-service');
+
+        const res = await fetch(`${base}/admin/onboarding-wizard/progress`, {
+          headers: {
+            'x-admin-token': ADMIN_TOKEN || '',
+            'Content-Type': 'application/json'
+          },
           credentials: 'include'
         });
+
         if (res.ok) {
           const data = await res.json();
-          if (data.should_show_wizard) {
+          if (data.should_show_wizard === true) {
             setNeedsWizard(true);
           }
         }
-      } catch (e) { /* non-blocking */ }
+      } catch (e) {
+        console.warn('[OnboardingGate] Check failed:', e);
+      }
       setChecked(true);
     };
     checkOnboarding();

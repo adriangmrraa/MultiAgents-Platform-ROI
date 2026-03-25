@@ -65,6 +65,17 @@ async def get_progress(current_user: User = Depends(get_current_user)):
         )
         has_agents = count > 0
 
+    # Debug info for troubleshooting
+    logger.info("onboarding_progress_check",
+        user_id=str(current_user.id),
+        email=current_user.email,
+        role=current_user.role,
+        tenant_id=tenant_id,
+        has_agents=has_agents,
+        completed_at=str(progress.get("completed_at")),
+        current_step=progress.get("current_step")
+    )
+
     return {
         **progress,
         "has_existing_agents": has_agents,
