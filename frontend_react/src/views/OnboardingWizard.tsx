@@ -212,7 +212,7 @@ export const OnboardingWizard: React.FC = () => {
 
     // --- Step 2: Meta ---
     const connectMeta = () => {
-        const clientId = (import.meta as any).env?.VITE_META_APP_ID || '';
+        const clientId = import.meta.env.VITE_FACEBOOK_APP_ID || '';
         const redirectUri = encodeURIComponent(window.location.origin + '/settings/meta');
         const scope = 'pages_show_list,pages_messaging,instagram_basic,instagram_manage_messages,whatsapp_business_management,business_management';
         const url = `https://www.facebook.com/v22.0/dialog/oauth?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
