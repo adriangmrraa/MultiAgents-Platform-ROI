@@ -665,10 +665,28 @@ export const OnboardingWizard: React.FC = () => {
         setVoiceState('idle');
     };
 
+    // Extract Meta data before starting chat (context for architect)
+    const [metaContext, setMetaContext] = useState('');
+
+    const extractMetaData = async () => {
+        if (metaContext) return metaContext; // already extracted
+        try {
+            const res = await fetchApi('/admin/onboarding/extract-meta-data', {
+                method: 'POST', body: { tenant_id: tenantId || 0 }
+            });
+            if (res?.context) {
+                setMetaContext(res.context);
+                return res.context;
+            }
+        } catch(e) { console.warn('Meta extraction failed:', e); }
+        return '';
+    };
+
     const acceptVoice = async () => {
         setVoiceConsent(true);
-        // Persist voice consent so it's remembered on reload
         saveProgress(step, { voice_consent: true });
+        // Extract Meta data first
+        const context = await extractMetaData();
         try {
             await navigator.mediaDevices.getUserMedia({ audio: true });
             setVoiceMode(true);
@@ -723,12 +741,16 @@ export const OnboardingWizard: React.FC = () => {
             return;
         }
 
-        // Fresh start — no history
+        // Fresh start — no history. Include Meta context if available
         setChatLoading(true);
+        const ctx = metaContext || await extractMetaData();
+        const initMessage = ctx
+            ? `INIT. CONTEXTO EXTRAIDO DE LAS REDES SOCIALES DEL NEGOCIO:\n${ctx}\n\nUsa esta informacion para personalizar tus preguntas y demostrar que ya conoces el negocio.`
+            : 'INIT';
         try {
             const res = await fetchApi('/admin/onboarding/interview-step', {
                 method: 'POST',
-                body: { session_id: chatSessionId + `_s${chatStep}`, user_message: 'INIT', step: chatStep, tenant_id: tenantId || 0, reset: true }
+                body: { session_id: chatSessionId + `_s${chatStep}`, user_message: initMessage, step: chatStep, tenant_id: tenantId || 0, reset: true }
             });
             if (res?.ai_message) {
                 setChatMessages([{ role: 'assistant', content: res.ai_message }]);

@@ -525,3 +525,142 @@ async def onboarding_tts(text: str = Body(..., embed=True)):
     except Exception as e:
         logger.error(f"TTS error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Meta Data Extraction (for Architect context) ---
+
+@router.post("/extract-meta-data")
+async def extract_meta_data(tenant_id: int = Body(0, embed=True)):
+    """
+    Extract business data from connected Meta assets (FB pages + Instagram).
+    Uses stored tokens to fetch profile info, recent posts, bio, category.
+    Returns structured context for the architect to use.
+    """
+    from db import db
+    from utils import decrypt_password
+    import httpx
+
+    if not tenant_id:
+        return {"context": "", "assets": []}
+
+    try:
+        # 1. Get business assets from DB
+        assets = await db.pool.fetch(
+            "SELECT asset_type, content FROM business_assets WHERE tenant_id = $1 AND is_active = true",
+            tenant_id
+        )
+
+        extracted = []
+        api_version = "v22.0"
+
+        for asset in assets:
+            asset_type = asset["asset_type"]
+            content = asset["content"] if isinstance(asset["content"], dict) else json.loads(asset["content"] or "{}")
+            asset_id = content.get("id", "")
+            asset_name = content.get("name", "") or content.get("username", "")
+
+            if not asset_id:
+                continue
+
+            # Get token for this asset
+            token_row = await db.pool.fetchrow(
+                "SELECT value FROM credentials WHERE tenant_id = $1 AND name = $2",
+                tenant_id, f"META_PAGE_TOKEN_{asset_id}"
+            )
+            # Try linked page token for Instagram
+            if not token_row and asset_type == "instagram":
+                linked_page_id = content.get("linked_page_id")
+                if linked_page_id:
+                    token_row = await db.pool.fetchrow(
+                        "SELECT value FROM credentials WHERE tenant_id = $1 AND name = $2",
+                        tenant_id, f"META_PAGE_TOKEN_{linked_page_id}"
+                    )
+
+            if not token_row:
+                extracted.append({"type": asset_type, "name": asset_name, "data": "Token no disponible"})
+                continue
+
+            token = decrypt_password(token_row["value"])
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                if asset_type == "page":
+                    # Facebook Page: name, category, about, description, fan_count
+                    resp = await client.get(
+                        f"https://graph.facebook.com/{api_version}/{asset_id}",
+                        params={"fields": "name,category,about,description,fan_count,website,phone", "access_token": token}
+                    )
+                    if resp.status_code == 200:
+                        page_data = resp.json()
+                        extracted.append({
+                            "type": "facebook_page",
+                            "name": page_data.get("name", ""),
+                            "category": page_data.get("category", ""),
+                            "about": page_data.get("about", ""),
+                            "description": page_data.get("description", ""),
+                            "fans": page_data.get("fan_count", 0),
+                            "website": page_data.get("website", ""),
+                            "phone": page_data.get("phone", ""),
+                        })
+
+                    # Recent posts
+                    posts_resp = await client.get(
+                        f"https://graph.facebook.com/{api_version}/{asset_id}/posts",
+                        params={"fields": "message,created_time", "limit": "5", "access_token": token}
+                    )
+                    if posts_resp.status_code == 200:
+                        posts = posts_resp.json().get("data", [])
+                        extracted.append({
+                            "type": "facebook_posts",
+                            "posts": [p.get("message", "")[:200] for p in posts if p.get("message")]
+                        })
+
+                elif asset_type == "instagram":
+                    # Instagram: name, username, biography, followers, media_count
+                    resp = await client.get(
+                        f"https://graph.facebook.com/{api_version}/{asset_id}",
+                        params={"fields": "name,username,biography,followers_count,media_count,website", "access_token": token}
+                    )
+                    if resp.status_code == 200:
+                        ig_data = resp.json()
+                        extracted.append({
+                            "type": "instagram_profile",
+                            "name": ig_data.get("name", ""),
+                            "username": ig_data.get("username", ""),
+                            "bio": ig_data.get("biography", ""),
+                            "followers": ig_data.get("followers_count", 0),
+                            "media_count": ig_data.get("media_count", 0),
+                            "website": ig_data.get("website", ""),
+                        })
+
+                    # Recent media captions
+                    media_resp = await client.get(
+                        f"https://graph.facebook.com/{api_version}/{asset_id}/media",
+                        params={"fields": "caption,timestamp,media_type", "limit": "5", "access_token": token}
+                    )
+                    if media_resp.status_code == 200:
+                        media = media_resp.json().get("data", [])
+                        extracted.append({
+                            "type": "instagram_posts",
+                            "posts": [m.get("caption", "")[:200] for m in media if m.get("caption")]
+                        })
+
+        # Build context string for the architect
+        context_parts = []
+        for item in extracted:
+            if item["type"] == "facebook_page":
+                context_parts.append(f"PAGINA DE FACEBOOK: {item['name']}. Categoria: {item.get('category','')}. Descripcion: {item.get('about','')}. Fans: {item.get('fans',0)}. Web: {item.get('website','')}")
+            elif item["type"] == "facebook_posts":
+                if item["posts"]:
+                    context_parts.append(f"ULTIMOS POSTS DE FACEBOOK: " + " | ".join(item["posts"][:3]))
+            elif item["type"] == "instagram_profile":
+                context_parts.append(f"PERFIL DE INSTAGRAM: @{item.get('username','')}. Bio: {item.get('bio','')}. Seguidores: {item.get('followers',0)}. Publicaciones: {item.get('media_count',0)}. Web: {item.get('website','')}")
+            elif item["type"] == "instagram_posts":
+                if item["posts"]:
+                    context_parts.append(f"ULTIMOS POSTS DE INSTAGRAM: " + " | ".join(item["posts"][:3]))
+
+        context = "\n".join(context_parts)
+        return {"context": context, "assets": extracted}
+
+    except Exception as e:
+        logger.error(f"Meta data extraction error: {e}")
+        return {"context": "", "assets": [], "error": str(e)}
