@@ -61,12 +61,17 @@ export const OnboardingWizard: React.FC = () => {
     const [showTnHelp, setShowTnHelp] = useState(false);
     const [tnCopied, setTnCopied] = useState(false);
 
-    // Step 2 (Meta)
+    // Step 2 (Meta + WhatsApp provider)
+    const [waProvider, setWaProvider] = useState<'meta' | 'ycloud' | null>(null);
     const [metaConnected, setMetaConnected] = useState(false);
     const [metaStatus, setMetaStatus] = useState<'idle' | 'loading' | 'wizard' | 'connected'>('idle');
     const [metaAssets, setMetaAssets] = useState<any>(null);
     const [metaConnectedAssets, setMetaConnectedAssets] = useState<Record<string, boolean>>({});
     const isFbSdkReady = useFacebookSdk();
+    // YCloud
+    const [ycloudKey, setYcloudKey] = useState('');
+    const [ycloudSecret, setYcloudSecret] = useState('');
+    const [ycloudSaved, setYcloudSaved] = useState(false);
 
     // Steps 3-4-5 (Chat)
     const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
@@ -307,9 +312,24 @@ export const OnboardingWizard: React.FC = () => {
     const handleMetaWizardComplete = () => {
         setMetaStatus('connected');
         setMetaConnected(true);
-        saveProgress(2, { step_2: { completed: true, meta_connected: true } });
-        // Auto-advance to step 3 after 10 seconds
+        saveProgress(2, { step_2: { completed: true, meta_connected: true, wa_provider: waProvider } });
         setTimeout(() => goNext(), 10000);
+    };
+
+    const saveYcloudCredentials = async () => {
+        if (!ycloudKey.trim()) { setError('Ingresa tu YCloud API Key'); return; }
+        setLoading(true);
+        try {
+            await fetchApi('/admin/credentials', { method: 'POST', body: { name: 'YCloud API Key', value: ycloudKey.trim(), category: 'whatsapp_cloud', scope: 'tenant' } });
+            if (ycloudSecret.trim()) {
+                await fetchApi('/admin/credentials', { method: 'POST', body: { name: 'YCloud Webhook Secret', value: ycloudSecret.trim(), category: 'whatsapp_cloud', scope: 'tenant' } });
+            }
+            setYcloudSaved(true);
+            saveProgress(2, { step_2: { completed: true, wa_provider: 'ycloud', ycloud_connected: true } });
+        } catch (e: any) {
+            setError(e.message || 'Error al guardar credenciales');
+        }
+        setLoading(false);
     };
 
     // --- Steps 3-4-5: Chat ---
@@ -782,21 +802,110 @@ export const OnboardingWizard: React.FC = () => {
                         </div>
                     )}
 
-                    {/* === STEP 2: Meta (reutiliza FB.login + MetaOnboardingWizard) === */}
+                    {/* === STEP 2: WhatsApp Provider + Meta Connection === */}
                     {step === 2 && (
                         <div className="space-y-4 animate-fade-in">
                             <div className="text-center mb-4">
-                                <div className="w-14 h-14 bg-[#1877F2]/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                                    <Facebook size={28} className="text-[#1877F2]" />
+                                <div className="w-14 h-14 bg-[#25D366]/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                    <MessageCircle size={28} className="text-[#25D366]" />
                                 </div>
-                                <h2 className="text-xl font-bold text-white">Conecta Meta</h2>
-                                <p className="text-slate-400 text-sm mt-1">WhatsApp, Instagram y Facebook Messenger</p>
+                                <h2 className="text-xl font-bold text-white">Conecta tus Canales</h2>
+                                <p className="text-slate-400 text-sm mt-1">WhatsApp, Instagram y Facebook</p>
                             </div>
+
+                            {/* Step 2a: Choose WhatsApp provider (if not chosen yet) */}
+                            {!waProvider && !metaConnected && !ycloudSaved && (
+                                <div className="space-y-3">
+                                    <p className="text-xs text-slate-400 text-center mb-2">Como conectas WhatsApp?</p>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button onClick={() => setWaProvider('meta')}
+                                            className="p-4 rounded-xl border border-white/5 hover:border-[#1877F2]/30 hover:bg-[#1877F2]/5 transition-all active:scale-[0.98] text-center">
+                                            <Facebook size={24} className="text-[#1877F2] mx-auto mb-2" />
+                                            <p className="text-sm font-bold text-white">Meta Directo</p>
+                                            <p className="text-[10px] text-slate-500 mt-1">WhatsApp + Instagram + Facebook en un solo paso</p>
+                                            <span className="inline-block mt-2 text-[9px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded-full font-bold">RECOMENDADO</span>
+                                        </button>
+                                        <button onClick={() => setWaProvider('ycloud')}
+                                            className="p-4 rounded-xl border border-white/5 hover:border-[#25D366]/30 hover:bg-[#25D366]/5 transition-all active:scale-[0.98] text-center">
+                                            <MessageCircle size={24} className="text-[#25D366] mx-auto mb-2" />
+                                            <p className="text-sm font-bold text-white">YCloud</p>
+                                            <p className="text-[10px] text-slate-500 mt-1">WhatsApp via YCloud API. Luego podes agregar Meta</p>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Step 2b: YCloud credentials */}
+                            {waProvider === 'ycloud' && !ycloudSaved && (
+                                <div className="glass p-5 rounded-xl border border-white/5 space-y-3 animate-fade-in">
+                                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                                        <MessageCircle size={16} className="text-[#25D366]" /> YCloud API
+                                    </h3>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 mb-1">API Key</label>
+                                        <input value={ycloudKey} onChange={e => setYcloudKey(e.target.value)} placeholder="Tu YCloud API Key" className={inputClass} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 mb-1">Webhook Secret (opcional)</label>
+                                        <input value={ycloudSecret} onChange={e => setYcloudSecret(e.target.value)} placeholder="Secret para validar webhooks" className={inputClass} />
+                                    </div>
+                                    <button onClick={saveYcloudCredentials} disabled={loading}
+                                        className="w-full py-3 bg-[#25D366] hover:bg-[#1da851] disabled:opacity-50 text-white font-bold rounded-xl transition-all active:scale-[0.98]">
+                                        Guardar YCloud
+                                    </button>
+                                    <button onClick={() => setWaProvider(null)} className="w-full text-xs text-slate-500 hover:text-slate-300 py-1">
+                                        Cambiar proveedor
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* YCloud saved — offer to also connect Meta */}
+                            {ycloudSaved && !metaConnected && metaStatus !== 'wizard' && metaStatus !== 'connected' && (
+                                <div className="space-y-3 animate-fade-in">
+                                    <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-2 text-green-400 text-sm">
+                                        <CheckCircle size={16} /> YCloud conectado
+                                    </div>
+                                    <div className="glass p-4 rounded-xl border border-white/5 text-center space-y-3">
+                                        <p className="text-xs text-slate-400">Tambien podes conectar Meta para Instagram y Facebook Messenger</p>
+                                        <button onClick={connectMeta} disabled={!isFbSdkReady}
+                                            className="w-full py-2.5 bg-[#1877F2] hover:bg-[#1565C0] disabled:opacity-50 text-white font-bold rounded-xl transition-all active:scale-[0.98] text-sm flex items-center justify-center gap-2">
+                                            <Facebook size={16} /> Conectar Meta tambien
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Meta provider flow (same as before) */}
+                            {waProvider === 'meta' && metaStatus !== 'connected' && metaStatus !== 'wizard' && !metaConnected && (
+                                <div className="glass p-5 rounded-xl border border-white/5 text-center space-y-4 animate-fade-in">
+                                    <button onClick={connectMeta} disabled={metaStatus === 'loading' || !isFbSdkReady}
+                                        className="w-full py-3 bg-[#1877F2] hover:bg-[#1565C0] disabled:opacity-50 text-white font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                                        {metaStatus === 'loading' ? (
+                                            <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Conectando...</>
+                                        ) : (
+                                            <><Facebook size={18} /> Conectar con Meta</>
+                                        )}
+                                    </button>
+                                    {!isFbSdkReady && <p className="text-[10px] text-amber-400">Cargando SDK de Facebook...</p>}
+                                    <button onClick={() => setWaProvider(null)} className="text-xs text-slate-500 hover:text-slate-300">
+                                        Cambiar proveedor
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Meta Wizard — asset selection */}
+                            {metaStatus === 'wizard' && metaAssets && (
+                                <MetaOnboardingWizard
+                                    assets={metaAssets}
+                                    onComplete={handleMetaWizardComplete}
+                                    onCancel={() => { setMetaStatus('idle'); }}
+                                />
+                            )}
 
                             {/* Connected — show assets for 10s then auto-advance */}
                             {metaStatus === 'connected' && (
                                 <div className="glass p-5 rounded-xl border border-green-500/20 space-y-3 animate-fade-in">
-                                    <div className="flex items-center justify-center gap-2 text-green-400 mb-3">
+                                    <div className="flex items-center justify-center gap-2 text-green-400 mb-2">
                                         <CheckCircle size={20} /> <span className="font-bold">Canales conectados</span>
                                     </div>
                                     <div className="grid grid-cols-3 gap-2">
@@ -810,51 +919,29 @@ export const OnboardingWizard: React.FC = () => {
                                             <span className="text-[10px] font-bold text-white">Instagram</span>
                                             {metaConnectedAssets.instagram && <Check size={10} className="text-green-400" />}
                                         </div>
-                                        <div className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 ${metaConnectedAssets.whatsapp ? 'bg-[#25D366]/10 border-[#25D366]/30' : 'bg-white/5 border-white/5 opacity-40'}`}>
-                                            <MessageCircle size={20} className={metaConnectedAssets.whatsapp ? 'text-[#25D366]' : 'text-slate-600'} />
+                                        <div className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 ${metaConnectedAssets.whatsapp || ycloudSaved ? 'bg-[#25D366]/10 border-[#25D366]/30' : 'bg-white/5 border-white/5 opacity-40'}`}>
+                                            <MessageCircle size={20} className={metaConnectedAssets.whatsapp || ycloudSaved ? 'text-[#25D366]' : 'text-slate-600'} />
                                             <span className="text-[10px] font-bold text-white">WhatsApp</span>
-                                            {metaConnectedAssets.whatsapp && <Check size={10} className="text-green-400" />}
+                                            {(metaConnectedAssets.whatsapp || ycloudSaved) && <Check size={10} className="text-green-400" />}
                                         </div>
                                     </div>
-                                    <p className="text-[10px] text-slate-500 text-center">Avanzando al siguiente paso en 10 segundos...</p>
+                                    {ycloudSaved && <p className="text-[10px] text-slate-500 text-center">WhatsApp via YCloud + Meta conectado</p>}
+                                    <p className="text-[10px] text-slate-500 text-center">Avanzando en 10 segundos...</p>
                                     <button onClick={goNext} className="w-full py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all active:scale-[0.98] text-sm flex items-center justify-center gap-2">
                                         Continuar ahora <ArrowRight size={14} />
                                     </button>
                                 </div>
                             )}
 
-                            {/* Wizard — asset selection (same as MetaSettings) */}
-                            {metaStatus === 'wizard' && metaAssets && (
-                                <MetaOnboardingWizard
-                                    assets={metaAssets}
-                                    onComplete={handleMetaWizardComplete}
-                                    onCancel={() => { setMetaStatus('idle'); }}
-                                />
-                            )}
-
-                            {/* Idle or Loading — show connect button */}
-                            {(metaStatus === 'idle' || metaStatus === 'loading') && (
-                                <div className="glass p-5 rounded-xl border border-white/5 text-center space-y-4">
-                                    <button onClick={connectMeta} disabled={metaStatus === 'loading' || !isFbSdkReady}
-                                        className="w-full py-3 bg-[#1877F2] hover:bg-[#1565C0] disabled:opacity-50 text-white font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
-                                        {metaStatus === 'loading' ? (
-                                            <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Conectando...</>
-                                        ) : (
-                                            <><Facebook size={18} /> Conectar con Meta</>
-                                        )}
-                                    </button>
-                                    {!isFbSdkReady && <p className="text-[10px] text-amber-400">Cargando SDK de Facebook...</p>}
-                                </div>
-                            )}
-
-                            {/* Navigation */}
-                            {metaStatus !== 'wizard' && (
+                            {/* Navigation (only when not in wizard) */}
+                            {metaStatus !== 'wizard' && metaStatus !== 'connected' && (
                                 <div className="flex gap-2">
                                     <button onClick={goBack} className="flex-1 py-3 bg-white/5 text-slate-400 font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
                                         <ArrowLeft size={16} /> Atras
                                     </button>
-                                    <button onClick={goNext} className="flex-[2] py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
-                                        {metaStatus === 'connected' ? 'Siguiente' : 'Configurar despues'} <ArrowRight size={16} />
+                                    <button onClick={() => { if (ycloudSaved) { saveProgress(2, { step_2: { completed: true, wa_provider: 'ycloud', ycloud_connected: true } }); goNext(); } else { goNext(); } }}
+                                        className="flex-[2] py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                                        {ycloudSaved || metaConnected ? 'Siguiente' : 'Configurar despues'} <ArrowRight size={16} />
                                     </button>
                                 </div>
                             )}
