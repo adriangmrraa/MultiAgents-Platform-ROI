@@ -1651,31 +1651,46 @@ async def onboarding_realtime_ws(websocket: WebSocket, session_id: str):
             "OpenAI-Beta": "realtime=v1"
         }
 
+        # Build instructions with language enforcement
+        base_instructions = config.get("system_prompt", "")
+        if not base_instructions or len(base_instructions) < 50:
+            base_instructions = """Sos Nova, la Arquitecta de Agentes de IA de Future Platform. Sos argentina, calida, profesional. Hablas con voseo natural. Tu mision es entrevistar al usuario para crear el agente de IA perfecto para su negocio."""
+
+        instructions = f"""IDIOMA OBLIGATORIO: Habla SIEMPRE en espanol argentino. NUNCA cambies de idioma. Usa voseo (vos, sos, tenes).
+
+{base_instructions}"""
+
+        logger.info("onboarding_realtime_instructions", length=len(instructions), first_100=instructions[:100])
+
         async with websockets.connect(url, additional_headers=headers) as openai_ws:
-            # Configure session with Nova's prompt
+            # Configure session with Nova's prompt + forced Spanish
             await openai_ws.send(_json.dumps({
                 "type": "session.update",
                 "session": {
-                    "instructions": config["system_prompt"],
-                    "voice": "nova",
+                    "instructions": instructions,
+                    "voice": "coral",
                     "input_audio_format": "pcm16",
                     "output_audio_format": "pcm16",
+                    "input_audio_transcription": {
+                        "model": "whisper-1"
+                    },
                     "turn_detection": {
                         "type": "server_vad",
                         "threshold": 0.5,
                         "prefix_padding_ms": 300,
-                        "silence_duration_ms": 1000
+                        "silence_duration_ms": 1500
                     }
                 }
             }))
 
             max_duration = config.get("max_duration", 600)
 
-            # Also send initial greeting trigger
+            # Send initial greeting — force Spanish response
             await openai_ws.send(_json.dumps({
                 "type": "response.create",
                 "response": {
-                    "modalities": ["audio", "text"]
+                    "modalities": ["audio", "text"],
+                    "instructions": "Saluda al usuario en espanol argentino. Presentate como Nova, la arquitecta de IA. Contale que ya investigaste su negocio en las redes sociales y que van a crear juntos la personalidad perfecta de su agente. Se calida y entusiasta. Maximo 3 oraciones."
                 }
             }))
 
