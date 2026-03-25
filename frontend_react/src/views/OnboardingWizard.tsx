@@ -816,9 +816,12 @@ export const OnboardingWizard: React.FC = () => {
         processor.connect(audioCtx.destination);
     };
 
+    // Audio playback queue — schedule chunks sequentially, not overlapping
+    const nextPlayTimeRef = useRef(0);
+
     const playRealtimeAudio = (arrayBuffer: ArrayBuffer) => {
         if (!realtimeAudioCtxRef.current) {
-            realtimeAudioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            realtimeAudioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         }
         const ctx = realtimeAudioCtxRef.current;
         const pcm16 = new Int16Array(arrayBuffer);
@@ -826,12 +829,17 @@ export const OnboardingWizard: React.FC = () => {
         for (let i = 0; i < pcm16.length; i++) {
             float32[i] = pcm16[i] / 32768;
         }
-        const buffer = ctx.createBuffer(1, float32.length, 24000); // OpenAI Realtime outputs 24kHz
+        const buffer = ctx.createBuffer(1, float32.length, 24000);
         buffer.getChannelData(0).set(float32);
         const src = ctx.createBufferSource();
         src.buffer = buffer;
         src.connect(ctx.destination);
-        src.start();
+
+        // Schedule this chunk AFTER the previous one finishes (no overlap)
+        const now = ctx.currentTime;
+        const startTime = Math.max(now, nextPlayTimeRef.current);
+        src.start(startTime);
+        nextPlayTimeRef.current = startTime + buffer.duration;
     };
 
     const stopRealtimeAudio = () => {
