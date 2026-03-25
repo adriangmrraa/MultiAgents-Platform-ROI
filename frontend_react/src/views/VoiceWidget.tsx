@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
     Phone, Mic, Headphones, Palette, Globe, Settings, Copy, Check,
     Plus, Trash2, ChevronDown, ChevronUp, AlertCircle, Zap,
-    Volume2, Radio, Eye, Code, ArrowLeft
+    Volume2, Radio, Eye, Code, ArrowLeft, Send, UserX, FileText
 } from 'lucide-react';
 
 // --- Interfaces ---
@@ -114,6 +114,8 @@ export const VoiceWidget: React.FC = () => {
     // Mobile: tab navigation
     const [mobileTab, setMobileTab] = useState<'config' | 'preview'>('config');
     const [showEditor, setShowEditor] = useState(false);
+    const [showDevInstructions, setShowDevInstructions] = useState(false);
+    const [devCopied, setDevCopied] = useState(false);
 
     useEffect(() => { loadAll(); }, []);
 
@@ -196,15 +198,55 @@ export const VoiceWidget: React.FC = () => {
         }
     };
 
+    const getApiBase = () => {
+        if (window.location.origin.includes('localhost')) return 'http://localhost:3000';
+        return window.location.origin.replace('frontend', 'orchestrator-service');
+    };
+
+    const getSnippetCode = () => {
+        if (!formData.widget_token) return '';
+        const apiBase = getApiBase();
+        return `<script>\n  (function(d,t) {\n    var s=d.createElement(t);\n    s.src="${apiBase}/static/voice-widget-sdk.js";\n    s.defer=true;s.async=true;\n    s.dataset.token="${formData.widget_token}";\n    d.head.appendChild(s);\n  })(document,"script");\n</script>`;
+    };
+
     const copySnippet = () => {
-        if (!formData.widget_token) return;
-        const apiBase = window.location.origin.includes('localhost')
-            ? 'http://localhost:3000'
-            : window.location.origin.replace('frontend', 'orchestrator-service');
-        const snippet = `<script>\n  (function(d,t) {\n    var s=d.createElement(t);\n    s.src="${apiBase}/static/voice-widget-sdk.js";\n    s.defer=true;s.async=true;\n    s.dataset.token="${formData.widget_token}";\n    d.head.appendChild(s);\n  })(document,"script");\n</script>`;
+        const snippet = getSnippetCode();
+        if (!snippet) return;
         navigator.clipboard.writeText(snippet);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const copyDevInstructions = () => {
+        const snippet = getSnippetCode();
+        if (!snippet) return;
+        const instructions = `INSTRUCCIONES PARA INSTALAR EL WIDGET DE VOZ
+=============================================
+
+Hola! Necesito que instales este widget de asistente de voz en mi tienda online.
+Es un boton flotante que permite a los visitantes hablar por voz con nuestro asistente de IA.
+
+PASOS:
+1. Ingresa al panel de administracion de la tienda (Tienda Nube / Shopify / WordPress)
+2. Ve a la seccion de "Codigo personalizado" o "Scripts externos"
+   - En Tienda Nube: Configuracion > Codigos externos > Footer
+   - En Shopify: Tienda online > Temas > Editar codigo > theme.liquid (antes de </body>)
+   - En WordPress: Apariencia > Editor de temas > footer.php (antes de </body>)
+3. Pega el siguiente codigo EXACTAMENTE como esta, antes de la etiqueta </body>:
+
+${snippet}
+
+IMPORTANTE:
+- No modifiques ninguna parte del codigo
+- El widget aparecera como un boton flotante en la esquina inferior de la pagina
+- Si necesitas desactivarlo, simplemente elimina este codigo
+- El widget se configura desde nuestro panel, no hace falta tocar nada mas en la tienda
+
+Cualquier duda, avisame!`;
+
+        navigator.clipboard.writeText(instructions);
+        setDevCopied(true);
+        setTimeout(() => setDevCopied(false), 2500);
     };
 
     const selectedAgent = agents.find(a => a.id === formData.agent_id);
@@ -254,7 +296,7 @@ export const VoiceWidget: React.FC = () => {
                 </div>
             </div>
 
-            {/* Embed Code */}
+            {/* Embed Code + Installation Guide */}
             <div className="glass p-4 lg:p-5 rounded-xl border border-white/5 bg-black/40">
                 <div className="flex justify-between items-center mb-3">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -266,21 +308,110 @@ export const VoiceWidget: React.FC = () => {
                                 copied ? 'bg-green-500/20 border-green-500 text-green-400' : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
                             }`}>
                             {copied ? <Check size={12} /> : <Copy size={12} />}
-                            {copied ? 'Copiado' : 'Copiar'}
+                            {copied ? 'Copiado' : 'Copiar codigo'}
                         </button>
                     )}
                 </div>
+
+                {/* Code Block */}
                 <div className="bg-[#0a0a0a] p-3 rounded-lg border border-white/5 overflow-x-auto">
                     <pre className="text-[10px] lg:text-[11px] font-mono text-slate-400 leading-relaxed whitespace-pre-wrap break-all">
                         {formData.widget_token
-                            ? `<script>\n  (function(d,t) {\n    var s=d.createElement(t);\n    s.src="API_URL/static/voice-widget-sdk.js";\n    s.defer=true;s.async=true;\n    s.dataset.token="${formData.widget_token}";\n    d.head.appendChild(s);\n  })(document,"script");\n</script>`
+                            ? getSnippetCode()
                             : 'Guarda el widget primero para obtener tu codigo.'
                         }
                     </pre>
                 </div>
-                <p className="mt-2 text-[10px] text-slate-600">
-                    Pega antes de &lt;/body&gt; en tu Tienda Nube.
-                </p>
+
+                {/* Quick Guide */}
+                {formData.widget_token && (
+                    <div className="mt-3 space-y-3">
+                        {/* Step-by-step mini guide */}
+                        <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-lg">
+                            <p className="text-[11px] font-bold text-blue-300 mb-2">Como instalar:</p>
+                            <div className="space-y-1.5">
+                                <div className="flex items-start gap-2">
+                                    <span className="w-4 h-4 bg-blue-500/20 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[9px] font-bold text-blue-300">1</span>
+                                    <p className="text-[10px] text-slate-400">Copia el codigo de arriba</p>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                    <span className="w-4 h-4 bg-blue-500/20 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[9px] font-bold text-blue-300">2</span>
+                                    <p className="text-[10px] text-slate-400">Ingresa al admin de tu tienda</p>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                    <span className="w-4 h-4 bg-blue-500/20 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[9px] font-bold text-blue-300">3</span>
+                                    <p className="text-[10px] text-slate-400">
+                                        <span className="text-white font-medium">Tienda Nube:</span> Configuracion &gt; Codigos externos &gt; Footer
+                                    </p>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                    <span className="w-4 h-4 bg-blue-500/20 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[9px] font-bold text-blue-300">4</span>
+                                    <p className="text-[10px] text-slate-400">
+                                        Pega el codigo antes de <code className="text-blue-300">&lt;/body&gt;</code> y guarda
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* "No soy dev" button */}
+                        <button
+                            onClick={() => setShowDevInstructions(!showDevInstructions)}
+                            className="w-full p-3 bg-amber-500/5 border border-amber-500/15 rounded-lg text-left transition-all hover:bg-amber-500/10 active:scale-[0.99]"
+                        >
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <UserX size={14} className="text-amber-400" />
+                                    <span className="text-xs font-bold text-amber-300">No soy desarrollador</span>
+                                </div>
+                                <ChevronDown size={14} className={`text-amber-400 transition-transform ${showDevInstructions ? 'rotate-180' : ''}`} />
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-1">
+                                Copia instrucciones completas para enviar a tu desarrollador o soporte tecnico
+                            </p>
+                        </button>
+
+                        {showDevInstructions && (
+                            <div className="space-y-2 animate-fade-in">
+                                {/* Preview of what will be copied */}
+                                <div className="bg-[#0a0a0a] p-3 rounded-lg border border-amber-500/10 max-h-40 overflow-y-auto">
+                                    <p className="text-[10px] font-mono text-amber-200/80 whitespace-pre-wrap leading-relaxed">
+                                        INSTRUCCIONES PARA INSTALAR EL WIDGET DE VOZ{'\n'}
+                                        =============================================={'\n\n'}
+                                        Hola! Necesito que instales este widget de asistente de voz en mi tienda online.{'\n\n'}
+                                        PASOS:{'\n'}
+                                        1. Ingresa al panel de administracion de la tienda{'\n'}
+                                        2. Ve a "Codigo personalizado" o "Scripts externos"{'\n'}
+                                        {'   '}- Tienda Nube: Configuracion &gt; Codigos externos &gt; Footer{'\n'}
+                                        {'   '}- Shopify: Tienda online &gt; Temas &gt; Editar codigo{'\n'}
+                                        {'   '}- WordPress: Apariencia &gt; Editor de temas &gt; footer.php{'\n'}
+                                        3. Pega el codigo (incluido abajo) antes de &lt;/body&gt;{'\n\n'}
+                                        [Codigo script incluido]{'\n\n'}
+                                        IMPORTANTE: No modifiques ninguna parte del codigo.
+                                    </p>
+                                </div>
+
+                                <button
+                                    onClick={copyDevInstructions}
+                                    className={`w-full py-3 rounded-xl font-bold text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2 ${
+                                        devCopied
+                                            ? 'bg-green-600 text-white'
+                                            : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30'
+                                    }`}
+                                >
+                                    {devCopied ? (
+                                        <><Check size={16} /> Instrucciones copiadas!</>
+                                    ) : (
+                                        <><FileText size={16} /> Copiar instrucciones para mi dev</>
+                                    )}
+                                </button>
+
+                                <p className="text-[9px] text-slate-600 text-center">
+                                    Se copia un texto completo con el codigo + pasos + indicaciones listo para enviar por WhatsApp, email o chat
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
