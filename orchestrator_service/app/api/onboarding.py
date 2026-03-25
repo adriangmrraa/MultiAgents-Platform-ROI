@@ -14,39 +14,49 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-async def _get_platform_key(tenant_id: int = 0) -> str:
-    """Resolve OpenAI API key: settings → tenant credential → env fallback."""
-    api_key = None
-
-    # 1. Settings (Pydantic BaseSettings — reads from env automatically)
+def _get_platform_key_sync() -> str:
+    """Resolve OpenAI API key synchronously. Called at import time."""
+    # Direct env read — most reliable
+    key = os.getenv("OPENAI_API_KEY")
+    if key:
+        return key
     try:
         from app.core.config import settings as app_settings
-        api_key = app_settings.OPENAI_API_KEY
+        if app_settings.OPENAI_API_KEY:
+            return app_settings.OPENAI_API_KEY
     except Exception:
         pass
+    return ""
 
-    # 2. Tenant credential from DB
-    if not api_key and tenant_id:
+# Cache the key at module load time
+_CACHED_PLATFORM_KEY = _get_platform_key_sync()
+logger.info(f"Platform key loaded: {'YES' if _CACHED_PLATFORM_KEY else 'NO'} (len={len(_CACHED_PLATFORM_KEY)})")
+
+
+async def _get_platform_key(tenant_id: int = 0) -> str:
+    """Resolve OpenAI API key."""
+    global _CACHED_PLATFORM_KEY
+
+    # Use cached key (loaded at startup)
+    if _CACHED_PLATFORM_KEY:
+        return _CACHED_PLATFORM_KEY
+
+    # Try tenant credential from DB
+    if tenant_id:
         try:
-            api_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
+            key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
+            if key:
+                return key
         except Exception:
             pass
 
-    # 3. Global var from main.py
-    if not api_key:
-        try:
-            from main import OPENAI_API_KEY as GLOBAL_KEY
-            api_key = GLOBAL_KEY
-        except Exception:
-            pass
+    # Re-read env (in case it was set after startup)
+    key = os.getenv("OPENAI_API_KEY")
+    if key:
+        _CACHED_PLATFORM_KEY = key
+        return key
 
-    # 4. Direct env fallback
-    if not api_key:
-        api_key = os.getenv("OPENAI_API_KEY")
-
-    if not api_key:
-        raise HTTPException(status_code=500, detail="Platform API key not configured")
-    return api_key
+    raise HTTPException(status_code=500, detail="Platform API key not configured")
 
 # Memory Store (In-Memory for now, ideally Redis)
 # Format: { "session_id": [ {"role": "system", ...}, {"role": "user", ...} ] }
