@@ -1722,11 +1722,59 @@ ESTRATEGIA: Al inicio, pedi al usuario su sitio web, Instagram o Facebook si no 
             max_duration = config.get("max_duration", 600)
             tenant_id = config.get("tenant_id", 0)
 
-            # Greeting with meta data
+            # Greeting — always investigate proactively
+            # Check if we have web_research or store URL from step_data
+            store_url = ""
+            try:
+                progress = await db.pool.fetchrow("SELECT step_data FROM onboarding_progress WHERE tenant_id = $1", tenant_id)
+                if progress and progress["step_data"]:
+                    sd = progress["step_data"] if isinstance(progress["step_data"], dict) else _json.loads(progress["step_data"])
+                    if sd.get("web_research", {}).get("url"):
+                        store_url = sd["web_research"]["url"]
+            except Exception:
+                pass
+
+            # Extract social URLs from meta_summary
+            fb_url = ""
+            ig_url = ""
             if meta_summary:
-                greeting = f"IDIOMA: Espanol argentino. Voseo. Primero usa la tool mostrar_dato_extraido para mostrar los datos de redes que encontraste. Despues saluda y presenta los hallazgos. DATOS:\n{meta_summary}"
+                import re as _re2
+                # Find Facebook page name
+                fb_match = _re2.search(r'PAGINA DE FACEBOOK: ([^.]+)', meta_summary)
+                if fb_match:
+                    fb_name = fb_match.group(1).strip()
+                    fb_url = f"https://www.facebook.com/{fb_name.replace(' ', '')}"
+                # Find Instagram username
+                ig_match = _re2.search(r'@(\w+)', meta_summary)
+                if ig_match:
+                    ig_url = f"https://www.instagram.com/{ig_match.group(1)}"
+
+            if meta_summary or store_url:
+                urls_to_investigate = ""
+                if store_url:
+                    urls_to_investigate += f"\nURL DE LA TIENDA: {store_url} — USA investigar_web para scrapear."
+                if fb_url:
+                    urls_to_investigate += f"\nURL DE FACEBOOK: {fb_url} — USA investigar_web para scrapear."
+                if ig_url:
+                    urls_to_investigate += f"\nURL DE INSTAGRAM: {ig_url} — USA investigar_web para scrapear."
+                greeting = f"""IDIOMA: Espanol argentino. Voseo obligatorio.
+
+PASO 1: Usa mostrar_dato_extraido para mostrar al usuario los datos que tenes.
+PASO 2: Si tenes URLs, usa investigar_web para scrapear cada una y obtener mas info del negocio.
+PASO 3: Presenta un resumen de TODO lo que encontraste (datos de redes + web).
+PASO 4: Pregunta si es correcto y arranca la entrevista.
+
+DATOS DE REDES SOCIALES:
+{meta_summary}
+{urls_to_investigate}
+
+Se concreta y menciona datos especificos: nombre, productos, estilo. Maximo 6 oraciones."""
             else:
-                greeting = "IDIOMA: Espanol argentino. Voseo. Presentate como Nova. Saluda y pedile que cuente sobre su negocio."
+                greeting = """IDIOMA: Espanol argentino. Voseo obligatorio.
+
+Presentate como Nova. Pedile al usuario la URL de su tienda web o redes sociales. Si te da una URL, usa investigar_web para scrapearla.
+Si no tiene web, pedile que te cuente sobre su negocio.
+Maximo 4 oraciones."""
 
             await openai_ws.send(_json.dumps({
                 "type": "response.create",
