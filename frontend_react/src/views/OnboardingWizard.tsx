@@ -830,9 +830,11 @@ export const OnboardingWizard: React.FC = () => {
 
         // 3. Create realtime session
         try {
+            // Include chat history for context restoration
+            const savedHistory = chatHistories[chatStep] || [];
             const sessionRes = await fetchApi('/admin/onboarding/realtime-session', {
                 method: 'POST',
-                body: { step: chatStep, tenant_id: tenantId || 0, meta_context: context }
+                body: { step: chatStep, tenant_id: tenantId || 0, meta_context: context, chat_history: savedHistory.map((m: any) => ({ role: m.role, content: m.content })) }
             });
             if (!sessionRes?.session_id) throw new Error('No session');
 
@@ -1075,7 +1077,7 @@ export const OnboardingWizard: React.FC = () => {
     const declineVoice = () => {
         setVoiceConsent(true);
         setVoiceMode(false);
-        initChat(step);
+        initChatWithVoice(step); // Uses history-aware path even in text mode
     };
 
     // Cleanup realtime on step change or unmount

@@ -552,6 +552,7 @@ async def create_realtime_session(
     step: int = Body(3, embed=True),
     tenant_id: int = Body(0, embed=True),
     meta_context: str = Body("", embed=True),
+    chat_history: list = Body([], embed=True),
 ):
     """Create an OpenAI Realtime session for the voice architect.
     Returns session_id and ws_url for WebSocket connection."""
@@ -583,6 +584,7 @@ INSTRUCCION CRITICA: En tu PRIMER mensaje, PRESENTA toda esta informacion proces
         "system_prompt": system_prompt,
         "voice": "nova",
         "max_duration": 600,  # 10 min max for onboarding conversation
+        "chat_history": chat_history or [],
     }
 
     await redis_client.setex(

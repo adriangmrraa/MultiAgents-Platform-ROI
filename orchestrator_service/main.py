@@ -1776,6 +1776,25 @@ Presentate como Nova. Pedile al usuario la URL de su tienda web o redes sociales
 Si no tiene web, pedile que te cuente sobre su negocio.
 Maximo 4 oraciones."""
 
+            # Inject chat history if user is resuming a conversation
+            prior_history = config.get("chat_history", [])
+            if prior_history and len(prior_history) > 0:
+                logger.info("onboarding_realtime_restoring_history", count=len(prior_history))
+                for msg in prior_history:
+                    role = msg.get("role", "user")
+                    content = msg.get("content", "")
+                    if role in ("user", "assistant") and content:
+                        await openai_ws.send(_json.dumps({
+                            "type": "conversation.item.create",
+                            "item": {
+                                "type": "message",
+                                "role": role,
+                                "content": [{"type": "input_text", "text": content}]
+                            }
+                        }))
+                # Change greeting to resume instead of fresh start
+                greeting = "IDIOMA: Espanol argentino. Voseo. Retoma la conversacion donde la dejamos. Revisa el historial que te pase y pregunta por lo que falta para completar esta seccion. No repitas preguntas ya respondidas."
+
             await openai_ws.send(_json.dumps({
                 "type": "response.create",
                 "response": {"modalities": ["audio", "text"], "instructions": greeting}
