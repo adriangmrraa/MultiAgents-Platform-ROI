@@ -1803,22 +1803,42 @@ Maximo 4 oraciones."""
             async def client_to_openai():
                 try:
                     while True:
-                        data = await websocket.receive()
-                        if "bytes" in data and data["bytes"]:
-                            await openai_ws.send(_json.dumps({
-                                "type": "input_audio_buffer.append",
-                                "audio": _b64.b64encode(data["bytes"]).decode()
-                            }))
-                        elif "text" in data and data["text"]:
-                            msg = _json.loads(data["text"])
-                            if msg.get("type") == "text_message":
+                        try:
+                            # Try to receive as raw message first
+                            data = await websocket.receive()
+                            msg_type = data.get("type", "")
+
+                            if msg_type == "websocket.disconnect":
+                                break
+
+                            raw_bytes = data.get("bytes")
+                            raw_text = data.get("text")
+
+                            if raw_bytes and len(raw_bytes) > 0:
+                                if not hasattr(client_to_openai, '_logged'):
+                                    logger.info("audio_bytes_receiving", first_chunk_size=len(raw_bytes))
+                                    client_to_openai._logged = True
                                 await openai_ws.send(_json.dumps({
-                                    "type": "conversation.item.create",
-                                    "item": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": msg.get("text", "")}]}
+                                    "type": "input_audio_buffer.append",
+                                    "audio": _b64.b64encode(raw_bytes).decode()
                                 }))
-                                await openai_ws.send(_json.dumps({"type": "response.create"}))
-                except Exception:
-                    pass
+                            elif raw_text:
+                                try:
+                                    msg = _json.loads(raw_text)
+                                    if msg.get("type") == "text_message":
+                                        await openai_ws.send(_json.dumps({
+                                            "type": "conversation.item.create",
+                                            "item": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": msg.get("text", "")}]}
+                                        }))
+                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                except _json.JSONDecodeError:
+                                    pass
+                        except Exception as recv_err:
+                            if "disconnect" in str(recv_err).lower():
+                                break
+                            logger.error("client_to_openai_recv_error", error=str(recv_err))
+                except Exception as outer_err:
+                    logger.error("client_to_openai_error", error=str(outer_err))
 
             async def openai_to_client():
                 try:
