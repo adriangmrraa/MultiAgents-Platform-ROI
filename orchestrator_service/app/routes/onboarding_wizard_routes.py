@@ -164,8 +164,17 @@ async def update_progress(body: ProgressUpdate, current_user = Depends(get_wizar
     # Merge step_data
     existing_data = progress["step_data"] if isinstance(progress["step_data"], dict) else {}
     if body.step_data:
-        step_key = f"step_{body.step}"
-        existing_data[step_key] = {**existing_data.get(step_key, {}), **body.step_data}
+        # body.step_data can be either {step_3: {...}} or {chat_history: [...], ...}
+        for key, value in body.step_data.items():
+            if key.startswith("step_"):
+                # Already keyed: {step_3: {chat_history: [...]}}
+                existing_data[key] = {**existing_data.get(key, {}), **(value if isinstance(value, dict) else {})}
+            else:
+                # Flat: {chat_history: [...], confirmed_sections: {...}}
+                step_key = f"step_{body.step}"
+                if step_key not in existing_data:
+                    existing_data[step_key] = {}
+                existing_data[step_key][key] = value
 
     # Update prompt draft if provided
     prompt_draft = body.system_prompt_draft if body.system_prompt_draft is not None else progress["system_prompt_draft"]
