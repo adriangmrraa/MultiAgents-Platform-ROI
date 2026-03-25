@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Layout } from './components/Layout';
@@ -89,6 +90,61 @@ function RequireAuth({ children }: { children: JSX.Element }) {
   return children;
 }
 
+function OnboardingGate({ children }: { children: JSX.Element }) {
+  const { user, isLoading } = useAuth();
+  const location = useLocation();
+  const [checked, setChecked] = useState(false);
+  const [needsWizard, setNeedsWizard] = useState(false);
+
+  useEffect(() => {
+    if (isLoading || !user) return;
+    // Skip check if already on the wizard page
+    if (location.pathname === '/onboarding-wizard') { setChecked(true); return; }
+    // Super admin skips
+    if ((user as any)?.role === 'super_admin') { setChecked(true); return; }
+
+    const checkOnboarding = async () => {
+      try {
+        const { ADMIN_TOKEN } = await import('./hooks/useApi');
+        const hostname = window.location.hostname;
+        let API_BASE = '/api';
+        if (hostname === 'localhost' || hostname === '127.0.0.1') API_BASE = 'http://localhost:3000';
+        else if (hostname.includes('platform-ui')) API_BASE = window.location.protocol + '//' + hostname.replace('platform-ui', 'orchestrator-service');
+        const token = ADMIN_TOKEN || '';
+        const res = await fetch(`${API_BASE}/admin/onboarding-wizard/progress`, {
+          headers: { 'x-admin-token': token, 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.should_show_wizard) {
+            setNeedsWizard(true);
+          }
+        }
+      } catch (e) { /* non-blocking */ }
+      setChecked(true);
+    };
+    checkOnboarding();
+  }, [user, isLoading, location.pathname]);
+
+  if (!checked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#09090b] text-white">
+        <svg className="animate-spin h-8 w-8 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    );
+  }
+
+  if (needsWizard) {
+    return <Navigate to="/onboarding-wizard" replace />;
+  }
+
+  return children;
+}
+
 import { LanguageProvider } from './contexts/LanguageContext';
 
 function App() {
@@ -108,16 +164,23 @@ function App() {
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
 
-            {/* Protected Routes */}
+            {/* Onboarding Wizard — fullscreen, outside Layout */}
+            <Route path="/onboarding-wizard" element={
+              <RequireAuth>
+                <OnboardingWizard />
+              </RequireAuth>
+            } />
+
+            {/* Protected Routes — with OnboardingGate redirect */}
             <Route path="/*" element={
               <RequireAuth>
-                <Layout>
-                  <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/setup" element={<Setup />} />
-                    <Route path="/nexus-setup" element={<SetupExperience />} />
-                    <Route path="/magic" element={<Navigate to="/onboarding-wizard" replace />} />
-                    <Route path="/onboarding-wizard" element={<OnboardingWizard />} />
+                <OnboardingGate>
+                  <Layout>
+                    <Routes>
+                      <Route path="/" element={<Dashboard />} />
+                      <Route path="/setup" element={<Setup />} />
+                      <Route path="/nexus-setup" element={<SetupExperience />} />
+                      <Route path="/magic" element={<Navigate to="/onboarding-wizard" replace />} />
                     <Route path="/onboarding" element={<OnboardingChat />} /> {/* Hyper-Onboarding v7.2 */}
                     <Route path="/forge" element={<BusinessForge />} />
                     <Route path="/stores" element={<Stores />} />
@@ -151,6 +214,7 @@ function App() {
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Layout>
+                </OnboardingGate>
               </RequireAuth>
             } />
           </Routes>
