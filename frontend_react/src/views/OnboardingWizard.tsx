@@ -136,10 +136,21 @@ export const OnboardingWizard: React.FC = () => {
                     navigate('/', { replace: true });
                     return;
                 }
+                const sd = data.step_data || {};
                 setStep(data.current_step || 0);
-                setStepData(data.step_data || {});
+                setStepData(sd);
                 setSystemPrompt(data.system_prompt_draft || '');
                 setTenantId(data.tenant_id);
+
+                // Restore step 1 state
+                if (sd.step_1?.tiendanube_connected) {
+                    setTnConnected(true);
+                    setTnStoreName(sd.step_1.store_id || '');
+                }
+                // Restore step 2 state
+                if (sd.step_2?.wa_provider) setWaProvider(sd.step_2.wa_provider);
+                if (sd.step_2?.ycloud_connected) setYcloudSaved(true);
+                if (sd.step_2?.meta_connected) { setMetaConnected(true); setMetaStatus('connected'); }
             }
         } catch (e) { /* first time */ }
         setLoading(false);
