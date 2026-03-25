@@ -412,10 +412,12 @@ async def onboarding_interview_step(
     step: int = Body(..., embed=True),
     tenant_id: int = Body(0, embed=True),
     reset: bool = Body(False, embed=True),
+    chat_history: list = Body([], embed=True),
 ):
     """
     Section-scoped interview for wizard steps 3, 4, 5.
     Each step uses a different prompt focused on that section.
+    Accepts chat_history to re-seed context when user returns after closing.
     """
     if step not in WIZARD_STEP_PROMPTS:
         raise HTTPException(status_code=400, detail=f"Invalid step {step}. Must be 3, 4, or 5.")
@@ -427,7 +429,17 @@ async def onboarding_interview_step(
             WIZARD_STEP_SESSIONS[step_session_key] = [
                 {"role": "system", "content": WIZARD_STEP_PROMPTS[step]}
             ]
-            if reset:
+
+            # Re-seed with chat history if user is returning
+            if chat_history and len(chat_history) > 0:
+                for msg in chat_history:
+                    role = msg.get("role", "user")
+                    content = msg.get("content", "")
+                    if role in ("user", "assistant") and content:
+                        WIZARD_STEP_SESSIONS[step_session_key].append({"role": role, "content": content})
+                # Tell the AI to continue where it left off
+                user_message = "Retome la conversacion donde la dejamos. Que falta por configurar de esta seccion?"
+            elif reset:
                 user_message = "Hola, estoy listo para configurar esta seccion."
 
         # Append user message

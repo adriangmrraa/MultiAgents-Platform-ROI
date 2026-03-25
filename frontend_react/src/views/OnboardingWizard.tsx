@@ -151,6 +151,18 @@ export const OnboardingWizard: React.FC = () => {
                 if (sd.step_2?.wa_provider) setWaProvider(sd.step_2.wa_provider);
                 if (sd.step_2?.ycloud_connected) setYcloudSaved(true);
                 if (sd.step_2?.meta_connected) { setMetaConnected(true); setMetaStatus('connected'); }
+                // Restore chat histories for steps 3-4-5
+                const restored: Record<number, any[]> = {};
+                for (const s of [3, 4, 5]) {
+                    if (sd[`step_${s}`]?.chat_history && sd[`step_${s}`].chat_history.length > 0) {
+                        restored[s] = sd[`step_${s}`].chat_history;
+                    }
+                }
+                if (Object.keys(restored).length > 0) setChatHistories(restored);
+                // Restore confirmed sections
+                if (sd.confirmed_sections) setConfirmedSections(sd.confirmed_sections);
+                // Set voice consent if user already accepted before
+                if (sd.voice_consent) setVoiceConsent(true);
             }
         } catch (e) { /* first time */ }
         setLoading(false);
@@ -591,9 +603,30 @@ export const OnboardingWizard: React.FC = () => {
         }
     };
 
+    // Auto-save chat history to DB (non-blocking)
+    const saveChatToDb = (msgs: any[]) => {
+        try {
+            fetchApi('/admin/onboarding-wizard/progress', {
+                method: 'PUT',
+                body: {
+                    step,
+                    step_data: {
+                        [`step_${step}`]: { chat_history: msgs, completed: false },
+                        confirmed_sections: confirmedSections,
+                        voice_consent: voiceConsent,
+                    }
+                }
+            }).catch(() => {});
+        } catch(e) {}
+    };
+
     const sendAndSpeak = async (text: string) => {
         if (!text.trim()) return;
-        setChatMessages(prev => [...prev, { role: 'user', content: text }]);
+        const userMsg = { role: 'user', content: text };
+        setChatMessages(prev => {
+            const updated = [...prev, userMsg];
+            return updated;
+        });
         setChatLoading(true);
         setVoiceState('processing');
         try {
@@ -602,9 +635,15 @@ export const OnboardingWizard: React.FC = () => {
                 body: { session_id: chatSessionId + `_s${step}`, user_message: text, step, tenant_id: tenantId || 0 }
             });
             if (res?.ai_message) {
-                const msg: any = { role: 'assistant', content: res.ai_message };
-                if (res.confirm_section) msg.confirmSection = res.confirm_section;
-                setChatMessages(prev => [...prev, msg]);
+                const assistantMsg: any = { role: 'assistant', content: res.ai_message };
+                if (res.confirm_section) assistantMsg.confirmSection = res.confirm_section;
+
+                setChatMessages(prev => {
+                    const updated = [...prev, assistantMsg];
+                    // Auto-save to DB after each exchange
+                    saveChatToDb(updated);
+                    return updated;
+                });
 
                 if (res.section_complete && res.extracted_draft) {
                     setSectionComplete(true);
@@ -628,6 +667,8 @@ export const OnboardingWizard: React.FC = () => {
 
     const acceptVoice = async () => {
         setVoiceConsent(true);
+        // Persist voice consent so it's remembered on reload
+        saveProgress(step, { voice_consent: true });
         try {
             await navigator.mediaDevices.getUserMedia({ audio: true });
             setVoiceMode(true);
@@ -646,11 +687,43 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     const initChatWithVoice = async (chatStep: number) => {
-        // Check if we have history for this step
-        if (chatHistories[chatStep] && chatHistories[chatStep].length > 0) {
-            setChatMessages(chatHistories[chatStep]);
-            return; // Don't re-init, resume
+        const savedHistory = chatHistories[chatStep];
+        const hasHistory = savedHistory && savedHistory.length > 0;
+
+        if (hasHistory) {
+            // Restore UI with saved messages
+            setChatMessages(savedHistory);
+            // Re-seed backend with history so AI remembers context
+            setChatLoading(true);
+            try {
+                const res = await fetchApi('/admin/onboarding/interview-step', {
+                    method: 'POST',
+                    body: {
+                        session_id: chatSessionId + `_s${chatStep}`,
+                        user_message: 'Retomo donde lo dejamos.',
+                        step: chatStep,
+                        tenant_id: tenantId || 0,
+                        reset: true,
+                        chat_history: savedHistory.map((m: any) => ({ role: m.role, content: m.content }))
+                    }
+                });
+                if (res?.ai_message) {
+                    const msg: any = { role: 'assistant', content: res.ai_message };
+                    if (res.confirm_section) msg.confirmSection = res.confirm_section;
+                    setChatMessages(prev => [...prev, msg]);
+                    setChatLoading(false);
+                    if (voiceMode) {
+                        await playTTS(res.ai_message);
+                        startAutoListen();
+                    }
+                    return;
+                }
+            } catch(e) {}
+            setChatLoading(false);
+            return;
         }
+
+        // Fresh start — no history
         setChatLoading(true);
         try {
             const res = await fetchApi('/admin/onboarding/interview-step', {
