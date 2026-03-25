@@ -816,9 +816,16 @@ export const OnboardingWizard: React.FC = () => {
             return;
         }
 
-        // 2. Extract Meta context + show research cards
-        const context = metaContext || await extractMetaData();
-        // extractMetaData also sets researchCards for cascade display
+        // 2. Extract Meta + Web context (WAIT for it before connecting)
+        let context = metaContext;
+        if (!context) {
+            context = await extractMetaData();
+        }
+        // Also include web research if available
+        if (!context && webResearchContext) {
+            context = webResearchContext;
+        }
+        console.log('[Realtime] Context for Nova:', context ? `${context.length} chars` : 'EMPTY');
 
         // 3. Create realtime session
         try {
