@@ -1688,6 +1688,7 @@ export const OnboardingWizard: React.FC = () => {
                                     <p className="text-[10px] font-bold text-slate-400">Reglas</p>
                                     <p className="text-xs text-white truncate flex items-center gap-1">
                                         {step >= 5 || stepData.step_4?.completed || savedSections.guardar_reglas ? <><Check size={10} className="text-green-400" /> Configuradas</> : 'Pendiente'}
+                                    </p>
                                 </div>
                             </div>
 
