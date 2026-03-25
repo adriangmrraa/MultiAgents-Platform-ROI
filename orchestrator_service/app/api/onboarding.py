@@ -545,6 +545,56 @@ async def onboarding_tts(text: str = Body(..., embed=True)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# --- Realtime Voice Session (OpenAI Realtime API — like Voice Widget) ---
+
+@router.post("/realtime-session")
+async def create_realtime_session(
+    step: int = Body(3, embed=True),
+    tenant_id: int = Body(0, embed=True),
+    meta_context: str = Body("", embed=True),
+):
+    """Create an OpenAI Realtime session for the voice architect.
+    Returns session_id and ws_url for WebSocket connection."""
+    import uuid
+    from db import redis_client
+
+    api_key = await _get_platform_key(tenant_id)
+
+    # Build Nova's system prompt with meta context
+    base_prompt = WIZARD_STEP_PROMPTS.get(step, WIZARD_STEP_PROMPTS[3])
+
+    # Strip voice format instructions (Realtime handles voice natively)
+    # Add meta context if available
+    system_prompt = base_prompt
+    if meta_context:
+        system_prompt = f"""CONTEXTO DE REDES SOCIALES DEL NEGOCIO:
+{meta_context}
+
+Usa esta informacion para personalizar tus preguntas. No la recites, demostrale al usuario que ya investigaste su negocio.
+
+{base_prompt}"""
+
+    session_id = uuid.uuid4().hex
+    session_data = {
+        "type": "onboarding_realtime",
+        "step": step,
+        "tenant_id": tenant_id,
+        "api_key": api_key,
+        "system_prompt": system_prompt,
+        "voice": "nova",
+        "max_duration": 600,  # 10 min max for onboarding conversation
+    }
+
+    await redis_client.setex(
+        f"onboarding_realtime:{session_id}",
+        660,  # TTL = max_duration + margin
+        json.dumps(session_data)
+    )
+
+    logger.info("onboarding_realtime_session_created", step=step, session_id=session_id)
+    return {"session_id": session_id, "step": step}
+
+
 # --- Meta Data Extraction (for Architect context) ---
 
 @router.post("/extract-meta-data")
@@ -558,15 +608,24 @@ async def extract_meta_data(tenant_id: int = Body(0, embed=True)):
     from utils import decrypt_password
     import httpx
 
+    # If no tenant_id provided, try to find the most recent one
     if not tenant_id:
-        return {"context": "", "assets": []}
+        row = await db.pool.fetchrow(
+            "SELECT tenant_id FROM onboarding_progress WHERE tenant_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1"
+        )
+        if row:
+            tenant_id = row["tenant_id"]
+    if not tenant_id:
+        return {"context": "", "assets": [], "debug": "no_tenant_id"}
 
     try:
         # 1. Get business assets from DB
+        logger.info(f"extract_meta_data: tenant_id={tenant_id}")
         assets = await db.pool.fetch(
             "SELECT asset_type, content FROM business_assets WHERE tenant_id = $1 AND is_active = true",
             tenant_id
         )
+        logger.info(f"extract_meta_data: found {len(assets)} assets")
 
         extracted = []
         api_version = "v22.0"
