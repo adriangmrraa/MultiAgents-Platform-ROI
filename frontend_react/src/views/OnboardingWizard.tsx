@@ -1005,9 +1005,21 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     const pauseMic = () => {
+        const newPaused = !micPaused;
+        setMicPaused(newPaused);
+        // Mute all audio tracks
         if (realtimeStreamRef.current) {
-            const track = realtimeStreamRef.current.getAudioTracks()[0];
-            if (track) { track.enabled = !track.enabled; setMicPaused(!track.enabled); }
+            realtimeStreamRef.current.getAudioTracks().forEach(track => { track.enabled = !newPaused; });
+        }
+        // Also disconnect/reconnect the processor to stop sending data
+        if (newPaused && realtimeProcessorRef.current) {
+            try { realtimeProcessorRef.current.disconnect(); } catch(e) {}
+        } else if (!newPaused && realtimeProcessorRef.current && realtimeAudioCtxRef.current && realtimeStreamRef.current) {
+            try {
+                const source = realtimeAudioCtxRef.current.createMediaStreamSource(realtimeStreamRef.current);
+                source.connect(realtimeProcessorRef.current);
+                realtimeProcessorRef.current.connect(realtimeAudioCtxRef.current.destination);
+            } catch(e) {}
         }
     };
 
