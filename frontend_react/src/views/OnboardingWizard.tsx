@@ -283,7 +283,11 @@ export const OnboardingWizard: React.FC = () => {
                 method: 'POST',
                 body: { session_id: chatSessionId + `_s${step}`, user_message: msg, step, tenant_id: tenantId || 0 }
             });
-            if (res?.ai_message) setChatMessages(prev => [...prev, { role: 'assistant', content: res.ai_message }]);
+            if (res?.ai_message) {
+                const newMsg: any = { role: 'assistant', content: res.ai_message };
+                if (res.confirm_section) newMsg.confirmSection = res.confirm_section;
+                setChatMessages(prev => [...prev, newMsg]);
+            }
             if (res?.section_complete && res?.extracted_draft) {
                 setSectionComplete(true);
                 setSectionDraft(res.extracted_draft);

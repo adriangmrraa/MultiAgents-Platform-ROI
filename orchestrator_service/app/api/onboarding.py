@@ -413,7 +413,7 @@ async def onboarding_interview_step(
 
 @router.post("/tts")
 async def onboarding_tts(text: str = Body(..., embed=True)):
-    """Convert text to speech using OpenAI TTS. Returns MP3 audio stream.
+    """Convert text to speech using OpenAI TTS. Returns MP3 audio bytes.
     Uses platform API key (company investment in onboarding UX).
     Voice: nova (femenina, cálida, ideal para LATAM).
     """
@@ -428,11 +428,11 @@ async def onboarding_tts(text: str = Body(..., embed=True)):
             response_format="mp3"
         )
 
-        async def audio_stream():
-            async for chunk in response.iter_bytes(1024):
-                yield chunk
+        # Read full audio content
+        audio_bytes = response.read()
 
-        return StreamingResponse(audio_stream(), media_type="audio/mpeg")
+        from fastapi.responses import Response
+        return Response(content=audio_bytes, media_type="audio/mpeg")
 
     except Exception as e:
         logger.error(f"TTS error: {e}")
