@@ -156,10 +156,37 @@ export const OnboardingWizard: React.FC = () => {
                     return;
                 }
                 const sd = data.step_data || {};
-                const draft = data.system_prompt_draft || '';
+                let draft = data.system_prompt_draft || '';
                 setStepData(sd);
-                setSystemPrompt(draft);
                 setTenantId(data.tenant_id);
+
+                // If draft is empty/short, reconstruct from chat histories in step_data
+                if ((!draft || draft.length < 100)) {
+                    const chatParts: string[] = [];
+                    for (const s of [3, 4, 5]) {
+                        const stepChat = sd[`step_${s}`]?.chat_history;
+                        if (stepChat && Array.isArray(stepChat)) {
+                            for (const msg of stepChat) {
+                                if (msg.role === 'assistant' && msg.content) {
+                                    chatParts.push(msg.content);
+                                } else if (msg.role === 'user' && msg.content) {
+                                    chatParts.push(`USUARIO: ${msg.content}`);
+                                }
+                            }
+                        }
+                        // Also check for section drafts
+                        const toneDraft = sd[`step_${s}`]?.tone_draft;
+                        const rulesDraft = sd[`step_${s}`]?.rules_draft;
+                        const dictDraft = sd[`step_${s}`]?.dictionary_draft;
+                        if (toneDraft) chatParts.push(toneDraft);
+                        if (rulesDraft) chatParts.push(rulesDraft);
+                        if (dictDraft) chatParts.push(dictDraft);
+                    }
+                    if (chatParts.length > 0) {
+                        draft = chatParts.join('\n\n');
+                    }
+                }
+                setSystemPrompt(draft);
 
                 // URL param ?step=6 to jump to review
                 const urlParams = new URLSearchParams(window.location.search);
