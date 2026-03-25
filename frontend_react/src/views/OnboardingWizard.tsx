@@ -1757,7 +1757,18 @@ ESTRUCTURA OBLIGATORIA:
 
 DRAFT/CONVERSACION DEL NEGOCIO:
 ${systemPrompt}`,
-                                                    system_prompt: 'Transforma el draft en un system prompt para un agente de ventas de WhatsApp. USA SOLO la info del draft. NUNCA inventes datos. Si falta algo, escribe [COMPLETAR]. Responde SOLO con el prompt, sin explicaciones.'
+                                                    system_prompt: `Sos un ingeniero de prompts experto. Tu trabajo es transformar una conversacion/draft en un SYSTEM PROMPT listo para produccion.
+
+El prompt resultante sera usado por un agente de IA que atiende WhatsApp, Instagram y Facebook de un negocio real. El agente recibe mensajes de clientes y responde.
+
+FORMATO DEL RESULTADO:
+- Escrito en SEGUNDA PERSONA dirigido al agente: "Sos el asistente de...", "Cuando un cliente pregunte...", "NUNCA digas..."
+- NO es un resumen del negocio. SON INSTRUCCIONES OPERATIVAS para el agente.
+- Cada regla es un IMPERATIVO: "SIEMPRE explicá...", "NUNCA inventes...", "Si el cliente pide X, respondé Y"
+- El diccionario tiene sinonimos del RUBRO ESPECIFICO (no genericos como "articulos, mercancias")
+
+USA SOLO datos del draft. NUNCA inventes. Si falta info, escribe [COMPLETAR].
+Responde SOLO con el prompt, sin explicaciones ni comentarios.`
                                                 }
                                             });
                                             if (res?.response) { setSystemPrompt(res.response); }
