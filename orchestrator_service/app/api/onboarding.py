@@ -15,18 +15,35 @@ logger = logging.getLogger(__name__)
 
 
 async def _get_platform_key(tenant_id: int = 0) -> str:
-    """Resolve OpenAI API key: tenant credential -> global var -> env fallback."""
+    """Resolve OpenAI API key: settings → tenant credential → env fallback."""
     api_key = None
-    if tenant_id:
-        api_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
+
+    # 1. Settings (Pydantic BaseSettings — reads from env automatically)
+    try:
+        from app.core.config import settings as app_settings
+        api_key = app_settings.OPENAI_API_KEY
+    except Exception:
+        pass
+
+    # 2. Tenant credential from DB
+    if not api_key and tenant_id:
+        try:
+            api_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
+        except Exception:
+            pass
+
+    # 3. Global var from main.py
     if not api_key:
         try:
             from main import OPENAI_API_KEY as GLOBAL_KEY
             api_key = GLOBAL_KEY
         except Exception:
             pass
+
+    # 4. Direct env fallback
     if not api_key:
         api_key = os.getenv("OPENAI_API_KEY")
+
     if not api_key:
         raise HTTPException(status_code=500, detail="Platform API key not configured")
     return api_key
