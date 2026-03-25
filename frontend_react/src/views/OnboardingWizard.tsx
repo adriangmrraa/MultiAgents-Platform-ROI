@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useFacebookSdk } from '../hooks/useFacebookSdk';
+import MetaOnboardingWizard from './settings/MetaOnboardingWizard';
 import {
     Sparkles, ArrowRight, ArrowLeft, Store, Facebook, Mic, MicOff, Send,
     Check, CheckCircle, AlertCircle, Copy, ChevronDown, Phone, Zap,
-    BarChart2, MessageCircle, Globe, CreditCard, X, Volume2, Star
+    BarChart2, MessageCircle, Globe, CreditCard, X, Volume2, Star, Instagram
 } from 'lucide-react';
 
 // --- Constants ---
@@ -61,6 +63,10 @@ export const OnboardingWizard: React.FC = () => {
 
     // Step 2 (Meta)
     const [metaConnected, setMetaConnected] = useState(false);
+    const [metaStatus, setMetaStatus] = useState<'idle' | 'loading' | 'wizard' | 'connected'>('idle');
+    const [metaAssets, setMetaAssets] = useState<any>(null);
+    const [metaConnectedAssets, setMetaConnectedAssets] = useState<Record<string, boolean>>({});
+    const isFbSdkReady = useFacebookSdk();
 
     // Steps 3-4-5 (Chat)
     const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([]);
@@ -245,14 +251,65 @@ export const OnboardingWizard: React.FC = () => {
         } finally { setLoading(false); }
     };
 
-    // --- Step 2: Meta ---
+    // --- Step 2: Meta (reuses same FB.login flow as MetaSettings) ---
     const connectMeta = () => {
-        const clientId = import.meta.env.VITE_FACEBOOK_APP_ID || import.meta.env.VITE_META_APP_ID || '';
-        const redirectUri = encodeURIComponent(window.location.origin + '/settings/meta');
-        const scope = 'pages_show_list,pages_messaging,instagram_basic,instagram_manage_messages,whatsapp_business_management,business_management';
-        const url = `https://www.facebook.com/v22.0/dialog/oauth?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
-        window.open(url, 'meta_oauth', 'width=600,height=700');
-        // User will come back and mark as done
+        if (!isFbSdkReady || !(window as any).FB) {
+            setError('Facebook SDK no cargado. Recarga la pagina.');
+            return;
+        }
+        setMetaStatus('loading');
+        const loginParams: any = {
+            config_id: import.meta.env.VITE_META_CONFIG_ID,
+            response_type: 'code',
+            override_default_response_type: true,
+        };
+        if (import.meta.env.VITE_META_EMBEDDED_SIGNUP === 'true') {
+            loginParams.extras = { feature: 'whatsapp_embedded_signup', setup: {} };
+        }
+        (window as any).FB.login((response: any) => {
+            const code = response.authResponse?.code || response.code;
+            const accessToken = response.authResponse?.accessToken;
+            if (accessToken) {
+                connectMetaBackend(accessToken, 'token');
+            } else if (code) {
+                connectMetaBackend(code, 'code');
+            } else {
+                setMetaStatus('idle');
+                if (response.status !== 'connected' && response.status !== 'unknown') {
+                    setError('No se recibio autorizacion de Meta.');
+                }
+            }
+        }, loginParams);
+    };
+
+    const connectMetaBackend = async (credential: string, type: 'code' | 'token') => {
+        try {
+            const redirectUri = window.location.origin + '/settings/meta';
+            const res = await fetchApi('/admin/meta/connect', {
+                method: 'POST',
+                body: { ...(type === 'code' ? { code: credential } : { access_token: credential }), redirect_uri: redirectUri }
+            });
+            if (res.status === 'success') {
+                const safeAssets = res.assets || { pages: [], instagram: [], whatsapp: [] };
+                setMetaAssets(safeAssets);
+                setMetaConnectedAssets(res.connected || {});
+                setMetaStatus('wizard');
+            } else {
+                setMetaStatus('idle');
+                setError(res.message || 'Conexion con Meta no completada.');
+            }
+        } catch (e: any) {
+            setMetaStatus('idle');
+            setError(e.message || 'Error conectando con Meta.');
+        }
+    };
+
+    const handleMetaWizardComplete = () => {
+        setMetaStatus('connected');
+        setMetaConnected(true);
+        saveProgress(2, { step_2: { completed: true, meta_connected: true } });
+        // Auto-advance to step 3 after 10 seconds
+        setTimeout(() => goNext(), 10000);
     };
 
     // --- Steps 3-4-5: Chat ---
@@ -725,10 +782,10 @@ export const OnboardingWizard: React.FC = () => {
                         </div>
                     )}
 
-                    {/* === STEP 2: Meta === */}
+                    {/* === STEP 2: Meta (reutiliza FB.login + MetaOnboardingWizard) === */}
                     {step === 2 && (
                         <div className="space-y-4 animate-fade-in">
-                            <div className="text-center mb-6">
+                            <div className="text-center mb-4">
                                 <div className="w-14 h-14 bg-[#1877F2]/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
                                     <Facebook size={28} className="text-[#1877F2]" />
                                 </div>
@@ -736,30 +793,71 @@ export const OnboardingWizard: React.FC = () => {
                                 <p className="text-slate-400 text-sm mt-1">WhatsApp, Instagram y Facebook Messenger</p>
                             </div>
 
-                            <div className="glass p-5 rounded-xl border border-white/5 text-center space-y-4">
-                                {metaConnected ? (
-                                    <div className="flex items-center justify-center gap-2 text-green-400">
-                                        <CheckCircle size={20} /> <span className="font-bold">Conectado</span>
+                            {/* Connected — show assets for 10s then auto-advance */}
+                            {metaStatus === 'connected' && (
+                                <div className="glass p-5 rounded-xl border border-green-500/20 space-y-3 animate-fade-in">
+                                    <div className="flex items-center justify-center gap-2 text-green-400 mb-3">
+                                        <CheckCircle size={20} /> <span className="font-bold">Canales conectados</span>
                                     </div>
-                                ) : (
-                                    <button onClick={connectMeta}
-                                        className="w-full py-3 bg-[#1877F2] hover:bg-[#1565C0] text-white font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
-                                        <Facebook size={18} /> Conectar con Meta
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 ${metaConnectedAssets.facebook ? 'bg-[#1877F2]/10 border-[#1877F2]/30' : 'bg-white/5 border-white/5 opacity-40'}`}>
+                                            <Facebook size={20} className={metaConnectedAssets.facebook ? 'text-[#1877F2]' : 'text-slate-600'} />
+                                            <span className="text-[10px] font-bold text-white">Facebook</span>
+                                            {metaConnectedAssets.facebook && <Check size={10} className="text-green-400" />}
+                                        </div>
+                                        <div className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 ${metaConnectedAssets.instagram ? 'bg-[#E1306C]/10 border-[#E1306C]/30' : 'bg-white/5 border-white/5 opacity-40'}`}>
+                                            <Instagram size={20} className={metaConnectedAssets.instagram ? 'text-[#E1306C]' : 'text-slate-600'} />
+                                            <span className="text-[10px] font-bold text-white">Instagram</span>
+                                            {metaConnectedAssets.instagram && <Check size={10} className="text-green-400" />}
+                                        </div>
+                                        <div className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 ${metaConnectedAssets.whatsapp ? 'bg-[#25D366]/10 border-[#25D366]/30' : 'bg-white/5 border-white/5 opacity-40'}`}>
+                                            <MessageCircle size={20} className={metaConnectedAssets.whatsapp ? 'text-[#25D366]' : 'text-slate-600'} />
+                                            <span className="text-[10px] font-bold text-white">WhatsApp</span>
+                                            {metaConnectedAssets.whatsapp && <Check size={10} className="text-green-400" />}
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 text-center">Avanzando al siguiente paso en 10 segundos...</p>
+                                    <button onClick={goNext} className="w-full py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all active:scale-[0.98] text-sm flex items-center justify-center gap-2">
+                                        Continuar ahora <ArrowRight size={14} />
                                     </button>
-                                )}
-                                <button onClick={() => setMetaConnected(true)} className="text-[10px] text-slate-600 hover:text-slate-400">
-                                    Ya conecte mi cuenta ✓
-                                </button>
-                            </div>
+                                </div>
+                            )}
 
-                            <div className="flex gap-2">
-                                <button onClick={goBack} className="flex-1 py-3 bg-white/5 text-slate-400 font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
-                                    <ArrowLeft size={16} /> Atras
-                                </button>
-                                <button onClick={goNext} className="flex-[2] py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
-                                    {metaConnected ? 'Siguiente' : 'Configurar despues'} <ArrowRight size={16} />
-                                </button>
-                            </div>
+                            {/* Wizard — asset selection (same as MetaSettings) */}
+                            {metaStatus === 'wizard' && metaAssets && (
+                                <MetaOnboardingWizard
+                                    assets={metaAssets}
+                                    onComplete={handleMetaWizardComplete}
+                                    onCancel={() => { setMetaStatus('idle'); }}
+                                />
+                            )}
+
+                            {/* Idle or Loading — show connect button */}
+                            {(metaStatus === 'idle' || metaStatus === 'loading') && (
+                                <div className="glass p-5 rounded-xl border border-white/5 text-center space-y-4">
+                                    <button onClick={connectMeta} disabled={metaStatus === 'loading' || !isFbSdkReady}
+                                        className="w-full py-3 bg-[#1877F2] hover:bg-[#1565C0] disabled:opacity-50 text-white font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                                        {metaStatus === 'loading' ? (
+                                            <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Conectando...</>
+                                        ) : (
+                                            <><Facebook size={18} /> Conectar con Meta</>
+                                        )}
+                                    </button>
+                                    {!isFbSdkReady && <p className="text-[10px] text-amber-400">Cargando SDK de Facebook...</p>}
+                                </div>
+                            )}
+
+                            {/* Navigation */}
+                            {metaStatus !== 'wizard' && (
+                                <div className="flex gap-2">
+                                    <button onClick={goBack} className="flex-1 py-3 bg-white/5 text-slate-400 font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                                        <ArrowLeft size={16} /> Atras
+                                    </button>
+                                    <button onClick={goNext} className="flex-[2] py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                                        {metaStatus === 'connected' ? 'Siguiente' : 'Configurar despues'} <ArrowRight size={16} />
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
 
