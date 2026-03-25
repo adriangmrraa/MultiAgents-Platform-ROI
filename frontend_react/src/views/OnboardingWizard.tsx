@@ -1075,21 +1075,29 @@ export const OnboardingWizard: React.FC = () => {
 
     const activateAgent = async () => {
         setLoading(true);
+        setError(null);
         try {
+            // Save the latest system prompt first
+            await fetchApi('/admin/onboarding-wizard/progress', {
+                method: 'PUT',
+                body: { step: 6, system_prompt_draft: systemPrompt }
+            }).catch(() => {});
+            // Create agent + mark wizard completed (sets completed_at)
             const res = await fetchApi('/admin/onboarding-wizard/complete', { method: 'POST' });
             if (res?.agent_id) {
-                await saveProgress(7);
-                setStep(7);
+                setStep(7); // Show pricing
+            } else {
+                setError('Error al activar el agente');
             }
-        } catch (e: any) { setError(e.message); }
+        } catch (e: any) { setError(e.message || 'Error al activar'); }
         setLoading(false);
     };
 
     // --- Step 7: Pricing ---
     const startTrial = async () => {
         try {
-            // Mark wizard as complete — trial starts automatically from existing logic
-            await saveProgress(7);
+            // Ensure wizard is marked complete (completed_at set)
+            await fetchApi('/admin/onboarding-wizard/complete', { method: 'POST' }).catch(() => {});
             navigate('/', { replace: true });
         } catch (e) { navigate('/'); }
     };
