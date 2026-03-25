@@ -94,6 +94,13 @@ export const OnboardingWizard: React.FC = () => {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [chatHistories, setChatHistories] = useState<Record<number, { role: string; content: string; confirmSection?: string }[]>>({});
     const [confirmedSections, setConfirmedSections] = useState<Record<string, boolean>>({});
+    // Realtime WebSocket
+    const realtimeWsRef = useRef<WebSocket | null>(null);
+    const realtimeAudioCtxRef = useRef<AudioContext | null>(null);
+    const realtimeStreamRef = useRef<MediaStream | null>(null);
+    const realtimeProcessorRef = useRef<ScriptProcessorNode | null>(null);
+    const [realtimeConnected, setRealtimeConnected] = useState(false);
+    const pendingTranscriptRef = useRef<string>('');
 
     // Step 6 (Test)
     const [testMessage, setTestMessage] = useState('');
@@ -682,20 +689,156 @@ export const OnboardingWizard: React.FC = () => {
         return '';
     };
 
+    const connectRealtime = async (chatStep: number) => {
+        // 1. Get mic permission
+        let stream: MediaStream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000 } });
+            realtimeStreamRef.current = stream;
+        } catch(e) {
+            console.error('[Realtime] Mic denied');
+            setVoiceMode(false);
+            initChat(chatStep);
+            return;
+        }
+
+        // 2. Extract Meta context
+        const context = metaContext || await extractMetaData();
+
+        // 3. Create realtime session
+        try {
+            const sessionRes = await fetchApi('/admin/onboarding/realtime-session', {
+                method: 'POST',
+                body: { step: chatStep, tenant_id: tenantId || 0, meta_context: context }
+            });
+            if (!sessionRes?.session_id) throw new Error('No session');
+
+            // 4. Connect WebSocket
+            const hostname = window.location.hostname;
+            let wsBase = '';
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                wsBase = 'ws://localhost:3000';
+            } else {
+                const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                wsBase = `${proto}//${hostname.includes('frontend') ? hostname.replace('frontend', 'orchestrator-service') : hostname}`;
+            }
+            const wsUrl = `${wsBase}/admin/onboarding/realtime-ws/${sessionRes.session_id}`;
+
+            const ws = new WebSocket(wsUrl);
+            ws.binaryType = 'arraybuffer';
+            realtimeWsRef.current = ws;
+
+            ws.onopen = () => {
+                setRealtimeConnected(true);
+                setVoiceState('listening');
+                // Start sending mic audio
+                startRealtimeAudioCapture(stream, ws);
+            };
+
+            ws.onmessage = (evt) => {
+                if (evt.data instanceof ArrayBuffer) {
+                    // Audio from Nova — play it
+                    setVoiceState('speaking');
+                    playRealtimeAudio(evt.data);
+                } else {
+                    // Text message (transcript)
+                    try {
+                        const msg = JSON.parse(evt.data);
+                        if (msg.type === 'transcript') {
+                            if (msg.role === 'assistant') {
+                                pendingTranscriptRef.current += msg.text;
+                            } else if (msg.role === 'user') {
+                                setChatMessages(prev => [...prev, { role: 'user', content: msg.text }]);
+                                saveChatToDb([...chatMessages, { role: 'user', content: msg.text }]);
+                            }
+                        } else if (msg.type === 'response_done') {
+                            // Full assistant response done — add to chat
+                            if (pendingTranscriptRef.current) {
+                                const fullText = pendingTranscriptRef.current;
+                                pendingTranscriptRef.current = '';
+                                setChatMessages(prev => {
+                                    const updated = [...prev, { role: 'assistant', content: fullText }];
+                                    saveChatToDb(updated);
+                                    return updated;
+                                });
+                            }
+                            setVoiceState('listening');
+                        }
+                    } catch(e) {}
+                }
+            };
+
+            ws.onclose = () => {
+                setRealtimeConnected(false);
+                setVoiceState('idle');
+                stopRealtimeAudio();
+            };
+
+            ws.onerror = () => {
+                setRealtimeConnected(false);
+                setVoiceState('idle');
+                stopRealtimeAudio();
+            };
+
+        } catch(e) {
+            console.error('[Realtime] Connection failed, falling back to text+TTS:', e);
+            // Fallback to text+TTS mode (still uses voice output via TTS)
+            await initChatWithVoice(chatStep);
+        }
+    };
+
+    const startRealtimeAudioCapture = (stream: MediaStream, ws: WebSocket) => {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+        realtimeAudioCtxRef.current = audioCtx;
+        const source = audioCtx.createMediaStreamSource(stream);
+        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        realtimeProcessorRef.current = processor;
+
+        processor.onaudioprocess = (e) => {
+            if (ws.readyState === WebSocket.OPEN) {
+                const input = e.inputBuffer.getChannelData(0);
+                const pcm16 = new Int16Array(input.length);
+                for (let i = 0; i < input.length; i++) {
+                    pcm16[i] = Math.max(-32768, Math.min(32767, input[i] * 32768));
+                }
+                ws.send(pcm16.buffer);
+            }
+        };
+        source.connect(processor);
+        processor.connect(audioCtx.destination);
+    };
+
+    const playRealtimeAudio = (arrayBuffer: ArrayBuffer) => {
+        if (!realtimeAudioCtxRef.current) {
+            realtimeAudioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        const ctx = realtimeAudioCtxRef.current;
+        const pcm16 = new Int16Array(arrayBuffer);
+        const float32 = new Float32Array(pcm16.length);
+        for (let i = 0; i < pcm16.length; i++) {
+            float32[i] = pcm16[i] / 32768;
+        }
+        const buffer = ctx.createBuffer(1, float32.length, 24000); // OpenAI Realtime outputs 24kHz
+        buffer.getChannelData(0).set(float32);
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(ctx.destination);
+        src.start();
+    };
+
+    const stopRealtimeAudio = () => {
+        if (realtimeProcessorRef.current) { try { realtimeProcessorRef.current.disconnect(); } catch(e) {} realtimeProcessorRef.current = null; }
+        if (realtimeStreamRef.current) { realtimeStreamRef.current.getTracks().forEach(t => t.stop()); realtimeStreamRef.current = null; }
+        if (realtimeAudioCtxRef.current) { try { realtimeAudioCtxRef.current.close(); } catch(e) {} realtimeAudioCtxRef.current = null; }
+        if (realtimeWsRef.current) { try { realtimeWsRef.current.close(); } catch(e) {} realtimeWsRef.current = null; }
+        setRealtimeConnected(false);
+    };
+
     const acceptVoice = async () => {
         setVoiceConsent(true);
+        setVoiceMode(true);
         saveProgress(step, { voice_consent: true });
-        // Extract Meta data first
-        const context = await extractMetaData();
-        try {
-            await navigator.mediaDevices.getUserMedia({ audio: true });
-            setVoiceMode(true);
-        } catch (e) {
-            // Mic denied — TTS only mode
-            setVoiceMode(false);
-        }
-        // Start the chat and speak the first message
-        await initChatWithVoice(step);
+        await connectRealtime(step);
     };
 
     const declineVoice = () => {
@@ -704,14 +847,19 @@ export const OnboardingWizard: React.FC = () => {
         initChat(step);
     };
 
+    // Cleanup realtime on step change or unmount
+    useEffect(() => {
+        return () => { stopRealtimeAudio(); };
+    }, [step]);
+
     const initChatWithVoice = async (chatStep: number) => {
         const savedHistory = chatHistories[chatStep];
         const hasHistory = savedHistory && savedHistory.length > 0;
+        // Always play TTS if user accepted voice (voiceConsent=true means they want voice)
+        const shouldSpeak = voiceConsent;
 
         if (hasHistory) {
-            // Restore UI with saved messages
             setChatMessages(savedHistory);
-            // Re-seed backend with history so AI remembers context
             setChatLoading(true);
             try {
                 const res = await fetchApi('/admin/onboarding/interview-step', {
@@ -730,7 +878,7 @@ export const OnboardingWizard: React.FC = () => {
                     if (res.confirm_section) msg.confirmSection = res.confirm_section;
                     setChatMessages(prev => [...prev, msg]);
                     setChatLoading(false);
-                    if (voiceMode) {
+                    if (shouldSpeak) {
                         await playTTS(res.ai_message);
                         startAutoListen();
                     }
@@ -741,7 +889,7 @@ export const OnboardingWizard: React.FC = () => {
             return;
         }
 
-        // Fresh start — no history. Include Meta context if available
+        // Fresh start — include Meta context
         setChatLoading(true);
         const ctx = metaContext || await extractMetaData();
         const initMessage = ctx
@@ -755,13 +903,14 @@ export const OnboardingWizard: React.FC = () => {
             if (res?.ai_message) {
                 setChatMessages([{ role: 'assistant', content: res.ai_message }]);
                 setChatLoading(false);
-                if (voiceMode) {
+                // ALWAYS play TTS for the first message — this is the "wow moment"
+                if (shouldSpeak) {
                     await playTTS(res.ai_message);
                     startAutoListen();
                 }
                 return;
             }
-        } catch (e) { /* fallback */ }
+        } catch (e) { console.error('[initChatWithVoice] Error:', e); }
         setChatLoading(false);
     };
 
