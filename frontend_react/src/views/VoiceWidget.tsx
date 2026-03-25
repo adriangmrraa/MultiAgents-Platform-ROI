@@ -42,8 +42,8 @@ interface Agent {
     name: string;
     role: string;
     model_version: string;
-    enabled_tools: string[];
-    channels: string[];
+    enabled_tools: string[] | Record<string, any> | null;
+    channels: string[] | Record<string, any> | null;
     is_active: boolean;
 }
 
@@ -329,7 +329,7 @@ export const VoiceWidget: React.FC = () => {
                                 {selectedAgent && (
                                     <div className="mt-2 p-3 bg-white/5 rounded-lg text-xs text-slate-400 space-y-1">
                                         <p>Modelo: <span className="text-white">{selectedAgent.model_version}</span></p>
-                                        <p>Tools: <span className="text-white">{(selectedAgent.enabled_tools || []).join(', ') || 'Ninguna'}</span></p>
+                                        <p>Tools: <span className="text-white">{(Array.isArray(selectedAgent.enabled_tools) ? selectedAgent.enabled_tools : []).join(', ') || 'Ninguna'}</span></p>
                                     </div>
                                 )}
                             </>
