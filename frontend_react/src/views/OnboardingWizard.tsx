@@ -468,42 +468,61 @@ export const OnboardingWizard: React.FC = () => {
     const startAutoListen = () => {
         if (!voiceMode) return;
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (!SpeechRecognition) return;
+        if (!SpeechRecognition) {
+            console.warn('[VoiceArchitect] SpeechRecognition not available');
+            setVoiceState('idle');
+            return;
+        }
+
+        // Stop any existing recognition first
+        if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch(e) {}
+            recognitionRef.current = null;
+        }
 
         setVoiceState('listening');
         const recognition = new SpeechRecognition();
         recognition.lang = 'es-AR';
-        recognition.continuous = true;
-        recognition.interimResults = false;
+        // Safari doesn't support continuous well — use false and restart on end
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        recognition.continuous = !isSafari;
+        recognition.interimResults = true; // Show partial results for better UX
 
-        let lastResultTime = Date.now();
         let accumulated = '';
+        let finalTranscript = '';
 
         recognition.onresult = (event: any) => {
-            const text = event.results[event.results.length - 1][0].transcript;
-            accumulated += (accumulated ? ' ' : '') + text;
-            lastResultTime = Date.now();
+            let interimTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += transcript + ' ';
+                } else {
+                    interimTranscript = transcript;
+                }
+            }
+            accumulated = (finalTranscript + interimTranscript).trim();
 
-            // Reset silence timers
+            // Reset silence timer on any speech
             clearTimeout(silenceTimerRef.current);
-            // 2s silence → send what we have
             silenceTimerRef.current = setTimeout(() => {
-                if (accumulated.trim()) {
-                    const toSend = accumulated.trim();
-                    accumulated = '';
-                    recognition.stop();
+                const toSend = finalTranscript.trim() || accumulated.trim();
+                if (toSend) {
+                    try { recognition.stop(); } catch(e) {}
                     recognitionRef.current = null;
                     setIsRecording(false);
                     setVoiceState('processing');
+                    finalTranscript = '';
+                    accumulated = '';
                     sendAndSpeak(toSend);
                 }
-            }, 2000);
+            }, 3000); // 3s silence → send (balanced between fluidity and premature cut)
         };
 
         // 15s total silence → stop mic
         const totalSilenceTimer = setTimeout(() => {
             if (recognitionRef.current) {
-                recognition.stop();
+                try { recognition.stop(); } catch(e) {}
                 recognitionRef.current = null;
                 setIsRecording(false);
                 setVoiceState('idle');
@@ -512,19 +531,53 @@ export const OnboardingWizard: React.FC = () => {
 
         recognition.onend = () => {
             clearTimeout(totalSilenceTimer);
+            // On Safari, recognition ends after each utterance — restart if still in listening mode
+            if (isSafari && voiceMode && !finalTranscript.trim()) {
+                try {
+                    recognition.start();
+                    return;
+                } catch(e) {
+                    // Can't restart — user needs to tap mic button
+                }
+            }
+            // If we have accumulated text, send it
+            if (finalTranscript.trim()) {
+                const toSend = finalTranscript.trim();
+                finalTranscript = '';
+                setIsRecording(false);
+                setVoiceState('processing');
+                sendAndSpeak(toSend);
+                return;
+            }
             setIsRecording(false);
             if (voiceState === 'listening') setVoiceState('idle');
         };
 
-        recognition.onerror = () => {
+        recognition.onerror = (event: any) => {
+            console.warn('[VoiceArchitect] STT error:', event.error);
             clearTimeout(totalSilenceTimer);
+            clearTimeout(silenceTimerRef.current);
+            // 'not-allowed' means mic permission denied
+            // 'no-speech' means no speech detected — this is normal
+            if (event.error === 'no-speech') {
+                // Restart on Safari, ignore on Chrome
+                if (isSafari && voiceMode) {
+                    try { recognition.start(); return; } catch(e) {}
+                }
+            }
             setIsRecording(false);
             setVoiceState('idle');
         };
 
-        recognition.start();
-        recognitionRef.current = recognition;
-        setIsRecording(true);
+        try {
+            recognition.start();
+            recognitionRef.current = recognition;
+            setIsRecording(true);
+            console.log('[VoiceArchitect] STT started, lang=es-AR, continuous=' + !isSafari);
+        } catch(e) {
+            console.error('[VoiceArchitect] Failed to start STT:', e);
+            setVoiceState('idle');
+        }
     };
 
     const sendAndSpeak = async (text: string) => {
