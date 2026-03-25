@@ -269,26 +269,127 @@ async def complete_wizard(current_user = Depends(get_wizard_user)):
 
 @router.post("/test-agent", dependencies=[Depends(get_wizard_user)])
 async def test_agent_preview(body: TestAgentRequest, current_user = Depends(get_wizard_user)):
-    """Test the agent with the draft system prompt. Uses platform API key."""
+    """Test the agent with the draft system prompt. Uses platform API key.
+    Supports conversation memory via session-based message history.
+    Uses tools (search_products, etc.) if available for the tenant.
+    """
     import openai
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    # Resolve API key
+    api_key = None
+    try:
+        from app.api.onboarding import _get_platform_key
+        tenant_id = current_user.tenant_id if hasattr(current_user, 'tenant_id') else 0
+        api_key = await _get_platform_key(tenant_id or 0)
+    except Exception:
+        api_key = os.getenv("OPENAI_API_KEY")
+
     if not api_key:
         raise HTTPException(status_code=500, detail="Platform API key not configured")
 
     client = openai.AsyncOpenAI(api_key=api_key)
 
+    # Session memory: store conversation in Redis for this test session
+    session_key = f"wizard_test:{str(current_user.id)}"
+    history = []
     try:
+        from db import redis_client
+        raw_history = await redis_client.get(session_key)
+        if raw_history:
+            history = json.loads(raw_history)
+    except Exception:
+        pass
+
+    # Build messages with history
+    messages = [{"role": "system", "content": body.system_prompt}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": body.message})
+
+    try:
+        # Define tools for the test (same as production agent)
+        tools = [
+            {"type": "function", "function": {"name": "search_specific_products", "description": "Buscar productos especificos en el catalogo de la tienda por query", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+            {"type": "function", "function": {"name": "browse_general_storefront", "description": "Mostrar productos destacados de la tienda", "parameters": {"type": "object", "properties": {}}}},
+            {"type": "function", "function": {"name": "search_by_category", "description": "Buscar productos por categoria", "parameters": {"type": "object", "properties": {"category": {"type": "string"}}, "required": ["category"]}}},
+        ]
+
         response = await client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": body.system_prompt},
-                {"role": "user", "content": body.message}
-            ],
+            messages=messages,
+            tools=tools,
             temperature=0.3,
             max_tokens=4000
         )
-        return {"response": response.choices[0].message.content}
+
+        choice = response.choices[0]
+        response_text = ""
+
+        # Handle tool calls
+        if choice.message.tool_calls:
+            # Execute tools
+            tool_results = []
+            for tc in choice.message.tool_calls:
+                tool_name = tc.function.name
+                tool_args = json.loads(tc.function.arguments) if tc.function.arguments else {}
+                tool_result = {"products": [], "message": "Buscando en el catalogo..."}
+
+                try:
+                    tenant_id = current_user.tenant_id if hasattr(current_user, 'tenant_id') else 0
+                    if tenant_id and tool_name in ("search_specific_products", "browse_general_storefront", "search_by_category"):
+                        # Fetch real products from Tienda Nube
+                        tn_token_row = await db.pool.fetchrow(
+                            "SELECT value FROM credentials WHERE tenant_id = $1 AND (name = 'TIENDANUBE_ACCESS_TOKEN' OR category = 'tiendanube') LIMIT 1",
+                            tenant_id
+                        )
+                        tn_store_row = await db.pool.fetchrow(
+                            "SELECT value FROM credentials WHERE tenant_id = $1 AND (name = 'TIENDANUBE_STORE_ID' OR category = 'tiendanube') AND name LIKE '%STORE%' LIMIT 1",
+                            tenant_id
+                        )
+                        if tn_token_row and tn_store_row:
+                            from utils import decrypt_password
+                            tn_token = decrypt_password(tn_token_row["value"])
+                            tn_store_id = decrypt_password(tn_store_row["value"])
+                            import httpx
+                            query = tool_args.get("query", "") or tool_args.get("category", "")
+                            url = f"https://api.tiendanube.com/v1/{tn_store_id}/products"
+                            params = {"per_page": 5}
+                            if query:
+                                params["q"] = query
+                            async with httpx.AsyncClient(timeout=10.0) as http:
+                                resp = await http.get(url, params=params, headers={"Authentication": f"bearer {tn_token}", "User-Agent": "FuturePlatform/1.0"})
+                                if resp.status_code == 200:
+                                    products = resp.json()
+                                    tool_result = {"products": [{"name": p.get("name", {}).get("es", p.get("name", "")), "price": p.get("variants", [{}])[0].get("price", "N/A") if p.get("variants") else "N/A"} for p in products[:5]]}
+                except Exception as e:
+                    logger.error("test_tool_error", tool=tool_name, error=str(e))
+                    tool_result = {"error": str(e), "products": []}
+
+                tool_results.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(tool_result)})
+
+            # Send tool results back to get final response
+            messages.append(choice.message)
+            messages.extend(tool_results)
+            final_response = await client.chat.completions.create(
+                model="gpt-4o",
+                messages=messages,
+                temperature=0.3,
+                max_tokens=4000
+            )
+            response_text = final_response.choices[0].message.content
+        else:
+            response_text = choice.message.content
+
+        # Save to history (keep last 20 messages)
+        history.append({"role": "user", "content": body.message})
+        history.append({"role": "assistant", "content": response_text})
+        history = history[-20:]  # Keep last 20
+        try:
+            from db import redis_client
+            await redis_client.setex(session_key, 3600, json.dumps(history))  # 1 hour TTL
+        except Exception:
+            pass
+
+        return {"response": response_text}
     except Exception as e:
         logger.error("test_agent_error", error=str(e))
         raise HTTPException(status_code=500, detail="Error testing agent")
