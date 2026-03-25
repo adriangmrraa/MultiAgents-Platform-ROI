@@ -720,10 +720,10 @@ export const OnboardingWizard: React.FC = () => {
             const port = window.location.port ? `:${window.location.port}` : '';
             let wsUrl = '';
             if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                wsUrl = `ws://localhost:3000/admin/onboarding/realtime-ws/${sessionRes.session_id}`;
+                wsUrl = `ws://localhost:3000/public/onboarding/realtime-ws/${sessionRes.session_id}`;
             } else {
                 // Use same-origin /api/ proxy (nginx handles WS upgrade)
-                wsUrl = `${proto}//${hostname}${port}/api/admin/onboarding/realtime-ws/${sessionRes.session_id}`;
+                wsUrl = `${proto}//${hostname}${port}/api/public/onboarding/realtime-ws/${sessionRes.session_id}`;
             }
             console.log('[Realtime] Connecting WS:', wsUrl);
 

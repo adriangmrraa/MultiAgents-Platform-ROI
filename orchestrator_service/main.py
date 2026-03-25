@@ -1624,6 +1624,144 @@ async def voice_ws_endpoint(websocket: WebSocket, session_id: str):
     """Voice Widget WebSocket endpoint for bidirectional audio."""
     await voice_websocket_handler(websocket, session_id)
 
+
+@app.websocket("/public/onboarding/realtime-ws/{session_id}")
+async def onboarding_realtime_ws(websocket: WebSocket, session_id: str):
+    """Onboarding Voice Architect — OpenAI Realtime WebSocket bridge."""
+    import json as _json
+    import base64 as _b64
+    import asyncio as _aio
+    import time as _time
+    from db import redis_client as _redis
+
+    raw = await _redis.get(f"onboarding_realtime:{session_id}")
+    if not raw:
+        await websocket.close(code=4001, reason="Invalid session")
+        return
+
+    config = _json.loads(raw)
+    await websocket.accept()
+
+    try:
+        import websockets
+
+        url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview"
+        headers = {
+            "Authorization": f"Bearer {config['api_key']}",
+            "OpenAI-Beta": "realtime=v1"
+        }
+
+        async with websockets.connect(url, additional_headers=headers) as openai_ws:
+            # Configure session with Nova's prompt
+            await openai_ws.send(_json.dumps({
+                "type": "session.update",
+                "session": {
+                    "instructions": config["system_prompt"],
+                    "voice": "nova",
+                    "input_audio_format": "pcm16",
+                    "output_audio_format": "pcm16",
+                    "turn_detection": {
+                        "type": "server_vad",
+                        "threshold": 0.5,
+                        "prefix_padding_ms": 300,
+                        "silence_duration_ms": 1000
+                    }
+                }
+            }))
+
+            max_duration = config.get("max_duration", 600)
+
+            # Also send initial greeting trigger
+            await openai_ws.send(_json.dumps({
+                "type": "response.create",
+                "response": {
+                    "modalities": ["audio", "text"]
+                }
+            }))
+
+            async def client_to_openai():
+                try:
+                    while True:
+                        data = await websocket.receive()
+                        if "bytes" in data and data["bytes"]:
+                            audio_b64 = _b64.b64encode(data["bytes"]).decode()
+                            await openai_ws.send(_json.dumps({
+                                "type": "input_audio_buffer.append",
+                                "audio": audio_b64
+                            }))
+                        elif "text" in data and data["text"]:
+                            # Text message from client (transcription display, etc)
+                            msg = _json.loads(data["text"])
+                            if msg.get("type") == "text_message":
+                                await openai_ws.send(_json.dumps({
+                                    "type": "conversation.item.create",
+                                    "item": {
+                                        "type": "message",
+                                        "role": "user",
+                                        "content": [{"type": "input_text", "text": msg.get("text", "")}]
+                                    }
+                                }))
+                                await openai_ws.send(_json.dumps({"type": "response.create"}))
+                except Exception:
+                    pass
+
+            async def openai_to_client():
+                try:
+                    async for message in openai_ws:
+                        event = _json.loads(message)
+                        etype = event.get("type", "")
+
+                        # Audio delta → forward to browser
+                        if etype == "response.audio.delta":
+                            audio_b64 = event.get("delta", "")
+                            if audio_b64:
+                                await websocket.send_bytes(_b64.b64decode(audio_b64))
+
+                        # Text transcript (what the AI says) → send to client for display
+                        elif etype == "response.audio_transcript.delta":
+                            text = event.get("delta", "")
+                            if text:
+                                await websocket.send_text(_json.dumps({
+                                    "type": "transcript",
+                                    "role": "assistant",
+                                    "text": text
+                                }))
+
+                        # User speech transcript → send to client for display
+                        elif etype == "conversation.item.input_audio_transcription.completed":
+                            text = event.get("transcript", "")
+                            if text:
+                                await websocket.send_text(_json.dumps({
+                                    "type": "transcript",
+                                    "role": "user",
+                                    "text": text
+                                }))
+
+                        # Response done
+                        elif etype == "response.done":
+                            await websocket.send_text(_json.dumps({"type": "response_done"}))
+
+                except Exception:
+                    pass
+
+            async def timeout():
+                await _aio.sleep(max_duration)
+
+            done, pending = await _aio.wait(
+                [_aio.create_task(client_to_openai()), _aio.create_task(openai_to_client()), _aio.create_task(timeout())],
+                return_when=_aio.FIRST_COMPLETED
+            )
+            for t in pending:
+                t.cancel()
+
+    except Exception as e:
+        logger.error("onboarding_realtime_error", error=str(e))
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
 # Mount static files for Voice Widget SDK
 import os as _os
 _static_dir = _os.path.join(_os.path.dirname(__file__), "static")
