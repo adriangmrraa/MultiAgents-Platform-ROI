@@ -152,7 +152,23 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     const goBack = () => {
-        if (step > 1) setStep(step - 1);
+        if (step > 1) {
+            setStep(step - 1);
+            // Reset chat state when going back to a chat step
+            setChatMessages([]);
+            setSectionDraft('');
+            setSectionComplete(false);
+        }
+    };
+
+    const goToStep = (targetStep: number) => {
+        // Can only go to completed steps or current step
+        if (targetStep < step && targetStep >= 1) {
+            setStep(targetStep);
+            setChatMessages([]);
+            setSectionDraft('');
+            setSectionComplete(false);
+        }
     };
 
     // --- Step 0: Welcome + Create Tenant ---
@@ -363,8 +379,10 @@ export const OnboardingWizard: React.FC = () => {
                     <div className="flex items-center justify-center gap-1 lg:gap-2 max-w-2xl mx-auto">
                         {STEP_LABELS.map((label, i) => (
                             <div key={i} className="flex items-center gap-1 lg:gap-2">
-                                <div className={`w-6 h-6 lg:w-8 lg:h-8 rounded-full flex items-center justify-center text-[9px] lg:text-xs font-bold transition-all ${
-                                    i < step ? 'bg-violet-600 text-white' :
+                                <div
+                                    onClick={() => i < step && i >= 1 ? goToStep(i) : null}
+                                    className={`w-6 h-6 lg:w-8 lg:h-8 rounded-full flex items-center justify-center text-[9px] lg:text-xs font-bold transition-all ${
+                                    i < step ? 'bg-violet-600 text-white cursor-pointer hover:bg-violet-500 active:scale-90' :
                                     i === step ? 'bg-violet-500 text-white ring-2 ring-violet-400/50 scale-110' :
                                     'bg-white/5 text-slate-600'
                                 }`}>
@@ -571,10 +589,16 @@ export const OnboardingWizard: React.FC = () => {
                                     </div>
 
                                     {/* Manual "Listo" button */}
-                                    <button onClick={() => sendChatMessage('Ya tengo todo listo, genera el resumen.')}
-                                        className="w-full py-2 text-xs text-slate-500 hover:text-violet-400 transition-colors mt-1">
-                                        Ya termine esta seccion →
-                                    </button>
+                                    <div className="flex gap-2 mt-1">
+                                        <button onClick={goBack}
+                                            className="flex-1 py-2 text-xs text-slate-500 hover:text-white transition-colors flex items-center justify-center gap-1">
+                                            <ArrowLeft size={12} /> Atras
+                                        </button>
+                                        <button onClick={() => sendChatMessage('Ya tengo todo listo, genera el resumen.')}
+                                            className="flex-1 py-2 text-xs text-slate-500 hover:text-violet-400 transition-colors">
+                                            Ya termine esta seccion →
+                                        </button>
+                                    </div>
                                 </>
                             ) : (
                                 /* Section Complete — Editable Summary */
@@ -665,6 +689,11 @@ export const OnboardingWizard: React.FC = () => {
                             <button onClick={activateAgent} disabled={loading}
                                 className="w-full py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-40 text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-violet-600/20 flex items-center justify-center gap-2">
                                 <Sparkles size={16} /> Activar Agente
+                            </button>
+
+                            <button onClick={goBack}
+                                className="w-full py-2.5 text-sm text-slate-500 hover:text-white transition-colors flex items-center justify-center gap-1.5 active:scale-[0.98]">
+                                <ArrowLeft size={14} /> Volver al paso anterior
                             </button>
                         </div>
                     )}
