@@ -277,7 +277,7 @@ async def test_agent_preview(body: TestAgentRequest, current_user = Depends(get_
                 {"role": "user", "content": body.message}
             ],
             temperature=0.3,
-            max_tokens=500
+            max_tokens=4000
         )
         return {"response": response.choices[0].message.content}
     except Exception as e:
