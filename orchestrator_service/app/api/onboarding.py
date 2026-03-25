@@ -323,7 +323,16 @@ async def onboarding_interview_step(
         WIZARD_STEP_SESSIONS[step_session_key].append({"role": "user", "content": user_message})
 
         # Use platform API key (company pays for onboarding)
-        api_key = os.getenv("OPENAI_API_KEY")
+        # Same pattern as main.py: try tenant credential first, then global env fallback
+        api_key = None
+        if tenant_id:
+            api_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
+        if not api_key:
+            # Global fallback (imported at module level in main.py line 70)
+            from main import OPENAI_API_KEY as GLOBAL_KEY
+            api_key = GLOBAL_KEY
+        if not api_key:
+            api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise HTTPException(status_code=500, detail="Platform API key not configured")
 
