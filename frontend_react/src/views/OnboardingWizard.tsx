@@ -420,6 +420,8 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     const confirmSection = async () => {
+        // STOP all audio before advancing
+        stopRealtimeAudio();
         const sectionKey = { 3: 'tone', 4: 'rules', 5: 'dictionary' }[step] || 'unknown';
         const newPrompt = systemPrompt + '\n\n' + sectionDraft;
         setSystemPrompt(newPrompt);
@@ -905,14 +907,16 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     const stopRealtimeAudio = () => {
-        console.log('[Realtime] Stopping all audio + WS');
-        // 1. Close WS first
+        console.log('[Realtime] Stopping ALL audio + WS + TTS');
+        // 0. Stop TTS Audio element (from playTTS fallback)
+        if (audioRef.current) { try { audioRef.current.pause(); audioRef.current.currentTime = 0; } catch(e) {} audioRef.current = null; }
+        // 1. Close WS
         if (realtimeWsRef.current) { try { realtimeWsRef.current.close(); } catch(e) {} realtimeWsRef.current = null; }
         // 2. Stop mic
         if (realtimeStreamRef.current) { realtimeStreamRef.current.getTracks().forEach(t => t.stop()); realtimeStreamRef.current = null; }
         // 3. Disconnect processor
         if (realtimeProcessorRef.current) { try { realtimeProcessorRef.current.disconnect(); } catch(e) {} realtimeProcessorRef.current = null; }
-        // 4. Close AudioContext (cancels ALL pending audio)
+        // 4. Close AudioContext (cancels ALL pending scheduled audio)
         if (realtimeAudioCtxRef.current) { try { realtimeAudioCtxRef.current.close(); } catch(e) {} realtimeAudioCtxRef.current = null; }
         // 5. Reset audio queue
         nextPlayTimeRef.current = 0;
