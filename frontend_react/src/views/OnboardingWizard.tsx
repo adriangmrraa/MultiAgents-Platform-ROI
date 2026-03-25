@@ -1831,47 +1831,54 @@ export const OnboardingWizard: React.FC = () => {
                             </div>
 
                             {/* Knowledge Collections Selector */}
-                            {(knowledgeCollections.length > 0 || knowledgeFiles.length > 0) && (
-                                <div className="glass p-4 rounded-xl border border-white/5 space-y-3">
-                                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                                        <Globe size={14} className="text-cyan-400" /> Base de Conocimiento (RAG)
-                                    </h3>
-                                    <p className="text-[10px] text-slate-500">Selecciona las colecciones que tu agente debe consultar para responder con contexto real.</p>
+                            {/* Knowledge Collections — always visible */}
+                            <div className="glass p-4 rounded-xl border border-white/5 space-y-3">
+                                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                                    <Globe size={14} className="text-cyan-400" /> Base de Conocimiento (RAG)
+                                </h3>
+                                <p className="text-[10px] text-slate-500">Selecciona las colecciones que tu agente debe consultar. Subi documentos para entrenar al agente con info de tu negocio.</p>
 
-                                    {knowledgeCollections.length > 0 && (
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-bold text-slate-400">Colecciones</label>
-                                            {knowledgeCollections.map(col => (
-                                                <label key={col} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
-                                                    <input type="checkbox" checked={selectedCollections.includes(col)}
-                                                        onChange={() => setSelectedCollections(prev => prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col])}
-                                                        className="w-4 h-4 rounded border-white/20 bg-white/5 text-violet-600 focus:ring-violet-500" />
-                                                    <span className="text-xs text-white">{col}</span>
-                                                    <span className="text-[9px] text-slate-500 ml-auto">{knowledgeFiles.filter(f => f.collection === col).length} docs</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {knowledgeFiles.length > 0 && knowledgeCollections.length === 0 && (
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-bold text-slate-400">Documentos</label>
-                                            {knowledgeFiles.map(file => (
-                                                <label key={file.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
-                                                    <input type="checkbox" checked={selectedCollections.includes(file.id)}
-                                                        onChange={() => setSelectedCollections(prev => prev.includes(file.id) ? prev.filter(c => c !== file.id) : [...prev, file.id])}
-                                                        className="w-4 h-4 rounded border-white/20 bg-white/5 text-violet-600 focus:ring-violet-500" />
-                                                    <span className="text-xs text-white truncate">{file.filename}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {selectedCollections.length > 0 && (
-                                        <p className="text-[9px] text-cyan-400">{selectedCollections.length} coleccion(es) seleccionada(s) — el agente consultara estos documentos</p>
-                                    )}
+                                {/* Default categories + dynamic collections */}
+                                <div className="space-y-1.5">
+                                    {['General', 'ADN Personal', 'Legal / Reglas', 'Catalogo', ...knowledgeCollections.filter(c => !['General', 'ADN Personal', 'Legal / Reglas', 'Catalogo'].includes(c))].map(col => (
+                                        <label key={col} className="flex items-center gap-2 p-2.5 rounded-lg hover:bg-white/5 cursor-pointer transition-colors border border-white/5">
+                                            <input type="checkbox" checked={selectedCollections.includes(col)}
+                                                onChange={() => setSelectedCollections(prev => prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col])}
+                                                className="w-4 h-4 rounded border-white/20 bg-white/5 text-violet-600 focus:ring-violet-500" />
+                                            <span className="text-xs text-white flex-1">{col}</span>
+                                            <span className="text-[9px] text-slate-500">{knowledgeFiles.filter((f: any) => f.collection === col).length} docs</span>
+                                        </label>
+                                    ))}
                                 </div>
-                            )}
+
+                                {/* Upload document inline */}
+                                <div className="pt-2 border-t border-white/5">
+                                    <label className="w-full py-2.5 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/20 text-cyan-300 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2">
+                                        <Plus size={14} /> Subir documento
+                                        <input type="file" className="hidden" accept=".pdf,.txt,.doc,.docx,.csv"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+                                                const formData = new FormData();
+                                                formData.append('file', file);
+                                                formData.append('collection', 'General');
+                                                try {
+                                                    await fetchApi('/admin/knowledge/upload', { method: 'POST', body: formData });
+                                                    // Reload collections
+                                                    const cols = await fetchApi('/admin/knowledge/collections');
+                                                    if (Array.isArray(cols)) setKnowledgeCollections(cols);
+                                                    const files = await fetchApi('/admin/knowledge/list');
+                                                    if (Array.isArray(files)) setKnowledgeFiles(files.filter((f: any) => f.status === 'active'));
+                                                } catch(err: any) { setError(err.message || 'Error al subir'); }
+                                            }} />
+                                    </label>
+                                    <p className="text-[9px] text-slate-600 mt-1 text-center">PDF, TXT, DOC, CSV — se vectoriza automaticamente</p>
+                                </div>
+
+                                {selectedCollections.length > 0 && (
+                                    <p className="text-[9px] text-cyan-400">{selectedCollections.length} coleccion(es) seleccionada(s)</p>
+                                )}
+                            </div>
 
                             {/* System Prompt + Refine Button */}
                             <div className="glass p-4 rounded-xl border border-white/5 space-y-3">
