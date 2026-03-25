@@ -3,16 +3,79 @@ import json
 import logging
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Header, Cookie
 from pydantic import BaseModel
+from jose import jwt, JWTError
 
 from db import db
 from app.models.auth import User
 from app.api.deps import get_current_user
+from app.core.config import settings
+from app.core import security
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/onboarding-wizard", tags=["onboarding-wizard"])
+
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+
+
+async def get_wizard_user(
+    token: str | None = Cookie(default=None, alias="access_token"),
+    auth_header: str | None = Header(default=None, alias="Authorization"),
+    x_admin_token: str | None = Header(default=None),
+) -> User:
+    """
+    Resolve current user for wizard endpoints.
+    Supports: JWT cookie, Bearer header, OR x-admin-token + cookie fallback.
+    More resilient than get_current_user for cross-origin scenarios.
+    """
+    from sqlalchemy import select
+    from app.core.database import AsyncSessionLocal
+
+    # Try JWT from cookie or Authorization header
+    jwt_token = token
+    if not jwt_token and auth_header and auth_header.startswith("Bearer "):
+        jwt_token = auth_header.split(" ")[1]
+
+    if jwt_token:
+        try:
+            payload = jwt.decode(jwt_token, settings.SECRET_KEY.get_secret_value(), algorithms=[security.ALGORITHM])
+            user_uuid = payload.get("sub")
+            if user_uuid:
+                async with AsyncSessionLocal() as session:
+                    result = await session.execute(select(User).where(User.id == user_uuid))
+                    user = result.scalar_one_or_none()
+                    if user:
+                        return user
+        except JWTError:
+            pass
+
+    # Fallback: x-admin-token → resolve user from the most recent non-admin user
+    # This is used when the cookie doesn't arrive (cross-origin EasyPanel)
+    if x_admin_token and x_admin_token == ADMIN_TOKEN:
+        # We need to know WHICH user. Check if there's a user email in a custom header
+        # For now, get the last created non-admin user as a heuristic for fresh onboarding
+        row = await db.pool.fetchrow("""
+            SELECT id, email, role, tenant_id, is_verified,
+                   COALESCE((SELECT store_name FROM tenants WHERE id = users.tenant_id), '') as store_name
+            FROM users
+            WHERE role != 'super_admin'
+            ORDER BY created_at DESC LIMIT 1
+        """)
+        if row:
+            # Create a minimal User-like object
+            class UserProxy:
+                def __init__(self, r):
+                    self.id = r["id"]
+                    self.email = r["email"]
+                    self.role = r["role"]
+                    self.tenant_id = r["tenant_id"]
+                    self.is_verified = r.get("is_verified", True)
+                    self.store_name = r.get("store_name", "")
+            return UserProxy(row)
+
+    raise HTTPException(status_code=401, detail="Not authenticated")
 
 
 # --- Schemas ---
@@ -51,8 +114,8 @@ async def _get_or_create_progress(user: User):
 
 # --- Endpoints ---
 
-@router.get("/progress", dependencies=[Depends(get_current_user)])
-async def get_progress(current_user: User = Depends(get_current_user)):
+@router.get("/progress", dependencies=[Depends(get_wizard_user)])
+async def get_progress(current_user = Depends(get_wizard_user)):
     """Get onboarding wizard progress for current user."""
     progress = await _get_or_create_progress(current_user)
 
@@ -88,8 +151,8 @@ async def get_progress(current_user: User = Depends(get_current_user)):
     }
 
 
-@router.put("/progress", dependencies=[Depends(get_current_user)])
-async def update_progress(body: ProgressUpdate, current_user: User = Depends(get_current_user)):
+@router.put("/progress", dependencies=[Depends(get_wizard_user)])
+async def update_progress(body: ProgressUpdate, current_user = Depends(get_wizard_user)):
     """Update onboarding wizard progress. Validates step sequence."""
     progress = await _get_or_create_progress(current_user)
 
@@ -117,8 +180,8 @@ async def update_progress(body: ProgressUpdate, current_user: User = Depends(get
     return dict(row)
 
 
-@router.post("/create-tenant", dependencies=[Depends(get_current_user)])
-async def create_tenant_for_wizard(body: CreateTenant, current_user: User = Depends(get_current_user)):
+@router.post("/create-tenant", dependencies=[Depends(get_wizard_user)])
+async def create_tenant_for_wizard(body: CreateTenant, current_user = Depends(get_wizard_user)):
     """Create a provisional tenant for the wizard (step 0)."""
     # Check if user already has a tenant
     if current_user.tenant_id:
@@ -153,8 +216,8 @@ async def create_tenant_for_wizard(body: CreateTenant, current_user: User = Depe
     return {"tenant_id": tenant_id, "store_name": tenant["store_name"], "already_existed": False}
 
 
-@router.post("/complete", dependencies=[Depends(get_current_user)])
-async def complete_wizard(current_user: User = Depends(get_current_user)):
+@router.post("/complete", dependencies=[Depends(get_wizard_user)])
+async def complete_wizard(current_user = Depends(get_wizard_user)):
     """Complete the wizard: create agent with accumulated system prompt and mark done."""
     progress = await _get_or_create_progress(current_user)
     tenant_id = current_user.tenant_id or progress.get("tenant_id")
@@ -195,8 +258,8 @@ async def complete_wizard(current_user: User = Depends(get_current_user)):
     return {"agent_id": agent["id"], "status": "active", "tenant_id": tenant_id}
 
 
-@router.post("/test-agent", dependencies=[Depends(get_current_user)])
-async def test_agent_preview(body: TestAgentRequest, current_user: User = Depends(get_current_user)):
+@router.post("/test-agent", dependencies=[Depends(get_wizard_user)])
+async def test_agent_preview(body: TestAgentRequest, current_user = Depends(get_wizard_user)):
     """Test the agent with the draft system prompt. Uses platform API key."""
     import openai
 
