@@ -151,10 +151,8 @@ export const OnboardingWizard: React.FC = () => {
         try {
             const data = await fetchApi('/admin/onboarding-wizard/progress');
             if (data && !data.detail) {
-                if (data.should_show_wizard === false) {
-                    navigate('/', { replace: true });
-                    return;
-                }
+                // Never redirect away — user can always access the wizard
+                // The wizard is both for onboarding AND for editing agent config later
                 const sd = data.step_data || {};
                 let draft = data.system_prompt_draft || '';
                 setStepData(sd);
