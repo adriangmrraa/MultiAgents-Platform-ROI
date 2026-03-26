@@ -4993,14 +4993,18 @@ async def upload_knowledge_file(
     if ext not in allowed_extensions:
         raise HTTPException(400, f"Unsupported file format: {ext}. Allowed: {', '.join(allowed_extensions)}")
 
-    # 1b. Sovereign Credential Check
+    # 1b. Sovereign Credential Check — fallback to platform key for free trial
     from admin_routes import get_tenant_credential
     openai_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
     google_key = await get_tenant_credential_by_type(tenant_id, "GOOGLE_API_KEY")
-    
+
     if not openai_key and not google_key:
-        logger.warning(f"knowledge_upload_blocked_no_keys: tenant {tenant_id}")
-        raise HTTPException(400, "Missing AI Credentials: No OpenAI or Google API keys found in vault.")
+        # Fallback: use platform key (company pays for free trial)
+        openai_key = OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
+        google_key = os.getenv("GOOGLE_API_KEY")
+        if not openai_key and not google_key:
+            logger.warning(f"knowledge_upload_blocked_no_keys: tenant {tenant_id}")
+            raise HTTPException(400, "Missing AI Credentials: No OpenAI or Google API keys found in vault.")
 
     # 2. Disk Buffering (Prevent 504 Timeouts)
     import shutil
