@@ -153,58 +153,73 @@ async def get_nova_context(page: str = "dashboard", current_user: User = Depends
 
 
 def _build_greeting(page, checks, conv_today, derivations_today, agent, health_score=50):
-    """Build Nova's proactive first message using health-check data."""
-    # Score-based greeting prefix
-    if health_score < 50 and checks:
-        return f"Tu negocio necesita atencion. Lo mas urgente: {checks[0]['message']}"
-    if health_score <= 80 and checks:
-        suggestions = [c for c in checks if c["type"] == "suggestion"]
-        if suggestions:
-            return f"Vas bien! Pero podes mejorar: {suggestions[0]['message']}"
+    """Build Nova's proactive greeting — warm, actionable, not just repeating checks."""
+    agent_name = None
+    try:
+        agent_name = agent["name"] if agent else None
+    except (KeyError, TypeError):
+        pass
 
-    # Priority: checks first (alerts)
-    alerts = [c for c in checks if c["type"] in ("alert", "warning")]
+    # Critical alerts: direct and urgent
+    alerts = [c for c in checks if c["type"] == "alert"] if checks else []
     if alerts:
-        return alerts[0]["message"]
+        return f"Ey! Algo urgente: {alerts[0]['message']}. Queres que te ayude a resolverlo?"
 
-    # Page-specific greetings with real data
+    # First-time / low score: introduce Nova and suggest quick wins
+    if health_score < 40:
+        return f"Hola! Soy Nova, tu copiloto de negocio. Tu score esta en {health_score}/100 — hay cosas rapidas que podemos mejorar juntos. Por donde arrancamos?"
+
+    # Score-aware but page-specific (warm tone)
     if page == "dashboard":
+        parts = []
+        if agent_name:
+            parts.append(f"Tu agente '{agent_name}' esta activo")
         if conv_today > 0:
-            msg = f"Hoy tuviste {conv_today} conversaciones."
+            parts.append(f"{conv_today} conversaciones hoy")
             if derivations_today > 0:
-                msg += f" {derivations_today} se derivaron a humano."
-            return msg
-        return "Todo tranquilo por aca. En que te puedo ayudar?"
+                parts.append(f"{derivations_today} derivadas a humano")
+        if parts:
+            summary = ". ".join(parts) + "."
+            # Add one quick suggestion if available
+            suggestions = [c for c in checks if c["type"] == "suggestion"] if checks else []
+            if suggestions:
+                return f"{summary} Tip rapido: {suggestions[0]['message']}"
+            return f"{summary} Todo marchando. En que te ayudo?"
+        # No activity
+        warnings = [c for c in checks if c["type"] == "warning"] if checks else []
+        if warnings:
+            return f"Hola! Hoy esta tranquilo. Aprovechemos para mejorar: {warnings[0]['message']}"
+        return "Hola! Soy Nova, tu asistente de negocio. Puedo ayudarte con productos, agente, canales, analytics — decime que necesitas."
 
     if page == "products":
-        return "Aca tenes tu catalogo. Queres agregar o editar algo?"
+        return "Este es tu catalogo. Puedo ayudarte a agregar productos, actualizar stock o importar desde CSV. Que necesitas?"
 
     if page == "agents":
-        try:
-            if agent:
-                return f"Tu agente '{agent['name']}' esta activo. Queres ajustar algo del prompt?"
-        except (KeyError, TypeError):
-            pass
-        return "Vamos a configurar tu agente. Arrancamos?"
+        if agent_name:
+            return f"'{agent_name}' esta en linea. Puedo ajustar el prompt, agregar reglas o mejorar el diccionario. Que hacemos?"
+        return "Todavia no tenes un agente. Queres que te ayude a crear uno?"
 
     if page == "chats":
         if conv_today > 0:
-            return f"{conv_today} conversaciones hoy. Alguna que quieras revisar?"
-        return "No hubo conversaciones hoy. Todo bien por aca."
+            return f"{conv_today} conversaciones hoy. Puedo buscar una especifica o mostrarte las que tuvieron problemas."
+        return "Sin conversaciones hoy. Puedo ayudarte a revisar las de ayer si queres."
 
     if page == "analytics":
-        return "Aca tenes tus metricas. Queres que te haga un resumen?"
+        return "Aca estan tus metricas. Puedo hacerte un resumen rapido de la semana o comparar periodos."
 
     if page == "knowledge":
-        return "Esta es tu base de conocimiento. Queres subir algo?"
+        return "Esta es tu base de conocimiento. Puedo guiarte para subir documentos, PDFs o texto que el agente use como referencia."
 
     if page == "settings":
-        return "Aca podes configurar tus conexiones. Necesitas ayuda?"
+        return "Aca podes configurar canales, integraciones y conexiones. Necesitas ayuda con algo?"
 
     if page == "billing":
-        return "Aca podes ver tu plan y facturacion."
+        return "Tu plan y facturacion. Puedo explicarte las diferencias entre planes si queres."
 
-    return "Hola! Soy Nova, tu asistente. En que te puedo ayudar?"
+    if page == "voice-widget":
+        return "El voice widget es un asistente de voz para tu tienda. Puedo ayudarte a configurarlo."
+
+    return "Hola! Soy Nova, tu copiloto de negocio. Puedo ayudarte con productos, agente, canales, analytics y mas. Decime que necesitas."
 
 
 # --- Nova Realtime Session ---

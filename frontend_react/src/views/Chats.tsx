@@ -383,7 +383,7 @@ export const Chats: React.FC = () => {
     };
 
     return (
-        <div className="view active animate-fade-in flex flex-col p-0 overflow-hidden" style={{ height: '100vh', maxHeight: '100vh', position: 'relative' }}>
+        <div className="view active animate-fade-in flex flex-col p-0 overflow-hidden" style={{ height: 'calc(100vh - 5rem)', maxHeight: 'calc(100vh - 5rem)', position: 'relative' }}>
             <h1 className="view-title px-6 pt-6 hidden md:block">Gestión Multicanal Nexus v4.2</h1>
 
             <div className="chats-layout flex-1 overflow-hidden" style={{
@@ -666,7 +666,7 @@ export const Chats: React.FC = () => {
                             </div>
 
                             {/* Input Area or Template Selector */}
-                            <div className="p-4 bg-black/60 backdrop-blur-xl border-t border-white/10 sticky bottom-0 z-30">
+                            <div className="p-3 lg:p-4 pb-20 lg:pb-4 bg-black/60 backdrop-blur-xl border-t border-white/10 sticky bottom-0 z-30">
                                 {(() => {
                                     // 24h Window Logic
                                     const lastMsgTime = new Date(selectedChat?.timestamp || Date.now()).getTime();
