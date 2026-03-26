@@ -5070,20 +5070,21 @@ async def process_knowledge_ingestion(doc_id: str, tenant_id: int, user_id: str,
         openai_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
         google_key = await get_tenant_credential_by_type(tenant_id, "GOOGLE_API_KEY")
         
-        if google_key: # Google takes precedence if both exist
+        # Resolve API key: tenant credential → platform env fallback
+        if google_key:
             provider = "google"
             api_key = google_key
         elif openai_key:
             provider = "openai"
             api_key = openai_key
-        elif settings.GOOGLE_API_KEY:
+        elif os.getenv("GOOGLE_API_KEY"):
             provider = "google"
-            api_key = settings.GOOGLE_API_KEY
-        elif settings.OPENAI_API_KEY:
+            api_key = os.getenv("GOOGLE_API_KEY")
+        elif os.getenv("OPENAI_API_KEY"):
             provider = "openai"
-            api_key = settings.OPENAI_API_KEY
+            api_key = os.getenv("OPENAI_API_KEY")
         else:
-            raise Exception("Missing AI Credentials. Please configure OpenAI or Google keys in Settings.")
+            raise Exception("Missing AI Credentials. No API keys found in vault or environment.")
 
         # 2. Ingest
         from app.core.rag import RAGCore
