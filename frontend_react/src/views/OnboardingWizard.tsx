@@ -120,6 +120,7 @@ export const OnboardingWizard: React.FC = () => {
     const [dynamicCards, setDynamicCards] = useState<{tipo: string, titulo: string, valor: string, icono?: string}[]>([]);
     const [micPaused, setMicPaused] = useState(false);
     const micPausedRef = useRef(false);
+    const novaPlayingRef = useRef(false); // Auto-mute mic while Nova speaks (echo prevention)
 
     // Step 6 (Test)
     const [testMessage, setTestMessage] = useState('');
@@ -864,6 +865,11 @@ export const OnboardingWizard: React.FC = () => {
 
             ws.onmessage = (evt) => {
                 if (evt.data instanceof ArrayBuffer) {
+                    // AUTO-MUTE: Nova is speaking → suppress mic to prevent echo loop
+                    if (!novaPlayingRef.current) {
+                        novaPlayingRef.current = true;
+                        micPausedRef.current = true;
+                    }
                     setVoiceState('speaking');
                     playRealtimeAudio(evt.data);
                 } else {
@@ -876,10 +882,30 @@ export const OnboardingWizard: React.FC = () => {
                                 pendingTranscriptRef.current += msg.text;
                             } else if (msg.role === 'user') {
                                 // BARGE-IN: user is speaking → cancel all Nova audio
+                                novaPlayingRef.current = false;
+                                micPausedRef.current = false;
                                 cancelPlayback();
                                 setVoiceState('processing');
                                 setChatMessages(prev => [...prev, { role: 'user', content: msg.text }]);
                             }
+                        // User started speaking (server VAD detected) → cancel Nova audio immediately
+                        } else if (msg.type === 'user_speech_started') {
+                            novaPlayingRef.current = false;
+                            micPausedRef.current = false;
+                            cancelPlayback();
+                            setVoiceState('processing');
+
+                        // Nova finished sending audio → unmute mic after playback ends
+                        } else if (msg.type === 'nova_audio_done') {
+                            // Delay unmute slightly to let last audio chunk finish playing
+                            const remainingPlayMs = Math.max(0, (nextPlayTimeRef.current - (realtimeAudioCtxRef.current?.currentTime || 0)) * 1000);
+                            setTimeout(() => {
+                                novaPlayingRef.current = false;
+                                if (!micPaused) { // Don't override manual mute
+                                    micPausedRef.current = false;
+                                }
+                            }, remainingPlayMs + 300); // 300ms safety buffer
+
                         } else if (msg.type === 'response_done') {
                             if (pendingTranscriptRef.current) {
                                 const fullText = pendingTranscriptRef.current;
@@ -890,6 +916,11 @@ export const OnboardingWizard: React.FC = () => {
                                     return updated;
                                 });
                             }
+                            // Unmute mic when response is fully done (safety net)
+                            setTimeout(() => {
+                                novaPlayingRef.current = false;
+                                if (!micPaused) micPausedRef.current = false;
+                            }, 500);
                             setVoiceState('listening');
 
                         // TOOL CALLS from Nova
@@ -956,7 +987,8 @@ export const OnboardingWizard: React.FC = () => {
         realtimeProcessorRef.current = processor;
 
         processor.onaudioprocess = (e) => {
-            if (micPausedRef.current) return;
+            // Skip sending audio if mic is paused OR Nova is playing (echo prevention)
+            if (micPausedRef.current || novaPlayingRef.current) return;
             if (ws.readyState !== WebSocket.OPEN) return;
 
             const input = e.inputBuffer.getChannelData(0);
@@ -992,6 +1024,8 @@ export const OnboardingWizard: React.FC = () => {
         }
         realtimeAudioCtxRef.current = null;
         nextPlayTimeRef.current = 0;
+        novaPlayingRef.current = false;
+        if (!micPaused) micPausedRef.current = false; // Re-enable mic after barge-in
     };
 
     // Audio playback — sequential queue with barge-in support
@@ -1039,6 +1073,7 @@ export const OnboardingWizard: React.FC = () => {
         setVoiceState('idle');
         setMicPaused(false);
         micPausedRef.current = false;
+        novaPlayingRef.current = false;
     };
 
     const pauseMic = () => {

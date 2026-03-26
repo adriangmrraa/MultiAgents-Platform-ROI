@@ -1505,6 +1505,14 @@ async def lifespan(app: FastAPI):
         except Exception as os_err:
             logger.error("orders_sync_start_failed", error=str(os_err))
 
+        # 10. Nova Daily Analysis (Phase 5 — conversation insights cron)
+        try:
+            from app.services.nova_daily_analysis import nova_daily_analysis_loop
+            asyncio.create_task(nova_daily_analysis_loop(db.pool, redis_client))
+            logger.info("nova_daily_analysis_started")
+        except Exception as nd_err:
+            logger.error("nova_daily_analysis_start_failed", error=str(nd_err))
+
         logger.info("system_startup_complete", port=8000)
         
     except Exception as e:
@@ -1789,9 +1797,9 @@ ESTRATEGIA: Al inicio, pedi al usuario su sitio web, Instagram o Facebook si no 
                     "tool_choice": "auto",
                     "turn_detection": {
                         "type": "server_vad",
-                        "threshold": 0.8,
-                        "prefix_padding_ms": 500,
-                        "silence_duration_ms": 3000
+                        "threshold": 0.5,
+                        "prefix_padding_ms": 800,
+                        "silence_duration_ms": 5000
                     }
                 }
             }))
@@ -1928,6 +1936,10 @@ Maximo 4 oraciones."""
                             if audio_b64:
                                 await websocket.send_bytes(_b64.b64decode(audio_b64))
 
+                        # Signal client to mute mic while Nova speaks (echo prevention)
+                        elif etype == "response.audio.done":
+                            await websocket.send_text(_json.dumps({"type": "nova_audio_done"}))
+
                         elif etype == "response.audio_transcript.delta":
                             text = event.get("delta", "")
                             if text:
@@ -1937,6 +1949,10 @@ Maximo 4 oraciones."""
                             text = event.get("transcript", "")
                             if text:
                                 await websocket.send_text(_json.dumps({"type": "transcript", "role": "user", "text": text}))
+
+                        # Signal that user started speaking (cancel Nova audio)
+                        elif etype == "input_audio_buffer.speech_started":
+                            await websocket.send_text(_json.dumps({"type": "user_speech_started"}))
 
                         elif etype == "response.done":
                             await websocket.send_text(_json.dumps({"type": "response_done"}))
