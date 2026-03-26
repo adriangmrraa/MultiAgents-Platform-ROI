@@ -471,3 +471,11 @@ body {
     will-change: transform, opacity, filter;
     animation: magicReveal 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+
+/* Nova Widget — Safe area insets for iOS Safari notch/home bar */
+.safe-top {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+.safe-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
