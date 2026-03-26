@@ -123,18 +123,19 @@ async def _analyze_with_gpt(conversation_summary: str) -> dict | None:
     try:
         import httpx
 
-        response = await httpx.AsyncClient(timeout=30).post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "gpt-4o-mini",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": """Analiza estas conversaciones de un agente de ventas por WhatsApp/Instagram.
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": """Analiza estas conversaciones de un agente de ventas por WhatsApp/Instagram.
 Retorna un JSON con:
 - temas_frecuentes: [lista de 3-5 temas mas consultados, cada uno con "tema" y "cantidad_aprox"]
 - problemas: [lista de situaciones donde el agente respondio mal o derivo innecesariamente]
@@ -143,14 +144,14 @@ Retorna un JSON con:
 - satisfaccion_estimada: numero 1-10
 - resumen: string de 2-3 oraciones resumen del dia
 Solo JSON valido, sin explicaciones ni markdown."""
-                    },
-                    {"role": "user", "content": conversation_summary}
-                ],
-                "temperature": 0,
-                "max_tokens": 600,
-                "response_format": {"type": "json_object"}
-            }
-        )
+                        },
+                        {"role": "user", "content": conversation_summary}
+                    ],
+                    "temperature": 0,
+                    "max_tokens": 600,
+                    "response_format": {"type": "json_object"}
+                }
+            )
 
         if response.status_code == 200:
             data = response.json()

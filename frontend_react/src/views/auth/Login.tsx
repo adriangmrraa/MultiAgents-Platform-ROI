@@ -72,16 +72,16 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center bg-[#1B1D20] relative overflow-x-hidden py-10">
+        <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#1B1D20] relative overflow-x-hidden px-4 py-8 lg:py-10">
             {/* Background Ambience */}
             <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-600/10 rounded-full blur-[120px] pointer-events-none" />
             <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-zinc-800/20 rounded-full blur-[120px] pointer-events-none" />
 
-            <div className="z-10 w-full max-w-md p-8 relative">
+            <div className="z-10 w-full max-w-md relative">
                 {/* Glass Card */}
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[24px] p-8 shadow-2xl">
-                    <div className="mb-8 text-center">
-                        <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 tracking-tight">
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl lg:rounded-[24px] p-6 lg:p-8 shadow-2xl">
+                    <div className="mb-6 lg:mb-8 text-center">
+                        <h1 className="text-2xl lg:text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 tracking-tight">
                             {t('auth.loginTitle')}
                         </h1>
                         <p className="text-gray-400 text-sm mt-2">{t('auth.protocolAccess')}</p>
@@ -171,12 +171,13 @@ export default function Login() {
                         {t('auth.noAccess')} <Link to="/register" className="text-red-400 hover:text-red-300 transition-colors font-medium">{t('auth.requestClearance')}</Link>
                     </div>
                 </div>
-            </div>
-            {/* Legal Footer */}
-            <div className="mt-6 w-full text-center">
-                <div className="flex justify-center gap-6 text-[11px] text-gray-600 font-medium">
-                    <Link to="/privacy-policy" className="hover:text-gray-400 transition-colors">Privacy Policy</Link>
-                    <Link to="/terms-of-service" className="hover:text-gray-400 transition-colors">Terms of Service</Link>
+
+                {/* Legal Footer — inside the card container for proper centering */}
+                <div className="mt-6 text-center">
+                    <div className="flex justify-center gap-6 text-[11px] text-gray-600 font-medium">
+                        <Link to="/privacy-policy" className="hover:text-gray-400 transition-colors">Privacy Policy</Link>
+                        <Link to="/terms-of-service" className="hover:text-gray-400 transition-colors">Terms of Service</Link>
+                    </div>
                 </div>
             </div>
         </div>

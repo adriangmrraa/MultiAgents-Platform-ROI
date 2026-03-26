@@ -180,8 +180,11 @@ def _build_greeting(page, checks, conv_today, derivations_today, agent, health_s
         return "Aca tenes tu catalogo. Queres agregar o editar algo?"
 
     if page == "agents":
-        if agent:
-            return f"Tu agente '{agent['name']}' esta activo. Queres ajustar algo del prompt?"
+        try:
+            if agent:
+                return f"Tu agente '{agent['name']}' esta activo. Queres ajustar algo del prompt?"
+        except (KeyError, TypeError):
+            pass
         return "Vamos a configurar tu agente. Arrancamos?"
 
     if page == "chats":
@@ -214,7 +217,8 @@ async def create_nova_session(
     current_user: User = Depends(get_current_user),
 ):
     """Create OpenAI Realtime session for Nova widget."""
-    tid = tenant_id or (current_user.tenant_id if hasattr(current_user, 'tenant_id') else 0)
+    # Security: always use authenticated user's tenant_id, ignore body param
+    tid = current_user.tenant_id if hasattr(current_user, 'tenant_id') else 0
 
     # Resolve API key
     api_key = os.getenv("OPENAI_API_KEY")
@@ -264,11 +268,15 @@ REGLAS:
         "max_duration": 300,  # 5 min per widget session
     }
 
-    await redis_client.setex(
-        f"nova_widget_session:{session_id}",
-        360,
-        json.dumps(session_data)
-    )
+    try:
+        await redis_client.setex(
+            f"nova_widget_session:{session_id}",
+            360,
+            json.dumps(session_data)
+        )
+    except Exception as e:
+        logger.error(f"nova_session_redis_error: {e}")
+        raise HTTPException(status_code=503, detail="Cache unavailable")
 
     return {"session_id": session_id, "page": page}
 

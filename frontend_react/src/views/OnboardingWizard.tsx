@@ -978,6 +978,10 @@ export const OnboardingWizard: React.FC = () => {
         // Use native sample rate for capture (browser default, usually 48000)
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
         captureAudioCtxRef.current = audioCtx;
+        // Safari/iOS: resume if suspended (autoplay policy)
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+        }
         const nativeSampleRate = audioCtx.sampleRate;
         const targetSampleRate = 24000; // OpenAI Realtime expects 24kHz PCM16
         console.log(`[Realtime] Capture: native=${nativeSampleRate}Hz, target=${targetSampleRate}Hz`);
@@ -1025,7 +1029,8 @@ export const OnboardingWizard: React.FC = () => {
         realtimeAudioCtxRef.current = null;
         nextPlayTimeRef.current = 0;
         novaPlayingRef.current = false;
-        if (!micPaused) micPausedRef.current = false; // Re-enable mic after barge-in
+        // Always re-enable mic on barge-in (use ref, not stale state)
+        micPausedRef.current = false;
     };
 
     // Audio playback — sequential queue with barge-in support
@@ -1036,6 +1041,10 @@ export const OnboardingWizard: React.FC = () => {
             nextPlayTimeRef.current = 0;
         }
         const ctx = realtimeAudioCtxRef.current;
+        // Safari/iOS: resume suspended AudioContext (autoplay policy)
+        if (ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+        }
         const pcm16 = new Int16Array(arrayBuffer);
         const float32 = new Float32Array(pcm16.length);
         for (let i = 0; i < pcm16.length; i++) {
