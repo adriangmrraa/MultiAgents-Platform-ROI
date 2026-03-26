@@ -71,8 +71,10 @@ export const OnboardingWizard: React.FC = () => {
     const [sectionComplete, setSectionComplete] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
 
-    // Audio STT
+    // Audio STT + TTS
     const [isRecording, setIsRecording] = useState(false);
+    const [voiceActive, setVoiceActive] = useState(false);
+    const [sttError, setSttError] = useState<string | null>(null);
     const recognitionRef = useRef<any>(null);
     const silenceTimerRef = useRef<any>(null);
 
@@ -228,7 +230,10 @@ export const OnboardingWizard: React.FC = () => {
                 method: 'POST',
                 body: { session_id: chatSessionId + `_s${chatStep}`, user_message: 'INIT', step: chatStep, tenant_id: tenantId || 0, reset: true }
             });
-            if (res?.ai_message) setChatMessages([{ role: 'assistant', content: res.ai_message }]);
+            if (res?.ai_message) {
+                setChatMessages([{ role: 'assistant', content: res.ai_message }]);
+                speakText(res.ai_message);
+            }
         } catch (e) { /* fallback */ }
         setChatLoading(false);
     };
@@ -250,7 +255,10 @@ export const OnboardingWizard: React.FC = () => {
                 method: 'POST',
                 body: { session_id: chatSessionId + `_s${step}`, user_message: msg, step, tenant_id: tenantId || 0 }
             });
-            if (res?.ai_message) setChatMessages(prev => [...prev, { role: 'assistant', content: res.ai_message }]);
+            if (res?.ai_message) {
+                setChatMessages(prev => [...prev, { role: 'assistant', content: res.ai_message }]);
+                speakText(res.ai_message);
+            }
             if (res?.section_complete && res?.extracted_draft) {
                 setSectionComplete(true);
                 setSectionDraft(res.extracted_draft);
@@ -270,50 +278,104 @@ export const OnboardingWizard: React.FC = () => {
     };
 
     // --- Audio STT ---
-    const toggleRecording = () => {
+    const toggleRecording = async () => {
         if (isRecording) {
             stopRecording();
         } else {
-            startRecording();
+            await startRecording();
         }
     };
 
-    const startRecording = () => {
+    const startRecording = async () => {
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (!SpeechRecognition) return;
+        if (!SpeechRecognition) {
+            setSttError('Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.');
+            return;
+        }
 
+        // Request microphone permission explicitly first
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // Stop the stream immediately — we just needed permission
+            stream.getTracks().forEach(t => t.stop());
+        } catch (err) {
+            setSttError('Permiso de microfono denegado. Habilita el microfono en la configuracion del navegador.');
+            return;
+        }
+
+        setSttError(null);
         const recognition = new SpeechRecognition();
         recognition.lang = 'es-AR';
         recognition.continuous = true;
-        recognition.interimResults = false;
+        recognition.interimResults = true;
 
         recognition.onresult = (event: any) => {
-            const text = event.results[event.results.length - 1][0].transcript;
-            sendChatMessage(text);
-            // Reset silence timer
+            const lastResult = event.results[event.results.length - 1];
+            if (lastResult.isFinal) {
+                const text = lastResult[0].transcript;
+                sendChatMessage(text);
+            }
+            // Reset silence timer on any result (interim or final)
             clearTimeout(silenceTimerRef.current);
-            silenceTimerRef.current = setTimeout(() => stopRecording(), 15000);
+            silenceTimerRef.current = setTimeout(() => stopRecording(), 20000);
         };
 
-        recognition.onerror = () => stopRecording();
-        recognition.onend = () => setIsRecording(false);
+        recognition.onerror = (event: any) => {
+            const errorMessages: Record<string, string> = {
+                'not-allowed': 'Permiso de microfono denegado.',
+                'no-speech': 'No se detecto voz. Intenta de nuevo.',
+                'audio-capture': 'No se encontro microfono.',
+                'network': 'Error de red para reconocimiento de voz.',
+            };
+            setSttError(errorMessages[event.error] || `Error de voz: ${event.error}`);
+            stopRecording();
+        };
 
-        recognition.start();
-        recognitionRef.current = recognition;
-        setIsRecording(true);
+        recognition.onend = () => {
+            // Auto-restart if still in recording mode (browser sometimes stops)
+            if (recognitionRef.current && isRecording) {
+                try { recognition.start(); } catch (_) { setIsRecording(false); }
+            } else {
+                setIsRecording(false);
+            }
+        };
 
-        // 15s silence cutoff
-        silenceTimerRef.current = setTimeout(() => stopRecording(), 15000);
+        try {
+            recognition.start();
+            recognitionRef.current = recognition;
+            setIsRecording(true);
+            // 20s silence cutoff
+            silenceTimerRef.current = setTimeout(() => stopRecording(), 20000);
+        } catch (err) {
+            setSttError('Error al iniciar reconocimiento de voz.');
+        }
     };
 
     const stopRecording = () => {
         if (recognitionRef.current) {
-            recognitionRef.current.stop();
-            recognitionRef.current = null;
+            const ref = recognitionRef.current;
+            recognitionRef.current = null; // Clear first to prevent auto-restart in onend
+            try { ref.stop(); } catch (_) {}
         }
         clearTimeout(silenceTimerRef.current);
         setIsRecording(false);
     };
+
+    // --- TTS (Text-to-Speech for architect responses) ---
+    const speakText = useCallback((text: string) => {
+        if (!voiceActive || !('speechSynthesis' in window)) return;
+        // Cancel any ongoing speech
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'es-AR';
+        utterance.rate = 1.05;
+        utterance.pitch = 1.0;
+        // Try to find a Spanish voice
+        const voices = window.speechSynthesis.getVoices();
+        const esVoice = voices.find(v => v.lang.startsWith('es')) || voices[0];
+        if (esVoice) utterance.voice = esVoice;
+        window.speechSynthesis.speak(utterance);
+    }, [voiceActive]);
 
     // --- Step 6: Test Agent ---
     const testAgent = async () => {
@@ -536,12 +598,36 @@ export const OnboardingWizard: React.FC = () => {
                     {/* === STEPS 3-4-5: Chat === */}
                     {step >= 3 && step <= 5 && (
                         <div className="flex flex-col h-[calc(100vh-160px)] animate-fade-in">
-                            <div className="text-center mb-4">
-                                <h2 className="text-lg font-bold text-white">
-                                    {step === 3 ? 'Identidad de tu Negocio' : step === 4 ? 'Reglas de Negocio' : 'Diccionario de Sinonimos'}
-                                </h2>
-                                <p className="text-slate-500 text-xs mt-1">Conversa con el arquitecto para configurar esta seccion</p>
+                            <div className="flex items-start justify-between mb-4">
+                                <div>
+                                    <h2 className="text-lg font-bold text-white">
+                                        {step === 3 ? 'Identidad de tu Negocio' : step === 4 ? 'Reglas de Negocio' : 'Diccionario de Sinonimos'}
+                                    </h2>
+                                    <p className="text-slate-500 text-xs mt-1">Conversa con la arquitecta de tu agente</p>
+                                </div>
+                                <button
+                                    onClick={() => { setVoiceActive(!voiceActive); if (voiceActive) window.speechSynthesis?.cancel(); }}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
+                                        voiceActive ? 'bg-violet-600/20 text-violet-300 border border-violet-500/30' : 'bg-white/5 text-slate-500 border border-white/10'
+                                    }`}>
+                                    <Volume2 size={14} /> {voiceActive ? 'Voz activa' : 'Voz'}
+                                </button>
                             </div>
+
+                            {/* Recording indicator */}
+                            {isRecording && (
+                                <div className="flex items-center justify-center gap-2 mb-3 text-red-400 text-sm animate-pulse">
+                                    <span className="w-2.5 h-2.5 bg-red-500 rounded-full" /> Te escucho...
+                                </div>
+                            )}
+
+                            {/* STT Error */}
+                            {sttError && (
+                                <div className="mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-300 text-xs flex items-center gap-2">
+                                    <AlertCircle size={12} /> {sttError}
+                                    <button onClick={() => setSttError(null)} className="ml-auto"><X size={12} /></button>
+                                </div>
+                            )}
 
                             {!sectionComplete ? (
                                 <>
@@ -580,7 +666,7 @@ export const OnboardingWizard: React.FC = () => {
                                         )}
                                         <input value={chatInput} onChange={e => setChatInput(e.target.value)}
                                             onKeyDown={e => e.key === 'Enter' && sendChatMessage()}
-                                            placeholder="Escribe o habla..."
+                                            placeholder={isRecording ? 'Habla ahora...' : 'Habla o escribe...'}
                                             className={`${inputClass} flex-1`} />
                                         <button onClick={() => sendChatMessage()} disabled={chatLoading || !chatInput.trim()}
                                             className="w-11 h-11 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white rounded-xl flex items-center justify-center transition-all active:scale-90 shrink-0">
