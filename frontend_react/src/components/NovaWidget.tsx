@@ -5,7 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import {
     Sparkles, X, Send, AlertTriangle, Lightbulb, Shield, BookOpen,
     Package, Image, Bot, Link, Database, Clock, ArrowRight, Check,
-    MessageCircle, BarChart2, TrendingUp, ChevronDown, ChevronUp
+    MessageCircle, BarChart2, TrendingUp, ChevronDown, ChevronUp,
+    Mic, MicOff, Volume2, Loader
 } from 'lucide-react';
 
 interface NovaCheck {
@@ -75,6 +76,7 @@ export const NovaWidget: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
 
+    // UI state
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'chat' | 'health' | 'insights'>('chat');
     const [healthData, setHealthData] = useState<any>(null);
@@ -91,6 +93,18 @@ export const NovaWidget: React.FC = () => {
     const [showAllChecks, setShowAllChecks] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // Voice state
+    const [voiceState, setVoiceState] = useState<'idle' | 'connecting' | 'listening' | 'processing' | 'speaking'>('idle');
+    const wsRef = useRef<WebSocket | null>(null);
+    const playbackCtxRef = useRef<AudioContext | null>(null);
+    const captureCtxRef = useRef<AudioContext | null>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+    const processorRef = useRef<ScriptProcessorNode | null>(null);
+    const nextPlayTimeRef = useRef(0);
+    const novaPlayingRef = useRef(false);
+    const micPausedRef = useRef(false);
+    const pendingTranscriptRef = useRef('');
 
     // Detect current page
     const currentPage = (() => {
@@ -134,17 +148,23 @@ export const NovaWidget: React.FC = () => {
         }
     }, [isOpen, currentPage]);
 
+    // Cleanup voice on close
+    useEffect(() => {
+        if (!isOpen) {
+            stopVoice();
+        }
+    }, [isOpen]);
+
     // Stop pulse after 10 seconds
     useEffect(() => {
         const timer = setTimeout(() => setPulse(false), 10000);
         return () => clearTimeout(timer);
     }, []);
 
-    // Toast on page load — show once per session if there are critical alerts
+    // Toast on page load
     useEffect(() => {
         const shown = sessionStorage.getItem('nova_toast_shown');
         if (shown) return;
-
         const checkAlerts = async () => {
             try {
                 const data = await fetchApi('/admin/nova/health-check');
@@ -157,13 +177,13 @@ export const NovaWidget: React.FC = () => {
                         setTimeout(() => setToastVisible(false), 8000);
                     }
                 }
-            } catch (e) {
-                // Non-blocking
-            }
+            } catch (e) { /* Non-blocking */ }
         };
         const timer = setTimeout(checkAlerts, 2000);
         return () => clearTimeout(timer);
     }, []);
+
+    // ===================== DATA FETCHING =====================
 
     const fetchContext = async () => {
         try {
@@ -194,27 +214,21 @@ export const NovaWidget: React.FC = () => {
         } catch (e) { /* Non-blocking */ }
     };
 
+    // ===================== TEXT CHAT =====================
+
     const sendMessage = async () => {
         if (!input.trim()) return;
         const msg = input.trim();
         setInput('');
         setMessages(prev => [...prev, { role: 'user', content: msg }]);
         setLoading(true);
-        // Blur input on mobile to dismiss keyboard after send
         inputRef.current?.blur();
-
         try {
             const novaPrompt = `Sos Nova, la asistente inteligente de Future Platform. Hablas en espanol argentino con voseo. Sos proactiva y directa. Estas en la pagina: ${currentPage}.
-
-Contexto actual:
-${context ? JSON.stringify(context.stats) : 'Sin datos'}
-
+Contexto: ${context ? JSON.stringify(context.stats) : 'Sin datos'}
 Health Score: ${healthData?.score ?? '?'}/100
-Checks pendientes:
-${healthData?.checks?.map((c: NovaCheck) => c.message).join('\n') || 'Ninguno'}
-
-Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion concreta.`;
-
+Checks: ${healthData?.checks?.map((c: NovaCheck) => c.message).join('; ') || 'Ninguno'}
+Responde breve (max 3 oraciones). Termina con una sugerencia concreta.`;
             const res = await fetchApi('/admin/onboarding-wizard/test-agent', {
                 method: 'POST',
                 body: { message: msg, system_prompt: novaPrompt }
@@ -228,12 +242,220 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
         setLoading(false);
     };
 
+    // ===================== VOICE PIPELINE =====================
+
+    const startVoice = async () => {
+        if (voiceState !== 'idle') return;
+        setVoiceState('connecting');
+
+        try {
+            // 1. Get mic permission
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef.current = stream;
+
+            // 2. Create Nova session
+            const contextSummary = context
+                ? `Score: ${healthData?.score}/100. ${context.greeting || ''} Stats: ${JSON.stringify(context.stats || {})}`
+                : 'Sin contexto cargado';
+
+            const sessionRes = await fetchApi('/admin/nova/session', {
+                method: 'POST',
+                body: { page: currentPage, context_summary: contextSummary }
+            });
+
+            if (!sessionRes?.session_id) {
+                throw new Error('No session_id');
+            }
+
+            // 3. Connect WebSocket
+            const hostname = window.location.hostname;
+            const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const port = (hostname === 'localhost' || hostname === '127.0.0.1') ? ':3000' : '';
+            const wsUrl = `${proto}//${hostname}${port}/api/public/nova/ws/${sessionRes.session_id}`;
+
+            const ws = new WebSocket(wsUrl);
+            ws.binaryType = 'arraybuffer';
+            wsRef.current = ws;
+
+            ws.onopen = () => {
+                setVoiceState('listening');
+                startAudioCapture(stream, ws);
+            };
+
+            ws.onmessage = (evt) => {
+                if (evt.data instanceof ArrayBuffer) {
+                    // Nova audio chunk — mute mic to prevent echo
+                    if (!novaPlayingRef.current) {
+                        novaPlayingRef.current = true;
+                        micPausedRef.current = true;
+                    }
+                    setVoiceState('speaking');
+                    playAudio(evt.data);
+                } else {
+                    try {
+                        const msg = JSON.parse(evt.data);
+
+                        if (msg.type === 'transcript') {
+                            if (msg.role === 'assistant') {
+                                setVoiceState('speaking');
+                                pendingTranscriptRef.current += msg.text;
+                            } else if (msg.role === 'user') {
+                                // Barge-in
+                                novaPlayingRef.current = false;
+                                micPausedRef.current = false;
+                                cancelPlayback();
+                                setVoiceState('processing');
+                                setMessages(prev => [...prev, { role: 'user', content: msg.text }]);
+                            }
+                        } else if (msg.type === 'user_speech_started') {
+                            novaPlayingRef.current = false;
+                            micPausedRef.current = false;
+                            cancelPlayback();
+                            setVoiceState('processing');
+                        } else if (msg.type === 'nova_audio_done') {
+                            // Unmute after playback finishes
+                            const ctx = playbackCtxRef.current;
+                            const remainingMs = ctx
+                                ? Math.max(0, (nextPlayTimeRef.current - ctx.currentTime) * 1000)
+                                : 0;
+                            setTimeout(() => {
+                                novaPlayingRef.current = false;
+                                micPausedRef.current = false;
+                            }, remainingMs + 300);
+                        } else if (msg.type === 'response_done') {
+                            if (pendingTranscriptRef.current) {
+                                const fullText = pendingTranscriptRef.current;
+                                pendingTranscriptRef.current = '';
+                                setMessages(prev => [...prev, { role: 'assistant', content: fullText }]);
+                            }
+                            setTimeout(() => {
+                                novaPlayingRef.current = false;
+                                micPausedRef.current = false;
+                            }, 500);
+                            setVoiceState('listening');
+                        } else if (msg.type === 'tool_call') {
+                            // Tool executed — could update UI
+                            const { name } = msg;
+                            if (name === 'ir_a_pagina' && msg.args?.page) {
+                                const route = ACTION_ROUTES[msg.args.page] || `/${msg.args.page}`;
+                                navigate(route);
+                            }
+                        }
+                    } catch (e) { /* ignore parse errors */ }
+                }
+            };
+
+            ws.onclose = () => {
+                setVoiceState('idle');
+                cleanupAudio();
+            };
+
+            ws.onerror = () => {
+                setVoiceState('idle');
+                cleanupAudio();
+            };
+
+        } catch (e) {
+            console.error('[Nova Voice] Failed:', e);
+            setVoiceState('idle');
+            cleanupAudio();
+        }
+    };
+
+    const stopVoice = () => {
+        if (wsRef.current) { try { wsRef.current.close(); } catch (e) {} wsRef.current = null; }
+        cleanupAudio();
+        setVoiceState('idle');
+    };
+
+    const cleanupAudio = () => {
+        if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+        if (processorRef.current) { try { processorRef.current.disconnect(); } catch (e) {} processorRef.current = null; }
+        if (captureCtxRef.current) { try { captureCtxRef.current.close(); } catch (e) {} captureCtxRef.current = null; }
+        cancelPlayback();
+        pendingTranscriptRef.current = '';
+        novaPlayingRef.current = false;
+        micPausedRef.current = false;
+    };
+
+    const startAudioCapture = (stream: MediaStream, ws: WebSocket) => {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        captureCtxRef.current = audioCtx;
+        if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+
+        const nativeSampleRate = audioCtx.sampleRate;
+        const targetSampleRate = 24000;
+        const source = audioCtx.createMediaStreamSource(stream);
+        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        processorRef.current = processor;
+
+        processor.onaudioprocess = (e) => {
+            if (micPausedRef.current || novaPlayingRef.current) return;
+            if (ws.readyState !== WebSocket.OPEN) return;
+
+            const input = e.inputBuffer.getChannelData(0);
+            let resampled: Float32Array;
+            if (nativeSampleRate === targetSampleRate) {
+                resampled = input;
+            } else {
+                const ratio = nativeSampleRate / targetSampleRate;
+                const newLength = Math.floor(input.length / ratio);
+                resampled = new Float32Array(newLength);
+                for (let i = 0; i < newLength; i++) {
+                    resampled[i] = input[Math.floor(i * ratio)];
+                }
+            }
+
+            const pcm16 = new Int16Array(resampled.length);
+            for (let i = 0; i < resampled.length; i++) {
+                pcm16[i] = Math.max(-32768, Math.min(32767, resampled[i] * 32768));
+            }
+            ws.send(pcm16.buffer);
+        };
+
+        source.connect(processor);
+        processor.connect(audioCtx.destination);
+    };
+
+    const playAudio = (arrayBuffer: ArrayBuffer) => {
+        if (!playbackCtxRef.current || playbackCtxRef.current.state === 'closed') {
+            playbackCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+            nextPlayTimeRef.current = 0;
+        }
+        const ctx = playbackCtxRef.current;
+        if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+        const pcm16 = new Int16Array(arrayBuffer);
+        const float32 = new Float32Array(pcm16.length);
+        for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768;
+
+        const buffer = ctx.createBuffer(1, float32.length, 24000);
+        buffer.getChannelData(0).set(float32);
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(ctx.destination);
+
+        const now = ctx.currentTime;
+        const startTime = Math.max(now, nextPlayTimeRef.current);
+        src.start(startTime);
+        nextPlayTimeRef.current = startTime + buffer.duration;
+    };
+
+    const cancelPlayback = () => {
+        if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
+            try { playbackCtxRef.current.close(); } catch (e) {}
+        }
+        playbackCtxRef.current = null;
+        nextPlayTimeRef.current = 0;
+        novaPlayingRef.current = false;
+        micPausedRef.current = false;
+    };
+
+    // ===================== HELPERS =====================
+
     const handleAction = (action: string) => {
         const route = ACTION_ROUTES[action];
-        if (route) {
-            navigate(route);
-            setIsOpen(false);
-        }
+        if (route) { navigate(route); setIsOpen(false); }
     };
 
     const applySuggestion = async (suggestion: { titulo: string; detalle: string }, idx: number) => {
@@ -247,37 +469,28 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                 }
             });
             setAppliedIdxs(prev => [...prev, idx]);
-            if (res?.response) {
-                setMessages(prev => [...prev, { role: 'assistant', content: res.response }]);
-            }
-        } catch (e) {
-            // Fallback
-        }
+            if (res?.response) setMessages(prev => [...prev, { role: 'assistant', content: res.response }]);
+        } catch (e) { /* Fallback */ }
         setApplyingIdx(null);
     };
 
-    // Score color
-    const scoreColor = (score: number) => {
-        if (score >= 80) return 'text-emerald-400';
-        if (score >= 50) return 'text-amber-400';
-        return 'text-red-400';
+    const scoreColor = (score: number) => score >= 80 ? 'text-emerald-400' : score >= 50 ? 'text-amber-400' : 'text-red-400';
+    const scoreBarColor = (score: number) => score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-red-500';
+    const scoreGreeting = (score: number) => score >= 80 ? 'Tu negocio esta al dia!' : score >= 50 ? 'Vas bien, pero podes mejorar' : 'Tu negocio necesita atencion';
+
+    const voiceLabel = {
+        idle: 'Activar voz',
+        connecting: 'Conectando...',
+        listening: 'Escuchando...',
+        processing: 'Procesando...',
+        speaking: 'Nova hablando...',
     };
 
-    const scoreBarColor = (score: number) => {
-        if (score >= 80) return 'bg-emerald-500';
-        if (score >= 50) return 'bg-amber-500';
-        return 'bg-red-500';
-    };
-
-    const scoreGreeting = (score: number) => {
-        if (score >= 80) return 'Tu negocio esta al dia!';
-        if (score >= 50) return 'Vas bien, pero podes mejorar';
-        return 'Tu negocio necesita atencion';
-    };
+    // ===================== RENDER =====================
 
     return (
         <>
-            {/* Toast Notification — above mobile nav */}
+            {/* Toast */}
             {toastVisible && (
                 <div className="fixed bottom-36 lg:bottom-24 left-3 right-3 lg:left-6 lg:right-auto z-[9999] lg:max-w-sm animate-fade-in">
                     <div className="bg-[#1a1a2e] border border-violet-500/30 rounded-xl px-4 py-3 shadow-2xl shadow-violet-600/20 flex items-start gap-3">
@@ -286,28 +499,22 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-xs text-white leading-relaxed">{toastMessage}</p>
-                            <button
-                                onClick={() => { setToastVisible(false); setIsOpen(true); }}
-                                className="text-[11px] text-violet-400 hover:text-violet-300 mt-1 py-1"
-                            >
+                            <button onClick={() => { setToastVisible(false); setIsOpen(true); }} className="text-[11px] text-violet-400 hover:text-violet-300 mt-1 py-1">
                                 Ver detalles
                             </button>
                         </div>
-                        <button onClick={() => setToastVisible(false)} className="text-slate-500 hover:text-white p-1 -mr-1">
-                            <X size={16} />
-                        </button>
+                        <button onClick={() => setToastVisible(false)} className="text-slate-500 hover:text-white p-1 -mr-1"><X size={16} /></button>
                     </div>
                 </div>
             )}
 
-            {/* Floating Button — raised on mobile to clear bottom nav */}
+            {/* Floating Button */}
             {!isOpen && (
                 <button
                     onClick={() => setIsOpen(true)}
                     className={`fixed bottom-20 lg:bottom-6 right-4 lg:right-6 z-[9998] w-14 h-14 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-full shadow-2xl shadow-violet-600/30 flex items-center justify-center text-white hover:scale-110 transition-all active:scale-95 ${pulse ? 'animate-pulse' : ''}`}
                 >
                     <Sparkles size={24} />
-                    {/* Badge for alerts */}
                     {healthData?.checks?.filter((c: NovaCheck) => c.type === 'alert').length > 0 && (
                         <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-[9px] font-bold flex items-center justify-center">
                             {healthData.checks.filter((c: NovaCheck) => c.type === 'alert').length}
@@ -316,27 +523,17 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                 </button>
             )}
 
-            {/* Panel — fullscreen on mobile, floating on desktop */}
+            {/* Panel */}
             {isOpen && (
                 <>
-                    {/* Mobile backdrop */}
-                    <div
-                        className="lg:hidden fixed inset-0 bg-black/60 z-[9997] backdrop-blur-sm"
-                        onClick={() => setIsOpen(false)}
-                    />
+                    <div className="lg:hidden fixed inset-0 bg-black/60 z-[9997] backdrop-blur-sm" onClick={() => setIsOpen(false)} />
 
                     <div
-                        className={[
-                            'fixed z-[9998] bg-[#0f0f17] flex flex-col overflow-hidden',
-                            // Mobile: fullscreen with safe areas
-                            'inset-0',
-                            // Desktop: floating panel bottom-right
-                            'lg:inset-auto lg:bottom-6 lg:right-6 lg:w-[420px] lg:h-[560px] lg:rounded-2xl lg:border lg:border-violet-500/20 lg:shadow-2xl lg:shadow-violet-600/10',
-                        ].join(' ')}
+                        className="fixed z-[9998] bg-[#0f0f17] flex flex-col overflow-hidden inset-0 lg:inset-auto lg:bottom-6 lg:right-6 lg:w-[420px] lg:h-[560px] lg:rounded-2xl lg:border lg:border-violet-500/20 lg:shadow-2xl lg:shadow-violet-600/10"
                         style={{ maxHeight: '-webkit-fill-available' }}
                     >
                         {/* Header */}
-                        <div className="px-4 py-3 lg:py-3 bg-gradient-to-r from-violet-600/20 to-indigo-600/20 border-b border-white/5 flex items-center justify-between shrink-0 safe-top">
+                        <div className="px-4 py-3 bg-gradient-to-r from-violet-600/20 to-indigo-600/20 border-b border-white/5 flex items-center justify-between shrink-0 safe-top">
                             <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 lg:w-7 lg:h-7 bg-violet-600 rounded-lg flex items-center justify-center">
                                     <Sparkles size={16} className="text-white lg:w-[14px] lg:h-[14px]" />
@@ -352,10 +549,7 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                                         {healthData.score}/100
                                     </span>
                                 )}
-                                <button
-                                    onClick={() => setIsOpen(false)}
-                                    className="text-slate-400 hover:text-white transition-colors p-1.5 -mr-1 rounded-lg active:bg-white/10"
-                                >
+                                <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white transition-colors p-1.5 -mr-1 rounded-lg active:bg-white/10">
                                     <X size={20} className="lg:w-4 lg:h-4" />
                                 </button>
                             </div>
@@ -363,22 +557,18 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
 
                         {/* Tabs */}
                         <div className="flex border-b border-white/5 shrink-0">
-                            {[
+                            {([
                                 { key: 'chat' as const, label: 'Chat', icon: <MessageCircle size={14} /> },
                                 { key: 'health' as const, label: 'Salud', icon: <TrendingUp size={14} /> },
                                 { key: 'insights' as const, label: 'Insights', icon: <BarChart2 size={14} /> },
-                            ].map(tab => (
+                            ]).map(tab => (
                                 <button
                                     key={tab.key}
                                     onClick={() => setActiveTab(tab.key)}
                                     className={`flex-1 py-3 lg:py-2 text-xs lg:text-[10px] font-medium flex items-center justify-center gap-1.5 transition-all active:bg-white/5 ${
-                                        activeTab === tab.key
-                                            ? 'text-violet-400 border-b-2 border-violet-500'
-                                            : 'text-slate-500'
+                                        activeTab === tab.key ? 'text-violet-400 border-b-2 border-violet-500' : 'text-slate-500'
                                     }`}
-                                >
-                                    {tab.icon} {tab.label}
-                                </button>
+                                >{tab.icon} {tab.label}</button>
                             ))}
                         </div>
 
@@ -387,6 +577,29 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                             {/* CHAT TAB */}
                             {activeTab === 'chat' && (
                                 <div className="flex flex-col h-full">
+                                    {/* Voice status bar */}
+                                    {voiceState !== 'idle' && (
+                                        <div className={`px-4 py-2.5 flex items-center justify-between shrink-0 border-b border-white/5 ${
+                                            voiceState === 'speaking' ? 'bg-violet-600/10' :
+                                            voiceState === 'listening' ? 'bg-emerald-600/10' :
+                                            'bg-white/5'
+                                        }`}>
+                                            <div className="flex items-center gap-2">
+                                                {voiceState === 'listening' && <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}
+                                                {voiceState === 'speaking' && <Volume2 size={14} className="text-violet-400 animate-pulse" />}
+                                                {voiceState === 'processing' && <Loader size={14} className="text-amber-400 animate-spin" />}
+                                                {voiceState === 'connecting' && <Loader size={14} className="text-slate-400 animate-spin" />}
+                                                <span className="text-xs text-slate-300">{voiceLabel[voiceState]}</span>
+                                            </div>
+                                            <button
+                                                onClick={stopVoice}
+                                                className="text-[10px] text-red-400 hover:text-red-300 px-2 py-1 rounded-lg hover:bg-red-500/10 active:bg-red-500/20"
+                                            >
+                                                Detener
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {/* Quick checks */}
                                     {context?.checks && context.checks.length > 0 && (
                                         <div className="px-3 py-2 space-y-1.5 max-h-32 overflow-y-auto border-b border-white/5 shrink-0">
@@ -413,9 +626,7 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                                                     msg.role === 'user'
                                                         ? 'bg-violet-600 text-white rounded-br-sm'
                                                         : 'bg-white/5 border border-white/5 text-slate-200 rounded-bl-sm'
-                                                }`}>
-                                                    {msg.content}
-                                                </div>
+                                                }`}>{msg.content}</div>
                                             </div>
                                         ))}
                                         {loading && (
@@ -430,24 +641,16 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                                 </div>
                             )}
 
-                            {/* HEALTH TAB */}
+                            {/* HEALTH TAB — same as before */}
                             {activeTab === 'health' && healthData && (
                                 <div className="p-4 space-y-5 lg:space-y-4">
-                                    {/* Score */}
                                     <div className="text-center">
-                                        <div className={`text-5xl lg:text-4xl font-black ${scoreColor(healthData.score)}`}>
-                                            {healthData.score}
-                                        </div>
+                                        <div className={`text-5xl lg:text-4xl font-black ${scoreColor(healthData.score)}`}>{healthData.score}</div>
                                         <p className="text-xs lg:text-[10px] text-slate-500 mt-1">{scoreGreeting(healthData.score)}</p>
                                         <div className="w-full h-2.5 lg:h-2 bg-white/5 rounded-full mt-3 overflow-hidden">
-                                            <div
-                                                className={`h-full rounded-full transition-all duration-1000 ${scoreBarColor(healthData.score)}`}
-                                                style={{ width: `${healthData.score}%` }}
-                                            />
+                                            <div className={`h-full rounded-full transition-all duration-1000 ${scoreBarColor(healthData.score)}`} style={{ width: `${healthData.score}%` }} />
                                         </div>
                                     </div>
-
-                                    {/* Completed items */}
                                     {healthData.completed?.length > 0 && (
                                         <div className="space-y-1.5 lg:space-y-1">
                                             <p className="text-xs lg:text-[10px] text-slate-500 font-medium uppercase tracking-wider">Completado</p>
@@ -458,8 +661,6 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                                             ))}
                                         </div>
                                     )}
-
-                                    {/* Pending checks */}
                                     {healthData.checks?.length > 0 && (
                                         <div className="space-y-2 lg:space-y-1.5">
                                             <p className="text-xs lg:text-[10px] text-slate-500 font-medium uppercase tracking-wider">Pendiente</p>
@@ -477,46 +678,36 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                                                 </button>
                                             ))}
                                             {healthData.checks.length > 4 && (
-                                                <button
-                                                    onClick={() => setShowAllChecks(!showAllChecks)}
-                                                    className="w-full text-center text-xs lg:text-[10px] text-slate-500 hover:text-slate-300 py-2 flex items-center justify-center gap-1 active:bg-white/5 rounded-lg"
-                                                >
+                                                <button onClick={() => setShowAllChecks(!showAllChecks)}
+                                                    className="w-full text-center text-xs lg:text-[10px] text-slate-500 hover:text-slate-300 py-2 flex items-center justify-center gap-1 active:bg-white/5 rounded-lg">
                                                     {showAllChecks ? <><ChevronUp size={14} /> Menos</> : <><ChevronDown size={14} /> Ver {healthData.checks.length - 4} mas</>}
                                                 </button>
                                             )}
                                         </div>
                                     )}
-
-                                    {/* Stats */}
                                     {healthData.stats && (
                                         <div className="grid grid-cols-2 gap-2.5 lg:gap-2 mt-2">
-                                            <div className="bg-white/5 rounded-xl lg:rounded-lg p-3 lg:p-2 text-center">
-                                                <p className="text-xl lg:text-lg font-bold text-white">{healthData.stats.products || 0}</p>
-                                                <p className="text-[10px] lg:text-[9px] text-slate-500">Productos</p>
-                                            </div>
-                                            <div className="bg-white/5 rounded-xl lg:rounded-lg p-3 lg:p-2 text-center">
-                                                <p className="text-xl lg:text-lg font-bold text-white">{healthData.stats.documents || 0}</p>
-                                                <p className="text-[10px] lg:text-[9px] text-slate-500">Documentos</p>
-                                            </div>
-                                            <div className="bg-white/5 rounded-xl lg:rounded-lg p-3 lg:p-2 text-center">
-                                                <p className="text-xl lg:text-lg font-bold text-white">{healthData.stats.conversations_week || 0}</p>
-                                                <p className="text-[10px] lg:text-[9px] text-slate-500">Convs (7d)</p>
-                                            </div>
-                                            <div className="bg-white/5 rounded-xl lg:rounded-lg p-3 lg:p-2 text-center">
-                                                <p className="text-xl lg:text-lg font-bold text-white">{healthData.stats.derivations_today || 0}</p>
-                                                <p className="text-[10px] lg:text-[9px] text-slate-500">Derivaciones hoy</p>
-                                            </div>
+                                            {[
+                                                { val: healthData.stats.products || 0, label: 'Productos' },
+                                                { val: healthData.stats.documents || 0, label: 'Documentos' },
+                                                { val: healthData.stats.conversations_week || 0, label: 'Convs (7d)' },
+                                                { val: healthData.stats.derivations_today || 0, label: 'Derivaciones hoy' },
+                                            ].map((s, i) => (
+                                                <div key={i} className="bg-white/5 rounded-xl lg:rounded-lg p-3 lg:p-2 text-center">
+                                                    <p className="text-xl lg:text-lg font-bold text-white">{s.val}</p>
+                                                    <p className="text-[10px] lg:text-[9px] text-slate-500">{s.label}</p>
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
                                 </div>
                             )}
 
-                            {/* INSIGHTS TAB */}
+                            {/* INSIGHTS TAB — same as before */}
                             {activeTab === 'insights' && (
                                 <div className="p-4 space-y-5 lg:space-y-4">
                                     {dailyData?.available && dailyData.analysis ? (
                                         <>
-                                            {/* Summary */}
                                             <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl lg:rounded-lg p-3.5 lg:p-3">
                                                 <p className="text-sm lg:text-[11px] text-violet-300 leading-relaxed">{dailyData.analysis.resumen}</p>
                                                 <div className="flex items-center gap-3 mt-2">
@@ -526,8 +717,6 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                                                     )}
                                                 </div>
                                             </div>
-
-                                            {/* Frequent topics */}
                                             {dailyData.analysis.temas_frecuentes && dailyData.analysis.temas_frecuentes.length > 0 && (
                                                 <div>
                                                     <p className="text-xs lg:text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-2 lg:mb-1.5">Temas frecuentes</p>
@@ -535,44 +724,32 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                                                         {dailyData.analysis.temas_frecuentes.map((t, i) => (
                                                             <div key={i} className="flex items-center justify-between bg-white/5 rounded-xl lg:rounded-lg px-3.5 py-2.5 lg:px-3 lg:py-1.5">
                                                                 <span className="text-sm lg:text-[11px] text-white">{t.tema}</span>
-                                                                {t.cantidad_aprox && (
-                                                                    <span className="text-xs lg:text-[10px] text-slate-500 ml-2 shrink-0">{t.cantidad_aprox}x</span>
-                                                                )}
+                                                                {t.cantidad_aprox && <span className="text-xs lg:text-[10px] text-slate-500 ml-2 shrink-0">{t.cantidad_aprox}x</span>}
                                                             </div>
                                                         ))}
                                                     </div>
                                                 </div>
                                             )}
-
-                                            {/* Problems */}
                                             {dailyData.analysis.problemas && dailyData.analysis.problemas.length > 0 && (
                                                 <div>
                                                     <p className="text-xs lg:text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-2 lg:mb-1.5">Problemas detectados</p>
                                                     <div className="space-y-1.5 lg:space-y-1">
                                                         {dailyData.analysis.problemas.map((p, i) => (
-                                                            <div key={i} className="bg-red-500/10 border border-red-500/20 rounded-xl lg:rounded-lg px-3.5 py-2.5 lg:px-3 lg:py-2 text-sm lg:text-[11px] text-red-300 leading-relaxed">
-                                                                {p}
-                                                            </div>
+                                                            <div key={i} className="bg-red-500/10 border border-red-500/20 rounded-xl lg:rounded-lg px-3.5 py-2.5 lg:px-3 lg:py-2 text-sm lg:text-[11px] text-red-300 leading-relaxed">{p}</div>
                                                         ))}
                                                     </div>
                                                 </div>
                                             )}
-
-                                            {/* Uncovered topics */}
                                             {dailyData.analysis.temas_sin_cobertura && dailyData.analysis.temas_sin_cobertura.length > 0 && (
                                                 <div>
                                                     <p className="text-xs lg:text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-2 lg:mb-1.5">Sin cobertura</p>
                                                     <div className="space-y-1.5 lg:space-y-1">
                                                         {dailyData.analysis.temas_sin_cobertura.map((t, i) => (
-                                                            <div key={i} className="bg-amber-500/10 border border-amber-500/20 rounded-xl lg:rounded-lg px-3.5 py-2.5 lg:px-3 lg:py-2 text-sm lg:text-[11px] text-amber-300 leading-relaxed">
-                                                                {t}
-                                                            </div>
+                                                            <div key={i} className="bg-amber-500/10 border border-amber-500/20 rounded-xl lg:rounded-lg px-3.5 py-2.5 lg:px-3 lg:py-2 text-sm lg:text-[11px] text-amber-300 leading-relaxed">{t}</div>
                                                         ))}
                                                     </div>
                                                 </div>
                                             )}
-
-                                            {/* Suggestions with Apply button */}
                                             {dailyData.analysis.sugerencias && dailyData.analysis.sugerencias.length > 0 && (
                                                 <div>
                                                     <p className="text-xs lg:text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-2 lg:mb-1.5">Sugerencias de mejora</p>
@@ -582,15 +759,10 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                                                                 <p className="text-sm lg:text-[11px] text-cyan-300 font-medium">{s.titulo}</p>
                                                                 <p className="text-xs lg:text-[10px] text-slate-400 mt-1 leading-relaxed">{s.detalle}</p>
                                                                 {appliedIdxs.includes(i) ? (
-                                                                    <div className="flex items-center gap-1 text-emerald-400 text-xs lg:text-[10px] mt-2">
-                                                                        <Check size={14} /> Aplicada
-                                                                    </div>
+                                                                    <div className="flex items-center gap-1 text-emerald-400 text-xs lg:text-[10px] mt-2"><Check size={14} /> Aplicada</div>
                                                                 ) : (
-                                                                    <button
-                                                                        onClick={() => applySuggestion(s, i)}
-                                                                        disabled={applyingIdx === i}
-                                                                        className="mt-2.5 lg:mt-2 px-4 py-2 lg:px-3 lg:py-1 bg-cyan-500/20 hover:bg-cyan-500/30 active:bg-cyan-500/40 border border-cyan-500/30 rounded-xl lg:rounded-lg text-xs lg:text-[10px] text-cyan-300 transition-all disabled:opacity-50"
-                                                                    >
+                                                                    <button onClick={() => applySuggestion(s, i)} disabled={applyingIdx === i}
+                                                                        className="mt-2.5 lg:mt-2 px-4 py-2 lg:px-3 lg:py-1 bg-cyan-500/20 hover:bg-cyan-500/30 active:bg-cyan-500/40 border border-cyan-500/30 rounded-xl lg:rounded-lg text-xs lg:text-[10px] text-cyan-300 transition-all disabled:opacity-50">
                                                                         {applyingIdx === i ? 'Aplicando...' : 'Aplicar sugerencia'}
                                                                     </button>
                                                                 )}
@@ -606,7 +778,6 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                                             <p className="text-base lg:text-sm text-slate-500">Sin datos de hoy</p>
                                             <p className="text-xs lg:text-[10px] text-slate-600 mt-1 px-4 leading-relaxed">
                                                 Nova analiza tus conversaciones automaticamente cada 12 horas.
-                                                Los insights aparecen aca cuando haya actividad.
                                             </p>
                                         </div>
                                     )}
@@ -614,16 +785,28 @@ Responde de forma breve (max 3 oraciones). Termina con una sugerencia o accion c
                             )}
                         </div>
 
-                        {/* Input — only on chat tab, with safe area bottom */}
+                        {/* Input bar — only on chat tab */}
                         {activeTab === 'chat' && (
                             <div className="px-3 py-3 lg:py-2 border-t border-white/5 shrink-0 safe-bottom bg-[#0f0f17]">
                                 <div className="flex gap-2">
+                                    {/* Mic button */}
+                                    <button
+                                        onClick={() => voiceState === 'idle' ? startVoice() : stopVoice()}
+                                        className={`w-11 h-11 lg:w-9 lg:h-9 rounded-xl flex items-center justify-center transition-all active:scale-90 shrink-0 ${
+                                            voiceState !== 'idle'
+                                                ? 'bg-red-500 hover:bg-red-600 text-white'
+                                                : 'bg-white/5 hover:bg-white/10 text-violet-400 border border-white/10'
+                                        }`}
+                                    >
+                                        {voiceState !== 'idle' ? <MicOff size={16} /> : <Mic size={16} />}
+                                    </button>
+
                                     <input
                                         ref={inputRef}
                                         value={input}
                                         onChange={e => setInput(e.target.value)}
                                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                                        placeholder="Preguntale a Nova..."
+                                        placeholder="Escribi o habla..."
                                         inputMode="text"
                                         enterKeyHint="send"
                                         autoComplete="off"
