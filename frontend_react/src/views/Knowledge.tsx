@@ -247,28 +247,64 @@ export const Knowledge: React.FC = () => {
                 )}
 
                 {/* File Grid */}
+                {/* Mobile: card list */}
                 {filteredFiles.length > 0 && (
-                    <div className="bg-slate-900/50 border border-white/10 rounded-lg overflow-hidden flex-1 overflow-auto">
+                    <div className="space-y-2 lg:hidden flex-1 overflow-auto">
+                        {filteredFiles.map((file: KnowledgeFile) => (
+                            <div key={file.id} className="bg-slate-900/50 border border-white/10 rounded-xl p-3 flex items-center gap-3">
+                                <div className="bg-slate-800 p-2 rounded-lg text-cyan-400 shrink-0">
+                                    <FileText size={18} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-white font-medium truncate">{file.filename}</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        {file.status === 'active' && (
+                                            <span className="text-[10px] text-green-400 flex items-center gap-1"><CheckCircle size={10} /> Activo</span>
+                                        )}
+                                        {file.status === 'processing' && (
+                                            <span className="text-[10px] text-blue-400 flex items-center gap-1"><Clock size={10} className="animate-spin" /> Indexando</span>
+                                        )}
+                                        {file.status === 'error' && (
+                                            <span className="text-[10px] text-red-400 flex items-center gap-1"><AlertCircle size={10} /> Error</span>
+                                        )}
+                                        <span className="text-[10px] text-slate-600">{formatSize(file.file_size)}</span>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => handleDelete(file.id)}
+                                    disabled={deletingIds.has(file.id)}
+                                    className="text-slate-500 hover:text-red-400 active:text-red-300 p-2 shrink-0 rounded-lg active:bg-red-500/10"
+                                >
+                                    {deletingIds.has(file.id) ? <Clock size={16} className="animate-spin text-red-500" /> : <Trash size={16} />}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Desktop: table */}
+                {filteredFiles.length > 0 && (
+                    <div className="bg-slate-900/50 border border-white/10 rounded-lg overflow-hidden flex-1 overflow-auto hidden lg:block">
                         <table className="w-full text-left text-sm relative">
                             <thead className="bg-slate-900 text-slate-400 uppercase text-xs sticky top-0 z-10">
                                 <tr>
-                                    <th className="p-3 lg:p-4">Documento</th>
-                                    <th className="p-3 lg:p-4 hidden sm:table-cell">Tamaño</th>
-                                    <th className="p-3 lg:p-4">Estado</th>
-                                    <th className="p-3 lg:p-4 hidden md:table-cell">Fecha</th>
+                                    <th className="p-4">Documento</th>
+                                    <th className="p-4">Tamaño</th>
+                                    <th className="p-4">Estado</th>
+                                    <th className="p-4">Fecha</th>
                                     <th className="p-4 text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/10">
                                 {filteredFiles.map((file: KnowledgeFile) => (
                                     <tr key={file.id} className="hover:bg-white/5 transition-colors group">
-                                        <td className="p-3 lg:p-4 flex items-center gap-2 lg:gap-3">
-                                            <div className="bg-slate-800 p-1.5 lg:p-2 rounded text-cyan-400 group-hover:text-cyan-300 group-hover:bg-slate-700 transition-colors shrink-0">
-                                                <FileText size={16} />
+                                        <td className="p-4 flex items-center gap-3">
+                                            <div className="bg-slate-800 p-2 rounded text-cyan-400 group-hover:text-cyan-300 group-hover:bg-slate-700 transition-colors shrink-0">
+                                                <FileText size={20} />
                                             </div>
-                                            <span className="font-medium text-white text-xs lg:text-sm truncate">{file.filename}</span>
+                                            <span className="font-medium text-white">{file.filename}</span>
                                         </td>
-                                        <td className="p-3 lg:p-4 text-slate-400 text-xs hidden sm:table-cell">{formatSize(file.file_size)}</td>
+                                        <td className="p-4 text-slate-400">{formatSize(file.file_size)}</td>
                                         <td className="p-4">
                                             {file.status === 'active' && (
                                                 <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded text-xs flex items-center gap-1 w-fit">
@@ -281,22 +317,12 @@ export const Knowledge: React.FC = () => {
                                                 </span>
                                             )}
                                             {file.status === 'error' && (
-                                                <span
-                                                    className="px-2 py-1 bg-red-500/10 text-red-400 rounded text-xs flex items-center gap-1 w-fit cursor-help"
-                                                    title={(() => {
-                                                        try {
-                                                            const meta = JSON.parse(file.meta || '{}');
-                                                            return meta.error_detail || 'Unknown error occurred during ingestion.';
-                                                        } catch (e) {
-                                                            return file.meta || 'Failed to process document.';
-                                                        }
-                                                    })()}
-                                                >
+                                                <span className="px-2 py-1 bg-red-500/10 text-red-400 rounded text-xs flex items-center gap-1 w-fit">
                                                     <AlertCircle size={12} /> Failed
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="p-3 lg:p-4 text-slate-400 text-xs hidden md:table-cell">
+                                        <td className="p-4 text-slate-400">
                                             {new Date(file.created_at).toLocaleDateString()}
                                         </td>
                                         <td className="p-4 text-right">
@@ -306,7 +332,6 @@ export const Knowledge: React.FC = () => {
                                                 <button
                                                     onClick={() => handleDelete(file.id)}
                                                     className="text-slate-500 hover:text-red-400 transition-colors p-2"
-                                                    title="Borrar vector"
                                                 >
                                                     <Trash size={16} />
                                                 </button>
