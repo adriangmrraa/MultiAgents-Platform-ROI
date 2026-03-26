@@ -7,7 +7,7 @@ import MetaOnboardingWizard from './settings/MetaOnboardingWizard';
 import {
     Sparkles, ArrowRight, ArrowLeft, Store, Facebook, Mic, MicOff, Send,
     Check, CheckCircle, AlertCircle, Copy, ChevronDown, Phone, Zap,
-    BarChart2, MessageCircle, Globe, CreditCard, X, Volume2, Star, Instagram
+    BarChart2, MessageCircle, Globe, CreditCard, X, Volume2, Star, Instagram, Plus
 } from 'lucide-react';
 
 // --- Constants ---
