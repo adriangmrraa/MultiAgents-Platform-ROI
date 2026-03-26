@@ -139,18 +139,19 @@ export const NovaWidget: React.FC = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    // Fetch context + health when opening
+    // Fetch context + health when opening, then auto-start voice
     useEffect(() => {
         if (isOpen) {
             fetchContext();
             fetchHealth();
             fetchDailyAnalysis();
-        }
-    }, [isOpen, currentPage]);
-
-    // Cleanup voice on close
-    useEffect(() => {
-        if (!isOpen) {
+            // Auto-start voice when widget opens
+            if (voiceState === 'idle') {
+                // Small delay to let context load first
+                const t = setTimeout(() => startVoice(), 500);
+                return () => clearTimeout(t);
+            }
+        } else {
             stopVoice();
         }
     }, [isOpen]);
