@@ -80,7 +80,8 @@ export const BusinessForge: React.FC = () => {
     useEffect(() => {
         loadBrandDNA();
         loadProducts();
-    }, [loadBrandDNA, loadProducts]);
+        loadAssets(); // Load assets on mount so gallery is always ready
+    }, [loadBrandDNA, loadProducts, loadAssets]);
 
     useEffect(() => {
         if (activeTab === 'gallery') loadAssets();
