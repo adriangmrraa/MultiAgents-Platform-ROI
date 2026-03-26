@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends, Header, Cookie
+from fastapi import APIRouter, HTTPException, Depends, Header, Cookie, Request
 from pydantic import BaseModel
 from jose import jwt, JWTError
 
