@@ -152,20 +152,65 @@ export const Stores: React.FC = () => {
 
     return (
         <div className="view active">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                <h1 className="view-title" style={{ margin: 0 }}>Hangar: Deployment Deck</h1>
-                <button className="btn-primary" onClick={openNew}>
-                    <Plus size={18} style={{ marginRight: '8px' }} />
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+                <h1 className="view-title" style={{ margin: 0 }}>Deployment Deck</h1>
+                <button className="btn-primary shrink-0" onClick={openNew}>
+                    <Plus size={18} className="mr-2" />
                     Nueva Tienda
                 </button>
             </div>
 
-            <div className="glass">
+            {/* Mobile cards */}
+            <div className="space-y-3 lg:hidden">
+                {tenants.map(t => (
+                    <div key={t.id || t.store_name} className="glass p-4 rounded-xl border border-white/10">
+                        <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
+                                    <ShoppingBag size={20} className="text-accent" />
+                                </div>
+                                <div>
+                                    <p className="font-bold text-white text-sm">{t.store_name}</p>
+                                    <p className="text-xs text-slate-500">{t.owner_email || 'Sin email'}</p>
+                                </div>
+                            </div>
+                            {t.tiendanube_store_id ? (
+                                <span className="service-pill ok text-[10px]"><CheckCircle size={10} /> Conectado</span>
+                            ) : (
+                                <span className="service-pill error text-[10px]"><XCircle size={10} /> Sin Config</span>
+                            )}
+                        </div>
+                        {t.tiendanube_store_id && (
+                            <p className="text-[10px] text-slate-500 mb-3 font-mono">TN ID: {t.tiendanube_store_id}</p>
+                        )}
+                        <div className="flex gap-2">
+                            <button className="flex-1 btn-secondary text-xs py-2 rounded-lg flex items-center justify-center gap-1" onClick={() => openEdit(t)}>
+                                <Edit2 size={14} /> Editar
+                            </button>
+                            <button className="btn-secondary text-xs px-3 py-2 rounded-lg text-accent" onClick={() => openToolConfig(t)}>
+                                <Wrench size={14} />
+                            </button>
+                            <button className="btn-delete text-xs px-3 py-2 rounded-lg" onClick={() => t.id && handleDelete(t.id)}>
+                                <Trash2 size={14} />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+                {tenants.length === 0 && (
+                    <div className="text-center py-12 text-slate-500">
+                        <ShoppingBag size={40} className="mx-auto mb-4 opacity-30" />
+                        <p>No tenes tiendas configuradas.</p>
+                    </div>
+                )}
+            </div>
+
+            {/* Desktop table */}
+            <div className="glass hidden lg:block">
                 <div className="table-responsive">
                     <table className="data-table">
                         <thead>
                             <tr>
-                                <th>Tienda / Dueño</th>
+                                <th>Tienda / Dueno</th>
                                 <th>Tienda Nube ID</th>
                                 <th>Estado</th>
                                 <th>Acciones</th>
@@ -202,7 +247,7 @@ export const Stores: React.FC = () => {
                             {tenants.length === 0 && (
                                 <tr>
                                     <td colSpan={4} style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-                                        No tienes tiendas configuradas. ¡Agrega la primera!
+                                        No tenes tiendas configuradas.
                                     </td>
                                 </tr>
                             )}

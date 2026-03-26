@@ -216,7 +216,50 @@ export const Agents: React.FC = () => {
                 </div>
             )}
 
-            <div className="glass">
+            {/* Agent Cards (mobile) / Table (desktop) */}
+            <div className="space-y-3 lg:hidden">
+                {agents.map(agent => (
+                    <div key={agent.id} className="glass p-4 rounded-xl border border-white/10">
+                        <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${agent.is_active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-500/10 text-slate-400'}`}>
+                                    <Bot size={20} />
+                                </div>
+                                <div>
+                                    <p className="font-bold text-white text-sm">{agent.name}</p>
+                                    <p className="text-xs text-slate-500">{agent.tenant_name || 'Personal'}</p>
+                                </div>
+                            </div>
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${agent.is_active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-500/10 text-slate-400'}`}>
+                                {agent.is_active ? 'Activo' : 'Inactivo'}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2 mb-3">
+                            <span className="badge type text-[10px]">{agent.role}</span>
+                            <span className="text-[10px] text-slate-500 font-mono">{agent.model_provider}/{agent.model_version}</span>
+                        </div>
+                        <div className="flex gap-2">
+                            <button className="flex-1 btn-secondary text-xs py-2 rounded-lg flex items-center justify-center gap-1" onClick={() => openEdit(agent)}>
+                                <Edit size={14} /> Editar
+                            </button>
+                            <button className="btn-delete text-xs px-3 py-2 rounded-lg" onClick={() => agent.id && handleDelete(agent.id)}>
+                                <Trash2 size={14} />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+                {agents.length === 0 && (
+                    <div className="text-center py-12">
+                        <Bot size={40} className="text-accent mx-auto mb-4 animate-bounce-subtle" />
+                        <h3 className="text-lg font-black text-white mb-2">{t('agents.noAgentsTitle') || 'Tu Armada esta vacia'}</h3>
+                        <p className="text-sm text-slate-500 mb-4">{t('agents.noAgentsDesc') || 'Comenza creando un agente.'}</p>
+                        <button className="btn-primary px-6 py-3" onClick={openNew}><Plus size={18} className="mr-2" /> Crear Agente</button>
+                    </div>
+                )}
+            </div>
+
+            {/* Desktop table */}
+            <div className="glass hidden lg:block">
                 <table className="data-table">
                     <thead>
                         <tr>
