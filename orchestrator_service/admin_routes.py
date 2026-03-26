@@ -5000,7 +5000,7 @@ async def upload_knowledge_file(
 
     if not openai_key and not google_key:
         # Fallback: use platform key (company pays for free trial)
-        openai_key = OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
         google_key = os.getenv("GOOGLE_API_KEY")
         if not openai_key and not google_key:
             logger.warning(f"knowledge_upload_blocked_no_keys: tenant {tenant_id}")
