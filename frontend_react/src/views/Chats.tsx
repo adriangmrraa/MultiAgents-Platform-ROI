@@ -383,7 +383,7 @@ export const Chats: React.FC = () => {
     };
 
     return (
-        <div className="view active animate-fade-in flex flex-col p-0 overflow-hidden" style={{ height: 'calc(100vh - 5rem)', maxHeight: 'calc(100vh - 5rem)', position: 'relative' }}>
+        <div className="view active animate-fade-in flex flex-col p-0 overflow-hidden" style={{ height: 'calc(100vh - 4.5rem)', maxHeight: 'calc(100vh - 4.5rem)', position: 'relative' }}>
             <h1 className="view-title px-6 pt-6 hidden md:block">Gestión Multicanal Nexus v4.2</h1>
 
             <div className="chats-layout flex-1 overflow-hidden" style={{

@@ -103,22 +103,17 @@ export const Sidebar: React.FC = () => {
                     </button>
                 )}
 
-                <div className={`mobile-nav-v4 flex-nowrap ${isMobileVisible ? 'translate-y-0 scale-100' : 'translate-y-32 scale-90 opacity-0'}`}>
-                    {isMobileVisible && (
-                        <button className="absolute -top-12 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/60 mb-4" onClick={() => setIsMobileVisible(false)}>
-                            <X size={20} />
-                        </button>
-                    )}
-                    <NavItem to="/" icon={<LayoutDashboard size={20} />} label={t('sidebar.dashboard')} />
-                    <NavItem to="/chats" icon={<MessageCircle size={20} />} label={t('sidebar.commsChannel')} />
-                    <NavItem to="/agents" icon={<Zap size={20} />} label={t('sidebar.agentSquad')} />
-                    <NavItem to="/stores" icon={<Store size={20} />} label={t('sidebar.hangar')} />
-                    <NavItem to="/forge" icon={<Palette size={20} />} label="Forge" />
-                    <NavItem to="/knowledge" icon={<Database size={20} />} label={t('sidebar.knowledge')} />
-                    <NavItem to="/voice-widget" icon={<Phone size={20} />} label="Voice" />
-                    <NavItem to="/billing" icon={<CreditCard size={20} />} label="Billing" />
-                    <NavItem to="/analytics" icon={<BarChart2 size={20} />} label={t('sidebar.telemetry')} />
-                    <NavItem to="/settings" icon={<Settings size={20} />} label={t('sidebar.settings')} />
+                <div className={`mobile-nav-v4 ${isMobileVisible ? 'translate-y-0' : 'translate-y-full opacity-0 pointer-events-none'}`}>
+                    <NavItem to="/" icon={<LayoutDashboard size={18} />} label="Home" />
+                    <NavItem to="/chats" icon={<MessageCircle size={18} />} label="Chats" />
+                    <NavItem to="/agents" icon={<Zap size={18} />} label="Agentes" />
+                    <NavItem to="/stores" icon={<Store size={18} />} label="Tiendas" />
+                    <NavItem to="/forge" icon={<Palette size={18} />} label="Forge" />
+                    <NavItem to="/knowledge" icon={<Database size={18} />} label="Knowledge" />
+                    <NavItem to="/voice-widget" icon={<Phone size={18} />} label="Voice" />
+                    <NavItem to="/billing" icon={<CreditCard size={18} />} label="Billing" />
+                    <NavItem to="/analytics" icon={<BarChart2 size={18} />} label="Analytics" />
+                    <NavItem to="/settings" icon={<Settings size={18} />} label="Config" />
                 </div>
             </div>
 

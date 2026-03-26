@@ -493,7 +493,7 @@ Responde breve (max 3 oraciones). Termina con una sugerencia concreta.`;
         <>
             {/* Toast */}
             {toastVisible && (
-                <div className="fixed bottom-36 lg:bottom-24 left-3 right-3 lg:left-6 lg:right-auto z-[9999] lg:max-w-sm animate-fade-in">
+                <div className="fixed bottom-28 lg:bottom-24 left-3 right-3 lg:left-6 lg:right-auto z-[9999] lg:max-w-sm animate-fade-in">
                     <div className="bg-[#1a1a2e] border border-violet-500/30 rounded-xl px-4 py-3 shadow-2xl shadow-violet-600/20 flex items-start gap-3">
                         <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center shrink-0">
                             <Sparkles size={14} className="text-white" />
@@ -513,7 +513,7 @@ Responde breve (max 3 oraciones). Termina con una sugerencia concreta.`;
             {!isOpen && (
                 <button
                     onClick={() => setIsOpen(true)}
-                    className={`fixed bottom-32 lg:bottom-6 right-4 lg:right-6 z-[9998] w-14 h-14 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-full shadow-2xl shadow-violet-600/30 flex items-center justify-center text-white hover:scale-110 transition-all active:scale-95 ${pulse ? 'animate-pulse' : ''}`}
+                    className={`fixed bottom-[4.5rem] lg:bottom-6 right-4 lg:right-6 z-[9998] w-14 h-14 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-full shadow-2xl shadow-violet-600/30 flex items-center justify-center text-white hover:scale-110 transition-all active:scale-95 ${pulse ? 'animate-pulse' : ''}`}
                 >
                     <Sparkles size={24} />
                     {healthData?.checks?.filter((c: NovaCheck) => c.type === 'alert').length > 0 && (

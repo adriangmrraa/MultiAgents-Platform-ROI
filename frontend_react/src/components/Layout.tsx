@@ -12,7 +12,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="glass-container min-h-screen">
             <UserProfile />
             <Sidebar />
-            <main className="content flex-1 lg:ml-24 overflow-x-hidden pt-20 lg:pt-6">
+            <main className="content flex-1 lg:ml-24 overflow-x-hidden pt-[4.5rem] pb-16 lg:pt-6 lg:pb-0">
                 {children}
             </main>
             <NovaWidget />
