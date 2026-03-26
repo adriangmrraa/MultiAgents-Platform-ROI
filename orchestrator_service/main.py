@@ -151,6 +151,7 @@ from app.routes.ingest_routes import router as ingest_router # NEW
 from app.routes.voice_widget_routes import router as voice_widget_router, public_router as voice_widget_public_router  # Voice Widget v1.0
 from app.routes.onboarding_wizard_routes import router as onboarding_wizard_router  # Onboarding Wizard v1.0
 from app.routes.nova_routes import router as nova_router  # Nova Platform Assistant v1.0
+from app.routes.product_routes import router as product_router, internal_search_router  # Internal Product Catalog v1.0
 from app.routes.voice_widget_ws import voice_websocket_handler  # Voice Widget WebSocket
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
@@ -1262,6 +1263,41 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Migration 43 index skipped: %', SQLERRM;
     END $$;
+    """,
+    # 44. Internal Products table (Product Catalog v1.0)
+    """
+    CREATE TABLE IF NOT EXISTS internal_products (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        description TEXT DEFAULT '',
+        category VARCHAR(100) DEFAULT 'General',
+        sku VARCHAR(50),
+        price DECIMAL(12,2) NOT NULL DEFAULT 0,
+        compare_at_price DECIMAL(12,2),
+        currency VARCHAR(3) DEFAULT 'ARS',
+        stock INTEGER DEFAULT 0,
+        track_stock BOOLEAN DEFAULT true,
+        variants JSONB DEFAULT '[]',
+        images JSONB DEFAULT '[]',
+        is_active BOOLEAN DEFAULT true,
+        tags JSONB DEFAULT '[]',
+        weight DECIMAL(8,2),
+        slug VARCHAR(255),
+        public_url TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    """,
+    """
+    DO $$
+    BEGIN
+        CREATE INDEX IF NOT EXISTS idx_internal_products_tenant ON internal_products(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_internal_products_category ON internal_products(tenant_id, category);
+        CREATE INDEX IF NOT EXISTS idx_internal_products_active ON internal_products(tenant_id, is_active);
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Migration 44 indexes skipped: %', SQLERRM;
+    END $$;
     """
 ]
 
@@ -1423,6 +1459,7 @@ async def lifespan(app: FastAPI):
         from app.models.attributed_sale import AttributedSale  # ROI Real v8.0
         from app.models.voice_widget import VoiceWidgetConfig, VoiceUsageRecord  # Voice Widget v1.0
         from app.models.onboarding import OnboardingProgress  # Onboarding Wizard v1.0
+        from app.models.internal_product import InternalProduct  # Internal Product Catalog v1.0
 
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -1618,6 +1655,8 @@ app.include_router(ingest_router)  # Meta Direct Messaging Ingestion
 app.include_router(voice_widget_router)  # Voice Widget Admin CRUD
 app.include_router(onboarding_wizard_router)  # Onboarding Wizard
 app.include_router(nova_router)  # Nova Platform Assistant
+app.include_router(product_router)  # Internal Product Catalog
+app.include_router(internal_search_router)  # Internal Product Search (TN-compatible)
 app.include_router(voice_widget_public_router)  # Voice Widget Public SDK Endpoints
 
 

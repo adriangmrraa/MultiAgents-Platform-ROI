@@ -35,6 +35,7 @@ import { Profile } from './views/Profile';
 import { PlatformTower } from './views/PlatformTower';
 import { Billing } from './views/Billing';
 import { VoiceWidget } from './views/VoiceWidget';
+import { Products } from './views/Products';
 import { Landing } from './views/Landing';
 import { Pricing } from './views/Pricing';
 import { PrivacyPolicy } from './views/PrivacyPolicy';
@@ -218,6 +219,7 @@ function App() {
                     <Route path="/console" element={<Console />} />
                     <Route path="/handoff" element={<Handoff />} />
                     <Route path="/voice-widget" element={<VoiceWidget />} />
+                    <Route path="/products" element={<Products />} />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/billing" element={<Billing />} />
                     <Route path="/platform" element={

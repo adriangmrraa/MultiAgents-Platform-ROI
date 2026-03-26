@@ -80,6 +80,7 @@ export const Sidebar: React.FC = () => {
                     <NavItem to="/credentials" icon={<Key size={20} />} label={t('sidebar.keymaster')} desc={t('sidebar.keymasterDesc')} />
                     <NavItem to="/handoff" icon={<Mail size={20} />} label="Handoff" desc="Derivación a Humanos" />
                     <NavItem to="/channels" icon={<LinkIcon size={20} />} label="Canales" desc="Gestión Multi-Tenant de Canales" />
+                    <NavItem to="/products" icon={<Store size={20} />} label="Productos" desc="Catalogo interno de productos" />
                     <NavItem to="/voice-widget" icon={<Phone size={20} />} label="Voice Widget" desc="Asistente de voz para tu tienda" />
                     <NavItem to="/settings/ycloud" icon={<Mail size={20} />} label={t('sidebar.ycloud')} desc={t('sidebar.ycloudDesc')} />
                     <NavItem to="/nexus-setup" icon={<Zap size={20} />} label={t('sidebar.nexusEngine')} desc={t('sidebar.nexusEngineDesc')} />
