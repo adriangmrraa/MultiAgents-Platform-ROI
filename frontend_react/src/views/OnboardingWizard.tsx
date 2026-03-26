@@ -2081,6 +2081,16 @@ ${systemPrompt}`,
                                 <Sparkles size={16} /> Activar Agente
                             </button>
 
+                            <button onClick={() => {
+                                // Go back to voice step to add/modify with Nova
+                                setVoiceConsent(false); // Show consent card again
+                                setSectionComplete(false);
+                                setStep(3);
+                            }}
+                                className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-violet-400 font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm border border-violet-500/20">
+                                <Mic size={14} /> Conversar con Nova para mejorar
+                            </button>
+
                             <button onClick={goBack}
                                 className="w-full py-2.5 text-sm text-slate-500 hover:text-white transition-colors flex items-center justify-center gap-1.5 active:scale-[0.98]">
                                 <ArrowLeft size={14} /> Volver al paso anterior
