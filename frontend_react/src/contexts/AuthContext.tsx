@@ -36,8 +36,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const data = await fetchApi('/auth/me', { skipRedirect: true });
             if (data && data.id) {
                 setUser(data);
+                // Store email for multi-tenant API auth (cross-origin fallback)
+                if (data.email) localStorage.setItem('user_email', data.email);
             } else {
                 setUser(null);
+                localStorage.removeItem('user_email');
             }
         } catch (err) {
             console.log("No active session", err);

@@ -115,7 +115,7 @@ function OnboardingGate({ children }: { children: JSX.Element }) {
         else if (hostname.includes('platform-ui')) base = window.location.protocol + '//' + hostname.replace('platform-ui', 'orchestrator-service');
 
         const res = await fetch(`${base}/admin/onboarding-wizard/progress`, {
-          headers: { 'x-admin-token': ADMIN_TOKEN || '', 'Content-Type': 'application/json' },
+          headers: { 'x-admin-token': ADMIN_TOKEN || '', 'Content-Type': 'application/json', 'x-user-email': user.email || '' },
           credentials: 'include'
         });
 

@@ -21,19 +21,29 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 
 
 async def get_wizard_user(
+    request: Request = None,
     token: str | None = Cookie(default=None, alias="access_token"),
     auth_header: str | None = Header(default=None, alias="Authorization"),
     x_admin_token: str | None = Header(default=None),
+    x_user_email: str | None = Header(default=None),
 ) -> User:
     """
     Resolve current user for wizard endpoints.
-    Supports: JWT cookie, Bearer header, OR x-admin-token + cookie fallback.
-    More resilient than get_current_user for cross-origin scenarios.
+    Supports: JWT cookie, Bearer header, OR x-admin-token + email header.
     """
     from sqlalchemy import select
     from app.core.database import AsyncSessionLocal
 
-    # Try JWT from cookie or Authorization header
+    class UserProxy:
+        def __init__(self, r):
+            self.id = r["id"]
+            self.email = r["email"]
+            self.role = r["role"]
+            self.tenant_id = r["tenant_id"]
+            self.is_verified = r.get("is_verified", True)
+            self.store_name = r.get("store_name", "")
+
+    # 1. Try JWT from cookie or Authorization header
     jwt_token = token
     if not jwt_token and auth_header and auth_header.startswith("Bearer "):
         jwt_token = auth_header.split(" ")[1]
@@ -51,29 +61,32 @@ async def get_wizard_user(
         except JWTError:
             pass
 
-    # Fallback: x-admin-token → resolve user from the most recent non-admin user
-    # This is used when the cookie doesn't arrive (cross-origin EasyPanel)
-    if x_admin_token and x_admin_token == ADMIN_TOKEN:
-        # We need to know WHICH user. Check if there's a user email in a custom header
-        # For now, get the last created non-admin user as a heuristic for fresh onboarding
+    # 2. Fallback: x-admin-token + x-user-email header (multi-tenant safe)
+    if x_admin_token and x_admin_token == ADMIN_TOKEN and x_user_email:
         row = await db.pool.fetchrow("""
             SELECT id, email, role, tenant_id, is_verified,
                    COALESCE((SELECT store_name FROM tenants WHERE id = users.tenant_id), '') as store_name
-            FROM users
-            WHERE role != 'super_admin'
-            ORDER BY created_at DESC LIMIT 1
-        """)
+            FROM users WHERE email = $1
+        """, x_user_email)
         if row:
-            # Create a minimal User-like object
-            class UserProxy:
-                def __init__(self, r):
-                    self.id = r["id"]
-                    self.email = r["email"]
-                    self.role = r["role"]
-                    self.tenant_id = r["tenant_id"]
-                    self.is_verified = r.get("is_verified", True)
-                    self.store_name = r.get("store_name", "")
             return UserProxy(row)
+
+    # 3. Last resort: x-admin-token without email — try to get user from JWT in cookie
+    # This handles the case where the cookie arrives but JWT decode failed
+    if x_admin_token and x_admin_token == ADMIN_TOKEN:
+        # Try getting email from the request if available
+        if request:
+            try:
+                body = await request.json()
+                if body.get("_user_email"):
+                    row = await db.pool.fetchrow(
+                        "SELECT id, email, role, tenant_id, is_verified, '' as store_name FROM users WHERE email = $1",
+                        body["_user_email"]
+                    )
+                    if row:
+                        return UserProxy(row)
+            except Exception:
+                pass
 
     raise HTTPException(status_code=401, detail="Not authenticated")
 

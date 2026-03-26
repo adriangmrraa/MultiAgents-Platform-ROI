@@ -46,8 +46,11 @@ export function useApi() {
         const executeFetch = async (attempt: number): Promise<any> => {
             try {
                 const isFormData = options.body instanceof FormData;
+                // Get user email from localStorage for multi-tenant auth
+                const userEmail = localStorage.getItem('user_email') || '';
                 const headers: Record<string, string> = {
                     'x-admin-token': ADMIN_TOKEN,
+                    'x-user-email': userEmail,
                     ...options.headers
                 };
 
