@@ -1,6 +1,7 @@
 import React, { type ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { UserProfile } from './UserProfile';
+import { NovaWidget } from './NovaWidget';
 
 interface LayoutProps {
     children: ReactNode;
@@ -14,6 +15,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <main className="content flex-1 lg:ml-24 overflow-x-hidden pt-20 lg:pt-6">
                 {children}
             </main>
+            <NovaWidget />
         </div>
     );
 };

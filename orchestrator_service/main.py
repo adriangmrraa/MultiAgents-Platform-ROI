@@ -150,6 +150,7 @@ from app.routes.gallery_routes import router as gallery_router  # Smart Gallery 
 from app.routes.ingest_routes import router as ingest_router # NEW
 from app.routes.voice_widget_routes import router as voice_widget_router, public_router as voice_widget_public_router  # Voice Widget v1.0
 from app.routes.onboarding_wizard_routes import router as onboarding_wizard_router  # Onboarding Wizard v1.0
+from app.routes.nova_routes import router as nova_router  # Nova Platform Assistant v1.0
 from app.routes.voice_widget_ws import voice_websocket_handler  # Voice Widget WebSocket
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
 from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
@@ -1616,6 +1617,7 @@ app.include_router(onboarding_router, prefix="/admin/onboarding")
 app.include_router(ingest_router)  # Meta Direct Messaging Ingestion
 app.include_router(voice_widget_router)  # Voice Widget Admin CRUD
 app.include_router(onboarding_wizard_router)  # Onboarding Wizard
+app.include_router(nova_router)  # Nova Platform Assistant
 app.include_router(voice_widget_public_router)  # Voice Widget Public SDK Endpoints
 
 
@@ -1625,9 +1627,33 @@ async def voice_ws_endpoint(websocket: WebSocket, session_id: str):
     await voice_websocket_handler(websocket, session_id)
 
 
+@app.websocket("/public/nova/ws/{session_id}")
+async def nova_widget_ws(websocket: WebSocket, session_id: str):
+    """Nova Widget — reuses onboarding Realtime handler with nova_widget_session key."""
+    import json as _json
+    import base64 as _b64
+    import asyncio as _aio
+    import time as _time
+    from db import redis_client as _redis
+
+    raw = await _redis.get(f"nova_widget_session:{session_id}")
+    if not raw:
+        await websocket.close(code=4001, reason="Invalid session")
+        return
+    # Reuse the onboarding handler by injecting the session under the onboarding key
+    await _redis.setex(f"onboarding_realtime:{session_id}", 360, raw)
+    # Fall through to the onboarding handler logic
+    await onboarding_realtime_ws_inner(websocket, session_id)
+
+
 @app.websocket("/public/onboarding/realtime-ws/{session_id}")
 async def onboarding_realtime_ws(websocket: WebSocket, session_id: str):
     """Onboarding Voice Architect — OpenAI Realtime WebSocket bridge."""
+    await onboarding_realtime_ws_inner(websocket, session_id)
+
+
+async def onboarding_realtime_ws_inner(websocket: WebSocket, session_id: str):
+    """Shared Realtime handler for both onboarding and Nova widget."""
     import json as _json
     import base64 as _b64
     import asyncio as _aio
