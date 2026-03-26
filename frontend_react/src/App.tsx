@@ -134,13 +134,8 @@ function OnboardingGate({ children }: { children: JSX.Element }) {
         console.warn('[OnboardingGate] Backend check failed, using client heuristic');
       }
 
-      // CLIENT-SIDE FALLBACK: If user has no store_name or it looks provisional, show wizard
-      // This catches the case where backend endpoint is unreachable
-      if (!user.store_name || user.store_name === '' || user.store_name.startsWith('Tienda de ')) {
-        // Check if user was recently created (no meaningful data yet)
-        // A user with no store_name and no super_admin role is likely new
-        setNeedsWizard(true);
-      }
+      // Backend check is authoritative — no client-side fallback needed
+      // The backend checks completed_at, has_agents, and role correctly
 
       setChecked(true);
     };
