@@ -2010,11 +2010,19 @@ Maximo 4 oraciones."""
                                 else:
                                     result = {"status": "error", "detail": "URL vacia"}
 
-                            # --- PRODUCT TOOLS ---
+                            # --- PRODUCT TOOLS (with input validation) ---
                             elif fn_name == "agregar_producto":
                                 try:
-                                    name = fn_args.get("name", "")
-                                    price = fn_args.get("price", 0)
+                                    name = (fn_args.get("name") or "").strip()
+                                    if not name:
+                                        result = {"status": "error", "detail": "El nombre del producto es obligatorio"}
+                                        await openai_ws.send(_json.dumps({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}}))
+                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                        continue
+                                    price = fn_args.get("price") or 0
+                                    if not isinstance(price, (int, float)):
+                                        try: price = float(price)
+                                        except: price = 0
                                     variants_str = fn_args.get("variants", "")
                                     variants_list = [{"name": v.strip(), "price": price, "stock": fn_args.get("stock", 0)} for v in variants_str.split(",") if v.strip()] if variants_str else []
                                     row = await db.pool.fetchrow("""
@@ -2029,6 +2037,11 @@ Maximo 4 oraciones."""
                             elif fn_name == "editar_producto":
                                 try:
                                     pid = fn_args.get("product_id")
+                                    if not pid:
+                                        result = {"status": "error", "detail": "product_id es obligatorio. Usa listar_productos para obtenerlo."}
+                                        await openai_ws.send(_json.dumps({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}}))
+                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                        continue
                                     updates = []
                                     params = [tenant_id]
                                     idx = 2
@@ -2047,6 +2060,11 @@ Maximo 4 oraciones."""
                             elif fn_name == "eliminar_producto":
                                 try:
                                     pid = fn_args.get("product_id")
+                                    if not pid:
+                                        result = {"status": "error", "detail": "product_id es obligatorio."}
+                                        await openai_ws.send(_json.dumps({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}}))
+                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                        continue
                                     await db.pool.execute("DELETE FROM internal_products WHERE id = $1 AND tenant_id = $2", pid, tenant_id)
                                     result = {"status": "eliminado", "product_id": pid}
                                 except Exception as e:
@@ -2066,17 +2084,30 @@ Maximo 4 oraciones."""
                             elif fn_name == "actualizar_stock":
                                 try:
                                     pid = fn_args.get("product_id")
+                                    if not pid:
+                                        result = {"status": "error", "detail": "product_id es obligatorio. Usa listar_productos primero."}
+                                        await openai_ws.send(_json.dumps({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}}))
+                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                        continue
                                     stock = fn_args.get("stock", 0)
+                                    if not isinstance(stock, int):
+                                        try: stock = int(stock)
+                                        except: stock = 0
                                     await db.pool.execute("UPDATE internal_products SET stock = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3", stock, pid, tenant_id)
                                     result = {"status": "stock_actualizado", "product_id": pid, "new_stock": stock}
                                 except Exception as e:
                                     result = {"status": "error", "detail": str(e)}
 
-                            # --- AGENT MANAGEMENT TOOLS ---
+                            # --- AGENT MANAGEMENT TOOLS (with validation) ---
                             elif fn_name == "modificar_prompt":
                                 try:
-                                    seccion = fn_args.get("seccion", "")
-                                    contenido = fn_args.get("contenido", "")
+                                    seccion = (fn_args.get("seccion") or "").strip()
+                                    contenido = (fn_args.get("contenido") or "").strip()
+                                    if not seccion or not contenido:
+                                        result = {"status": "error", "detail": "Necesito 'seccion' (ej: reglas, identidad, tono) y 'contenido' (el texto de la seccion)."}
+                                        await openai_ws.send(_json.dumps({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}}))
+                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                        continue
                                     agent = await db.pool.fetchrow("SELECT id, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1", tenant_id)
                                     if agent:
                                         prompt = agent["system_prompt_template"] or ""
