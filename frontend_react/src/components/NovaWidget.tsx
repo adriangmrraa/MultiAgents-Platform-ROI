@@ -513,7 +513,7 @@ Responde breve (max 3 oraciones). Termina con una sugerencia concreta.`;
             {!isOpen && (
                 <button
                     onClick={() => setIsOpen(true)}
-                    className={`fixed bottom-20 lg:bottom-6 right-4 lg:right-6 z-[9998] w-14 h-14 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-full shadow-2xl shadow-violet-600/30 flex items-center justify-center text-white hover:scale-110 transition-all active:scale-95 ${pulse ? 'animate-pulse' : ''}`}
+                    className={`fixed bottom-32 lg:bottom-6 right-4 lg:right-6 z-[9998] w-14 h-14 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-full shadow-2xl shadow-violet-600/30 flex items-center justify-center text-white hover:scale-110 transition-all active:scale-95 ${pulse ? 'animate-pulse' : ''}`}
                 >
                     <Sparkles size={24} />
                     {healthData?.checks?.filter((c: NovaCheck) => c.type === 'alert').length > 0 && (
