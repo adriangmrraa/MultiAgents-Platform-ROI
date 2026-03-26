@@ -1748,7 +1748,19 @@ ESTRATEGIA: Al inicio, pedi al usuario su sitio web, Instagram o Facebook si no 
             {"type": "function", "name": "finalizar_configuracion", "description": "Llamar cuando TODAS las secciones estan guardadas. Cierra la conversacion.", "parameters": {"type": "object", "properties": {"resumen_final": {"type": "string"}}, "required": ["resumen_final"]}},
             {"type": "function", "name": "cambiar_seccion", "description": "Cambiar la seccion visible en la UI. Mostrar titulo, descripcion y botones al usuario.", "parameters": {"type": "object", "properties": {"seccion_activa": {"type": "string"}, "titulo": {"type": "string"}, "descripcion": {"type": "string"}, "botones": {"type": "array", "items": {"type": "object", "properties": {"label": {"type": "string"}, "accion": {"type": "string"}, "estilo": {"type": "string"}}}}}, "required": ["seccion_activa"]}},
             {"type": "function", "name": "mostrar_dato_extraido", "description": "Mostrar un dato de las redes sociales como card visual. Usar al inicio para presentar la investigacion.", "parameters": {"type": "object", "properties": {"tipo": {"type": "string"}, "titulo": {"type": "string"}, "valor": {"type": "string"}, "icono": {"type": "string"}}, "required": ["titulo", "valor"]}},
-            {"type": "function", "name": "investigar_web", "description": "Scrapear una URL web para extraer informacion del negocio. Usar cuando el usuario comparte una URL de su sitio web, redes sociales, o tienda online. Devuelve el contenido de la pagina.", "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL completa a investigar (ej: https://www.ejemplo.com)"}}, "required": ["url"]}}
+            {"type": "function", "name": "investigar_web", "description": "Scrapear una URL web para extraer informacion del negocio. Usar cuando el usuario comparte una URL de su sitio web, redes sociales, o tienda online. Devuelve el contenido de la pagina.", "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL completa a investigar (ej: https://www.ejemplo.com)"}}, "required": ["url"]}},
+            # Product catalog tools
+            {"type": "function", "name": "agregar_producto", "description": "Agregar un producto al catalogo interno. Usar cuando el usuario quiere cargar un producto.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "price": {"type": "number"}, "description": {"type": "string"}, "category": {"type": "string"}, "stock": {"type": "integer"}, "variants": {"type": "string", "description": "Variantes separadas por coma: S, M, L, XL"}}, "required": ["name", "price"]}},
+            {"type": "function", "name": "editar_producto", "description": "Editar un producto existente.", "parameters": {"type": "object", "properties": {"product_id": {"type": "integer"}, "name": {"type": "string"}, "price": {"type": "number"}, "stock": {"type": "integer"}, "description": {"type": "string"}}, "required": ["product_id"]}},
+            {"type": "function", "name": "eliminar_producto", "description": "Eliminar un producto.", "parameters": {"type": "object", "properties": {"product_id": {"type": "integer"}}, "required": ["product_id"]}},
+            {"type": "function", "name": "listar_productos", "description": "Ver el catalogo de productos. Retorna nombre, precio y stock.", "parameters": {"type": "object", "properties": {"category": {"type": "string"}}}},
+            {"type": "function", "name": "actualizar_stock", "description": "Actualizar stock de un producto.", "parameters": {"type": "object", "properties": {"product_id": {"type": "integer"}, "stock": {"type": "integer"}}, "required": ["product_id", "stock"]}},
+            # Agent management tools
+            {"type": "function", "name": "modificar_prompt", "description": "Agregar o editar una seccion del system prompt del agente de ventas.", "parameters": {"type": "object", "properties": {"seccion": {"type": "string", "description": "Nombre de la seccion: identidad, tono, reglas, diccionario, o nueva"}, "contenido": {"type": "string", "description": "Nuevo contenido de la seccion"}}, "required": ["seccion", "contenido"]}},
+            {"type": "function", "name": "agregar_regla", "description": "Agregar regla de negocio al prompt del agente.", "parameters": {"type": "object", "properties": {"regla": {"type": "string"}}, "required": ["regla"]}},
+            {"type": "function", "name": "agregar_sinonimo", "description": "Agregar sinonimos al diccionario del agente.", "parameters": {"type": "object", "properties": {"categoria": {"type": "string"}, "sinonimos": {"type": "string"}}, "required": ["categoria", "sinonimos"]}},
+            {"type": "function", "name": "ver_prompt_actual", "description": "Ver el system prompt actual del agente.", "parameters": {"type": "object", "properties": {}}},
+            {"type": "function", "name": "ver_errores_agente", "description": "Ver las ultimas derivaciones y errores del agente.", "parameters": {"type": "object", "properties": {}}}
         ]
 
         # Extract meta summary for greeting
@@ -1981,6 +1993,160 @@ Maximo 4 oraciones."""
                                         result = {"status": "error", "detail": str(e)}
                                 else:
                                     result = {"status": "error", "detail": "URL vacia"}
+
+                            # --- PRODUCT TOOLS ---
+                            elif fn_name == "agregar_producto":
+                                try:
+                                    name = fn_args.get("name", "")
+                                    price = fn_args.get("price", 0)
+                                    variants_str = fn_args.get("variants", "")
+                                    variants_list = [{"name": v.strip(), "price": price, "stock": fn_args.get("stock", 0)} for v in variants_str.split(",") if v.strip()] if variants_str else []
+                                    row = await db.pool.fetchrow("""
+                                        INSERT INTO internal_products (tenant_id, name, description, category, price, stock, variants)
+                                        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name
+                                    """, tenant_id, name, fn_args.get("description", ""), fn_args.get("category", "General"),
+                                        price, fn_args.get("stock", 0), _json.dumps(variants_list))
+                                    result = {"status": "creado", "id": row["id"], "name": row["name"]}
+                                except Exception as e:
+                                    result = {"status": "error", "detail": str(e)}
+
+                            elif fn_name == "editar_producto":
+                                try:
+                                    pid = fn_args.get("product_id")
+                                    updates = []
+                                    params = [tenant_id]
+                                    idx = 2
+                                    for field in ["name", "price", "stock", "description"]:
+                                        if field in fn_args and fn_args[field] is not None:
+                                            updates.append(f"{field} = ${idx}")
+                                            params.append(fn_args[field])
+                                            idx += 1
+                                    if updates:
+                                        params.append(pid)
+                                        await db.pool.execute(f"UPDATE internal_products SET {', '.join(updates)}, updated_at = NOW() WHERE tenant_id = $1 AND id = ${idx}", *params)
+                                    result = {"status": "actualizado", "product_id": pid}
+                                except Exception as e:
+                                    result = {"status": "error", "detail": str(e)}
+
+                            elif fn_name == "eliminar_producto":
+                                try:
+                                    pid = fn_args.get("product_id")
+                                    await db.pool.execute("DELETE FROM internal_products WHERE id = $1 AND tenant_id = $2", pid, tenant_id)
+                                    result = {"status": "eliminado", "product_id": pid}
+                                except Exception as e:
+                                    result = {"status": "error", "detail": str(e)}
+
+                            elif fn_name == "listar_productos":
+                                try:
+                                    cat = fn_args.get("category")
+                                    if cat:
+                                        rows = await db.pool.fetch("SELECT id, name, price, stock, category FROM internal_products WHERE tenant_id = $1 AND category ILIKE $2 AND is_active = true LIMIT 10", tenant_id, f"%{cat}%")
+                                    else:
+                                        rows = await db.pool.fetch("SELECT id, name, price, stock, category FROM internal_products WHERE tenant_id = $1 AND is_active = true LIMIT 10", tenant_id)
+                                    result = {"products": [dict(r) for r in rows], "count": len(rows)}
+                                except Exception as e:
+                                    result = {"status": "error", "detail": str(e)}
+
+                            elif fn_name == "actualizar_stock":
+                                try:
+                                    pid = fn_args.get("product_id")
+                                    stock = fn_args.get("stock", 0)
+                                    await db.pool.execute("UPDATE internal_products SET stock = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3", stock, pid, tenant_id)
+                                    result = {"status": "stock_actualizado", "product_id": pid, "new_stock": stock}
+                                except Exception as e:
+                                    result = {"status": "error", "detail": str(e)}
+
+                            # --- AGENT MANAGEMENT TOOLS ---
+                            elif fn_name == "modificar_prompt":
+                                try:
+                                    seccion = fn_args.get("seccion", "")
+                                    contenido = fn_args.get("contenido", "")
+                                    agent = await db.pool.fetchrow("SELECT id, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1", tenant_id)
+                                    if agent:
+                                        prompt = agent["system_prompt_template"] or ""
+                                        header = f"## {seccion.upper()}"
+                                        if header in prompt.upper():
+                                            # Find and replace the section
+                                            import re as _re3
+                                            pattern = _re3.compile(rf"(## {_re3.escape(seccion)}.*?)(?=\n## |\Z)", _re3.IGNORECASE | _re3.DOTALL)
+                                            new_prompt = pattern.sub(f"## {seccion.upper()}\n{contenido}\n", prompt)
+                                        else:
+                                            new_prompt = prompt + f"\n\n## {seccion.upper()}\n{contenido}"
+                                        await db.pool.execute("UPDATE agents SET system_prompt_template = $1, updated_at = NOW() WHERE id = $2", new_prompt, agent["id"])
+                                        result = {"status": "prompt_actualizado", "seccion": seccion}
+                                    else:
+                                        result = {"status": "error", "detail": "No hay agente activo"}
+                                except Exception as e:
+                                    result = {"status": "error", "detail": str(e)}
+
+                            elif fn_name == "agregar_regla":
+                                try:
+                                    regla = fn_args.get("regla", "")
+                                    agent = await db.pool.fetchrow("SELECT id, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1", tenant_id)
+                                    if agent:
+                                        prompt = agent["system_prompt_template"] or ""
+                                        # Count existing rules
+                                        import re as _re4
+                                        nums = _re4.findall(r'^\d+\.', prompt, _re4.MULTILINE)
+                                        next_num = len(nums) + 1
+                                        # Append after REGLAS section
+                                        if "## REGLAS" in prompt.upper() or "## 8." in prompt:
+                                            prompt = prompt.rstrip() + f"\n{next_num}. {regla}"
+                                        else:
+                                            prompt += f"\n\n## REGLAS ADICIONALES\n{next_num}. {regla}"
+                                        await db.pool.execute("UPDATE agents SET system_prompt_template = $1, updated_at = NOW() WHERE id = $2", prompt, agent["id"])
+                                        result = {"status": "regla_agregada", "numero": next_num}
+                                    else:
+                                        result = {"status": "error", "detail": "No hay agente activo"}
+                                except Exception as e:
+                                    result = {"status": "error", "detail": str(e)}
+
+                            elif fn_name == "agregar_sinonimo":
+                                try:
+                                    cat = fn_args.get("categoria", "")
+                                    sins = fn_args.get("sinonimos", "")
+                                    agent = await db.pool.fetchrow("SELECT id, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1", tenant_id)
+                                    if agent:
+                                        prompt = agent["system_prompt_template"] or ""
+                                        entry = f"* {cat.upper()}: {sins}"
+                                        if "## DICCIONARIO" in prompt.upper() or "## 4." in prompt:
+                                            prompt = prompt.rstrip() + f"\n{entry}"
+                                        else:
+                                            prompt += f"\n\n## DICCIONARIO DE SINONIMOS\n{entry}"
+                                        await db.pool.execute("UPDATE agents SET system_prompt_template = $1, updated_at = NOW() WHERE id = $2", prompt, agent["id"])
+                                        result = {"status": "sinonimo_agregado", "categoria": cat}
+                                    else:
+                                        result = {"status": "error", "detail": "No hay agente activo"}
+                                except Exception as e:
+                                    result = {"status": "error", "detail": str(e)}
+
+                            elif fn_name == "ver_prompt_actual":
+                                try:
+                                    agent = await db.pool.fetchrow("SELECT name, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1", tenant_id)
+                                    if agent:
+                                        prompt = agent["system_prompt_template"] or ""
+                                        # Return summary of sections
+                                        sections = [line.strip() for line in prompt.split('\n') if line.strip().startswith('##')]
+                                        result = {"agent_name": agent["name"], "prompt_length": len(prompt), "sections": sections, "preview": prompt[:500]}
+                                    else:
+                                        result = {"status": "no_agent"}
+                                except Exception as e:
+                                    result = {"status": "error", "detail": str(e)}
+
+                            elif fn_name == "ver_errores_agente":
+                                try:
+                                    rows = await db.pool.fetch("""
+                                        SELECT cm.content, cm.created_at, cc.channel
+                                        FROM chat_messages cm
+                                        JOIN chat_conversations cc ON cc.id = cm.conversation_id
+                                        WHERE cm.tenant_id = $1 AND cm.role = 'assistant'
+                                        AND cm.content ILIKE '%deriv%humano%'
+                                        AND cm.created_at >= NOW() - INTERVAL '24 hours'
+                                        ORDER BY cm.created_at DESC LIMIT 10
+                                    """, tenant_id)
+                                    result = {"derivations_24h": len(rows), "recent": [{"message": r["content"][:100], "channel": r["channel"], "time": str(r["created_at"])} for r in rows]}
+                                except Exception as e:
+                                    result = {"status": "error", "detail": str(e)}
 
                             # Send result back to OpenAI
                             await openai_ws.send(_json.dumps({
@@ -2245,23 +2411,80 @@ async def call_tiendanube_api(endpoint: str, params: dict = None):
         return f"Request Error: {str(e)}"
 
 @tool
+async def _search_internal_products(tenant_id: int, q: str = "", limit: int = 3):
+    """Search internal product catalog (fallback when no TN credentials)."""
+    if q:
+        rows = await db.pool.fetch("""
+            SELECT * FROM internal_products
+            WHERE tenant_id = $1 AND is_active = true AND (name ILIKE $2 OR description ILIKE $2 OR category ILIKE $2)
+            LIMIT $3
+        """, tenant_id, f"%{q}%", limit)
+    else:
+        rows = await db.pool.fetch("""
+            SELECT * FROM internal_products WHERE tenant_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT $2
+        """, tenant_id, limit)
+
+    if not rows:
+        return []
+
+    import json as _j
+    products = []
+    for r in rows:
+        images = r["images"] if isinstance(r["images"], list) else _j.loads(r["images"] or "[]")
+        variants = r["variants"] if isinstance(r["variants"], list) else _j.loads(r["variants"] or "[]")
+        products.append({
+            "id": r["id"],
+            "name": {"es": r["name"]},
+            "variants": [{"price": str(v.get("price", r["price"])), "stock": v.get("stock", r["stock"]), "values": [{"es": v.get("name", "")}]} for v in variants] if variants else [{"price": str(r["price"]), "stock": r["stock"]}],
+            "images": [{"src": img if isinstance(img, str) else img.get("src", "")} for img in images],
+            "description": {"es": r["description"] or ""},
+            "permalink": r.get("public_url") or "",
+        })
+    return products
+
+
+@tool
 async def search_specific_products(q: str):
     """SEARCH for specific products by name, category, or brand. REQUIRED for queries like 'medias', 'zapatillas', 'puntas', 'grishko'. Input 'q' is the keyword."""
     cache_key = f"productsq:{q}"
     cached = await get_cached_tool(cache_key)
     if cached: return cached
-    result = await call_tiendanube_api("/products", {"q": q, "per_page": 3})
+
+    # Auto-detect: TN or internal catalog
+    store_id = tenant_store_id.get()
+    token = tenant_access_token.get()
+    tid = current_tenant_id.get() or 0
+
+    if store_id and token:
+        result = await call_tiendanube_api("/products", {"q": q, "per_page": 3})
+    else:
+        # Fallback: internal catalog
+        try:
+            tid = tid or int(store_id or 0)
+        except Exception:
+            tid = 0
+        result = await _search_internal_products(tid, q, 3)
+
     if isinstance(result, (dict, list)): await set_cached_tool(cache_key, result, ttl=600)
     return result
 
 @tool
 async def search_by_category(category: str, keyword: str):
-    """Search for products by category and keyword in Tienda Nube. Returns top 3 results simplified."""
+    """Search for products by category and keyword. Returns top 3 results simplified."""
     q = f"{category} {keyword}"
     cache_key = f"search_by_category:{category}:{keyword}"
     cached = await get_cached_tool(cache_key)
     if cached: return cached
-    result = await call_tiendanube_api("/products", {"q": q, "per_page": 3})
+
+    store_id = tenant_store_id.get()
+    token = tenant_access_token.get()
+
+    if store_id and token:
+        result = await call_tiendanube_api("/products", {"q": q, "per_page": 3})
+    else:
+        tid = current_tenant_id.get() or 0
+        result = await _search_internal_products(tid, q, 3)
+
     if isinstance(result, (dict, list)): await set_cached_tool(cache_key, result, ttl=600)
     return result
 
@@ -2271,7 +2494,18 @@ async def browse_general_storefront():
     cache_key = "productsall"
     cached = await get_cached_tool(cache_key)
     if cached: return cached
-    result = await call_tiendanube_api("/products", {"per_page": 3})
+
+    store_id = tenant_store_id.get()
+    token = tenant_access_token.get()
+
+    if store_id and token:
+        result = await call_tiendanube_api("/products", {"per_page": 3})
+    else:
+        tid = 0
+        try: tid = int(store_id or 0)
+        except: pass
+        result = await _search_internal_products(tid, "", 3)
+
     if isinstance(result, (dict, list)): await set_cached_tool(cache_key, result, ttl=600)
     return result
 
