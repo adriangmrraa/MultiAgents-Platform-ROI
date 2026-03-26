@@ -170,37 +170,33 @@ export const Knowledge: React.FC = () => {
     // --- Render ---
 
     return (
-        <div className="view active flex h-full gap-6">
-            {/* Sidebar Navigation */}
-            <div className="w-64 flex-shrink-0 flex flex-col gap-2">
-                <div className="mb-4">
-                    <h1 className="text-xl font-bold flex items-center gap-2 text-white">
-                        <Database className="text-cyan-400" />
+        <div className="view active flex flex-col lg:flex-row h-full gap-4 lg:gap-6">
+            {/* Sidebar Navigation — horizontal scroll on mobile, vertical on desktop */}
+            <div className="lg:w-64 flex-shrink-0 flex flex-col gap-2">
+                <div className="mb-2 lg:mb-4">
+                    <h1 className="text-lg lg:text-xl font-bold flex items-center gap-2 text-white">
+                        <Database className="text-cyan-400" size={20} />
                         Knowledge
                     </h1>
-                    <p className="text-slate-500 text-xs mt-1">Sovereign RAG Engine v5.50</p>
+                    <p className="text-slate-500 text-xs mt-1 hidden lg:block">Sovereign RAG Engine v5.50</p>
                 </div>
 
-                <div className="flex flex-col gap-1">
+                <div className="flex lg:flex-col gap-1.5 lg:gap-1 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 -mx-1 px-1 no-scrollbar">
                     {COLLECTIONS.map(col => (
                         <button
                             key={col.id}
                             onClick={() => setActiveCollection(col.id)}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeCollection === col.id
+                            className={`flex items-center gap-2 lg:gap-3 px-3 lg:px-4 py-2 lg:py-3 rounded-lg text-xs lg:text-sm font-medium transition-all whitespace-nowrap shrink-0 ${activeCollection === col.id
                                 ? 'bg-slate-800 text-cyan-400 shadow-lg shadow-black/20'
                                 : 'text-slate-400 hover:bg-white/5 hover:text-white'
                                 }`}
                         >
-                            <col.icon size={18} />
+                            <col.icon size={16} />
                             {col.label}
-                            {/* Optional Counter */}
-                            {/* <span className="ml-auto text-xs opacity-50 bg-black/20 px-2 py-0.5 rounded">
-                                {files.filter(f => (f.collection || 'General') === col.id).length}
-                            </span> */}
                         </button>
                     ))}
 
-                    <button className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-500 hover:text-cyan-400 hover:bg-white/5 border border-dashed border-slate-800 hover:border-cyan-500/30 mt-2 transition-all">
+                    <button className="hidden lg:flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-500 hover:text-cyan-400 hover:bg-white/5 border border-dashed border-slate-800 hover:border-cyan-500/30 mt-2 transition-all">
                         <FolderPlus size={18} />
                         Nueva Colección...
                     </button>
@@ -209,18 +205,17 @@ export const Knowledge: React.FC = () => {
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0">
-                <div className="flex justify-between items-center mb-6">
-                    <div>
-                        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                            <Folder size={20} className="text-slate-500" />
-                            {activeCollection}
-                            <span className="text-slate-600 font-normal">/</span>
-                            <span className="text-slate-400 text-sm font-normal">
-                                {filteredFiles.length} documentos
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 lg:mb-6">
+                    <div className="min-w-0">
+                        <h2 className="text-base lg:text-lg font-semibold text-white flex items-center gap-2">
+                            <Folder size={18} className="text-slate-500 shrink-0" />
+                            <span className="truncate">{activeCollection}</span>
+                            <span className="text-slate-400 text-xs lg:text-sm font-normal shrink-0">
+                                ({filteredFiles.length})
                             </span>
                         </h2>
                     </div>
-                    <div>
+                    <div className="shrink-0">
                         <input
                             type="file"
                             ref={fileInputRef}
@@ -229,12 +224,12 @@ export const Knowledge: React.FC = () => {
                             accept=".pdf,.txt,.docx,.md,.csv"
                         />
                         <button
-                            className="bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-2 px-4 rounded flex items-center gap-2 transition-all shadow-lg shadow-cyan-500/20"
+                            className="bg-cyan-500 hover:bg-cyan-600 active:bg-cyan-700 text-black font-bold py-2.5 px-4 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-cyan-500/20 text-sm"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={uploading}
                         >
-                            {uploading ? <Clock className="animate-spin" size={18} /> : <Upload size={18} />}
-                            {uploading ? 'Indexando...' : 'Subir Archivo'}
+                            {uploading ? <Clock className="animate-spin" size={16} /> : <Upload size={16} />}
+                            {uploading ? 'Indexando...' : 'Subir'}
                         </button>
                     </div>
                 </div>
@@ -257,23 +252,23 @@ export const Knowledge: React.FC = () => {
                         <table className="w-full text-left text-sm relative">
                             <thead className="bg-slate-900 text-slate-400 uppercase text-xs sticky top-0 z-10">
                                 <tr>
-                                    <th className="p-4">Documento</th>
-                                    <th className="p-4">Tamaño</th>
-                                    <th className="p-4">Estado</th>
-                                    <th className="p-4">Fecha</th>
+                                    <th className="p-3 lg:p-4">Documento</th>
+                                    <th className="p-3 lg:p-4 hidden sm:table-cell">Tamaño</th>
+                                    <th className="p-3 lg:p-4">Estado</th>
+                                    <th className="p-3 lg:p-4 hidden md:table-cell">Fecha</th>
                                     <th className="p-4 text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/10">
                                 {filteredFiles.map((file: KnowledgeFile) => (
                                     <tr key={file.id} className="hover:bg-white/5 transition-colors group">
-                                        <td className="p-4 flex items-center gap-3">
-                                            <div className="bg-slate-800 p-2 rounded text-cyan-400 group-hover:text-cyan-300 group-hover:bg-slate-700 transition-colors">
-                                                <FileText size={20} />
+                                        <td className="p-3 lg:p-4 flex items-center gap-2 lg:gap-3">
+                                            <div className="bg-slate-800 p-1.5 lg:p-2 rounded text-cyan-400 group-hover:text-cyan-300 group-hover:bg-slate-700 transition-colors shrink-0">
+                                                <FileText size={16} />
                                             </div>
-                                            <span className="font-medium text-white">{file.filename}</span>
+                                            <span className="font-medium text-white text-xs lg:text-sm truncate">{file.filename}</span>
                                         </td>
-                                        <td className="p-4 text-slate-400">{formatSize(file.file_size)}</td>
+                                        <td className="p-3 lg:p-4 text-slate-400 text-xs hidden sm:table-cell">{formatSize(file.file_size)}</td>
                                         <td className="p-4">
                                             {file.status === 'active' && (
                                                 <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded text-xs flex items-center gap-1 w-fit">
@@ -301,7 +296,7 @@ export const Knowledge: React.FC = () => {
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="p-4 text-slate-400">
+                                        <td className="p-3 lg:p-4 text-slate-400 text-xs hidden md:table-cell">
                                             {new Date(file.created_at).toLocaleDateString()}
                                         </td>
                                         <td className="p-4 text-right">

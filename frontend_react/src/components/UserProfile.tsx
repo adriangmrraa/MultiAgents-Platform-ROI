@@ -159,13 +159,13 @@ export const UserProfile: React.FC = () => {
                                 <p className="text-white font-bold">{user?.full_name}</p>
                                 <p className="text-xs text-slate-400">{user?.role}</p>
                             </div>
-                            <NavLink to="/profile" className="px-3 py-3 rounded hover:bg-white/5 text-sm text-slate-300 flex items-center gap-3">
+                            <NavLink to="/profile" onClick={() => setIsOpen(false)} className="px-3 py-3 rounded hover:bg-white/5 text-sm text-slate-300 flex items-center gap-3 active:bg-white/10">
                                 <UserIcon size={16} /> Profile
                             </NavLink>
-                            <NavLink to="/settings" className="px-3 py-3 rounded hover:bg-white/5 text-sm text-slate-300 flex items-center gap-3">
+                            <NavLink to="/settings" onClick={() => setIsOpen(false)} className="px-3 py-3 rounded hover:bg-white/5 text-sm text-slate-300 flex items-center gap-3 active:bg-white/10">
                                 <Key size={16} /> Settings
                             </NavLink>
-                            <button onClick={logout} className="px-3 py-3 rounded hover:bg-red-900/20 text-sm text-red-400 flex items-center gap-3 mt-2">
+                            <button onClick={() => { logout(); setIsOpen(false); }} className="px-3 py-3 rounded hover:bg-red-900/20 text-sm text-red-400 flex items-center gap-3 mt-2 active:bg-red-900/30">
                                 <LogOut size={16} /> Logout
                             </button>
                         </div>
