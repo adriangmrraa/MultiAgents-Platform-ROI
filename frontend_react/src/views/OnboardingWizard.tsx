@@ -1241,11 +1241,19 @@ export const OnboardingWizard: React.FC = () => {
 
     // --- Step 7: Pricing ---
     const startTrial = async () => {
+        setLoading(true);
         try {
-            // Ensure wizard is marked complete (completed_at set)
-            await fetchApi('/admin/onboarding-wizard/complete', { method: 'POST' }).catch(() => {});
-            navigate('/', { replace: true });
-        } catch (e) { navigate('/'); }
+            await fetchApi('/admin/onboarding-wizard/complete', { method: 'POST' });
+        } catch (e) {
+            // If /complete fails (agent already exists), just mark progress
+            try {
+                await fetchApi('/admin/onboarding-wizard/progress', {
+                    method: 'PUT', body: { step: 7 }
+                });
+            } catch(e2) {}
+        }
+        // Always navigate to home
+        window.location.href = '/';
     };
 
     const goToCheckout = async (plan: string) => {
