@@ -2292,7 +2292,7 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
                 try:
                     result = init_resp.json().get("result", {})
                     session_id = result.get("meta", {}).get("sessionId") or result.get("sessionId")
-                except: pass
+                except Exception: pass
             
             if session_id:
                 logger.info("mcp_session_captured", session_id=session_id)
@@ -2331,7 +2331,7 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
                             if msg.get("id") == call_payload["id"] or "result" in msg or "error" in msg:
                                 if "result" in msg: return msg["result"]
                                 if "error" in msg: return f"MCP Tool Error: {msg['error']}"
-                        except: pass
+                        except Exception: pass
                     all_text += line + "\n"
 
             if not all_text.strip():
@@ -2341,7 +2341,7 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
                 json_resp = json.loads(all_text)
                 if "result" in json_resp: return json_resp["result"]
                 return json_resp
-            except:
+            except Exception:
                 return all_text
                 
     except Exception as e:
@@ -2671,7 +2671,7 @@ async def derivhumano(reason: str, contact_name: Optional[str] = None, contact_p
     if isinstance(ctx, str):
         try:
             ctx = json.loads(ctx)
-        except:
+        except Exception:
             ctx = {}
             
     wa_id = (cphone or contact_phone) if ctx.get('ctx-phone') else "Oculto"
@@ -3127,7 +3127,7 @@ async def chat_endpoint(
          
     try:
         payload = await request.json()
-    except:
+    except Exception:
         raise HTTPException(400, "Invalid JSON")
         
     # ... (Rest of deduplication logic) ...
@@ -3145,7 +3145,7 @@ async def chat_endpoint(
             if tid is not None:
                 try:
                     tid = int(tid)
-                except:
+                except Exception:
                     pass
             # Parse Attachments
             media_list = []
@@ -3711,7 +3711,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                         knowledge_sources = json.loads(ks_raw)
                         if not isinstance(knowledge_sources, list):
                              knowledge_sources = [ks_raw]
-                    except:
+                    except Exception:
                         knowledge_sources = [ks_raw]
                 else:
                     knowledge_sources = ks_raw
@@ -3734,7 +3734,7 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                     wizard_overrides['tone'] = conf.get('agent_tone')
                     wizard_overrides['business_rules'] = conf.get('business_rules')
                     wizard_overrides['synonym_dictionary'] = conf.get('synonym_dictionary')
-                except: pass
+                except Exception: pass
         else:
             # Prio 2: Tenant Config (Legacy / Fallback)
             raw_prompt = tenant_row.get("system_prompt_template") or GLOBAL_SYSTEM_PROMPT or "Eres un asistente virtual amable."

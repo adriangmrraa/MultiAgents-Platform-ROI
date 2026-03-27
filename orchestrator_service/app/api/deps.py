@@ -112,6 +112,7 @@ async def get_current_tenant_webhook(request: Request, db: AsyncSession = Depend
         logger.error("tenant_resolution_failed", reason="no_identifier_in_payload")
         raise HTTPException(status_code=400, detail="Could not identify target channel")
 
+    tenant_orm = None
     clean_phone = "".join(filter(str.isdigit, str(raw_channel_id)))
     if clean_phone:
         result = await db.execute(select(Tenant).where(Tenant.bot_phone_number == clean_phone))

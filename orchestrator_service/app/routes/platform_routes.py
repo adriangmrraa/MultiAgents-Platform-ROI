@@ -166,7 +166,7 @@ async def platform_infrastructure(db = Depends(get_pool_db)):
 
     try:
         db_size_str = await db.fetchval("SELECT pg_size_pretty(pg_database_size(current_database()))")
-    except:
+    except Exception:
         db_size_str = "Unknown"
 
     # Table sizes
@@ -180,7 +180,7 @@ async def platform_infrastructure(db = Depends(get_pool_db)):
             LIMIT 15
         """)
         tables = [dict(r) for r in table_sizes]
-    except:
+    except Exception:
         tables = []
 
     return {

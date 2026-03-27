@@ -180,11 +180,11 @@ async def ingest_message(event: SimpleEvent):
              )
              if asset_row:
                  t_val = asset_row['tenant_id']
-                 tenant_id = int(t_val) if str(t_val).isdigit() else 1
+                 tenant_id = int(t_val) if str(t_val).isdigit() else None
 
     if not tenant_id:
-        logger.warning("ingest_tenant_unresolved", recipient=event.recipient_id)
-        tenant_id = 1
+        logger.error("ingest_tenant_unresolved", recipient=event.recipient_id)
+        raise HTTPException(status_code=404, detail=f"Could not resolve tenant for {event.recipient_id}")
 
     # 2. Resolve Source Identifier (Asset Name from content JSONB)
     source_identifier = event.recipient_id
@@ -271,13 +271,13 @@ async def ingest_message(event: SimpleEvent):
                 id, tenant_id, channel, external_user_id, customer_id, status, provider,
                 platform_origin, source_identifier, source_entity_id,
                 display_name, avatar_url, meta, last_message_at, last_message_preview,
-                created_at, updated_at
+                channel_source, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, 'open', 'meta_direct', $6, $7, $8, $9, $10, $11::jsonb, NOW(), $12, NOW(), NOW())
+            VALUES ($1, $2, $3, $4, $5, 'open', 'meta_direct', $6, $7, $8, $9, $10, $11::jsonb, NOW(), $12, $13, NOW(), NOW())
         """, conversation_id, tenant_id, event.platform, event.sender_id, customer_id,
              event.platform, source_identifier, event.recipient_id,
-             sender_name, sender_avatar,  meta_json,
-             (event.payload.get("text") or "[Media]")[:50])
+             sender_name, sender_avatar, meta_json,
+             (event.payload.get("text") or "[Media]")[:50], event.platform)
 
     # 5. Persist Message
     msg_id = str(uuid.uuid4())
