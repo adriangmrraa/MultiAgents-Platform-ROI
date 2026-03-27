@@ -132,6 +132,11 @@ class MetaWebhookService:
              # Pass on postbacks, reads, etc.
              return None
 
+        # Filter out echo messages (sent BY the page, not TO the page)
+        if message.get("is_echo"):
+            logger.info("echo_filtered", platform=platform, sender=sender_id)
+            return None
+
         simple_event = {
             "provider": "meta",
             "platform": platform,

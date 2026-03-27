@@ -40,6 +40,9 @@ import { Landing } from './views/Landing';
 import { Pricing } from './views/Pricing';
 import { PrivacyPolicy } from './views/PrivacyPolicy';
 import { TermsOfService } from './views/TermsOfService';
+import { MetaConnectionGuide } from './views/MetaConnectionGuide';
+import { Documentation } from './views/Documentation';
+import { Enterprise } from './views/Enterprise';
 
 function RequireSuperAdmin({ children }: { children: JSX.Element }) {
   const { user, isLoading } = useAuth();
@@ -179,6 +182,9 @@ function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
+            <Route path="/meta-connection" element={<MetaConnectionGuide />} />
+            <Route path="/docs" element={<Documentation />} />
+            <Route path="/enterprise" element={<Enterprise />} />
 
             {/* Onboarding Wizard — fullscreen, outside Layout */}
             <Route path="/onboarding-wizard" element={

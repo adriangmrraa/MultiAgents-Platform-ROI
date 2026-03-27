@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Lock, Zap } from 'lucide-react';
 
 export default function ForgotPassword() {
     const [email, setEmail] = useState('');
@@ -33,21 +33,37 @@ export default function ForgotPassword() {
     };
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center bg-[#1B1D20] relative overflow-x-hidden py-10">
-            <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-[120px] pointer-events-none" />
-            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-zinc-800/20 rounded-full blur-[120px] pointer-events-none" />
+        <div className="min-h-screen w-full flex items-center justify-center bg-[#09090b] relative overflow-x-hidden py-10 px-4">
+            <style>{`
+                @keyframes glow-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.6; } }
+                @keyframes lock-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+                .animate-glow { animation: glow-pulse 4s ease-in-out infinite; }
+                .animate-lock { animation: lock-bounce 2s ease-in-out infinite; }
+            `}</style>
 
-            <div className="z-10 w-full max-w-md p-8 relative">
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[24px] p-8 shadow-2xl">
+            {/* Glow Orbs */}
+            <div className="absolute top-20 left-1/4 w-[400px] h-[400px] bg-purple-600/15 rounded-full blur-[150px] pointer-events-none animate-glow" />
+            <div className="absolute bottom-20 right-1/4 w-[300px] h-[300px] bg-blue-600/15 rounded-full blur-[120px] pointer-events-none animate-glow" />
+
+            <div className="z-10 w-full max-w-md relative">
+                {/* Logo */}
+                <div className="flex items-center justify-center gap-2 mb-8">
+                    <div className="w-8 h-8 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
+                        <Zap size={16} className="text-white fill-current" />
+                    </div>
+                    <span className="text-xl font-bold tracking-tight text-white">Future</span>
+                </div>
+
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl">
                     {sent ? (
                         <div className="text-center">
-                            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
                                 <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                             </div>
                             <h2 className="text-2xl font-black text-white mb-2">Email enviado</h2>
-                            <p className="text-gray-400 text-sm mb-6">
+                            <p className="text-gray-400 text-sm mb-6 leading-relaxed">
                                 Si el email esta registrado, recibiras un enlace para restablecer tu contrasena. Revisa tu bandeja de entrada.
                             </p>
                             <Link to="/login" className="text-purple-400 hover:text-purple-300 text-sm font-medium transition-colors">
@@ -57,7 +73,10 @@ export default function ForgotPassword() {
                     ) : (
                         <>
                             <div className="mb-8 text-center">
-                                <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 tracking-tight">
+                                <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center animate-lock">
+                                    <Lock size={24} className="text-purple-400" />
+                                </div>
+                                <h1 className="text-2xl sm:text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 tracking-tight">
                                     Restablecer contrasena
                                 </h1>
                                 <p className="text-gray-400 text-sm mt-2">
@@ -73,15 +92,13 @@ export default function ForgotPassword() {
 
                             <form onSubmit={handleSubmit} className="space-y-6">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                                        Email
-                                    </label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Email</label>
                                     <input
                                         type="email"
                                         required
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
-                                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors"
+                                        className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors"
                                         placeholder="tu@email.com"
                                     />
                                 </div>
@@ -89,7 +106,7 @@ export default function ForgotPassword() {
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-900/20"
+                                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-900/30"
                                 >
                                     {loading ? (
                                         <span className="flex items-center justify-center">
@@ -110,6 +127,13 @@ export default function ForgotPassword() {
                             </div>
                         </>
                     )}
+                </div>
+
+                <div className="mt-6 text-center">
+                    <div className="flex justify-center gap-6 text-[11px] text-gray-600 font-medium">
+                        <Link to="/privacy-policy" className="hover:text-gray-400 transition-colors">Privacy Policy</Link>
+                        <Link to="/terms-of-service" className="hover:text-gray-400 transition-colors">Terms of Service</Link>
+                    </div>
                 </div>
             </div>
         </div>

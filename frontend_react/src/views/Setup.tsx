@@ -1,181 +1,196 @@
 import React, { useState } from 'react';
 import { useApi } from '../hooks/useApi';
-import { ArrowRight, ArrowLeft, CheckCircle, Smartphone, ShoppingBag, Send } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle, Smartphone, ShoppingBag, Send, Zap, Globe, Activity } from 'lucide-react';
 
 export const Setup: React.FC = () => {
     const { fetchApi, loading } = useApi();
     const [currentStep, setCurrentStep] = useState(1);
     const [formData, setFormData] = useState({
-        bot_phone_number: '',
-        store_name: '',
-        store_website: '',
-        tiendanube_store_id: '',
-        tiendanube_token: ''
+        bot_phone_number: '', store_name: '', store_website: '',
+        tiendanube_store_id: '', tiendanube_token: ''
     });
     const [testResult, setTestResult] = useState<any>(null);
 
     const handleNext = async () => {
         setTestResult(null);
-        if (currentStep === 1) {
-            // Validate step 1?
-        }
-        if (currentStep === 2) {
-            // Validate step 2
-        }
         if (currentStep < 5) setCurrentStep(c => c + 1);
-        else {
-            // Finalize
-            alert('Setup Completo!');
-            window.location.href = '/';
-        }
+        else { alert('Setup Completo!'); window.location.href = '/'; }
     };
 
-    const handlePrev = () => {
-        setTestResult(null);
-        if (currentStep > 1) setCurrentStep(c => c - 1);
-    };
+    const handlePrev = () => { setTestResult(null); if (currentStep > 1) setCurrentStep(c => c - 1); };
 
     const runTest = async (step: number) => {
         try {
             setTestResult({ status: 'loading', message: 'Probando...' });
-
             if (step === 3) {
-                // Create storee if needed
-                const payload = {
-                    store_name: formData.store_name,
-                    bot_phone_number: formData.bot_phone_number,
-                    store_website: formData.store_website,
-                    tiendanube_store_id: formData.tiendanube_store_id,
+                await fetchApi('/admin/tenants', { method: 'POST', body: {
+                    store_name: formData.store_name, bot_phone_number: formData.bot_phone_number,
+                    store_website: formData.store_website, tiendanube_store_id: formData.tiendanube_store_id,
                     tiendanube_access_token: formData.tiendanube_token
-                };
-                await fetchApi('/admin/tenants', { method: 'POST', body: payload });
+                }});
                 setTestResult({ status: 'success', message: 'Tienda creada/actualizada correctamente.' });
             } else if (step === 4) {
                 await fetchApi('/admin/diagnostics/healthz');
-                setTestResult({ status: 'success', message: 'Conexión con Orquestador: OK' });
+                setTestResult({ status: 'success', message: 'Conexion con Orquestador: OK' });
             } else if (step === 5) {
-                // Send test msg
                 await fetchApi(`/admin/tenants/${formData.bot_phone_number}/test-message`, { method: 'POST' });
                 setTestResult({ status: 'success', message: 'Mensaje enviado a tu WhatsApp.' });
             }
-
-        } catch (e) {
+        } catch (e: any) {
             setTestResult({ status: 'error', message: e.message });
         }
     };
 
-    return (
-        <div className="view active">
-            <h1 className="view-title">Asistente de Configuración</h1>
+    const steps = [
+        { num: 1, label: 'Tienda', icon: <ShoppingBag size={14} /> },
+        { num: 2, label: 'Nube', icon: <Globe size={14} /> },
+        { num: 3, label: 'Guardar', icon: <CheckCircle size={14} /> },
+        { num: 4, label: 'Verificar', icon: <Activity size={14} /> },
+        { num: 5, label: 'Prueba', icon: <Send size={14} /> },
+    ];
 
-            <div className="glass" style={{ padding: '40px', maxWidth: '800px', margin: '0 auto' }}>
-                {/* Progress Bar */}
-                <div style={{ marginBottom: '40px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                        {[1, 2, 3, 4, 5].map(step => (
-                            <div key={step} style={{
-                                width: '30px', height: '30px', borderRadius: '50%',
-                                background: step <= currentStep ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '14px', fontWeight: 'bold'
-                            }}>
-                                {step < currentStep ? <CheckCircle size={16} /> : step}
-                            </div>
+    return (
+        <div className="view active animate-fade-in">
+            <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-purple-600/20 rounded-xl flex items-center justify-center">
+                    <Zap size={20} className="text-purple-400" />
+                </div>
+                <div>
+                    <h1 className="text-2xl font-black text-white">Asistente de Configuracion</h1>
+                    <p className="text-xs text-gray-500">Configura tu tienda paso a paso</p>
+                </div>
+            </div>
+
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-10 max-w-3xl mx-auto">
+                {/* Progress */}
+                <div className="mb-10">
+                    <div className="flex justify-between items-center mb-4">
+                        {steps.map((step, i) => (
+                            <React.Fragment key={step.num}>
+                                <div className="flex flex-col items-center gap-1.5">
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
+                                        step.num < currentStep ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg shadow-purple-900/30' :
+                                        step.num === currentStep ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30' :
+                                        'bg-white/5 text-gray-600 border border-white/10'
+                                    }`}>
+                                        {step.num < currentStep ? <CheckCircle size={16} /> : step.icon}
+                                    </div>
+                                    <span className={`text-[10px] font-medium ${step.num <= currentStep ? 'text-white' : 'text-gray-600'}`}>{step.label}</span>
+                                </div>
+                                {i < steps.length - 1 && (
+                                    <div className={`flex-1 h-px mx-2 mb-5 ${step.num < currentStep ? 'bg-gradient-to-r from-purple-600 to-blue-600' : 'bg-white/10'}`} />
+                                )}
+                            </React.Fragment>
                         ))}
-                    </div>
-                    <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px' }}>
-                        <div style={{ height: '100%', width: `${((currentStep - 1) / 4) * 100}%`, background: 'var(--accent)', transition: 'width 0.3s' }}></div>
                     </div>
                 </div>
 
-                <div className="setup-content" style={{ minHeight: '300px' }}>
+                {/* Content */}
+                <div className="min-h-[280px] animate-fade-in">
                     {currentStep === 1 && (
-                        <div className="fade-in">
-                            <h2 style={{ marginBottom: '20px' }}>Crear Tienda</h2>
-                            <p style={{ color: '#a1a1aa', marginBottom: '30px' }}>Configura los datos básicos de tu primera tienda.</p>
-                            <div className="form-group">
-                                <label>Número de WhatsApp (Bot)</label>
-                                <div style={{ position: 'relative' }}>
-                                    <Smartphone size={18} style={{ position: 'absolute', top: '14px', left: '12px', color: '#a1a1aa' }} />
-                                    <input style={{ paddingLeft: '40px' }} value={formData.bot_phone_number} onChange={e => setFormData({ ...formData, bot_phone_number: e.target.value })} placeholder="54911..." />
+                        <div>
+                            <h2 className="text-xl font-black text-white mb-2">Crear Tienda</h2>
+                            <p className="text-sm text-gray-500 mb-6">Configura los datos basicos de tu primera tienda.</p>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Numero de WhatsApp (Bot)</label>
+                                    <div className="relative">
+                                        <Smartphone size={16} className="absolute top-3.5 left-3 text-gray-600" />
+                                        <input className="w-full bg-black/30 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors"
+                                            value={formData.bot_phone_number} onChange={e => setFormData({ ...formData, bot_phone_number: e.target.value })} placeholder="54911..." />
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="form-group">
-                                <label>Nombre de la Tienda</label>
-                                <div style={{ position: 'relative' }}>
-                                    <ShoppingBag size={18} style={{ position: 'absolute', top: '14px', left: '12px', color: '#a1a1aa' }} />
-                                    <input style={{ paddingLeft: '40px' }} value={formData.store_name} onChange={e => setFormData({ ...formData, store_name: e.target.value })} placeholder="Mi Tienda" />
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Nombre de la Tienda</label>
+                                    <div className="relative">
+                                        <ShoppingBag size={16} className="absolute top-3.5 left-3 text-gray-600" />
+                                        <input className="w-full bg-black/30 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors"
+                                            value={formData.store_name} onChange={e => setFormData({ ...formData, store_name: e.target.value })} placeholder="Mi Tienda" />
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="form-group">
-                                <label>Sitio Web</label>
-                                <input value={formData.store_website} onChange={e => setFormData({ ...formData, store_website: e.target.value })} placeholder="https://..." />
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Sitio Web</label>
+                                    <input className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors"
+                                        value={formData.store_website} onChange={e => setFormData({ ...formData, store_website: e.target.value })} placeholder="https://..." />
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {currentStep === 2 && (
-                        <div className="fade-in">
-                            <h2 style={{ marginBottom: '20px' }}>Conectar Tienda Nube</h2>
-                            <p style={{ color: '#a1a1aa', marginBottom: '30px' }}>Ingresa tus credenciales de Tienda Nube para sincronizar el catálogo.</p>
-                            <div className="form-group">
-                                <label>ID de Tienda</label>
-                                <input value={formData.tiendanube_store_id} onChange={e => setFormData({ ...formData, tiendanube_store_id: e.target.value })} placeholder="123456" />
-                            </div>
-                            <div className="form-group">
-                                <label>Access Token</label>
-                                <input type="password" value={formData.tiendanube_token} onChange={e => setFormData({ ...formData, tiendanube_token: e.target.value })} placeholder="Token API" />
+                        <div>
+                            <h2 className="text-xl font-black text-white mb-2">Conectar Tienda Nube</h2>
+                            <p className="text-sm text-gray-500 mb-6">Ingresa tus credenciales de Tienda Nube para sincronizar el catalogo.</p>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">ID de Tienda</label>
+                                    <input className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors"
+                                        value={formData.tiendanube_store_id} onChange={e => setFormData({ ...formData, tiendanube_store_id: e.target.value })} placeholder="123456" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Access Token</label>
+                                    <input type="password" className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors"
+                                        value={formData.tiendanube_token} onChange={e => setFormData({ ...formData, tiendanube_token: e.target.value })} placeholder="Token API" />
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {currentStep === 3 && (
-                        <div className="fade-in">
-                            <h2 style={{ marginBottom: '20px' }}>Guardar Configuración</h2>
-                            <p style={{ color: '#a1a1aa', marginBottom: '30px' }}>Vamos a guardar tu tienda en la base de datos.</p>
-                            <button className="btn-secondary" onClick={() => runTest(3)} disabled={loading}>
+                        <div>
+                            <h2 className="text-xl font-black text-white mb-2">Guardar Configuracion</h2>
+                            <p className="text-sm text-gray-500 mb-6">Vamos a guardar tu tienda en la base de datos.</p>
+                            <button onClick={() => runTest(3)} disabled={loading}
+                                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-5 py-3 rounded-xl text-sm font-medium transition-all">
                                 {loading ? 'Guardando...' : 'Guardar y Verificar'}
                             </button>
                         </div>
                     )}
 
                     {currentStep === 4 && (
-                        <div className="fade-in">
-                            <h2 style={{ marginBottom: '20px' }}>Verificar Servicios</h2>
-                            <p style={{ color: '#a1a1aa', marginBottom: '30px' }}>Comprobando estado del sistema...</p>
-                            <button className="btn-secondary" onClick={() => runTest(4)} disabled={loading}>
+                        <div>
+                            <h2 className="text-xl font-black text-white mb-2">Verificar Servicios</h2>
+                            <p className="text-sm text-gray-500 mb-6">Comprobando estado del sistema...</p>
+                            <button onClick={() => runTest(4)} disabled={loading}
+                                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-5 py-3 rounded-xl text-sm font-medium transition-all">
                                 {loading ? 'Verificando...' : 'Verificar Salud'}
                             </button>
                         </div>
                     )}
 
                     {currentStep === 5 && (
-                        <div className="fade-in">
-                            <h2 style={{ marginBottom: '20px' }}>Prueba Final</h2>
-                            <p style={{ color: '#a1a1aa', marginBottom: '30px' }}>Enviaremos un mensaje de prueba a tu WhatsApp: {formData.bot_phone_number}</p>
-                            <button className="btn-primary" onClick={() => runTest(5)} disabled={loading}>
-                                <Send size={18} style={{ marginRight: '8px' }} />
-                                {loading ? 'Enviando...' : 'Enviar Mensaje de Prueba'}
+                        <div>
+                            <h2 className="text-xl font-black text-white mb-2">Prueba Final</h2>
+                            <p className="text-sm text-gray-500 mb-6">Enviaremos un mensaje de prueba a tu WhatsApp: <span className="text-white font-mono">{formData.bot_phone_number}</span></p>
+                            <button onClick={() => runTest(5)} disabled={loading}
+                                className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-5 py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-purple-900/30">
+                                <Send size={16} /> {loading ? 'Enviando...' : 'Enviar Mensaje de Prueba'}
                             </button>
                         </div>
                     )}
 
                     {testResult && (
-                        <div className={`preflight-check ${testResult.status === 'success' ? 'check-pass' : 'check-fail'}`} style={{ marginTop: '20px' }}>
-                            <div className="check-header">
-                                <span className="check-name">{testResult.message}</span>
-                            </div>
+                        <div className={`mt-6 p-4 rounded-xl border flex items-center gap-3 ${
+                            testResult.status === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+                            testResult.status === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
+                            'bg-purple-500/10 border-purple-500/20 text-purple-400'
+                        }`}>
+                            {testResult.status === 'success' ? <CheckCircle size={18} /> : testResult.status === 'loading' ?
+                                <div className="w-4 h-4 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" /> : null}
+                            <span className="text-sm">{testResult.message}</span>
                         </div>
                     )}
-
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                    <button className="btn-secondary" onClick={handlePrev} disabled={currentStep === 1} style={{ display: currentStep === 1 ? 'none' : 'flex', alignItems: 'center', gap: '8px' }}>
-                        <ArrowLeft size={18} /> Anterior
-                    </button>
-                    <button className="btn-primary" onClick={handleNext} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-                        {currentStep === 5 ? 'Finalizar' : 'Siguiente'} <ArrowRight size={18} />
+                {/* Navigation */}
+                <div className="flex justify-between mt-10 pt-5 border-t border-white/10">
+                    {currentStep > 1 ? (
+                        <button onClick={handlePrev} className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all">
+                            <ArrowLeft size={16} /> Anterior
+                        </button>
+                    ) : <div />}
+                    <button onClick={handleNext} className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-purple-900/30">
+                        {currentStep === 5 ? 'Finalizar' : 'Siguiente'} <ArrowRight size={16} />
                     </button>
                 </div>
             </div>

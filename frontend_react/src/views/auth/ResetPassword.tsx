@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { KeyRound, Zap } from 'lucide-react';
 
 export default function ResetPassword() {
     const [searchParams] = useSearchParams();
@@ -14,19 +15,9 @@ export default function ResetPassword() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-
-        if (password.length < 6) {
-            setError('La contrasena debe tener al menos 6 caracteres.');
-            return;
-        }
-        if (password !== confirmPassword) {
-            setError('Las contrasenas no coinciden.');
-            return;
-        }
-        if (!token) {
-            setError('Token invalido. Solicita un nuevo enlace.');
-            return;
-        }
+        if (password.length < 6) { setError('La contrasena debe tener al menos 6 caracteres.'); return; }
+        if (password !== confirmPassword) { setError('Las contrasenas no coinciden.'); return; }
+        if (!token) { setError('Token invalido. Solicita un nuevo enlace.'); return; }
 
         setLoading(true);
         try {
@@ -37,11 +28,8 @@ export default function ResetPassword() {
                 body: JSON.stringify({ token, new_password: password })
             });
             const data = await res.json().catch(() => ({}));
-            if (res.ok) {
-                setSuccess(true);
-            } else {
-                setError(data.detail || 'Error al restablecer la contrasena.');
-            }
+            if (res.ok) { setSuccess(true); }
+            else { setError(data.detail || 'Error al restablecer la contrasena.'); }
         } catch {
             setError('Error de conexion. Intenta de nuevo.');
         } finally {
@@ -50,45 +38,56 @@ export default function ResetPassword() {
     };
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center bg-[#1B1D20] relative overflow-x-hidden py-10">
-            <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-[120px] pointer-events-none" />
-            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-zinc-800/20 rounded-full blur-[120px] pointer-events-none" />
+        <div className="min-h-screen w-full flex items-center justify-center bg-[#09090b] relative overflow-x-hidden py-10 px-4">
+            <style>{`
+                @keyframes glow-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.6; } }
+                @keyframes key-wiggle { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
+                .animate-glow { animation: glow-pulse 4s ease-in-out infinite; }
+                .animate-key { animation: key-wiggle 2s ease-in-out infinite; }
+            `}</style>
 
-            <div className="z-10 w-full max-w-md p-8 relative">
-                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[24px] p-8 shadow-2xl">
+            <div className="absolute top-20 left-1/4 w-[400px] h-[400px] bg-purple-600/15 rounded-full blur-[150px] pointer-events-none animate-glow" />
+            <div className="absolute bottom-20 right-1/4 w-[300px] h-[300px] bg-blue-600/15 rounded-full blur-[120px] pointer-events-none animate-glow" />
+
+            <div className="z-10 w-full max-w-md relative">
+                {/* Logo */}
+                <div className="flex items-center justify-center gap-2 mb-8">
+                    <div className="w-8 h-8 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
+                        <Zap size={16} className="text-white fill-current" />
+                    </div>
+                    <span className="text-xl font-bold tracking-tight text-white">Future</span>
+                </div>
+
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl">
                     {success ? (
                         <div className="text-center">
-                            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
                                 <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                             </div>
                             <h2 className="text-2xl font-black text-white mb-2">Contrasena actualizada</h2>
-                            <p className="text-gray-400 text-sm mb-6">
+                            <p className="text-gray-400 text-sm mb-6 leading-relaxed">
                                 Tu contrasena fue restablecida exitosamente. Ya puedes iniciar sesion con tu nueva contrasena.
                             </p>
-                            <Link
-                                to="/login"
-                                className="inline-block bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold px-6 py-3 rounded-xl transition-all"
-                            >
+                            <Link to="/login" className="inline-block bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-lg shadow-purple-900/30">
                                 Ir al Login
                             </Link>
                         </div>
                     ) : (
                         <>
                             <div className="mb-8 text-center">
-                                <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 tracking-tight">
+                                <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center animate-key">
+                                    <KeyRound size={24} className="text-purple-400" />
+                                </div>
+                                <h1 className="text-2xl sm:text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 tracking-tight">
                                     Nueva contrasena
                                 </h1>
-                                <p className="text-gray-400 text-sm mt-2">
-                                    Ingresa tu nueva contrasena.
-                                </p>
+                                <p className="text-gray-400 text-sm mt-2">Ingresa tu nueva contrasena.</p>
                             </div>
 
                             {error && (
-                                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm text-center">
-                                    {error}
-                                </div>
+                                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm text-center">{error}</div>
                             )}
 
                             {!token && (
@@ -97,42 +96,23 @@ export default function ResetPassword() {
                                 </div>
                             )}
 
-                            <form onSubmit={handleSubmit} className="space-y-6">
+                            <form onSubmit={handleSubmit} className="space-y-5">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                                        Nueva contrasena
-                                    </label>
-                                    <input
-                                        type="password"
-                                        required
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors"
-                                        placeholder="••••••••"
-                                        minLength={6}
-                                    />
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Nueva contrasena</label>
+                                    <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors"
+                                        placeholder="••••••••" minLength={6} />
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                                        Confirmar contrasena
-                                    </label>
-                                    <input
-                                        type="password"
-                                        required
-                                        value={confirmPassword}
-                                        onChange={(e) => setConfirmPassword(e.target.value)}
-                                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors"
-                                        placeholder="••••••••"
-                                        minLength={6}
-                                    />
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Confirmar contrasena</label>
+                                    <input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors"
+                                        placeholder="••••••••" minLength={6} />
                                 </div>
 
-                                <button
-                                    type="submit"
-                                    disabled={loading || !token}
-                                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-900/20"
-                                >
+                                <button type="submit" disabled={loading || !token}
+                                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-900/30">
                                     {loading ? (
                                         <span className="flex items-center justify-center">
                                             <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -150,6 +130,13 @@ export default function ResetPassword() {
                             </div>
                         </>
                     )}
+                </div>
+
+                <div className="mt-6 text-center">
+                    <div className="flex justify-center gap-6 text-[11px] text-gray-600 font-medium">
+                        <Link to="/privacy-policy" className="hover:text-gray-400 transition-colors">Privacy Policy</Link>
+                        <Link to="/terms-of-service" className="hover:text-gray-400 transition-colors">Terms of Service</Link>
+                    </div>
                 </div>
             </div>
         </div>

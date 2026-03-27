@@ -9,6 +9,9 @@
 | GET | `/auth/me` | Current user info |
 | GET | `/auth/google/oauth-url` | Google OAuth initiation |
 | POST | `/auth/google/callback` | Google OAuth callback |
+| POST | `/auth/forgot-password` | Request password reset email |
+| POST | `/auth/reset-password` | Reset password with token |
+| POST | `/auth/verify-email` | Verify email address |
 
 ## Admin — Agents (`/admin`)
 
@@ -54,6 +57,7 @@
 | GET | `/billing/my-subscription` | Current subscription |
 | POST | `/billing/checkout` | Create checkout session |
 | POST | `/billing/change-plan` | Upgrade/downgrade |
+| POST | `/billing/cancel` | Cancel subscription at period end |
 | GET | `/billing/invoices` | Invoice history |
 | GET | `/billing/usage` | Current period usage |
 | POST | `/billing/webhook/stripe` | Stripe webhook |

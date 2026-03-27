@@ -696,7 +696,7 @@ async def relay_message(msg: RelayMessage, request: Request):
                              # Fallback to YCloud if credentials miss
                              raise Exception("Meta WhatsApp Credentials Missing")
 
-                        url = f"https://graph.facebook.com/v19.0/{phone_id}/messages"
+                        url = f"https://graph.facebook.com/v22.0/{phone_id}/messages"
                         headers = {
                             "Authorization": f"Bearer {token_wa}",
                             "Content-Type": "application/json"
@@ -724,7 +724,7 @@ async def relay_message(msg: RelayMessage, request: Request):
                              raise Exception("Meta Page Token Missing")
 
                         # Graph API URL for Page/IG Messages
-                        url = "https://graph.facebook.com/v19.0/me/messages"
+                        url = "https://graph.facebook.com/v22.0/me/messages"
                         params = {"access_token": page_token}
                         # IG/FB Recipient is PSID
                         payload = {

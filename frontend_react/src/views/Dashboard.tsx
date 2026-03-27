@@ -88,9 +88,9 @@ export const Dashboard: React.FC = () => {
             {stats?.roi_metrics && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                     {/* Hero: GMV — now shows live vs heuristic */}
-                    <div className="bg-white/5 backdrop-blur-xl p-8 rounded-[24px] border border-white/10 relative overflow-hidden group hover:border-red-500/20 transition-colors">
+                    <div className="bg-white/5 backdrop-blur-xl p-8 rounded-[24px] border border-white/10 relative overflow-hidden group hover:border-purple-500/20 transition-colors">
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                            <Activity size={120} className="text-red-600" />
+                            <Activity size={120} className="text-purple-600" />
                         </div>
                         <div className="flex items-center gap-2 mb-2">
                             <h2 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em]">{t('dashboard.valueGenerated')}</h2>
@@ -104,7 +104,7 @@ export const Dashboard: React.FC = () => {
                             <span className="text-6xl font-black text-white tracking-tighter">
                                 {stats.roi_metrics.formatted_gmv}
                             </span>
-                            <span className="text-red-400 font-bold bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20 text-xs uppercase tracking-wider">
+                            <span className="text-purple-400 font-bold bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20 text-xs uppercase tracking-wider">
                                 {t('dashboard.conversions', { count: stats.roi_metrics.conversions })}
                             </span>
                         </div>
@@ -217,7 +217,7 @@ export const Dashboard: React.FC = () => {
             {/* Operational Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                 {/* Traffic Stats */}
-                <div className="bg-white/5 border border-white/10 rounded-[24px] p-6 backdrop-blur-md relative overflow-hidden group hover:border-red-500/20 transition-colors">
+                <div className="bg-white/5 border border-white/10 rounded-[24px] p-6 backdrop-blur-md relative overflow-hidden group hover:border-purple-500/20 transition-colors">
                     <div className="absolute -top-4 -right-4 w-16 h-16 bg-zinc-800/20 rounded-full blur-[20px]" />
                     <div className="flex justify-between items-center mb-4 relative z-10">
                         <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{t('dashboard.commsTraffic')}</span>
@@ -228,11 +228,11 @@ export const Dashboard: React.FC = () => {
                 </div>
 
                 {/* Efficiency */}
-                <div className="bg-white/5 border border-white/10 rounded-[24px] p-6 backdrop-blur-md relative overflow-hidden group hover:border-red-500/20 transition-colors">
-                    <div className="absolute -top-4 -right-4 w-16 h-16 bg-red-600/5 rounded-full blur-[20px]" />
+                <div className="bg-white/5 border border-white/10 rounded-[24px] p-6 backdrop-blur-md relative overflow-hidden group hover:border-purple-500/20 transition-colors">
+                    <div className="absolute -top-4 -right-4 w-16 h-16 bg-purple-600/5 rounded-full blur-[20px]" />
                     <div className="flex justify-between items-center mb-4 relative z-10">
                         <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{t('dashboard.efficiency')}</span>
-                        <Activity className="text-red-600 group-hover:text-red-400 transition-colors" size={20} />
+                        <Activity className="text-purple-600 group-hover:text-purple-400 transition-colors" size={20} />
                     </div>
                     <span className="text-3xl font-black text-white block mb-0.5 tracking-tighter">
                         {stats?.total_messages ? Math.round((stats.processed_messages / stats.total_messages) * 100) : 0}%
@@ -241,7 +241,7 @@ export const Dashboard: React.FC = () => {
                 </div>
 
                 {/* System Status (Condensed) */}
-                <div className="bg-white/5 border border-white/10 rounded-[24px] p-6 backdrop-blur-md flex items-center justify-between hover:border-red-500/20 transition-colors">
+                <div className="bg-white/5 border border-white/10 rounded-[24px] p-6 backdrop-blur-md flex items-center justify-between hover:border-purple-500/20 transition-colors">
                     <div>
                         <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-1">{t('dashboard.systemHealth')}</div>
                         <div className={`text-2xl font-black tracking-tight ${health.status === 'OK' ? 'text-emerald-400' : 'text-red-400'}`}>

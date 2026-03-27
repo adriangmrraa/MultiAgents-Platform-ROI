@@ -1,0 +1,42 @@
+# ==============================================================================
+# NEXUS v5.4 - CONFIGURATION TEMPLATE
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. CRITICAL (Required for Boot)
+# ------------------------------------------------------------------------------
+
+# Database: Supabase (pgvector)
+# NOTE: If hostname resolution fails (e.g. 'supabase-db') in EasyPanel,
+# use the Internal IP (e.g. 172.20.x.x) obtained via 'hostname -i' in the DB service.
+SUPABASE_URL=http://supabase-kong:8000
+SUPABASE_SERVICE_KEY=your-service-role-key-here
+SUPABASE_DB_URL=postgresql://postgres:password@172.20.0.1:5432/postgres
+
+# Security
+ADMIN_TOKEN=admin-secret-change-me
+INTERNAL_API_TOKEN=internal-secret-change-me
+ENCRYPTION_KEY=your-fernet-key-here # Generated via cryptography.fernet
+
+# ------------------------------------------------------------------------------
+# 2. INTERNAL SERVICES (Docker Network)
+# ------------------------------------------------------------------------------
+ORCHESTRATOR_SERVICE_URL=http://orchestrator_service:8000
+AGENT_SERVICE_URL=http://agent_service:8001
+WHATSAPP_SERVICE_URL=http://whatsapp_service:8002
+REDIS_URL=redis://redis:6379
+
+# ------------------------------------------------------------------------------
+# 3. OPTIONAL (Zero-Dependency Startup)
+# ------------------------------------------------------------------------------
+
+# Global Fallback Keys (If not provided per tenant)
+# OPENAI_API_KEY=sk-global-fallback-key
+# GOOGLE_API_KEY=global-fallback-key-here
+
+# WhatsApp / External
+# YCLOUD_API_KEY=your-ycloud-key
+# YCLOUD_WEBHOOK_SECRET=your-secret
+
+# Branding Defaults (Normally handled via UI)
+# STORE_NAME="Nexus Default"

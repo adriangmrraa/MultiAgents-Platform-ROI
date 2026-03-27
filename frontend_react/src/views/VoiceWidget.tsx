@@ -116,6 +116,8 @@ export const VoiceWidget: React.FC = () => {
     const [showEditor, setShowEditor] = useState(false);
     const [showDevInstructions, setShowDevInstructions] = useState(false);
     const [devCopied, setDevCopied] = useState(false);
+    // Collapsible sections state (all collapsed by default)
+    const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
     useEffect(() => { loadAll(); }, []);
 
@@ -251,6 +253,8 @@ Cualquier duda, avisame!`;
 
     const selectedAgent = agents.find(a => a.id === formData.agent_id);
     const currentVoices = providers?.voices?.[formData.voice_pipeline === 'realtime' ? formData.realtime_provider : formData.voice_provider] || providers?.voices?.['openai'] || [];
+
+    const toggleSection = (key: string) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
 
     // planBlocked = demo mode (Free users can see but not save)
 
@@ -426,43 +430,59 @@ Cualquier duda, avisame!`;
             )}
 
             {/* Agent Selector */}
-            <div className="glass p-4 lg:p-5 rounded-xl border border-white/5">
-                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
-                    <Zap size={16} className="text-violet-400" /> Agente
-                </h3>
-                {agents.length === 0 ? (
-                    <div className="text-center py-6">
-                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center mx-auto mb-3">
-                            <Zap size={20} className="text-slate-500" />
-                        </div>
-                        <p className="text-slate-500 text-sm mb-2">No tienes agentes activos</p>
-                        <a href="/agents" className="text-violet-400 text-sm hover:underline font-medium">Crear un agente</a>
-                    </div>
-                ) : (
-                    <>
-                        <select
-                            value={formData.agent_id}
-                            onChange={e => setFormData({ ...formData, agent_id: parseInt(e.target.value) })}
-                            className={selectClass}
-                        >
-                            <option value={0} className="bg-[#1a1a2e] text-slate-400">Selecciona un agente...</option>
-                            {agents.map(a => <option key={a.id} value={a.id} className="bg-[#1a1a2e] text-white">{a.name} ({a.role})</option>)}
-                        </select>
-                        {selectedAgent && (
-                            <div className="mt-2 p-3 bg-violet-500/5 border border-violet-500/10 rounded-lg text-xs space-y-1">
-                                <p className="text-slate-400">Modelo: <span className="text-violet-300 font-medium">{selectedAgent.model_version}</span></p>
-                                <p className="text-slate-400">Tools: <span className="text-violet-300 font-medium">{(Array.isArray(selectedAgent.enabled_tools) ? selectedAgent.enabled_tools : []).join(', ') || 'Ninguna'}</span></p>
+            <div className="glass rounded-xl border border-white/5 overflow-hidden">
+                <button onClick={() => toggleSection('agent')}
+                    className="w-full p-4 lg:p-5 flex items-center justify-between text-white active:bg-white/5 transition-colors">
+                    <span className="text-sm font-bold flex items-center gap-2">
+                        <Zap size={16} className="text-violet-400" /> Agente
+                        {selectedAgent && <span className="text-[10px] text-slate-500 font-normal ml-1">— {selectedAgent.name}</span>}
+                    </span>
+                    <ChevronDown size={16} className={`text-slate-500 transition-transform ${openSections.agent ? 'rotate-180' : ''}`} />
+                </button>
+                {openSections.agent && (
+                    <div className="px-4 lg:px-5 pb-4 lg:pb-5 border-t border-white/5 pt-3">
+                        {agents.length === 0 ? (
+                            <div className="text-center py-6">
+                                <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center mx-auto mb-3">
+                                    <Zap size={20} className="text-slate-500" />
+                                </div>
+                                <p className="text-slate-500 text-sm mb-2">No tienes agentes activos</p>
+                                <a href="/agents" className="text-violet-400 text-sm hover:underline font-medium">Crear un agente</a>
                             </div>
+                        ) : (
+                            <>
+                                <select
+                                    value={formData.agent_id}
+                                    onChange={e => setFormData({ ...formData, agent_id: parseInt(e.target.value) })}
+                                    className={selectClass}
+                                >
+                                    <option value={0} className="bg-[#1a1a2e] text-slate-400">Selecciona un agente...</option>
+                                    {agents.map(a => <option key={a.id} value={a.id} className="bg-[#1a1a2e] text-white">{a.name} ({a.role})</option>)}
+                                </select>
+                                {selectedAgent && (
+                                    <div className="mt-2 p-3 bg-violet-500/5 border border-violet-500/10 rounded-lg text-xs space-y-1">
+                                        <p className="text-slate-400">Modelo: <span className="text-violet-300 font-medium">{selectedAgent.model_version}</span></p>
+                                        <p className="text-slate-400">Tools: <span className="text-violet-300 font-medium">{(Array.isArray(selectedAgent.enabled_tools) ? selectedAgent.enabled_tools : []).join(', ') || 'Ninguna'}</span></p>
+                                    </div>
+                                )}
+                            </>
                         )}
-                    </>
+                    </div>
                 )}
             </div>
 
             {/* Voice Config */}
-            <div className="glass p-4 lg:p-5 rounded-xl border border-white/5">
-                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
-                    <Volume2 size={16} className="text-violet-400" /> Voz
-                </h3>
+            <div className="glass rounded-xl border border-white/5 overflow-hidden">
+                <button onClick={() => toggleSection('voice')}
+                    className="w-full p-4 lg:p-5 flex items-center justify-between text-white active:bg-white/5 transition-colors">
+                    <span className="text-sm font-bold flex items-center gap-2">
+                        <Volume2 size={16} className="text-violet-400" /> Voz
+                        <span className="text-[10px] text-slate-500 font-normal ml-1">— {formData.voice_pipeline === 'realtime' ? 'Realtime' : 'Cascaded'}</span>
+                    </span>
+                    <ChevronDown size={16} className={`text-slate-500 transition-transform ${openSections.voice ? 'rotate-180' : ''}`} />
+                </button>
+                {openSections.voice && (
+                <div className="px-4 lg:px-5 pb-4 lg:pb-5 border-t border-white/5 pt-3">
 
                 {/* Pipeline */}
                 <div className="grid grid-cols-2 gap-2 mb-4">
@@ -546,14 +566,21 @@ Cualquier duda, avisame!`;
                         </div>
                     </div>
                 </div>
+                </div>
+                )}
             </div>
 
             {/* Visual */}
-            <div className="glass p-4 lg:p-5 rounded-xl border border-white/5">
-                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
-                    <Palette size={16} className="text-violet-400" /> Visual
-                </h3>
-                <div className="space-y-3">
+            <div className="glass rounded-xl border border-white/5 overflow-hidden">
+                <button onClick={() => toggleSection('visual')}
+                    className="w-full p-4 lg:p-5 flex items-center justify-between text-white active:bg-white/5 transition-colors">
+                    <span className="text-sm font-bold flex items-center gap-2">
+                        <Palette size={16} className="text-violet-400" /> Visual
+                    </span>
+                    <ChevronDown size={16} className={`text-slate-500 transition-transform ${openSections.visual ? 'rotate-180' : ''}`} />
+                </button>
+                {openSections.visual && (
+                <div className="px-4 lg:px-5 pb-4 lg:pb-5 border-t border-white/5 pt-3 space-y-3">
                     <div>
                         <label className="block text-xs font-bold text-slate-400 mb-1">Nombre</label>
                         <input type="text" value={formData.widget_name}
@@ -624,6 +651,7 @@ Cualquier duda, avisame!`;
                             className={inputClass} />
                     </div>
                 </div>
+                )}
             </div>
 
             {/* Override (Collapsible) */}
@@ -656,38 +684,47 @@ Cualquier duda, avisame!`;
             </div>
 
             {/* API Mode */}
-            <div className="glass p-4 lg:p-5 rounded-xl border border-white/5">
-                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-white">
-                    <Radio size={16} className="text-violet-400" /> API
-                </h3>
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                    {[
-                        { key: 'platform', label: 'Future API', desc: `${usage?.voice_minutes_included || 0} min/mes` },
-                        { key: 'byok', label: 'Tu API Key', desc: 'Ilimitado' },
-                    ].map(m => (
-                        <button key={m.key} onClick={() => setFormData({ ...formData, api_key_mode: m.key })}
-                            className={`p-3 rounded-xl border text-left transition-all active:scale-[0.98] ${
-                                formData.api_key_mode === m.key ? 'border-violet-500 bg-violet-500/10' : 'border-white/5 hover:bg-white/5'
-                            }`}>
-                            <p className="font-bold text-white text-xs">{m.label}</p>
-                            <p className="text-slate-500 text-[10px] mt-0.5">{m.desc}</p>
-                        </button>
-                    ))}
-                </div>
-                {formData.api_key_mode === 'byok' && formData.realtime_provider === 'nvidia' && !providers?.has_keys?.nvidia && (
-                    <div className="space-y-2 mt-3 p-3 bg-white/5 rounded-lg">
-                        <label className="block text-xs font-bold text-slate-400">NGC API Key</label>
-                        <textarea value={ngcKeyInput} rows={2} placeholder="Pega tu NGC API Key..."
-                            onChange={e => setNgcKeyInput(e.target.value)}
-                            className={`${inputClass} text-xs font-mono resize-none`} />
-                        <button onClick={handleSaveNgcKey}
-                            className="w-full py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-colors active:scale-[0.98]">
-                            Guardar Key
-                        </button>
+            <div className="glass rounded-xl border border-white/5 overflow-hidden">
+                <button onClick={() => toggleSection('api')}
+                    className="w-full p-4 lg:p-5 flex items-center justify-between text-white active:bg-white/5 transition-colors">
+                    <span className="text-sm font-bold flex items-center gap-2">
+                        <Radio size={16} className="text-violet-400" /> API
+                        <span className="text-[10px] text-slate-500 font-normal ml-1">— {formData.api_key_mode === 'byok' ? 'Tu API Key' : 'Future API'}</span>
+                    </span>
+                    <ChevronDown size={16} className={`text-slate-500 transition-transform ${openSections.api ? 'rotate-180' : ''}`} />
+                </button>
+                {openSections.api && (
+                <div className="px-4 lg:px-5 pb-4 lg:pb-5 border-t border-white/5 pt-3">
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                        {[
+                            { key: 'platform', label: 'Future API', desc: `${usage?.voice_minutes_included || 0} min/mes` },
+                            { key: 'byok', label: 'Tu API Key', desc: 'Ilimitado' },
+                        ].map(m => (
+                            <button key={m.key} onClick={() => setFormData({ ...formData, api_key_mode: m.key })}
+                                className={`p-3 rounded-xl border text-left transition-all active:scale-[0.98] ${
+                                    formData.api_key_mode === m.key ? 'border-violet-500 bg-violet-500/10' : 'border-white/5 hover:bg-white/5'
+                                }`}>
+                                <p className="font-bold text-white text-xs">{m.label}</p>
+                                <p className="text-slate-500 text-[10px] mt-0.5">{m.desc}</p>
+                            </button>
+                        ))}
                     </div>
-                )}
-                {formData.api_key_mode === 'byok' && formData.realtime_provider === 'openai' && (
-                    <p className="text-[10px] text-slate-600 mt-1">Usa tu OpenAI Key de Credenciales.</p>
+                    {formData.api_key_mode === 'byok' && formData.realtime_provider === 'nvidia' && !providers?.has_keys?.nvidia && (
+                        <div className="space-y-2 mt-3 p-3 bg-white/5 rounded-lg">
+                            <label className="block text-xs font-bold text-slate-400">NGC API Key</label>
+                            <textarea value={ngcKeyInput} rows={2} placeholder="Pega tu NGC API Key..."
+                                onChange={e => setNgcKeyInput(e.target.value)}
+                                className={`${inputClass} text-xs font-mono resize-none`} />
+                            <button onClick={handleSaveNgcKey}
+                                className="w-full py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-colors active:scale-[0.98]">
+                                Guardar Key
+                            </button>
+                        </div>
+                    )}
+                    {formData.api_key_mode === 'byok' && formData.realtime_provider === 'openai' && (
+                        <p className="text-[10px] text-slate-600 mt-1">Usa tu OpenAI Key de Credenciales.</p>
+                    )}
+                </div>
                 )}
             </div>
 
@@ -818,9 +855,9 @@ Cualquier duda, avisame!`;
                 </>
             ) : (
                 <>
-                    {/* Mobile Back Button */}
+                    {/* Back Button */}
                     <button onClick={() => setShowEditor(false)}
-                        className="lg:hidden flex items-center gap-2 text-slate-400 text-sm mb-3 active:text-white transition-colors">
+                        className="flex items-center gap-2 text-slate-400 text-sm mb-3 active:text-white hover:text-white transition-colors">
                         <ArrowLeft size={16} /> Volver a widgets
                     </button>
 

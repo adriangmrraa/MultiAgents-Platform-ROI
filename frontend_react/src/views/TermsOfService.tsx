@@ -4,12 +4,12 @@ import { Shield, Check, ArrowRight, Zap } from 'lucide-react';
 
 export const TermsOfService: React.FC = () => {
     return (
-        <div className="min-h-screen bg-[#09090b] text-white selection:bg-red-500/30">
+        <div className="min-h-screen bg-[#09090b] text-white selection:bg-purple-500/30">
             {/* Header / Nav */}
             <nav className="fixed top-0 w-full z-50 bg-[#09090b]/80 backdrop-blur-lg border-b border-white/10">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-tr from-red-600 to-orange-600 rounded-lg flex items-center justify-center">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
                             <Zap size={16} className="text-white fill-current" />
                         </div>
                         <span className="text-lg sm:text-xl font-bold tracking-tight">Future</span>

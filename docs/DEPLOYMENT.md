@@ -74,6 +74,16 @@ GOOGLE_OAUTH_CLIENT_ID=<google-oauth-client-id>
 VITE_GOOGLE_OAUTH_CLIENT_ID=<same-client-id>
 ```
 
+### Email (SMTP)
+
+```env
+SMTP_HOST=<smtp-host>           # e.g. smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=<smtp-user>
+SMTP_PASSWORD=<smtp-password>
+SMTP_FROM_EMAIL=<noreply@yourdomain.com>
+```
+
 ### Optional
 
 ```env

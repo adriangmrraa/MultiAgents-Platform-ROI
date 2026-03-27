@@ -62,6 +62,34 @@
 - Verify `INTERNAL_SECRET_KEY` and `INTERNAL_API_TOKEN` match across services
 - The ingest route accepts both for compatibility
 
+## Google OAuth
+
+### Google login button not visible
+- Verify `VITE_GOOGLE_OAUTH_CLIENT_ID` is set in the frontend build (must be available at build time, not just runtime)
+- In Docker: ensure `VITE_GOOGLE_OAUTH_CLIENT_ID` is passed as a build arg in the Dockerfile
+- Check browser console for Google Identity Services errors
+
+### Google login fails with 401
+- Verify `GOOGLE_OAUTH_CLIENT_ID` in the orchestrator matches `VITE_GOOGLE_OAUTH_CLIENT_ID` in the frontend
+- Check orchestrator logs for token verification errors
+- Ensure the Google Cloud Console has the correct authorized origins and redirect URIs
+
+### Welcome email not sent after Google signup
+- Check SMTP configuration (see Deployment docs)
+- Verify orchestrator logs for email sending errors
+- Google signups auto-verify email — the welcome email should send immediately
+
+## Email / SMTP
+
+### Emails not sending
+- Verify all SMTP env vars are set: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`
+- Test SMTP connectivity from the orchestrator container
+- Check spam folder — Future Platform emails use dark-themed HTML templates
+
+### Password reset email not received
+- Verify `FRONTEND_URL` is set correctly — the reset link uses this to build the URL
+- Check orchestrator logs for errors on `POST /auth/forgot-password`
+
 ## Frontend
 
 ### Chats page empty
