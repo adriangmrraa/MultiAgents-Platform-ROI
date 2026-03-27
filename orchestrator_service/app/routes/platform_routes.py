@@ -446,11 +446,14 @@ async def edit_tenant(
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
+    ALLOWED_FIELDS = {"store_name", "owner_email", "bot_phone_number", "store_website", "store_description", "is_active"}
     updates = []
     params = []
     idx = 1
 
     for field, value in req.model_dump(exclude_none=True).items():
+        if field not in ALLOWED_FIELDS:
+            continue
         updates.append(f"{field} = ${idx}")
         params.append(value)
         idx += 1
