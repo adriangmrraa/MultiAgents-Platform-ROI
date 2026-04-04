@@ -29,4 +29,4 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 # Run Alembic migrations on startup, then start server
-CMD sh -c "echo 'Running migrations...' && alembic upgrade head 2>&1; echo 'Starting server...' && uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"
+CMD sh -c "echo 'Running migrations...' && alembic upgrade head 2>&1 && echo 'Starting server...' && uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"

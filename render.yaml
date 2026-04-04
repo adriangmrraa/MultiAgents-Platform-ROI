@@ -69,8 +69,8 @@ services:
     env: node
     region: oregon
     plan: pro
-    buildCommand: "cd bff_service && npm install"
-    startCommand: "cd bff_service && node server.js"
+    buildCommand: "cd bff_service && npm install && npm run build"
+    startCommand: "cd bff_service && npm start"
     healthCheckPath: /health
     envVars:
       - key: ORCHESTRATOR_URL

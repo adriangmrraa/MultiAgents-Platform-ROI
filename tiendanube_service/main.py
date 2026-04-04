@@ -157,6 +157,8 @@ def get_tn_headers(access_token: str) -> Dict[str, str]:
     masked = f"{access_token[:4]}...{access_token[-4:]}" if token_len > 8 else "***"
     logger.info("tn_token_diagnostic", length=token_len, masked=masked)
         
+    # TiendaNube API usa "Authentication" (no estándar) en vez de "Authorization".
+    # Ref: documentación oficial de autenticación de TiendaNube API.
     return {
         "Authentication": f"bearer {access_token.strip()}",
         "User-Agent": TIENDANUBE_USER_AGENT,

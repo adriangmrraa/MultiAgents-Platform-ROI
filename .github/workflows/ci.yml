@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  lint-python:
+    name: Python Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint orchestrator
+        run: ruff check orchestrator_service/ --select E,F,W --ignore E501
+      - name: Lint agent service
+        run: ruff check agent_service/ --select E,F,W --ignore E501
+      - name: Lint whatsapp service
+        run: ruff check whatsapp_service/ --select E,F,W --ignore E501
+      - name: Lint meta service
+        run: ruff check meta_service/ --select E,F,W --ignore E501
+      - name: Lint tiendanube service
+        run: ruff check tiendanube_service/ --select E,F,W --ignore E501
+
+  lint-frontend:
+    name: Frontend Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend_react/package-lock.json
+      - name: Install deps
+        run: cd frontend_react && npm ci --legacy-peer-deps
+      - name: Type check
+        run: cd frontend_react && npx tsc --noEmit
+
+  lint-bff:
+    name: BFF Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: bff_service/package-lock.json
+      - name: Install deps
+        run: cd bff_service && npm ci
+      - name: Type check
+        run: cd bff_service && npx tsc --noEmit
+
+  docker-smoke:
+    name: Docker Build Smoke Test
+    runs-on: ubuntu-latest
+    needs: [lint-python, lint-frontend, lint-bff]
+    strategy:
+      matrix:
+        service:
+          - orchestrator_service
+          - agent_service
+          - whatsapp_service
+          - meta_service
+          - tiendanube_service
+          - bff_service
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.service }}
+        run: docker build -t ${{ matrix.service }}:ci -f ${{ matrix.service }}/Dockerfile ${{ matrix.service }}/

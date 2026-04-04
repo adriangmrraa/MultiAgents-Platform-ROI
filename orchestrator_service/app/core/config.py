@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr, field_validator, field_serializer, model_validator
-from typing import Any, List
+from typing import Any, List, Optional
 from dotenv import load_dotenv
 import os
 import logging
@@ -183,13 +183,13 @@ class Settings(BaseSettings):
     # Infrastructure
     POSTGRES_DSN: str = ""
     REDIS_URL: str = "redis://redis:6379/0"
-    CORS_ALLOWED_ORIGINS: Any = [
-        "https://multiagents-frontend.yn8wow.easypanel.host",
-        "https://multiagents-backend.yn8wow.easypanel.host",
-        "https://multiagents-orchestrator.yn8wow.easypanel.host",
-        "http://localhost:3000",
-        "http://localhost:8000",
-    ]
+
+    # Database connection pool
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
+    CORS_ALLOWED_ORIGINS: Any = []
     BOT_PHONE_NUMBER: str | None = None
 
     # Google OAuth
@@ -203,8 +203,12 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = ""
 
     # Stripe
-    STRIPE_SECRET_KEY: str | None = None
-    STRIPE_WEBHOOK_SECRET: str | None = None
+    STRIPE_SECRET_KEY: Optional[str] = None
+    STRIPE_WEBHOOK_SECRET: Optional[str] = None
+
+    # MercadoPago
+    MP_ACCESS_TOKEN: Optional[str] = None
+    MP_WEBHOOK_SECRET: Optional[str] = None
 
     # Supabase (RAG)
     SUPABASE_URL: str = ""

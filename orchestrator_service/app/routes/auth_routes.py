@@ -107,9 +107,10 @@ async def register(
             raise HTTPException(status_code=409, detail="Email already registered")
         else:
             # Idempotency / Resend Logic for Unverified Users
-            # Ensure token exists
+            # Ensure token exists (genera nuevo con expiración de 48h)
             if not existing_user.verification_token:
                 existing_user.verification_token = uuid.uuid4().hex
+                existing_user.verification_token_expires_at = datetime.utcnow() + timedelta(hours=48)
                 await db.commit()
 
             # Resend Email (catch exceptions safely in Service)
@@ -198,6 +199,8 @@ async def register(
         role="owner",
         is_verified=False,
         verification_token=verification_token,
+        # Token expira en 48 horas desde el momento de registro
+        verification_token_expires_at=datetime.utcnow() + timedelta(hours=48),
     )
     db.add(new_user)
     await db.commit()
@@ -276,10 +279,11 @@ async def login(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Account locked due to too many failed login attempts.",
                 )
+    except HTTPException:
+        raise
     except Exception as e:
-        # If Redis is down, log but allow login to proceed (fail-open for availability)
-        logger.error("redis_lockout_check_failed", error=str(e))
-        # Continue without lockout check
+        logger.critical("redis_unavailable_login_blocked", error=str(e))
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.")
 
     # 1. Find User
     result = await db.execute(select(User).where(User.email == user_in.email))
@@ -340,8 +344,16 @@ async def verify_email(data: TokenSchema, db: AsyncSession = Depends(get_db)):
             status_code=400, detail="Invalid or expired verification token"
         )
 
+    # Verificar que el token no haya expirado
+    if user.verification_token_expires_at and datetime.utcnow() > user.verification_token_expires_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Verification link expired. Please request a new one.",
+        )
+
     user.is_verified = True
     user.verification_token = None  # One-time use
+    user.verification_token_expires_at = None  # Limpiar expiración al verificar
     await db.commit()
 
     # Send welcome email after verification
@@ -397,10 +409,10 @@ async def resend_verification(
                 detail=f"Please wait {60 - int(delta.total_seconds())} seconds before trying again.",
             )
 
-    # 2. Prepare Token
-    if not current_user.verification_token:
-        current_user.verification_token = uuid.uuid4().hex
-        logger.info("resend_verification_token_generated")
+    # 2. Prepare Token — siempre renueva el token y su expiración (48h)
+    current_user.verification_token = uuid.uuid4().hex
+    current_user.verification_token_expires_at = datetime.utcnow() + timedelta(hours=48)
+    logger.info("resend_verification_token_generated")
 
     # 3. Send Email (BLOCKING per User Debug Protocol)
     from app.core.email import EmailService
@@ -416,9 +428,8 @@ async def resend_verification(
         current_user.last_verification_email_at = datetime.utcnow()
         await db.commit()
     except Exception as e:
-        logger.error("smtp_resend_error", error=str(e))
-        # CRITICAL: Raise detail as requested by user
-        raise HTTPException(status_code=500, detail=f"DEBUG SMTP ERROR: {str(e)}")
+        logger.error("smtp_error", error=str(e), error_type=type(e).__name__)
+        raise HTTPException(status_code=500, detail="Error sending verification email. Please try again later.")
 
     return {"message": "Verification email sent successfully."}
 

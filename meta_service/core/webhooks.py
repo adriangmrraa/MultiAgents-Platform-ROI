@@ -29,10 +29,10 @@ class MetaWebhookService:
         Validates X-Hub-Signature-256 header.
         """
         signature = request.headers.get("X-Hub-Signature-256")
+        if not self.app_secret:
+            raise HTTPException(status_code=503, detail="Webhook signature verification not configured")
+
         if not signature:
-            # For development, allow bypass if App Secret is not set
-            if not self.app_secret:
-                return
             raise HTTPException(status_code=403, detail="Missing signature")
 
         body = await request.body()

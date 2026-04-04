@@ -49,17 +49,17 @@ services:
       - orchestrator_service
 
   # --- Frontend Layer ---
-  platform_ui:
+  frontend_react:
     build:
-      context: ./platform_ui
-    container_name: platform_ui
+      context: ./frontend_react
+    container_name: frontend_react
     restart: unless-stopped
     ports:
       - "80:80"
     environment:
       # Protocol Omega: Dynamic Injection for app.js
       - API_BASE_URL=http://localhost:8000
-      # NOTE: In production with domain, this should be the public HTTPS URL of the orchestrator 
+      # NOTE: In production with domain, this should be the public HTTPS URL of the orchestrator
       # IF accessing from client browser, OR internal if doing SSR (but this is a SPA).
       # For SPA, the browser needs the Public URL.
       # However, Nginx logic was refactored to rely on app.js detection.

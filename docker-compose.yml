@@ -19,10 +19,10 @@ services:
   platform_ui:
     build: ./frontend_react
     ports:
-      - "80:80"
+      - "80:8080"
     environment:
       - API_BASE_URL=http://localhost:8000 # Default fallback
-      - ADMIN_TOKEN=${ADMIN_TOKEN:-admin-secret-99} # Protocol Omega Auth
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN is required} # Protocol Omega Auth
       - VITE_FACEBOOK_APP_ID=${VITE_FACEBOOK_APP_ID}
       - VITE_FACEBOOK_API_VERSION=${VITE_FACEBOOK_API_VERSION:-v20.0}
       - VITE_META_CONFIG_ID=${VITE_META_CONFIG_ID}
@@ -44,7 +44,7 @@ services:
       - POSTGRES_DSN=${POSTGRES_DSN}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
-      - ADMIN_TOKEN=${ADMIN_TOKEN:-admin-secret-99} # Explicit Sync
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN is required} # Explicit Sync
       - META_SERVICE_URL=http://meta_service:8000
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
@@ -75,7 +75,7 @@ services:
     environment:
       - PORT=8003
       - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
-      - ADMIN_TOKEN=${ADMIN_TOKEN:-admin-secret-99}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN is required}
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8003/health" ]
       interval: 30s
@@ -112,7 +112,7 @@ services:
     environment:
       - PORT=8000
       - ORCHESTRATOR_URL=http://orchestrator_service:8000
-      - META_VERIFY_TOKEN=${META_VERIFY_TOKEN:-nexus_verification_token}
+      - META_VERIFY_TOKEN=${META_VERIFY_TOKEN:?META_VERIFY_TOKEN is required}
       - META_APP_SECRET=${META_APP_SECRET}
       - INTERNAL_SECRET_KEY=${INTERNAL_API_TOKEN}
     healthcheck:

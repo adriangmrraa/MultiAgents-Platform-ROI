@@ -44,9 +44,9 @@ services:
       - nexus-network
 
   # --- Frontend Layer ---
-  platform_ui:
+  frontend_react:
     build:
-      context: ./platform_ui
+      context: ./frontend_react
     restart: unless-stopped
     ports:
       - "80:80"

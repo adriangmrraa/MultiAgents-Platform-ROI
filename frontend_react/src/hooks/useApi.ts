@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || detectApiBase();
-export const ADMIN_TOKEN = import.meta.env.VITE_API_ADMIN_TOKEN || import.meta.env.VITE_ADMIN_TOKEN || "";
 
 function detectApiBase() {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
@@ -49,7 +48,6 @@ export function useApi() {
                 // Get user email from localStorage for multi-tenant auth
                 const userEmail = localStorage.getItem('user_email') || '';
                 const headers: Record<string, string> = {
-                    'x-admin-token': ADMIN_TOKEN,
                     'x-user-email': userEmail,
                     ...options.headers
                 };

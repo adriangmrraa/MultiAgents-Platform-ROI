@@ -542,10 +542,9 @@ export const OnboardingWizard: React.FC = () => {
         if (!text || text.length < 2) return;
         setVoiceState('speaking');
         try {
-            const { ADMIN_TOKEN } = await import('../hooks/useApi');
             const res = await fetch(`${getApiBase()}/admin/onboarding/tts`, {
                 method: 'POST',
-                headers: { 'x-admin-token': ADMIN_TOKEN || '', 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text }),
                 credentials: 'include'
             });

@@ -48,7 +48,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialTab = 'integrations' 
         const left = window.screen.width / 2 - width / 2;
         const top = window.screen.height / 2 - height / 2;
         const tid = user?.tenant_id || import.meta.env.VITE_DEFAULT_TENANT_ID || 1;
-        let serviceUrl = import.meta.env.VITE_TIENDANUBE_SERVICE_URL || "https://multiagents-tiendanube-service.yn8wow.easypanel.host";
+        let serviceUrl = import.meta.env.VITE_TIENDANUBE_SERVICE_URL || "";
         serviceUrl = serviceUrl.replace(/\/$/, '');
         const url = `${serviceUrl}/auth/login?tenant_id=${tid}`;
         window.open(url, "TiendaNubeLogin", `width=${width},height=${height},top=${top},left=${left}`);

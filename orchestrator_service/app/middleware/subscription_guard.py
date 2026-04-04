@@ -61,15 +61,14 @@ EXEMPT_PREFIXES = (
 class SubscriptionGuardMiddleware(BaseHTTPMiddleware):
     def _block_response(self, request: Request, status_code: int, content: dict) -> JSONResponse:
         """Return a 402 JSONResponse WITH CORS headers so the browser doesn't swallow it."""
-        origin = request.headers.get("origin", "*")
-        return JSONResponse(
-            status_code=status_code,
-            content=content,
-            headers={
-                "Access-Control-Allow-Origin": origin,
-                "Access-Control-Allow-Credentials": "true",
-            }
-        )
+        origin = request.headers.get("origin")
+        headers = {}
+        if origin:
+            allowed_origins = settings.CORS_ALLOWED_ORIGINS if isinstance(settings.CORS_ALLOWED_ORIGINS, list) else []
+            if origin in allowed_origins:
+                headers["Access-Control-Allow-Origin"] = origin
+                headers["Access-Control-Allow-Credentials"] = "true"
+        return JSONResponse(status_code=status_code, content=content, headers=headers)
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path

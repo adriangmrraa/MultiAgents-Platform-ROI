@@ -110,16 +110,14 @@ function OnboardingGate({ children }: { children: JSX.Element }) {
     // Simple client-side check: use fetchApi from useApi pattern
     const checkOnboarding = async () => {
       try {
-        const { useApi: _u, ADMIN_TOKEN } = await import('./hooks/useApi');
-
-        // Detect API base (same as useApi)
+        // Detectar base de la API (igual que useApi)
         const hostname = window.location.hostname;
         let base = '/api';
         if (hostname === 'localhost' || hostname === '127.0.0.1') base = 'http://localhost:3000';
         else if (hostname.includes('platform-ui')) base = window.location.protocol + '//' + hostname.replace('platform-ui', 'orchestrator-service');
 
         const res = await fetch(`${base}/admin/onboarding-wizard/progress`, {
-          headers: { 'x-admin-token': ADMIN_TOKEN || '', 'Content-Type': 'application/json', 'x-user-email': user.email || '' },
+          headers: { 'Content-Type': 'application/json', 'x-user-email': user.email || '' },
           credentials: 'include'
         });
 

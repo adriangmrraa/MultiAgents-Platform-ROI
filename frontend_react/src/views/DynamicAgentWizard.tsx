@@ -27,7 +27,7 @@ const AGENT_CONFIG_SCHEMA: FieldConfig[] = [
         "key": "website_url",
         "label": "URL de la Web",
         "type": "text",
-        "defaultValue": "https://www.pointecoach.shop",
+        "defaultValue": "",
         "placeholder": "https://tu-tienda.com",
         "description": "Link principal para el Call to Action final."
     },

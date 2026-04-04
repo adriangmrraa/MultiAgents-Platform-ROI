@@ -1,5 +1,6 @@
 import uuid
-from sqlalchemy import String, ForeignKey
+from typing import Optional
+from sqlalchemy import String, ForeignKey, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from datetime import datetime
@@ -28,6 +29,10 @@ class User(Base, TimestampMixin):
     is_verified: Mapped[bool] = mapped_column(default=False, nullable=False)
     verification_token: Mapped[str] = mapped_column(
         String(255), nullable=True, unique=True
+    )
+    # Expiración del token de verificación de email (48 horas desde emisión)
+    verification_token_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
     )
     last_verification_email_at: Mapped[datetime] = mapped_column(nullable=True)
 

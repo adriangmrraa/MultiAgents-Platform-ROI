@@ -1722,8 +1722,10 @@ async def global_exception_handler(request: Request, exc: Exception):
     # Manually add CORS headers to exception response to avoid "CORS Error" masking the real 500
     origin = request.headers.get("origin")
     if origin:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
+        allowed_origins = settings.CORS_ALLOWED_ORIGINS if isinstance(settings.CORS_ALLOWED_ORIGINS, list) else []
+        if origin in allowed_origins:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
 

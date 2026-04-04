@@ -297,13 +297,13 @@ async def verify_signature(request: Request):
         logger.error("tenant_resolution_exception", error=str(e))
         raise HTTPException(503, detail="Tenant resolution service unavailable")
 
-    # Fetch tenant-specific webhook secret
-    global YCLOUD_WEBHOOK_SECRET
-    YCLOUD_WEBHOOK_SECRET = await get_config(
-        "YCLOUD_WEBHOOK_SECRET", tenant_id=tenant_id
+    # Obtener el secreto específico del tenant (variable local, sin mutar el global)
+    # Fallback al secreto de entorno si el tenant no tiene uno configurado
+    tenant_webhook_secret = await get_config(
+        "YCLOUD_WEBHOOK_SECRET", default=YCLOUD_WEBHOOK_SECRET, tenant_id=tenant_id
     )
 
-    if not YCLOUD_WEBHOOK_SECRET:
+    if not tenant_webhook_secret:
         logger.error("missing_tenant_webhook_secret", tenant_id=tenant_id)
         raise HTTPException(
             503, detail=f"Webhook secret not configured for tenant {tenant_id}"
@@ -311,7 +311,7 @@ async def verify_signature(request: Request):
 
     signed_payload = f"{t}.{raw_body.decode('utf-8')}"
     expected = hmac.new(
-        YCLOUD_WEBHOOK_SECRET.encode("utf-8"),
+        tenant_webhook_secret.encode("utf-8"),
         signed_payload.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()

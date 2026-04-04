@@ -25,15 +25,12 @@ from typing import Optional
 from db import get_pool_db
 from app.api.deps import get_current_user
 from app.models.auth import User
+from app.core.config import settings
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/billing", tags=["Billing"])
 
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
-MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
-MP_WEBHOOK_SECRET = os.getenv("MP_WEBHOOK_SECRET")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 
@@ -424,12 +421,12 @@ async def create_checkout(
 
 async def _create_stripe_checkout(plan, req, current_user, db):
     """Create Stripe Checkout session."""
-    if not STRIPE_SECRET_KEY:
+    if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Stripe not configured")
 
     import stripe
 
-    stripe.api_key = STRIPE_SECRET_KEY
+    stripe.api_key = settings.STRIPE_SECRET_KEY
 
     # Determine the price to use: prefer stored stripe_price_id, fall back to
     # creating an ad-hoc price from price_monthly (price_usd on the plan row).
@@ -588,10 +585,10 @@ async def _handle_stripe_sub_canceled(sub_data, db):
 @router.post("/webhook/stripe")
 async def stripe_webhook(request: Request, db=Depends(get_pool_db)):
     """Handle Stripe webhook events. Not authenticated — Stripe calls this directly."""
-    if not STRIPE_SECRET_KEY:
+    if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Stripe not configured")
 
-    if not STRIPE_WEBHOOK_SECRET:
+    if not settings.STRIPE_WEBHOOK_SECRET:
         logger.error("stripe_webhook_secret_missing")
         raise HTTPException(status_code=503, detail="Stripe webhook secret not configured")
 
@@ -601,7 +598,7 @@ async def stripe_webhook(request: Request, db=Depends(get_pool_db)):
     except ImportError:
         from stripe import SignatureVerificationError
 
-    stripe.api_key = STRIPE_SECRET_KEY
+    stripe.api_key = settings.STRIPE_SECRET_KEY
 
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
@@ -611,7 +608,7 @@ async def stripe_webhook(request: Request, db=Depends(get_pool_db)):
         raise HTTPException(status_code=400, detail="Missing stripe-signature header")
 
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+        event = stripe.Webhook.construct_event(payload, sig_header, settings.STRIPE_WEBHOOK_SECRET)
     except ValueError as e:
         logger.error("stripe_webhook_invalid_payload", error=str(e))
         raise HTTPException(status_code=400, detail="Invalid payload")
@@ -639,11 +636,11 @@ async def stripe_webhook(request: Request, db=Depends(get_pool_db)):
 @router.post("/webhook/mercadopago")
 async def mercadopago_webhook(request: Request, db=Depends(get_pool_db)):
     """Handle MercadoPago webhook events."""
-    if not MP_ACCESS_TOKEN:
+    if not settings.MP_ACCESS_TOKEN:
         raise HTTPException(status_code=503, detail="MercadoPago not configured")
 
     # HMAC-SHA256 signature verification
-    if not MP_WEBHOOK_SECRET:
+    if not settings.MP_WEBHOOK_SECRET:
         raise HTTPException(
             status_code=503, detail="MercadoPago webhook secret not configured"
         )
@@ -658,7 +655,7 @@ async def mercadopago_webhook(request: Request, db=Depends(get_pool_db)):
     else:
         logger.warning("mp_webhook_signature_missing")
 
-    if not verify_mercadopago_signature(body_bytes, signature, MP_WEBHOOK_SECRET):
+    if not verify_mercadopago_signature(body_bytes, signature, settings.MP_WEBHOOK_SECRET):
         logger.error("mp_webhook_signature_mismatch", signature=signature)
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
@@ -676,7 +673,7 @@ async def mercadopago_webhook(request: Request, db=Depends(get_pool_db)):
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 f"https://api.mercadopago.com/preapproval/{data_id}",
-                headers={"Authorization": f"Bearer {MP_ACCESS_TOKEN}"},
+                headers={"Authorization": f"Bearer {settings.MP_ACCESS_TOKEN}"},
             )
             if resp.status_code != 200:
                 return {"received": True}
@@ -738,7 +735,7 @@ async def mercadopago_webhook(request: Request, db=Depends(get_pool_db)):
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 f"https://api.mercadopago.com/v1/payments/{data_id}",
-                headers={"Authorization": f"Bearer {MP_ACCESS_TOKEN}"},
+                headers={"Authorization": f"Bearer {settings.MP_ACCESS_TOKEN}"},
             )
             if resp.status_code == 200:
                 payment = resp.json()
@@ -866,11 +863,11 @@ async def cancel_subscription(
 
     # Cancel with payment provider
     if provider == "stripe" and ext_sub_id:
-        if not STRIPE_SECRET_KEY:
+        if not settings.STRIPE_SECRET_KEY:
             raise HTTPException(status_code=503, detail="Stripe not configured")
         import stripe
 
-        stripe.api_key = STRIPE_SECRET_KEY
+        stripe.api_key = settings.STRIPE_SECRET_KEY
         try:
             await asyncio.to_thread(stripe.Subscription.cancel, ext_sub_id)
         except Exception as e:
@@ -880,7 +877,7 @@ async def cancel_subscription(
             )
 
     elif provider == "mercadopago" and ext_sub_id:
-        if not MP_ACCESS_TOKEN:
+        if not settings.MP_ACCESS_TOKEN:
             raise HTTPException(status_code=503, detail="MercadoPago not configured")
         import httpx
 
@@ -888,7 +885,7 @@ async def cancel_subscription(
             resp = await client.put(
                 f"https://api.mercadopago.com/preapproval/{ext_sub_id}",
                 headers={
-                    "Authorization": f"Bearer {MP_ACCESS_TOKEN}",
+                    "Authorization": f"Bearer {settings.MP_ACCESS_TOKEN}",
                     "Content-Type": "application/json",
                 },
                 json={"status": "cancelled"},

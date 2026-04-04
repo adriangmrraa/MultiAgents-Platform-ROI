@@ -10,15 +10,51 @@ const port = process.env.PORT || 3000;
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://orchestrator_service:8000';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 
-// Configuration
+// Configuración de CORS: lista blanca explícita desde variable de entorno
+const ALLOWED_ORIGINS_RAW = process.env.CORS_ALLOWED_ORIGINS || '';
+const ALLOWED_ORIGINS: string[] = ALLOWED_ORIGINS_RAW
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
+
 app.use(cors({
-    origin: true,
+    origin: (origin, callback) => {
+        // Permitir solicitudes sin origin (ej. servidor a servidor, curl)
+        if (!origin) return callback(null, true);
+        // Si no hay lista configurada, permitir todo (modo desarrollo)
+        if (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+        return callback(new Error(`Origin ${origin} not allowed`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-token', 'x-tenant-id', 'x-signature']
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id', 'x-signature', 'Cookie']
 }));
 app.options('*', cors());
 app.use(express.json());
+
+// Middleware: valida sesión activa antes de inyectar el token admin
+async function validateSession(req: any, res: any, next: any) {
+    const cookieHeader = req.headers['cookie'] || '';
+    if (!cookieHeader) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    try {
+        const verifyRes = await axios.get(`${ORCHESTRATOR_URL}/auth/me`, {
+            headers: { cookie: cookieHeader },
+            timeout: 5000,
+        });
+        if (verifyRes.status !== 200) {
+            return res.status(401).json({ error: 'Invalid session' });
+        }
+        (req as any).user = verifyRes.data;
+        next();
+    } catch (err: any) {
+        if (err.response?.status === 401 || err.response?.status === 403) {
+            return res.status(401).json({ error: 'Session expired' });
+        }
+        return res.status(503).json({ error: 'Auth service unavailable' });
+    }
+}
 
 // --- Strict Contracts ---
 
@@ -41,7 +77,7 @@ interface BusinessAsset {
 // --- Smart SSE Logic ---
 
 // --- Global Stream (Phase 2: Mission Control) ---
-app.get('/api/engine/stream/global', async (req: Request, res: Response) => {
+app.get('/api/engine/stream/global', validateSession, async (req: Request, res: Response) => {
     console.log(`[SSE] Global Console connected`);
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -94,7 +130,7 @@ app.get('/api/engine/stream/global', async (req: Request, res: Response) => {
     loop();
 });
 
-app.get('/api/engine/stream/:tenantId', async (req: Request, res: Response) => {
+app.get('/api/engine/stream/:tenantId', validateSession, async (req: Request, res: Response) => {
     const { tenantId } = req.params;
     console.log(`[SSE] Client connected for Tenant: ${tenantId}`);
 
@@ -193,18 +229,19 @@ app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', service: 'bff-interface', mode: 'hybrid-sse' });
 });
 
-app.use(async (req: Request, res: Response) => {
-    // Inject Admin Token for /api/engine calls if coming from UI? 
-    // No, UI should send its auth. But for /admin calls proxying...
-    // Let's keep it simple: strict proxy.
+app.use(async (req: Request, res: Response, next: any) => {
+    // PROD-04: Validar sesión antes de inyectar el token admin en rutas /api/engine
+    if (req.originalUrl.startsWith('/api/engine')) {
+        return validateSession(req, res, async () => {
+            await proxyToOrchestrator(req, res);
+        });
+    }
+    await proxyToOrchestrator(req, res);
+});
 
-    // Rewrite path: /api/x -> /admin/x if needed? 
-    // Our UI calls /api/engine/ignite. Orchestrator expects /admin/engine/ignite.
-    // Let's do a smart rewrite for "User Friendly" API paths to "Internal Admin" paths
-
+async function proxyToOrchestrator(req: Request, res: Response) {
+    // Reescritura de rutas: /api/engine/* → /admin/engine/*
     let targetUrl = req.originalUrl;
-
-    // Rewrite Map
     if (req.originalUrl.startsWith('/api/engine')) {
         targetUrl = req.originalUrl.replace('/api/engine', '/admin/engine');
     }
@@ -220,9 +257,7 @@ app.use(async (req: Request, res: Response) => {
             headers: {
                 ...req.headers,
                 host: undefined,
-                // If it's an engine call, we might need to inject the admin token if the user doesn't have it.
-                // For MVP SetupExperience, we suppose the user has a temporary token or we Inject trusted one.
-                // Let's inject ADMIN_TOKEN for 'engine' calls to simplify the "No Auth Setup" requirement.
+                // Inyectar token admin server-side (nunca expuesto al browser)
                 ...(req.originalUrl.startsWith('/api/engine') ? { 'x-admin-token': ADMIN_TOKEN } : {})
             }
         });
@@ -235,7 +270,7 @@ app.use(async (req: Request, res: Response) => {
             res.status(502).json({ error: 'Orchestrator unavailable', details: error.message });
         }
     }
-});
+}
 
 app.listen(port, () => {
     console.log(`BFF Service running on port ${port}`);

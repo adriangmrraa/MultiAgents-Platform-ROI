@@ -11,8 +11,13 @@ from core.webhooks import MetaWebhookService
 from core.client import OrchestratorClient
 
 # Configuration
-META_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN", "nexus_verification_token")
+META_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN")
+if not META_VERIFY_TOKEN:
+    raise RuntimeError("META_VERIFY_TOKEN environment variable is required")
+
 META_APP_SECRET = os.getenv("META_APP_SECRET")
+if not META_APP_SECRET:
+    raise RuntimeError("META_APP_SECRET environment variable is required")
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator-service:8000")
 
 # Logging
@@ -130,9 +135,8 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Ingests and Normalizes Meta Events.
     """
-    # 1. Verify Signature (Security)
-    if META_APP_SECRET:
-        await webhook_service.verify_signature(request)
+    # 1. Verificar firma (seguridad obligatoria)
+    await webhook_service.verify_signature(request)
     
     # 2. Parse & Normalize
     try:
