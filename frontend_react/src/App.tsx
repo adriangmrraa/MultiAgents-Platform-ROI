@@ -43,6 +43,7 @@ import { TermsOfService } from './views/TermsOfService';
 import { MetaConnectionGuide } from './views/MetaConnectionGuide';
 import { Documentation } from './views/Documentation';
 import { Enterprise } from './views/Enterprise';
+import { PromoLanding } from './views/PromoLanding';
 
 function RequireSuperAdmin({ children }: { children: JSX.Element }) {
   const { user, isLoading } = useAuth();
@@ -183,6 +184,7 @@ function App() {
             <Route path="/meta-connection" element={<MetaConnectionGuide />} />
             <Route path="/docs" element={<Documentation />} />
             <Route path="/enterprise" element={<Enterprise />} />
+            <Route path="/promo" element={<PromoLanding />} />
 
             {/* Onboarding Wizard — fullscreen, outside Layout */}
             <Route path="/onboarding-wizard" element={
