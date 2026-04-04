@@ -5,17 +5,21 @@ from typing import Dict, Any
 
 logger = structlog.get_logger()
 
+
 class OrchestratorClient:
     """
     Client for communicating with the internal Orchestrator service.
     Handles authentication via Internal Secret.
     """
+
     def __init__(self):
-        self.base_url = os.getenv("ORCHESTRATOR_URL", "http://orchestrator_service:8000")
-        self.internal_secret = os.getenv("INTERNAL_SECRET_KEY", "internal-secret")
+        self.base_url = os.getenv(
+            "ORCHESTRATOR_URL", "http://orchestrator_service:8000"
+        )
+        self.internal_secret = os.getenv("INTERNAL_SECRET_KEY")
         self.headers = {
             "Content-Type": "application/json",
-            "X-Internal-Secret": self.internal_secret
+            "X-Internal-Secret": self.internal_secret,
         }
 
     async def ingest_webhook_event(self, event_data: Dict[str, Any]):

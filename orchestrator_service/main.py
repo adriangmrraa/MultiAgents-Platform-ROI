@@ -21,32 +21,53 @@ from email.mime.text import MIMEText
 from email.utils import formatdate
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union, Literal
-from fastapi import FastAPI, HTTPException, Header, Depends, status, Request, BackgroundTasks, WebSocket
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Header,
+    Depends,
+    status,
+    Request,
+    BackgroundTasks,
+    WebSocket,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from contextvars import ContextVar
 from pydantic import BaseModel, Field
 
 # Safety Protocols: Rate Limiting
-from app.middleware.rate_limit import RateLimitMiddleware # Import Middleware
+from app.middleware.rate_limit import RateLimitMiddleware  # Import Middleware (legacy)
+from app.middleware.rate_limit_enhanced import (
+    limiter,
+    attach_rate_limiter,
+)  # Enhanced rate limiting with slowapi
 
 # PROTOCOL OMEGA DEPLOYMENT TRACKER
-print(">> SYSTEM STARTUP: Protocol Omega v5.9.129 (Stream+SQL Fix Loaded)")
+pass  # Startup log emitted via lifespan logger below
 
 # --- Imports ---
 from app.core.tenant import TenantContext
 from app.api.deps import get_current_tenant_webhook, get_current_tenant_header
-from app.models.customer import Customer # Schema Drift Prevention
-from app.models.template import WhatsAppTemplate # v5.42 WhatsApp Module
-from app.models.rag import Document # v5.48 RAG Collections
-from app.workers.shadow_indexer import ShadowIndexer # v5.32 Shadow RAG
+from app.models.customer import Customer  # Schema Drift Prevention
+from app.models.template import WhatsAppTemplate  # v5.42 WhatsApp Module
+from app.models.rag import Document  # v5.48 RAG Collections
+from app.workers.shadow_indexer import ShadowIndexer  # v5.32 Shadow RAG
 
 # --- Dynamic Context ---
 tenant_store_id: ContextVar[Optional[str]] = ContextVar("tenant_store_id", default=None)
-tenant_access_token: ContextVar[Optional[str]] = ContextVar("tenant_access_token", default=None)
-current_tenant_id: ContextVar[Optional[int]] = ContextVar("current_tenant_id", default=None)
-current_conversation_id: ContextVar[Optional[uuid.UUID]] = ContextVar("current_conversation_id", default=None)
-current_customer_phone: ContextVar[Optional[str]] = ContextVar("current_customer_phone", default=None)
+tenant_access_token: ContextVar[Optional[str]] = ContextVar(
+    "tenant_access_token", default=None
+)
+current_tenant_id: ContextVar[Optional[int]] = ContextVar(
+    "current_tenant_id", default=None
+)
+current_conversation_id: ContextVar[Optional[uuid.UUID]] = ContextVar(
+    "current_conversation_id", default=None
+)
+current_customer_phone: ContextVar[Optional[str]] = ContextVar(
+    "current_customer_phone", default=None
+)
 
 try:
     from langchain.agents import AgentExecutor, create_openai_functions_agent
@@ -63,7 +84,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 from db import db, redis_client
-from app.core.credentials import get_tenant_credential, get_tenant_credential_by_type 
+from app.core.credentials import get_tenant_credential, get_tenant_credential_by_type
 from app.core.db_setup import background_db_setup  # Nexus v5.9 Self-Healing
 
 # Configuration & Environment
@@ -74,18 +95,24 @@ POSTGRES_DSN = os.getenv("POSTGRES_DSN")
 
 # Fallback Tienda Nube credentials (from Env Vars)
 GLOBAL_TN_STORE_ID = os.getenv("TIENDANUBE_STORE_ID") or os.getenv("GLOBAL_TN_STORE_ID")
-GLOBAL_TN_ACCESS_TOKEN = os.getenv("TIENDANUBE_ACCESS_TOKEN") or os.getenv("GLOBAL_TN_ACCESS_TOKEN")
+GLOBAL_TN_ACCESS_TOKEN = os.getenv("TIENDANUBE_ACCESS_TOKEN") or os.getenv(
+    "GLOBAL_TN_ACCESS_TOKEN"
+)
 
 # Service URLs & Feature Flags (Nexus v3 Decentralized Architecture)
 NEXUS_V3_ENABLED = os.getenv("NEXUS_V3_ENABLED", "true").lower() == "true"
 AGENT_SERVICE_URL = os.getenv("AGENT_SERVICE_URL", "http://agent_service:8001")
-TIENDANUBE_SERVICE_URL = os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003")
+TIENDANUBE_SERVICE_URL = os.getenv(
+    "TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003"
+)
 WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL")
 if not WHATSAPP_SERVICE_URL:
     # Use underscore as primary, will fallback to dash in unified_message_delivery if needed
     WHATSAPP_SERVICE_URL = "http://whatsapp_service:8002"
-INTERNAL_SECRET_KEY = os.getenv("INTERNAL_API_TOKEN") or os.getenv("INTERNAL_SECRET_KEY")
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "agente-js-secret-key-2024")
+INTERNAL_SECRET_KEY = os.getenv("INTERNAL_API_TOKEN") or os.getenv(
+    "INTERNAL_SECRET_KEY"
+)
+ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "")
 
 from app.core.config import settings
 
@@ -100,7 +127,7 @@ GLOBAL_SYSTEM_PROMPT = os.getenv("GLOBAL_SYSTEM_PROMPT")
 structlog.configure(
     processors=[
         structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer()
+        structlog.processors.JSONRenderer(),
     ],
     logger_factory=structlog.PrintLoggerFactory(),
 )
@@ -119,16 +146,28 @@ class MediaObject:
     def __init__(self, url, provider_id, m_type, mime=None, filename=None):
         self.url = url
         self.provider_id = str(provider_id)
-        self.type = m_type # image, video, audio, file
+        self.type = m_type  # image, video, audio, file
         self.mime_type = mime
         self.file_name = filename
 
+
 class SimpleEvent:
-    def __init__(self, from_num, text, msg_id, channel_source='whatsapp', external_cw_id=None, external_acc_id=None, tenant_id=None, media=None, event_type="message"):
+    def __init__(
+        self,
+        from_num,
+        text,
+        msg_id,
+        channel_source="whatsapp",
+        external_cw_id=None,
+        external_acc_id=None,
+        tenant_id=None,
+        media=None,
+        event_type="message",
+    ):
         self.from_number = str(from_num) if from_num is not None else None
         self.text = str(text) if text is not None else ""
         self.event_id = str(msg_id) if msg_id is not None else None
-        self.customer_name = from_num # Fallback
+        self.customer_name = from_num  # Fallback
         self.event_type = event_type
         self.media = media or []
         self.correlation_id = str(uuid.uuid4())
@@ -136,7 +175,8 @@ class SimpleEvent:
         self.external_chatwoot_id = external_cw_id
         self.external_account_id = external_acc_id
         self.tenant_id = tenant_id
-        self.role = 'user' # Default
+        self.role = "user"  # Default
+
 
 # FastAPI App
 from contextlib import asynccontextmanager
@@ -146,15 +186,25 @@ from admin_routes import router as admin_router, sync_environment
 from app.routes.auth_routes import router as auth_router
 from app.routes.platform_routes import router as platform_router
 from app.routes.billing_routes import router as billing_router  # SaaS Billing
-from app.routes.gallery_routes import router as gallery_router  # Smart Gallery (Pomelli-style)
-from app.routes.ingest_routes import router as ingest_router # NEW
-from app.routes.voice_widget_routes import router as voice_widget_router, public_router as voice_widget_public_router  # Voice Widget v1.0
-from app.routes.onboarding_wizard_routes import router as onboarding_wizard_router  # Onboarding Wizard v1.0
+from app.routes.gallery_routes import (
+    router as gallery_router,
+)  # Smart Gallery (Pomelli-style)
+from app.routes.ingest_routes import router as ingest_router  # NEW
+from app.routes.voice_widget_routes import (
+    router as voice_widget_router,
+    public_router as voice_widget_public_router,
+)  # Voice Widget v1.0
+from app.routes.onboarding_wizard_routes import (
+    router as onboarding_wizard_router,
+)  # Onboarding Wizard v1.0
 from app.routes.nova_routes import router as nova_router  # Nova Platform Assistant v1.0
-from app.routes.product_routes import router as product_router, internal_search_router  # Internal Product Catalog v1.0
+from app.routes.product_routes import (
+    router as product_router,
+    internal_search_router,
+)  # Internal Product Catalog v1.0
 from app.routes.voice_widget_ws import voice_websocket_handler  # Voice Widget WebSocket
-from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
-from app.api.onboarding import router as onboarding_router # Hyper-Onboarding
+from app.api.onboarding import router as onboarding_router  # Hyper-Onboarding
+from app.api.onboarding import router as onboarding_router  # Hyper-Onboarding
 
 
 from app.core.database import AsyncSessionLocal, engine
@@ -595,7 +645,6 @@ migration_steps = [
     "CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages (conversation_id, created_at);",
     "CREATE INDEX IF NOT EXISTS idx_chat_conversations_tenant ON chat_conversations (tenant_id, updated_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_chat_messages_media ON chat_messages (media_id);",
-    
     # 12. Advanced Features Columns
     """
     DO $$
@@ -604,7 +653,6 @@ migration_steps = [
         ALTER TABLE tenants ADD COLUMN IF NOT EXISTS total_tool_calls BIGINT DEFAULT 0;
     END $$;
     """,
-    
     # 13. Update Prompt
     """
     UPDATE tenants 
@@ -945,7 +993,6 @@ CATALOGO:
 
     END $$;
     """,
-    
     # 31. Channel Bindings Table (Multi-Tenant Architecture v7.0)
     """
     CREATE TABLE IF NOT EXISTS channel_bindings (
@@ -975,7 +1022,6 @@ CATALOGO:
         END IF;
     END $$;
     """,
-    
     # 32. Auto-migrate existing channels (v7.0 - Only if empty)
     """
     INSERT INTO channel_bindings (tenant_id, provider, channel_id, label, created_at)
@@ -990,7 +1036,6 @@ CATALOGO:
       AND NOT EXISTS (SELECT 1 FROM channel_bindings)
     ON CONFLICT (provider, channel_id) DO NOTHING;
     """,
-    
     # 33. Verify Agent FK Constraint (v7.0)
     """
     DO $$
@@ -1101,7 +1146,6 @@ CATALOGO:
         RAISE NOTICE 'Migration 36 (Fix Credentials Constraints) failed: %', SQLERRM;
     END $$;
     """,
-
     # 37. Global Templates (v7.2.1)
     """
     DO $$
@@ -1298,7 +1342,7 @@ CATALOGO:
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE 'Migration 44 indexes skipped: %', SQLERRM;
     END $$;
-    """
+    """,
 ]
 
 
@@ -1336,14 +1380,20 @@ async def _sync_all_tenants_orders():
           AND is_valid = true
     """)
 
-    tn_service_url = os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003")
-    internal_secret = os.getenv("INTERNAL_SECRET_KEY") or os.getenv("INTERNAL_API_TOKEN")
+    tn_service_url = os.getenv(
+        "TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003"
+    )
+    internal_secret = os.getenv("INTERNAL_SECRET_KEY") or os.getenv(
+        "INTERNAL_API_TOKEN"
+    )
 
     for row in rows:
         tenant_id = row["tenant_id"]
         try:
             access_token = await TokenManager.get_valid_token(tenant_id, "tiendanube")
-            store_id = await get_tenant_credential_by_type(tenant_id, "TIENDANUBE_USER_ID")
+            store_id = await get_tenant_credential_by_type(
+                tenant_id, "TIENDANUBE_USER_ID"
+            )
 
             if not store_id:
                 raw = await db.pool.fetchval(
@@ -1351,13 +1401,16 @@ async def _sync_all_tenants_orders():
                 )
                 if raw:
                     from utils import decrypt_password
+
                     store_id = decrypt_password(str(raw))
 
             if not access_token or not store_id:
                 continue
 
             # Fetch orders from last 24h
-            date_from = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%dT00:00:00")
+            date_from = (datetime.utcnow() - timedelta(hours=24)).strftime(
+                "%Y-%m-%dT00:00:00"
+            )
 
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
@@ -1367,7 +1420,7 @@ async def _sync_all_tenants_orders():
                         "access_token": access_token,
                         "date_from": date_from,
                     },
-                    headers={"X-Internal-Secret": internal_secret}
+                    headers={"X-Internal-Secret": internal_secret},
                 )
                 if resp.status_code != 200:
                     continue
@@ -1378,15 +1431,19 @@ async def _sync_all_tenants_orders():
             orders = data["data"].get("orders", [])
             new_count = 0
             for order in orders:
-                stored = await SalesAttributionService.process_and_store_order(tenant_id, order)
+                stored = await SalesAttributionService.process_and_store_order(
+                    tenant_id, order
+                )
                 if stored:
                     new_count += 1
 
             if new_count > 0:
-                logger.info("orders_synced",
-                            tenant_id=tenant_id,
-                            new_orders=new_count,
-                            total_fetched=len(orders))
+                logger.info(
+                    "orders_synced",
+                    tenant_id=tenant_id,
+                    new_orders=new_count,
+                    total_fetched=len(orders),
+                )
 
             # Rate limit: small delay between tenants
             await asyncio.sleep(2)
@@ -1399,14 +1456,14 @@ async def _sync_all_tenants_orders():
 async def lifespan(app: FastAPI):
     # --- Flight Check (Nexus v3.2 Protocol) ---
     logger.info("system_startup_initiated", version="v3.2 Protocol Omega")
-    
+
     # 1. Environment Audit
     env_status = {
         "OPENAI_API_KEY": bool(OPENAI_API_KEY),
         "POSTGRES_DSN": bool(POSTGRES_DSN),
         "REDIS_URL": bool(REDIS_URL),
         "TIENDANUBE_TOKEN": bool(GLOBAL_TN_ACCESS_TOKEN),
-        "INTERNAL_SECRET": bool(INTERNAL_SECRET_KEY)
+        "INTERNAL_SECRET": bool(INTERNAL_SECRET_KEY),
     }
     logger.info("environment_audit", **env_status)
 
@@ -1414,21 +1471,23 @@ async def lifespan(app: FastAPI):
     try:
         # 2. Connectivity Check: Postgres
         if not POSTGRES_DSN:
-             logger.error("missing_postgres_dsn")
+            logger.error("missing_postgres_dsn")
         else:
-             await db.connect() 
-             logger.info("connectivity_check", service="postgres", status="connected")
-             
+            await db.connect()
+            logger.info("connectivity_check", service="postgres", status="connected")
+
         # 3. Connectivity Check: Redis
         try:
-             await redis_client.ping()
-             logger.info("connectivity_check", service="redis", status="connected")
+            await redis_client.ping()
+            logger.info("connectivity_check", service="redis", status="connected")
         except Exception as r_err:
-             logger.error("connectivity_check", service="redis", status="failed", error=str(r_err))
+            logger.error(
+                "connectivity_check", service="redis", status="failed", error=str(r_err)
+            )
 
         # 4. Auto-Migration for EasyPanel (Schema Repair & Prep)
         logger.info("maintenance_robot_start", strategy="schema_surgeon")
-        
+
         # Execute migration steps sequentially
         for i, step in enumerate(migration_steps):
             try:
@@ -1452,18 +1511,29 @@ async def lifespan(app: FastAPI):
         from app.models.base import Base
         from app.models.tenant import Tenant
         from app.models.chat import ChatConversation, ChatMessage, ChatMedia
-        from app.models.customer import Customer # Fixes "Phantom Table" issue
-        from app.models.agent import Agent # Nexus v3 Agent Support
-        from app.models.auth import User # Sovereign Identity
-        from app.models.billing import Plan, Subscription, UsageRecord, Invoice, AuditLog  # SaaS Billing
+        from app.models.customer import Customer  # Fixes "Phantom Table" issue
+        from app.models.agent import Agent  # Nexus v3 Agent Support
+        from app.models.auth import User  # Sovereign Identity
+        from app.models.billing import (
+            Plan,
+            Subscription,
+            UsageRecord,
+            Invoice,
+            AuditLog,
+        )  # SaaS Billing
         from app.models.attributed_sale import AttributedSale  # ROI Real v8.0
-        from app.models.voice_widget import VoiceWidgetConfig, VoiceUsageRecord  # Voice Widget v1.0
+        from app.models.voice_widget import (
+            VoiceWidgetConfig,
+            VoiceUsageRecord,
+        )  # Voice Widget v1.0
         from app.models.onboarding import OnboardingProgress  # Onboarding Wizard v1.0
-        from app.models.internal_product import InternalProduct  # Internal Product Catalog v1.0
+        from app.models.internal_product import (
+            InternalProduct,
+        )  # Internal Product Catalog v1.0
 
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            
+
         # 6. Hydrate Data (SQLAlchemy session)
         async with AsyncSessionLocal() as session:
             try:
@@ -1476,6 +1546,7 @@ async def lifespan(app: FastAPI):
         # 7. SaaS Services: Usage Tracker + Trial Manager
         try:
             from app.services.usage_tracker import init_usage_tracker
+
             init_usage_tracker(db)
             logger.info("usage_tracker_initialized")
         except Exception as ut_err:
@@ -1483,6 +1554,7 @@ async def lifespan(app: FastAPI):
 
         try:
             from app.services.trial_manager import trial_check_loop
+
             asyncio.create_task(trial_check_loop(db.pool))
             logger.info("trial_manager_started")
         except Exception as tm_err:
@@ -1491,6 +1563,7 @@ async def lifespan(app: FastAPI):
         # 8. Run billing migration (idempotent - safe to run on every startup)
         try:
             from scripts.migrate_saas_billing import run_startup_billing_migration
+
             await run_startup_billing_migration(db)
             # Verify plans were seeded
             plan_count = await db.pool.fetchval("SELECT COUNT(*) FROM plans")
@@ -1508,22 +1581,27 @@ async def lifespan(app: FastAPI):
         # 10. Nova Daily Analysis (Phase 5 — conversation insights cron)
         try:
             from app.services.nova_daily_analysis import nova_daily_analysis_loop
+
             asyncio.create_task(nova_daily_analysis_loop(db.pool, redis_client))
             logger.info("nova_daily_analysis_started")
         except Exception as nd_err:
             logger.error("nova_daily_analysis_start_failed", error=str(nd_err))
 
         logger.info("system_startup_complete", port=8000)
-        
+
     except Exception as e:
-        logger.error("startup_critical_error", error=str(e), dsn_preview=POSTGRES_DSN[:15] if POSTGRES_DSN else "None")
+        logger.error(
+            "startup_critical_error",
+            error=str(e),
+            dsn_preview=POSTGRES_DSN[:15] if POSTGRES_DSN else "None",
+        )
         # Optimization: We let it start, but health checks will fail.
         if "Name or service not known" in str(e):
-             print(f"CRITICAL DNS ERROR: Cannot resolve database host. Check your POSTGRES_DSN: {POSTGRES_DSN}")
-             raise e
-    
+            logger.critical("db_dns_error", dsn_preview=POSTGRES_DSN[:15] if POSTGRES_DSN else "None")
+            raise e
+
     yield
-    
+
     # Migration: Ensure Users table has profile fields
     try:
         # Use the fixed helper method
@@ -1533,47 +1611,89 @@ async def lifespan(app: FastAPI):
             ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500),
             ADD COLUMN IF NOT EXISTS last_verification_email_at TIMESTAMPTZ;
         """)
-        await db.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
+        await db.execute(
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE"
+        )
     except Exception as e:
-        logger.warning(f"Migration profile fields check failed (ignoring for shutdown): {e}")
+        logger.warning(
+            f"Migration profile fields check failed (ignoring for shutdown): {e}"
+        )
 
     # Shutdown
     await db.disconnect()
     await engine.dispose()
     logger.info("shutdown_complete")
 
+
 # FastAPI App Initialization
 app = FastAPI(
     title="Orchestrator Service",
     description="Central intelligence for Kilocode microservices.",
     version="1.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # --- CORS Policy Restoration (Nexus v5.5) ---
-# Hardcoded fallbacks as per mission requirements
-default_origins = [
-    "https://multiagents-frontend.yn8wow.easypanel.host",
-    "http://localhost:3000",
-    "http://localhost:5173"
-]
+# Enhanced with RF‑007: Reflective CORS vulnerability fix
+import logging
 
-# Load from ENV if available
+logger = logging.getLogger(__name__)
+
+# Primary source: settings.CORS_ALLOWED_ORIGINS (env var CORS_ALLOWED_ORIGINS)
+allowed_origins = (
+    settings.CORS_ALLOWED_ORIGINS.copy()
+    if isinstance(settings.CORS_ALLOWED_ORIGINS, list)
+    else []
+)
+
+# Backward compatibility: merge ALLOWED_ORIGINS env var
 env_origins = os.getenv("ALLOWED_ORIGINS", "")
 if env_origins:
-    extra_origins = [o.strip() for o in env_origins.split(",") if o.strip()]
-    default_origins.extend(extra_origins)
+    extra = [o.strip() for o in env_origins.split(",") if o.strip()]
+    allowed_origins.extend(extra)
 
-# Deduplicate
-final_origins = list(set(default_origins))
+# Remove duplicates (preserve order maybe not needed)
+final_origins = list(set(allowed_origins))
+
+# Security: warn about wildcard usage
+if "*" in final_origins:
+    logger.warning(
+        "CORS allowed_origins contains wildcard '*'; this is insecure and should be removed in production. "
+        "allow_credentials will be forced to False."
+    )
+    # With wildcard present, we must not allow credentials (spec RF‑007)
+    allow_creds = False
+    # Remove wildcard from list because CORSMiddleware expects a list of strings, "*" is special.
+    # Actually, CORSMiddleware treats "*" as a special value; we keep it but set allow_credentials=False.
+else:
+    allow_creds = True
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=final_origins,
-    allow_credentials=True,
+    allow_credentials=allow_creds,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Security Headers (XSS, clickjacking, etc.)
+from app.middleware.security_headers import SecurityHeadersMiddleware
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Audit Logging for compliance (SOC2, ISO27001)
+from app.middleware.audit import AuditMiddleware
+
+app.add_middleware(AuditMiddleware)
+
+# API Security Hardening (RF-206)
+# - Request size limit: 1MB
+# - Default timeout: 30s (configurable per endpoint via @router.post(..., timeout=60))
+# - Request ID tracing header
+from app.middleware.api_security import APISecurityMiddleware, RequestIDMiddleware
+
+app.add_middleware(APISecurityMiddleware)
+app.add_middleware(RequestIDMiddleware)
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(billing_router)  # SaaS Billing Routes
@@ -1582,20 +1702,22 @@ from app.api import agents, templates
 
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(templates.router, prefix="/api/templates", tags=["templates"])
-app.include_router(platform_router) # Platform Router (God Mode)
+app.include_router(platform_router)  # Platform Router (God Mode)
 
 # SaaS Subscription Guard (blocks expired trials/suspended accounts)
 from app.middleware.subscription_guard import SubscriptionGuardMiddleware
+
 app.add_middleware(SubscriptionGuardMiddleware)
 
-app.add_middleware(RateLimitMiddleware)
+# app.add_middleware(RateLimitMiddleware)  # Replaced by enhanced rate limiting (slowapi) attached after routers
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error("unhandled_exception", error=str(exc))
     response = JSONResponse(
         status_code=500,
-        content={"detail": "Internal Server Error", "error": str(exc)},
+        content={"detail": "Internal Server Error"},
     )
     # Manually add CORS headers to exception response to avoid "CORS Error" masking the real 500
     origin = request.headers.get("origin")
@@ -1604,18 +1726,28 @@ async def global_exception_handler(request: Request, exc: Exception):
         response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
+
 # (CORS Configuration moved to top for startup priority)
+
 
 # Root Endpoint for basic health checks (Traefik/EasyPanel)
 @app.get("/")
 async def root():
     return {"status": "ok", "service": "orchestrator", "version": "1.1.0"}
 
+
+# API Versioning (RF-206)
+@app.get("/api/v1/{path:path}")
+async def v1_deprecated(path: str):
+    return {"message": "v1 is deprecated, please use v2", "deprecated": True}
+
+
 class ToolResponse(BaseModel):
     ok: bool
     data: Optional[Any] = None
     error: Optional[ToolError] = None
     meta: Optional[Dict[str, Any]] = None
+
 
 class InboundMedia(BaseModel):
     type: str
@@ -1624,23 +1756,33 @@ class InboundMedia(BaseModel):
     file_name: Optional[str] = None
     provider_id: Optional[str] = None
 
+
 class InboundChatEvent(BaseModel):
     provider: str
     event_id: str
     provider_message_id: str
     from_number: str
     to_number: Optional[str] = None
-    text: Optional[str] = None # made optional for pure media messages
+    text: Optional[str] = None  # made optional for pure media messages
     customer_name: Optional[str] = None
     event_type: str
     correlation_id: str
     media: Optional[List[InboundMedia]] = None
 
+
 class OrchestratorMessage(BaseModel):
-    part: Optional[int] = Field(None, description="The sequence number of this message.")
+    part: Optional[int] = Field(
+        None, description="The sequence number of this message."
+    )
     total: Optional[int] = Field(None, description="The total number of messages.")
-    text: Optional[str] = Field(None, description="The text content of this message burst.")
-    imageUrl: Optional[str] = Field(None, description="The URL of the product image (images[0].src from tools), or null if no image is available.")
+    text: Optional[str] = Field(
+        None, description="The text content of this message burst."
+    )
+    imageUrl: Optional[str] = Field(
+        None,
+        description="The URL of the product image (images[0].src from tools), or null if no image is available.",
+    )
+
 
 class OrchestratorResult(BaseModel):
     status: Literal["ok", "duplicate", "ignored", "error"]
@@ -1652,9 +1794,6 @@ class OrchestratorResult(BaseModel):
 
 # (Middleware and app instance moved to top)
 
-@app.get("/health")
-async def health_check():
-    return {"status": "ok", "service": "orchestrator"}
 
 # --- Include Admin Router ---
 app.include_router(admin_router)
@@ -1666,6 +1805,9 @@ app.include_router(nova_router)  # Nova Platform Assistant
 app.include_router(product_router)  # Internal Product Catalog
 app.include_router(internal_search_router)  # Internal Product Search (TN-compatible)
 app.include_router(voice_widget_public_router)  # Voice Widget Public SDK Endpoints
+
+# Enhanced rate limiting (slowapi) - attach after all routers are included
+attach_rate_limiter(app)
 
 
 @app.websocket("/public/voice-widget/ws/{session_id}")
@@ -1721,7 +1863,7 @@ async def onboarding_realtime_ws_inner(websocket: WebSocket, session_id: str):
         url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview"
         headers = {
             "Authorization": f"Bearer {config['api_key']}",
-            "OpenAI-Beta": "realtime=v1"
+            "OpenAI-Beta": "realtime=v1",
         }
 
         # Build instructions with language enforcement
@@ -1745,30 +1887,267 @@ ESTRATEGIA: Al inicio, pedi al usuario su sitio web, Instagram o Facebook si no 
 
 {base_instructions}"""
 
-        logger.info("onboarding_realtime_instructions", length=len(instructions), first_100=instructions[:100])
+        logger.info(
+            "onboarding_realtime_instructions",
+            length=len(instructions),
+            first_100=instructions[:100],
+        )
 
         # Define Nova's tools for saving prompt sections + controlling UI
         nova_tools = [
-            {"type": "function", "name": "guardar_identidad", "description": "Guardar la seccion IDENTIDAD del system prompt. Llamar cuando tengas nombre del negocio, rubro, cliente ideal y diferencial.", "parameters": {"type": "object", "properties": {"nombre_negocio": {"type": "string"}, "rubro": {"type": "string"}, "cliente_ideal": {"type": "string"}, "diferencial": {"type": "string"}, "prompt_seccion": {"type": "string", "description": "Texto completo de la seccion IDENTIDAD con densidad Pointe Coach"}}, "required": ["prompt_seccion"]}},
-            {"type": "function", "name": "guardar_tono", "description": "Guardar la seccion TONO Y PERSONALIDAD. Llamar cuando tengas pronombres, formalidad, emojis, muletillas, frases prohibidas.", "parameters": {"type": "object", "properties": {"prompt_seccion": {"type": "string", "description": "Texto completo de la seccion TONO Y PERSONALIDAD"}}, "required": ["prompt_seccion"]}},
-            {"type": "function", "name": "guardar_reglas", "description": "Guardar REGLAS DE NEGOCIO. Llamar cuando tengas envios, cambios, horarios, pagos, prohibiciones.", "parameters": {"type": "object", "properties": {"prompt_seccion": {"type": "string", "description": "Texto completo de la seccion REGLAS como imperativos"}}, "required": ["prompt_seccion"]}},
-            {"type": "function", "name": "guardar_diccionario", "description": "Guardar DICCIONARIO DE SINONIMOS. Llamar cuando tengas sinonimos de productos, jerga, abreviaciones.", "parameters": {"type": "object", "properties": {"prompt_seccion": {"type": "string", "description": "Texto completo del DICCIONARIO con minimo 5 sinonimos por categoria"}}, "required": ["prompt_seccion"]}},
-            {"type": "function", "name": "finalizar_configuracion", "description": "Llamar cuando TODAS las secciones estan guardadas. Cierra la conversacion.", "parameters": {"type": "object", "properties": {"resumen_final": {"type": "string"}}, "required": ["resumen_final"]}},
-            {"type": "function", "name": "cambiar_seccion", "description": "Cambiar la seccion visible en la UI. Mostrar titulo, descripcion y botones al usuario.", "parameters": {"type": "object", "properties": {"seccion_activa": {"type": "string"}, "titulo": {"type": "string"}, "descripcion": {"type": "string"}, "botones": {"type": "array", "items": {"type": "object", "properties": {"label": {"type": "string"}, "accion": {"type": "string"}, "estilo": {"type": "string"}}}}}, "required": ["seccion_activa"]}},
-            {"type": "function", "name": "mostrar_dato_extraido", "description": "Mostrar un dato de las redes sociales como card visual. Usar al inicio para presentar la investigacion.", "parameters": {"type": "object", "properties": {"tipo": {"type": "string"}, "titulo": {"type": "string"}, "valor": {"type": "string"}, "icono": {"type": "string"}}, "required": ["titulo", "valor"]}},
-            {"type": "function", "name": "investigar_web", "description": "Scrapear una URL web para extraer informacion del negocio. Usar cuando el usuario comparte una URL de su sitio web, redes sociales, o tienda online. Devuelve el contenido de la pagina.", "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL completa a investigar (ej: https://www.ejemplo.com)"}}, "required": ["url"]}},
+            {
+                "type": "function",
+                "name": "guardar_identidad",
+                "description": "Guardar la seccion IDENTIDAD del system prompt. Llamar cuando tengas nombre del negocio, rubro, cliente ideal y diferencial.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "nombre_negocio": {"type": "string"},
+                        "rubro": {"type": "string"},
+                        "cliente_ideal": {"type": "string"},
+                        "diferencial": {"type": "string"},
+                        "prompt_seccion": {
+                            "type": "string",
+                            "description": "Texto completo de la seccion IDENTIDAD con densidad Pointe Coach",
+                        },
+                    },
+                    "required": ["prompt_seccion"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "guardar_tono",
+                "description": "Guardar la seccion TONO Y PERSONALIDAD. Llamar cuando tengas pronombres, formalidad, emojis, muletillas, frases prohibidas.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "prompt_seccion": {
+                            "type": "string",
+                            "description": "Texto completo de la seccion TONO Y PERSONALIDAD",
+                        }
+                    },
+                    "required": ["prompt_seccion"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "guardar_reglas",
+                "description": "Guardar REGLAS DE NEGOCIO. Llamar cuando tengas envios, cambios, horarios, pagos, prohibiciones.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "prompt_seccion": {
+                            "type": "string",
+                            "description": "Texto completo de la seccion REGLAS como imperativos",
+                        }
+                    },
+                    "required": ["prompt_seccion"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "guardar_diccionario",
+                "description": "Guardar DICCIONARIO DE SINONIMOS. Llamar cuando tengas sinonimos de productos, jerga, abreviaciones.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "prompt_seccion": {
+                            "type": "string",
+                            "description": "Texto completo del DICCIONARIO con minimo 5 sinonimos por categoria",
+                        }
+                    },
+                    "required": ["prompt_seccion"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "finalizar_configuracion",
+                "description": "Llamar cuando TODAS las secciones estan guardadas. Cierra la conversacion.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"resumen_final": {"type": "string"}},
+                    "required": ["resumen_final"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "cambiar_seccion",
+                "description": "Cambiar la seccion visible en la UI. Mostrar titulo, descripcion y botones al usuario.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "seccion_activa": {"type": "string"},
+                        "titulo": {"type": "string"},
+                        "descripcion": {"type": "string"},
+                        "botones": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "label": {"type": "string"},
+                                    "accion": {"type": "string"},
+                                    "estilo": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                    "required": ["seccion_activa"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "mostrar_dato_extraido",
+                "description": "Mostrar un dato de las redes sociales como card visual. Usar al inicio para presentar la investigacion.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tipo": {"type": "string"},
+                        "titulo": {"type": "string"},
+                        "valor": {"type": "string"},
+                        "icono": {"type": "string"},
+                    },
+                    "required": ["titulo", "valor"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "investigar_web",
+                "description": "Scrapear una URL web para extraer informacion del negocio. Usar cuando el usuario comparte una URL de su sitio web, redes sociales, o tienda online. Devuelve el contenido de la pagina.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "URL completa a investigar (ej: https://www.ejemplo.com)",
+                        }
+                    },
+                    "required": ["url"],
+                },
+            },
             # Product catalog tools
-            {"type": "function", "name": "agregar_producto", "description": "Agregar un producto al catalogo interno. Usar cuando el usuario quiere cargar un producto.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "price": {"type": "number"}, "description": {"type": "string"}, "category": {"type": "string"}, "stock": {"type": "integer"}, "variants": {"type": "string", "description": "Variantes separadas por coma: S, M, L, XL"}}, "required": ["name", "price"]}},
-            {"type": "function", "name": "editar_producto", "description": "Editar un producto existente.", "parameters": {"type": "object", "properties": {"product_id": {"type": "integer"}, "name": {"type": "string"}, "price": {"type": "number"}, "stock": {"type": "integer"}, "description": {"type": "string"}}, "required": ["product_id"]}},
-            {"type": "function", "name": "eliminar_producto", "description": "Eliminar un producto.", "parameters": {"type": "object", "properties": {"product_id": {"type": "integer"}}, "required": ["product_id"]}},
-            {"type": "function", "name": "listar_productos", "description": "Ver el catalogo de productos. Retorna nombre, precio y stock.", "parameters": {"type": "object", "properties": {"category": {"type": "string"}}}},
-            {"type": "function", "name": "actualizar_stock", "description": "Actualizar stock de un producto.", "parameters": {"type": "object", "properties": {"product_id": {"type": "integer"}, "stock": {"type": "integer"}}, "required": ["product_id", "stock"]}},
+            {
+                "type": "function",
+                "name": "agregar_producto",
+                "description": "Agregar un producto al catalogo interno. Usar cuando el usuario quiere cargar un producto.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "price": {"type": "number"},
+                        "description": {"type": "string"},
+                        "category": {"type": "string"},
+                        "stock": {"type": "integer"},
+                        "variants": {
+                            "type": "string",
+                            "description": "Variantes separadas por coma: S, M, L, XL",
+                        },
+                    },
+                    "required": ["name", "price"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "editar_producto",
+                "description": "Editar un producto existente.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "product_id": {"type": "integer"},
+                        "name": {"type": "string"},
+                        "price": {"type": "number"},
+                        "stock": {"type": "integer"},
+                        "description": {"type": "string"},
+                    },
+                    "required": ["product_id"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "eliminar_producto",
+                "description": "Eliminar un producto.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"product_id": {"type": "integer"}},
+                    "required": ["product_id"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "listar_productos",
+                "description": "Ver el catalogo de productos. Retorna nombre, precio y stock.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"category": {"type": "string"}},
+                },
+            },
+            {
+                "type": "function",
+                "name": "actualizar_stock",
+                "description": "Actualizar stock de un producto.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "product_id": {"type": "integer"},
+                        "stock": {"type": "integer"},
+                    },
+                    "required": ["product_id", "stock"],
+                },
+            },
             # Agent management tools
-            {"type": "function", "name": "modificar_prompt", "description": "Agregar o editar una seccion del system prompt del agente de ventas.", "parameters": {"type": "object", "properties": {"seccion": {"type": "string", "description": "Nombre de la seccion: identidad, tono, reglas, diccionario, o nueva"}, "contenido": {"type": "string", "description": "Nuevo contenido de la seccion"}}, "required": ["seccion", "contenido"]}},
-            {"type": "function", "name": "agregar_regla", "description": "Agregar regla de negocio al prompt del agente.", "parameters": {"type": "object", "properties": {"regla": {"type": "string"}}, "required": ["regla"]}},
-            {"type": "function", "name": "agregar_sinonimo", "description": "Agregar sinonimos al diccionario del agente.", "parameters": {"type": "object", "properties": {"categoria": {"type": "string"}, "sinonimos": {"type": "string"}}, "required": ["categoria", "sinonimos"]}},
-            {"type": "function", "name": "ver_prompt_actual", "description": "Ver el system prompt actual del agente.", "parameters": {"type": "object", "properties": {}}},
-            {"type": "function", "name": "ver_errores_agente", "description": "Ver las ultimas derivaciones y errores del agente.", "parameters": {"type": "object", "properties": {}}}
+            {
+                "type": "function",
+                "name": "modificar_prompt",
+                "description": "Agregar o editar una seccion del system prompt del agente de ventas.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "seccion": {
+                            "type": "string",
+                            "description": "Nombre de la seccion: identidad, tono, reglas, diccionario, o nueva",
+                        },
+                        "contenido": {
+                            "type": "string",
+                            "description": "Nuevo contenido de la seccion",
+                        },
+                    },
+                    "required": ["seccion", "contenido"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "agregar_regla",
+                "description": "Agregar regla de negocio al prompt del agente.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"regla": {"type": "string"}},
+                    "required": ["regla"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "agregar_sinonimo",
+                "description": "Agregar sinonimos al diccionario del agente.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "categoria": {"type": "string"},
+                        "sinonimos": {"type": "string"},
+                    },
+                    "required": ["categoria", "sinonimos"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "ver_prompt_actual",
+                "description": "Ver el system prompt actual del agente.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+            {
+                "type": "function",
+                "name": "ver_errores_agente",
+                "description": "Ver las ultimas derivaciones y errores del agente.",
+                "parameters": {"type": "object", "properties": {}},
+            },
         ]
 
         # Extract meta summary for greeting
@@ -1781,28 +2160,37 @@ ESTRATEGIA: Al inicio, pedi al usuario su sitio web, Instagram o Facebook si no 
                     meta_block = parts[1].split("Usa esta informacion")[0].strip()
                 meta_summary = meta_block
 
-        logger.info("onboarding_realtime_v2", has_meta=bool(meta_summary), meta_len=len(meta_summary), tools=len(nova_tools))
+        logger.info(
+            "onboarding_realtime_v2",
+            has_meta=bool(meta_summary),
+            meta_len=len(meta_summary),
+            tools=len(nova_tools),
+        )
 
         async with websockets.connect(url, additional_headers=headers) as openai_ws:
             # Configure session with tools + VAD tuned
-            await openai_ws.send(_json.dumps({
-                "type": "session.update",
-                "session": {
-                    "instructions": instructions,
-                    "voice": "coral",
-                    "input_audio_format": "pcm16",
-                    "output_audio_format": "pcm16",
-                    "input_audio_transcription": {"model": "whisper-1"},
-                    "tools": nova_tools,
-                    "tool_choice": "auto",
-                    "turn_detection": {
-                        "type": "server_vad",
-                        "threshold": 0.5,
-                        "prefix_padding_ms": 800,
-                        "silence_duration_ms": 5000
+            await openai_ws.send(
+                _json.dumps(
+                    {
+                        "type": "session.update",
+                        "session": {
+                            "instructions": instructions,
+                            "voice": "coral",
+                            "input_audio_format": "pcm16",
+                            "output_audio_format": "pcm16",
+                            "input_audio_transcription": {"model": "whisper-1"},
+                            "tools": nova_tools,
+                            "tool_choice": "auto",
+                            "turn_detection": {
+                                "type": "server_vad",
+                                "threshold": 0.5,
+                                "prefix_padding_ms": 800,
+                                "silence_duration_ms": 5000,
+                            },
+                        },
                     }
-                }
-            }))
+                )
+            )
 
             max_duration = config.get("max_duration", 600)
             tenant_id = config.get("tenant_id", 0)
@@ -1811,9 +2199,16 @@ ESTRATEGIA: Al inicio, pedi al usuario su sitio web, Instagram o Facebook si no 
             # Check if we have web_research or store URL from step_data
             store_url = ""
             try:
-                progress = await db.pool.fetchrow("SELECT step_data FROM onboarding_progress WHERE tenant_id = $1", tenant_id)
+                progress = await db.pool.fetchrow(
+                    "SELECT step_data FROM onboarding_progress WHERE tenant_id = $1",
+                    tenant_id,
+                )
                 if progress and progress["step_data"]:
-                    sd = progress["step_data"] if isinstance(progress["step_data"], dict) else _json.loads(progress["step_data"])
+                    sd = (
+                        progress["step_data"]
+                        if isinstance(progress["step_data"], dict)
+                        else _json.loads(progress["step_data"])
+                    )
                     if sd.get("web_research", {}).get("url"):
                         store_url = sd["web_research"]["url"]
             except Exception:
@@ -1824,13 +2219,14 @@ ESTRATEGIA: Al inicio, pedi al usuario su sitio web, Instagram o Facebook si no 
             ig_url = ""
             if meta_summary:
                 import re as _re2
+
                 # Find Facebook page name
-                fb_match = _re2.search(r'PAGINA DE FACEBOOK: ([^.]+)', meta_summary)
+                fb_match = _re2.search(r"PAGINA DE FACEBOOK: ([^.]+)", meta_summary)
                 if fb_match:
                     fb_name = fb_match.group(1).strip()
                     fb_url = f"https://www.facebook.com/{fb_name.replace(' ', '')}"
                 # Find Instagram username
-                ig_match = _re2.search(r'@(\w+)', meta_summary)
+                ig_match = _re2.search(r"@(\w+)", meta_summary)
                 if ig_match:
                     ig_url = f"https://www.instagram.com/{ig_match.group(1)}"
 
@@ -1864,26 +2260,41 @@ Maximo 4 oraciones."""
             # Inject chat history if user is resuming a conversation
             prior_history = config.get("chat_history", [])
             if prior_history and len(prior_history) > 0:
-                logger.info("onboarding_realtime_restoring_history", count=len(prior_history))
+                logger.info(
+                    "onboarding_realtime_restoring_history", count=len(prior_history)
+                )
                 for msg in prior_history:
                     role = msg.get("role", "user")
                     content = msg.get("content", "")
                     if role in ("user", "assistant") and content:
-                        await openai_ws.send(_json.dumps({
-                            "type": "conversation.item.create",
-                            "item": {
-                                "type": "message",
-                                "role": role,
-                                "content": [{"type": "input_text", "text": content}]
-                            }
-                        }))
+                        await openai_ws.send(
+                            _json.dumps(
+                                {
+                                    "type": "conversation.item.create",
+                                    "item": {
+                                        "type": "message",
+                                        "role": role,
+                                        "content": [
+                                            {"type": "input_text", "text": content}
+                                        ],
+                                    },
+                                }
+                            )
+                        )
                 # Change greeting to resume instead of fresh start
                 greeting = "IDIOMA: Espanol argentino. Voseo. Retoma la conversacion donde la dejamos. Revisa el historial que te pase y pregunta por lo que falta para completar esta seccion. No repitas preguntas ya respondidas."
 
-            await openai_ws.send(_json.dumps({
-                "type": "response.create",
-                "response": {"modalities": ["audio", "text"], "instructions": greeting}
-            }))
+            await openai_ws.send(
+                _json.dumps(
+                    {
+                        "type": "response.create",
+                        "response": {
+                            "modalities": ["audio", "text"],
+                            "instructions": greeting,
+                        },
+                    }
+                )
+            )
 
             async def client_to_openai():
                 try:
@@ -1900,28 +2311,54 @@ Maximo 4 oraciones."""
                             raw_text = data.get("text")
 
                             if raw_bytes and len(raw_bytes) > 0:
-                                if not hasattr(client_to_openai, '_logged'):
-                                    logger.info("audio_bytes_receiving", first_chunk_size=len(raw_bytes))
+                                if not hasattr(client_to_openai, "_logged"):
+                                    logger.info(
+                                        "audio_bytes_receiving",
+                                        first_chunk_size=len(raw_bytes),
+                                    )
                                     client_to_openai._logged = True
-                                await openai_ws.send(_json.dumps({
-                                    "type": "input_audio_buffer.append",
-                                    "audio": _b64.b64encode(raw_bytes).decode()
-                                }))
+                                await openai_ws.send(
+                                    _json.dumps(
+                                        {
+                                            "type": "input_audio_buffer.append",
+                                            "audio": _b64.b64encode(raw_bytes).decode(),
+                                        }
+                                    )
+                                )
                             elif raw_text:
                                 try:
                                     msg = _json.loads(raw_text)
                                     if msg.get("type") == "text_message":
-                                        await openai_ws.send(_json.dumps({
-                                            "type": "conversation.item.create",
-                                            "item": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": msg.get("text", "")}]}
-                                        }))
-                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                        await openai_ws.send(
+                                            _json.dumps(
+                                                {
+                                                    "type": "conversation.item.create",
+                                                    "item": {
+                                                        "type": "message",
+                                                        "role": "user",
+                                                        "content": [
+                                                            {
+                                                                "type": "input_text",
+                                                                "text": msg.get(
+                                                                    "text", ""
+                                                                ),
+                                                            }
+                                                        ],
+                                                    },
+                                                }
+                                            )
+                                        )
+                                        await openai_ws.send(
+                                            _json.dumps({"type": "response.create"})
+                                        )
                                 except _json.JSONDecodeError:
                                     pass
                         except Exception as recv_err:
                             if "disconnect" in str(recv_err).lower():
                                 break
-                            logger.error("client_to_openai_recv_error", error=str(recv_err))
+                            logger.error(
+                                "client_to_openai_recv_error", error=str(recv_err)
+                            )
                 except Exception as outer_err:
                     logger.error("client_to_openai_error", error=str(outer_err))
 
@@ -1938,24 +2375,49 @@ Maximo 4 oraciones."""
 
                         # Signal client to mute mic while Nova speaks (echo prevention)
                         elif etype == "response.audio.done":
-                            await websocket.send_text(_json.dumps({"type": "nova_audio_done"}))
+                            await websocket.send_text(
+                                _json.dumps({"type": "nova_audio_done"})
+                            )
 
                         elif etype == "response.audio_transcript.delta":
                             text = event.get("delta", "")
                             if text:
-                                await websocket.send_text(_json.dumps({"type": "transcript", "role": "assistant", "text": text}))
+                                await websocket.send_text(
+                                    _json.dumps(
+                                        {
+                                            "type": "transcript",
+                                            "role": "assistant",
+                                            "text": text,
+                                        }
+                                    )
+                                )
 
-                        elif etype == "conversation.item.input_audio_transcription.completed":
+                        elif (
+                            etype
+                            == "conversation.item.input_audio_transcription.completed"
+                        ):
                             text = event.get("transcript", "")
                             if text:
-                                await websocket.send_text(_json.dumps({"type": "transcript", "role": "user", "text": text}))
+                                await websocket.send_text(
+                                    _json.dumps(
+                                        {
+                                            "type": "transcript",
+                                            "role": "user",
+                                            "text": text,
+                                        }
+                                    )
+                                )
 
                         # Signal that user started speaking (cancel Nova audio)
                         elif etype == "input_audio_buffer.speech_started":
-                            await websocket.send_text(_json.dumps({"type": "user_speech_started"}))
+                            await websocket.send_text(
+                                _json.dumps({"type": "user_speech_started"})
+                            )
 
                         elif etype == "response.done":
-                            await websocket.send_text(_json.dumps({"type": "response_done"}))
+                            await websocket.send_text(
+                                _json.dumps({"type": "response_done"})
+                            )
 
                         # FUNCTION CALLING — Nova executed a tool
                         elif etype == "response.function_call_arguments.done":
@@ -1968,21 +2430,38 @@ Maximo 4 oraciones."""
                             except Exception:
                                 fn_args = {}
 
-                            logger.info("nova_tool_call", tool=fn_name, args_len=len(fn_args_str))
+                            logger.info(
+                                "nova_tool_call",
+                                tool=fn_name,
+                                args_len=len(fn_args_str),
+                            )
 
                             # Execute tool
                             result = {"status": "ok"}
-                            if fn_name in ("guardar_identidad", "guardar_tono", "guardar_reglas", "guardar_diccionario"):
+                            if fn_name in (
+                                "guardar_identidad",
+                                "guardar_tono",
+                                "guardar_reglas",
+                                "guardar_diccionario",
+                            ):
                                 prompt_seccion = fn_args.get("prompt_seccion", "")
                                 if prompt_seccion and tenant_id:
                                     try:
                                         await db.pool.execute(
                                             "UPDATE onboarding_progress SET system_prompt_draft = COALESCE(system_prompt_draft, '') || E'\\n\\n' || $1, updated_at = NOW() WHERE tenant_id = $2",
-                                            prompt_seccion, tenant_id
+                                            prompt_seccion,
+                                            tenant_id,
                                         )
-                                        result = {"status": "guardado", "seccion": fn_name}
+                                        result = {
+                                            "status": "guardado",
+                                            "seccion": fn_name,
+                                        }
                                     except Exception as e:
-                                        logger.error("tool_save_error", tool=fn_name, error=str(e))
+                                        logger.error(
+                                            "tool_save_error",
+                                            tool=fn_name,
+                                            error=str(e),
+                                        )
                                         result = {"status": "error", "detail": str(e)}
 
                             elif fn_name == "investigar_web":
@@ -1990,22 +2469,60 @@ Maximo 4 oraciones."""
                                 if url:
                                     try:
                                         import httpx as _httpx
-                                        async with _httpx.AsyncClient(timeout=15.0, follow_redirects=True) as http:
-                                            resp = await http.get(url, headers={"User-Agent": "Mozilla/5.0 FuturePlatform/1.0"})
+
+                                        async with _httpx.AsyncClient(
+                                            timeout=15.0, follow_redirects=True
+                                        ) as http:
+                                            resp = await http.get(
+                                                url,
+                                                headers={
+                                                    "User-Agent": "Mozilla/5.0 FuturePlatform/1.0"
+                                                },
+                                            )
                                             if resp.status_code == 200:
                                                 # Extract text content (strip HTML tags)
                                                 import re as _re
-                                                html = resp.text[:15000]  # Limit to 15KB
-                                                text = _re.sub(r'<script[^>]*>.*?</script>', '', html, flags=_re.DOTALL)
-                                                text = _re.sub(r'<style[^>]*>.*?</style>', '', text, flags=_re.DOTALL)
-                                                text = _re.sub(r'<[^>]+>', ' ', text)
-                                                text = _re.sub(r'\s+', ' ', text).strip()[:5000]
-                                                result = {"status": "ok", "url": url, "contenido": text}
-                                                logger.info("investigar_web_ok", url=url, content_len=len(text))
+
+                                                html = resp.text[
+                                                    :15000
+                                                ]  # Limit to 15KB
+                                                text = _re.sub(
+                                                    r"<script[^>]*>.*?</script>",
+                                                    "",
+                                                    html,
+                                                    flags=_re.DOTALL,
+                                                )
+                                                text = _re.sub(
+                                                    r"<style[^>]*>.*?</style>",
+                                                    "",
+                                                    text,
+                                                    flags=_re.DOTALL,
+                                                )
+                                                text = _re.sub(r"<[^>]+>", " ", text)
+                                                text = _re.sub(
+                                                    r"\s+", " ", text
+                                                ).strip()[:5000]
+                                                result = {
+                                                    "status": "ok",
+                                                    "url": url,
+                                                    "contenido": text,
+                                                }
+                                                logger.info(
+                                                    "investigar_web_ok",
+                                                    url=url,
+                                                    content_len=len(text),
+                                                )
                                             else:
-                                                result = {"status": "error", "detail": f"HTTP {resp.status_code}"}
+                                                result = {
+                                                    "status": "error",
+                                                    "detail": f"HTTP {resp.status_code}",
+                                                }
                                     except Exception as e:
-                                        logger.error("investigar_web_error", url=url, error=str(e))
+                                        logger.error(
+                                            "investigar_web_error",
+                                            url=url,
+                                            error=str(e),
+                                        )
                                         result = {"status": "error", "detail": str(e)}
                                 else:
                                     result = {"status": "error", "detail": "URL vacia"}
@@ -2015,22 +2532,69 @@ Maximo 4 oraciones."""
                                 try:
                                     name = (fn_args.get("name") or "").strip()
                                     if not name:
-                                        result = {"status": "error", "detail": "El nombre del producto es obligatorio"}
-                                        await openai_ws.send(_json.dumps({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}}))
-                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                        result = {
+                                            "status": "error",
+                                            "detail": "El nombre del producto es obligatorio",
+                                        }
+                                        await openai_ws.send(
+                                            _json.dumps(
+                                                {
+                                                    "type": "conversation.item.create",
+                                                    "item": {
+                                                        "type": "function_call_output",
+                                                        "call_id": call_id,
+                                                        "output": _json.dumps(result),
+                                                    },
+                                                }
+                                            )
+                                        )
+                                        await openai_ws.send(
+                                            _json.dumps({"type": "response.create"})
+                                        )
                                         continue
                                     price = fn_args.get("price") or 0
                                     if not isinstance(price, (int, float)):
-                                        try: price = float(price)
-                                        except: price = 0
+                                        try:
+                                            price = float(price)
+                                        except Exception as e:
+                                            logger.warning(
+                                                "price_conversion_failed",
+                                                error=str(e),
+                                                original_price=price,
+                                            )
+                                            price = 0
                                     variants_str = fn_args.get("variants", "")
-                                    variants_list = [{"name": v.strip(), "price": price, "stock": fn_args.get("stock", 0)} for v in variants_str.split(",") if v.strip()] if variants_str else []
-                                    row = await db.pool.fetchrow("""
+                                    variants_list = (
+                                        [
+                                            {
+                                                "name": v.strip(),
+                                                "price": price,
+                                                "stock": fn_args.get("stock", 0),
+                                            }
+                                            for v in variants_str.split(",")
+                                            if v.strip()
+                                        ]
+                                        if variants_str
+                                        else []
+                                    )
+                                    row = await db.pool.fetchrow(
+                                        """
                                         INSERT INTO internal_products (tenant_id, name, description, category, price, stock, variants)
                                         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name
-                                    """, tenant_id, name, fn_args.get("description", ""), fn_args.get("category", "General"),
-                                        price, fn_args.get("stock", 0), _json.dumps(variants_list))
-                                    result = {"status": "creado", "id": row["id"], "name": row["name"]}
+                                    """,
+                                        tenant_id,
+                                        name,
+                                        fn_args.get("description", ""),
+                                        fn_args.get("category", "General"),
+                                        price,
+                                        fn_args.get("stock", 0),
+                                        _json.dumps(variants_list),
+                                    )
+                                    result = {
+                                        "status": "creado",
+                                        "id": row["id"],
+                                        "name": row["name"],
+                                    }
                                 except Exception as e:
                                     result = {"status": "error", "detail": str(e)}
 
@@ -2038,22 +2602,52 @@ Maximo 4 oraciones."""
                                 try:
                                     pid = fn_args.get("product_id")
                                     if not pid:
-                                        result = {"status": "error", "detail": "product_id es obligatorio. Usa listar_productos para obtenerlo."}
-                                        await openai_ws.send(_json.dumps({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}}))
-                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                        result = {
+                                            "status": "error",
+                                            "detail": "product_id es obligatorio. Usa listar_productos para obtenerlo.",
+                                        }
+                                        await openai_ws.send(
+                                            _json.dumps(
+                                                {
+                                                    "type": "conversation.item.create",
+                                                    "item": {
+                                                        "type": "function_call_output",
+                                                        "call_id": call_id,
+                                                        "output": _json.dumps(result),
+                                                    },
+                                                }
+                                            )
+                                        )
+                                        await openai_ws.send(
+                                            _json.dumps({"type": "response.create"})
+                                        )
                                         continue
                                     updates = []
                                     params = [tenant_id]
                                     idx = 2
-                                    for field in ["name", "price", "stock", "description"]:
-                                        if field in fn_args and fn_args[field] is not None:
+                                    for field in [
+                                        "name",
+                                        "price",
+                                        "stock",
+                                        "description",
+                                    ]:
+                                        if (
+                                            field in fn_args
+                                            and fn_args[field] is not None
+                                        ):
                                             updates.append(f"{field} = ${idx}")
                                             params.append(fn_args[field])
                                             idx += 1
                                     if updates:
                                         params.append(pid)
-                                        await db.pool.execute(f"UPDATE internal_products SET {', '.join(updates)}, updated_at = NOW() WHERE tenant_id = $1 AND id = ${idx}", *params)
-                                    result = {"status": "actualizado", "product_id": pid}
+                                        await db.pool.execute(
+                                            f"UPDATE internal_products SET {', '.join(updates)}, updated_at = NOW() WHERE tenant_id = $1 AND id = ${idx}",
+                                            *params,
+                                        )
+                                    result = {
+                                        "status": "actualizado",
+                                        "product_id": pid,
+                                    }
                                 except Exception as e:
                                     result = {"status": "error", "detail": str(e)}
 
@@ -2061,11 +2655,31 @@ Maximo 4 oraciones."""
                                 try:
                                     pid = fn_args.get("product_id")
                                     if not pid:
-                                        result = {"status": "error", "detail": "product_id es obligatorio."}
-                                        await openai_ws.send(_json.dumps({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}}))
-                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                        result = {
+                                            "status": "error",
+                                            "detail": "product_id es obligatorio.",
+                                        }
+                                        await openai_ws.send(
+                                            _json.dumps(
+                                                {
+                                                    "type": "conversation.item.create",
+                                                    "item": {
+                                                        "type": "function_call_output",
+                                                        "call_id": call_id,
+                                                        "output": _json.dumps(result),
+                                                    },
+                                                }
+                                            )
+                                        )
+                                        await openai_ws.send(
+                                            _json.dumps({"type": "response.create"})
+                                        )
                                         continue
-                                    await db.pool.execute("DELETE FROM internal_products WHERE id = $1 AND tenant_id = $2", pid, tenant_id)
+                                    await db.pool.execute(
+                                        "DELETE FROM internal_products WHERE id = $1 AND tenant_id = $2",
+                                        pid,
+                                        tenant_id,
+                                    )
                                     result = {"status": "eliminado", "product_id": pid}
                                 except Exception as e:
                                     result = {"status": "error", "detail": str(e)}
@@ -2074,10 +2688,20 @@ Maximo 4 oraciones."""
                                 try:
                                     cat = fn_args.get("category")
                                     if cat:
-                                        rows = await db.pool.fetch("SELECT id, name, price, stock, category FROM internal_products WHERE tenant_id = $1 AND category ILIKE $2 AND is_active = true LIMIT 10", tenant_id, f"%{cat}%")
+                                        rows = await db.pool.fetch(
+                                            "SELECT id, name, price, stock, category FROM internal_products WHERE tenant_id = $1 AND category ILIKE $2 AND is_active = true LIMIT 10",
+                                            tenant_id,
+                                            f"%{cat}%",
+                                        )
                                     else:
-                                        rows = await db.pool.fetch("SELECT id, name, price, stock, category FROM internal_products WHERE tenant_id = $1 AND is_active = true LIMIT 10", tenant_id)
-                                    result = {"products": [dict(r) for r in rows], "count": len(rows)}
+                                        rows = await db.pool.fetch(
+                                            "SELECT id, name, price, stock, category FROM internal_products WHERE tenant_id = $1 AND is_active = true LIMIT 10",
+                                            tenant_id,
+                                        )
+                                    result = {
+                                        "products": [dict(r) for r in rows],
+                                        "count": len(rows),
+                                    }
                                 except Exception as e:
                                     result = {"status": "error", "detail": str(e)}
 
@@ -2085,16 +2709,48 @@ Maximo 4 oraciones."""
                                 try:
                                     pid = fn_args.get("product_id")
                                     if not pid:
-                                        result = {"status": "error", "detail": "product_id es obligatorio. Usa listar_productos primero."}
-                                        await openai_ws.send(_json.dumps({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}}))
-                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                        result = {
+                                            "status": "error",
+                                            "detail": "product_id es obligatorio. Usa listar_productos primero.",
+                                        }
+                                        await openai_ws.send(
+                                            _json.dumps(
+                                                {
+                                                    "type": "conversation.item.create",
+                                                    "item": {
+                                                        "type": "function_call_output",
+                                                        "call_id": call_id,
+                                                        "output": _json.dumps(result),
+                                                    },
+                                                }
+                                            )
+                                        )
+                                        await openai_ws.send(
+                                            _json.dumps({"type": "response.create"})
+                                        )
                                         continue
                                     stock = fn_args.get("stock", 0)
                                     if not isinstance(stock, int):
-                                        try: stock = int(stock)
-                                        except: stock = 0
-                                    await db.pool.execute("UPDATE internal_products SET stock = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3", stock, pid, tenant_id)
-                                    result = {"status": "stock_actualizado", "product_id": pid, "new_stock": stock}
+                                        try:
+                                            stock = int(stock)
+                                        except Exception as e:
+                                            logger.warning(
+                                                "stock_conversion_failed",
+                                                error=str(e),
+                                                original_stock=stock,
+                                            )
+                                            stock = 0
+                                    await db.pool.execute(
+                                        "UPDATE internal_products SET stock = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3",
+                                        stock,
+                                        pid,
+                                        tenant_id,
+                                    )
+                                    result = {
+                                        "status": "stock_actualizado",
+                                        "product_id": pid,
+                                        "new_stock": stock,
+                                    }
                                 except Exception as e:
                                     result = {"status": "error", "detail": str(e)}
 
@@ -2104,47 +2760,108 @@ Maximo 4 oraciones."""
                                     seccion = (fn_args.get("seccion") or "").strip()
                                     contenido = (fn_args.get("contenido") or "").strip()
                                     if not seccion or not contenido:
-                                        result = {"status": "error", "detail": "Necesito 'seccion' (ej: reglas, identidad, tono) y 'contenido' (el texto de la seccion)."}
-                                        await openai_ws.send(_json.dumps({"type": "conversation.item.create", "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}}))
-                                        await openai_ws.send(_json.dumps({"type": "response.create"}))
+                                        result = {
+                                            "status": "error",
+                                            "detail": "Necesito 'seccion' (ej: reglas, identidad, tono) y 'contenido' (el texto de la seccion).",
+                                        }
+                                        await openai_ws.send(
+                                            _json.dumps(
+                                                {
+                                                    "type": "conversation.item.create",
+                                                    "item": {
+                                                        "type": "function_call_output",
+                                                        "call_id": call_id,
+                                                        "output": _json.dumps(result),
+                                                    },
+                                                }
+                                            )
+                                        )
+                                        await openai_ws.send(
+                                            _json.dumps({"type": "response.create"})
+                                        )
                                         continue
-                                    agent = await db.pool.fetchrow("SELECT id, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1", tenant_id)
+                                    agent = await db.pool.fetchrow(
+                                        "SELECT id, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1",
+                                        tenant_id,
+                                    )
                                     if agent:
                                         prompt = agent["system_prompt_template"] or ""
                                         header = f"## {seccion.upper()}"
                                         if header in prompt.upper():
                                             # Find and replace the section
                                             import re as _re3
-                                            pattern = _re3.compile(rf"(## {_re3.escape(seccion)}.*?)(?=\n## |\Z)", _re3.IGNORECASE | _re3.DOTALL)
-                                            new_prompt = pattern.sub(f"## {seccion.upper()}\n{contenido}\n", prompt)
+
+                                            pattern = _re3.compile(
+                                                rf"(## {_re3.escape(seccion)}.*?)(?=\n## |\Z)",
+                                                _re3.IGNORECASE | _re3.DOTALL,
+                                            )
+                                            new_prompt = pattern.sub(
+                                                f"## {seccion.upper()}\n{contenido}\n",
+                                                prompt,
+                                            )
                                         else:
-                                            new_prompt = prompt + f"\n\n## {seccion.upper()}\n{contenido}"
-                                        await db.pool.execute("UPDATE agents SET system_prompt_template = $1, updated_at = NOW() WHERE id = $2", new_prompt, agent["id"])
-                                        result = {"status": "prompt_actualizado", "seccion": seccion}
+                                            new_prompt = (
+                                                prompt
+                                                + f"\n\n## {seccion.upper()}\n{contenido}"
+                                            )
+                                        await db.pool.execute(
+                                            "UPDATE agents SET system_prompt_template = $1, updated_at = NOW() WHERE id = $2",
+                                            new_prompt,
+                                            agent["id"],
+                                        )
+                                        result = {
+                                            "status": "prompt_actualizado",
+                                            "seccion": seccion,
+                                        }
                                     else:
-                                        result = {"status": "error", "detail": "No hay agente activo"}
+                                        result = {
+                                            "status": "error",
+                                            "detail": "No hay agente activo",
+                                        }
                                 except Exception as e:
                                     result = {"status": "error", "detail": str(e)}
 
                             elif fn_name == "agregar_regla":
                                 try:
                                     regla = fn_args.get("regla", "")
-                                    agent = await db.pool.fetchrow("SELECT id, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1", tenant_id)
+                                    agent = await db.pool.fetchrow(
+                                        "SELECT id, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1",
+                                        tenant_id,
+                                    )
                                     if agent:
                                         prompt = agent["system_prompt_template"] or ""
                                         # Count existing rules
                                         import re as _re4
-                                        nums = _re4.findall(r'^\d+\.', prompt, _re4.MULTILINE)
+
+                                        nums = _re4.findall(
+                                            r"^\d+\.", prompt, _re4.MULTILINE
+                                        )
                                         next_num = len(nums) + 1
                                         # Append after REGLAS section
-                                        if "## REGLAS" in prompt.upper() or "## 8." in prompt:
-                                            prompt = prompt.rstrip() + f"\n{next_num}. {regla}"
+                                        if (
+                                            "## REGLAS" in prompt.upper()
+                                            or "## 8." in prompt
+                                        ):
+                                            prompt = (
+                                                prompt.rstrip()
+                                                + f"\n{next_num}. {regla}"
+                                            )
                                         else:
                                             prompt += f"\n\n## REGLAS ADICIONALES\n{next_num}. {regla}"
-                                        await db.pool.execute("UPDATE agents SET system_prompt_template = $1, updated_at = NOW() WHERE id = $2", prompt, agent["id"])
-                                        result = {"status": "regla_agregada", "numero": next_num}
+                                        await db.pool.execute(
+                                            "UPDATE agents SET system_prompt_template = $1, updated_at = NOW() WHERE id = $2",
+                                            prompt,
+                                            agent["id"],
+                                        )
+                                        result = {
+                                            "status": "regla_agregada",
+                                            "numero": next_num,
+                                        }
                                     else:
-                                        result = {"status": "error", "detail": "No hay agente activo"}
+                                        result = {
+                                            "status": "error",
+                                            "detail": "No hay agente activo",
+                                        }
                                 except Exception as e:
                                     result = {"status": "error", "detail": str(e)}
 
@@ -2152,29 +2869,57 @@ Maximo 4 oraciones."""
                                 try:
                                     cat = fn_args.get("categoria", "")
                                     sins = fn_args.get("sinonimos", "")
-                                    agent = await db.pool.fetchrow("SELECT id, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1", tenant_id)
+                                    agent = await db.pool.fetchrow(
+                                        "SELECT id, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1",
+                                        tenant_id,
+                                    )
                                     if agent:
                                         prompt = agent["system_prompt_template"] or ""
                                         entry = f"* {cat.upper()}: {sins}"
-                                        if "## DICCIONARIO" in prompt.upper() or "## 4." in prompt:
+                                        if (
+                                            "## DICCIONARIO" in prompt.upper()
+                                            or "## 4." in prompt
+                                        ):
                                             prompt = prompt.rstrip() + f"\n{entry}"
                                         else:
                                             prompt += f"\n\n## DICCIONARIO DE SINONIMOS\n{entry}"
-                                        await db.pool.execute("UPDATE agents SET system_prompt_template = $1, updated_at = NOW() WHERE id = $2", prompt, agent["id"])
-                                        result = {"status": "sinonimo_agregado", "categoria": cat}
+                                        await db.pool.execute(
+                                            "UPDATE agents SET system_prompt_template = $1, updated_at = NOW() WHERE id = $2",
+                                            prompt,
+                                            agent["id"],
+                                        )
+                                        result = {
+                                            "status": "sinonimo_agregado",
+                                            "categoria": cat,
+                                        }
                                     else:
-                                        result = {"status": "error", "detail": "No hay agente activo"}
+                                        result = {
+                                            "status": "error",
+                                            "detail": "No hay agente activo",
+                                        }
                                 except Exception as e:
                                     result = {"status": "error", "detail": str(e)}
 
                             elif fn_name == "ver_prompt_actual":
                                 try:
-                                    agent = await db.pool.fetchrow("SELECT name, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1", tenant_id)
+                                    agent = await db.pool.fetchrow(
+                                        "SELECT name, system_prompt_template FROM agents WHERE tenant_id = $1 AND is_active = true LIMIT 1",
+                                        tenant_id,
+                                    )
                                     if agent:
                                         prompt = agent["system_prompt_template"] or ""
                                         # Return summary of sections
-                                        sections = [line.strip() for line in prompt.split('\n') if line.strip().startswith('##')]
-                                        result = {"agent_name": agent["name"], "prompt_length": len(prompt), "sections": sections, "preview": prompt[:500]}
+                                        sections = [
+                                            line.strip()
+                                            for line in prompt.split("\n")
+                                            if line.strip().startswith("##")
+                                        ]
+                                        result = {
+                                            "agent_name": agent["name"],
+                                            "prompt_length": len(prompt),
+                                            "sections": sections,
+                                            "preview": prompt[:500],
+                                        }
                                     else:
                                         result = {"status": "no_agent"}
                                 except Exception as e:
@@ -2182,7 +2927,8 @@ Maximo 4 oraciones."""
 
                             elif fn_name == "ver_errores_agente":
                                 try:
-                                    rows = await db.pool.fetch("""
+                                    rows = await db.pool.fetch(
+                                        """
                                         SELECT cm.content, cm.created_at, cc.channel
                                         FROM chat_messages cm
                                         JOIN chat_conversations cc ON cc.id = cm.conversation_id
@@ -2190,22 +2936,51 @@ Maximo 4 oraciones."""
                                         AND cm.content ILIKE '%deriv%humano%'
                                         AND cm.created_at >= NOW() - INTERVAL '24 hours'
                                         ORDER BY cm.created_at DESC LIMIT 10
-                                    """, tenant_id)
-                                    result = {"derivations_24h": len(rows), "recent": [{"message": r["content"][:100], "channel": r["channel"], "time": str(r["created_at"])} for r in rows]}
+                                    """,
+                                        tenant_id,
+                                    )
+                                    result = {
+                                        "derivations_24h": len(rows),
+                                        "recent": [
+                                            {
+                                                "message": r["content"][:100],
+                                                "channel": r["channel"],
+                                                "time": str(r["created_at"]),
+                                            }
+                                            for r in rows
+                                        ],
+                                    }
                                 except Exception as e:
                                     result = {"status": "error", "detail": str(e)}
 
                             # Send result back to OpenAI
-                            await openai_ws.send(_json.dumps({
-                                "type": "conversation.item.create",
-                                "item": {"type": "function_call_output", "call_id": call_id, "output": _json.dumps(result)}
-                            }))
-                            await openai_ws.send(_json.dumps({"type": "response.create"}))
+                            await openai_ws.send(
+                                _json.dumps(
+                                    {
+                                        "type": "conversation.item.create",
+                                        "item": {
+                                            "type": "function_call_output",
+                                            "call_id": call_id,
+                                            "output": _json.dumps(result),
+                                        },
+                                    }
+                                )
+                            )
+                            await openai_ws.send(
+                                _json.dumps({"type": "response.create"})
+                            )
 
                             # Forward tool event to frontend for UI update
-                            await websocket.send_text(_json.dumps({
-                                "type": "tool_call", "name": fn_name, "args": fn_args, "result": result
-                            }))
+                            await websocket.send_text(
+                                _json.dumps(
+                                    {
+                                        "type": "tool_call",
+                                        "name": fn_name,
+                                        "args": fn_args,
+                                        "result": result,
+                                    }
+                                )
+                            )
 
                 except Exception as e:
                     logger.error("openai_to_client_error", error=str(e))
@@ -2214,8 +2989,12 @@ Maximo 4 oraciones."""
                 await _aio.sleep(max_duration)
 
             done, pending = await _aio.wait(
-                [_aio.create_task(client_to_openai()), _aio.create_task(openai_to_client()), _aio.create_task(timeout())],
-                return_when=_aio.FIRST_COMPLETED
+                [
+                    _aio.create_task(client_to_openai()),
+                    _aio.create_task(openai_to_client()),
+                    _aio.create_task(timeout()),
+                ],
+                return_when=_aio.FIRST_COMPLETED,
             )
             for t in pending:
                 t.cancel()
@@ -2228,18 +3007,28 @@ Maximo 4 oraciones."""
         except Exception:
             pass
 
+
 # Mount static files for Voice Widget SDK
 import os as _os
+
 _static_dir = _os.path.join(_os.path.dirname(__file__), "static")
 if _os.path.isdir(_static_dir):
     from starlette.staticfiles import StaticFiles
+
     app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 # Metrics
 SERVICE_NAME = "orchestrator_service"
-REQUESTS = Counter("http_requests_total", "Total Request Count", ["service", "endpoint", "method", "status"])
-LATENCY = Histogram("http_request_latency_seconds", "Request Latency", ["service", "endpoint"])
+REQUESTS = Counter(
+    "http_requests_total",
+    "Total Request Count",
+    ["service", "endpoint", "method", "status"],
+)
+LATENCY = Histogram(
+    "http_request_latency_seconds", "Request Latency", ["service", "endpoint"]
+)
 TOOL_CALLS = Counter("tool_calls_total", "Total Tool Calls", ["tool", "status"])
+
 
 # --- Tools & Helpers ---
 async def get_cached_tool(key: str):
@@ -2251,14 +3040,19 @@ async def get_cached_tool(key: str):
         logger.error("cache_read_error", error=str(e))
     return None
 
+
 async def set_cached_tool(key: str, data: dict, ttl: int = 300):
     try:
         await redis_client.setex(f"cache:tool:{key}", ttl, json.dumps(data))
     except Exception as e:
         logger.error("cache_write_error", error=str(e))
 
+
 # --- Tools & Helpers ---
-MCP_URL = "https://n8n-n8n.qvwxm2.easypanel.host/mcp/d36b3e5f-9756-447f-9a07-74d50543c7e8"
+MCP_URL = (
+    "https://n8n-n8n.qvwxm2.easypanel.host/mcp/d36b3e5f-9756-447f-9a07-74d50543c7e8"
+)
+
 
 async def call_mcp_tool(tool_name: str, arguments: dict):
     """Bridge to call tools on n8n MCP server with stateful session and SSE support."""
@@ -2267,9 +3061,9 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
         async with httpx.AsyncClient(timeout=30.0) as client:
             headers = {
                 "Content-Type": "application/json",
-                "Accept": "application/json, text/event-stream"
+                "Accept": "application/json, text/event-stream",
             }
-            
+
             # 1. Initialize
             init_payload = {
                 "jsonrpc": "2.0",
@@ -2278,31 +3072,31 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
                 "params": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {},
-                    "clientInfo": {"name": "Orchestrator-Bridge", "version": "1.0"}
-                }
+                    "clientInfo": {"name": "Orchestrator-Bridge", "version": "1.0"},
+                },
             }
             init_resp = await client.post(MCP_URL, json=init_payload, headers=headers)
-            
+
             if init_resp.status_code != 200:
                 return f"MCP Init Failed ({init_resp.status_code}): {init_resp.text}"
-            
+
             # Capture Mcp-Session-Id
             session_id = init_resp.headers.get("Mcp-Session-Id")
             if not session_id:
                 try:
                     result = init_resp.json().get("result", {})
-                    session_id = result.get("meta", {}).get("sessionId") or result.get("sessionId")
-                except Exception: pass
-            
+                    session_id = result.get("meta", {}).get("sessionId") or result.get(
+                        "sessionId"
+                    )
+                except Exception:
+                    pass
+
             if session_id:
                 logger.info("mcp_session_captured", session_id=session_id)
                 client.headers.update({"Mcp-Session-Id": session_id})
 
             # 2. Notifications/initialized
-            notif_payload = {
-                "jsonrpc": "2.0",
-                "method": "notifications/initialized"
-            }
+            notif_payload = {"jsonrpc": "2.0", "method": "notifications/initialized"}
             await client.post(MCP_URL, json=notif_payload, headers=headers)
 
             # 3. Call Tool
@@ -2310,74 +3104,93 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
                 "jsonrpc": "2.0",
                 "id": "call-" + str(uuid.uuid4())[:8],
                 "method": "tools/call",
-                "params": {
-                    "name": tool_name,
-                    "arguments": arguments
-                }
+                "params": {"name": tool_name, "arguments": arguments},
             }
-            
+
             all_text = ""
-            async with client.stream("POST", MCP_URL, json=call_payload, headers=headers) as resp:
+            async with client.stream(
+                "POST", MCP_URL, json=call_payload, headers=headers
+            ) as resp:
                 if resp.status_code != 200:
                     raw_text = await resp.aread()
-                    return f"MCP Tool Call Error {resp.status_code}: {raw_text.decode()}"
+                    return (
+                        f"MCP Tool Call Error {resp.status_code}: {raw_text.decode()}"
+                    )
 
                 async for line in resp.aiter_lines():
-                    if not line: continue
+                    if not line:
+                        continue
                     if line.startswith("data: "):
                         data_json = line[6:]
                         try:
                             msg = json.loads(data_json)
-                            if msg.get("id") == call_payload["id"] or "result" in msg or "error" in msg:
-                                if "result" in msg: return msg["result"]
-                                if "error" in msg: return f"MCP Tool Error: {msg['error']}"
-                        except Exception: pass
+                            if (
+                                msg.get("id") == call_payload["id"]
+                                or "result" in msg
+                                or "error" in msg
+                            ):
+                                if "result" in msg:
+                                    return msg["result"]
+                                if "error" in msg:
+                                    return f"MCP Tool Error: {msg['error']}"
+                        except Exception:
+                            pass
                     all_text += line + "\n"
 
             if not all_text.strip():
                 return "MCP Server returned an empty response."
-            
+
             try:
                 json_resp = json.loads(all_text)
-                if "result" in json_resp: return json_resp["result"]
+                if "result" in json_resp:
+                    return json_resp["result"]
                 return json_resp
             except Exception:
                 return all_text
-                
+
     except Exception as e:
         logger.error("mcp_bridge_error", tool=tool_name, error=str(e))
-        await log_db("error", "tool_execution_failed", f"MCP Tool {tool_name} failed: {str(e)}", {"tool": tool_name})
+        await log_db(
+            "error",
+            "tool_execution_failed",
+            f"MCP Tool {tool_name} failed: {str(e)}",
+            {"tool": tool_name},
+        )
         return f"MCP Bridge Exception: {str(e)}"
 
 
 def simplify_product(p):
     """Keep only essential fields for the LLM to save tokens."""
-    if not isinstance(p, dict): return p
-    
+    if not isinstance(p, dict):
+        return p
+
     # Simplify variants to just a summary of options if needed, or specific prices
     variants = p.get("variants") or []
-    if not isinstance(variants, list): variants = []
-    
+    if not isinstance(variants, list):
+        variants = []
+
     price = "0"
     promo_price = None
     variant_details = []
-    
+
     if variants:
         v0 = variants[0] if isinstance(variants[0], dict) else {}
         price = v0.get("price", "0")
         promo_price = v0.get("promotional_price", None)
-        
+
         # Summarize variants (e.g., "Color: Rojo, Azul")
         seen_options = set()
         for v in variants:
-            if not isinstance(v, dict): continue
+            if not isinstance(v, dict):
+                continue
             v_values = v.get("values") or []
             if isinstance(v_values, list):
                 for val in v_values:
                     if isinstance(val, dict):
-                        val_str = val.get("es") or val.get("en") 
-                        if val_str: seen_options.add(val_str)
-        
+                        val_str = val.get("es") or val.get("en")
+                        if val_str:
+                            seen_options.add(val_str)
+
         if seen_options:
             variant_details = list(seen_options)
 
@@ -2400,10 +3213,11 @@ def simplify_product(p):
         # Fallback to 'descripción' field if exists
         raw_desc = p.get("descripción", "") or ""
 
-    if not isinstance(raw_desc, str): raw_desc = ""
+    if not isinstance(raw_desc, str):
+        raw_desc = ""
 
     # Remove simple HTML tags for token saving
-    clean_desc = re.sub('<[^<]+?>', '', raw_desc)
+    clean_desc = re.sub("<[^<]+?>", "", raw_desc)
     # Truncate if too long (e.g. 300 chars)
     if len(clean_desc) > 300:
         clean_desc = clean_desc[:297] + "..."
@@ -2413,11 +3227,12 @@ def simplify_product(p):
         "name": p.get("name", {}).get("es", "Sin nombre"),
         "price": price,
         "promotional_price": promo_price,
-        "description": clean_desc, 
-        "variants": ", ".join(variant_details), 
+        "description": clean_desc,
+        "variants": ", ".join(variant_details),
         "url": p.get("canonical_url"),
-        "imageUrl": image_url
+        "imageUrl": image_url,
     }
+
 
 async def call_tiendanube_api(endpoint: str, params: dict = None):
     # Retrieve current tenant credentials from ContextVar
@@ -2426,67 +3241,111 @@ async def call_tiendanube_api(endpoint: str, params: dict = None):
 
     if not store_id or not token:
         # Debug: Check if vars are actually empty
-        logger.error("tiendanube_config_missing", 
-                     store_id=store_id, 
-                     has_token=bool(token),
-                     context_note="ContextVar might not have propagated to tool task")
+        logger.error(
+            "tiendanube_config_missing",
+            store_id=store_id,
+            has_token=bool(token),
+            context_note="ContextVar might not have propagated to tool task",
+        )
         return "Error: Store ID or Token not configured for this tenant. Please check database configuration for this phone number."
 
     headers = {
         "Authentication": f"bearer {token}",
         "User-Agent": "n8n (santiago@atendo.agency)",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
     try:
         url = f"https://api.tiendanube.com/v1/{store_id}{endpoint}"
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, params=params, headers=headers)
             if response.status_code != 200:
-                logger.error("tiendanube_api_error", status=response.status_code, text=response.text[:200])
+                logger.error(
+                    "tiendanube_api_error",
+                    status=response.status_code,
+                    text=response.text[:200],
+                )
                 return f"Error HTTP {response.status_code}: {response.text}"
-            
+
             data = response.json()
-            
+
             # Auto-simplify if it's a list of products
             if isinstance(data, list) and "/products" in endpoint:
                 return [simplify_product(p) for p in data]
-                
+
             return data
     except Exception as e:
         logger.error("tiendanube_request_exception", error=str(e))
-        await log_db("error", "external_api_error", f"TiendaNube API failed: {endpoint}", {"error": str(e)})
+        await log_db(
+            "error",
+            "external_api_error",
+            f"TiendaNube API failed: {endpoint}",
+            {"error": str(e)},
+        )
         return f"Request Error: {str(e)}"
+
 
 @tool
 async def _search_internal_products(tenant_id: int, q: str = "", limit: int = 3):
     """Search internal product catalog (fallback when no TN credentials)."""
     if q:
-        rows = await db.pool.fetch("""
+        rows = await db.pool.fetch(
+            """
             SELECT * FROM internal_products
             WHERE tenant_id = $1 AND is_active = true AND (name ILIKE $2 OR description ILIKE $2 OR category ILIKE $2)
             LIMIT $3
-        """, tenant_id, f"%{q}%", limit)
+        """,
+            tenant_id,
+            f"%{q}%",
+            limit,
+        )
     else:
-        rows = await db.pool.fetch("""
+        rows = await db.pool.fetch(
+            """
             SELECT * FROM internal_products WHERE tenant_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT $2
-        """, tenant_id, limit)
+        """,
+            tenant_id,
+            limit,
+        )
 
     if not rows:
         return []
 
     import json as _j
+
     products = []
     for r in rows:
-        images = r["images"] if isinstance(r["images"], list) else _j.loads(r["images"] or "[]")
-        variants = r["variants"] if isinstance(r["variants"], list) else _j.loads(r["variants"] or "[]")
-        products.append({
-            "id": r["id"],
-            "name": {"es": r["name"]},
-            "variants": [{"price": str(v.get("price", r["price"])), "stock": v.get("stock", r["stock"]), "values": [{"es": v.get("name", "")}]} for v in variants] if variants else [{"price": str(r["price"]), "stock": r["stock"]}],
-            "images": [{"src": img if isinstance(img, str) else img.get("src", "")} for img in images],
-            "description": {"es": r["description"] or ""},
-            "permalink": r.get("public_url") or "",
-        })
+        images = (
+            r["images"]
+            if isinstance(r["images"], list)
+            else _j.loads(r["images"] or "[]")
+        )
+        variants = (
+            r["variants"]
+            if isinstance(r["variants"], list)
+            else _j.loads(r["variants"] or "[]")
+        )
+        products.append(
+            {
+                "id": r["id"],
+                "name": {"es": r["name"]},
+                "variants": [
+                    {
+                        "price": str(v.get("price", r["price"])),
+                        "stock": v.get("stock", r["stock"]),
+                        "values": [{"es": v.get("name", "")}],
+                    }
+                    for v in variants
+                ]
+                if variants
+                else [{"price": str(r["price"]), "stock": r["stock"]}],
+                "images": [
+                    {"src": img if isinstance(img, str) else img.get("src", "")}
+                    for img in images
+                ],
+                "description": {"es": r["description"] or ""},
+                "permalink": r.get("public_url") or "",
+            }
+        )
     return products
 
 
@@ -2495,7 +3354,8 @@ async def search_specific_products(q: str):
     """SEARCH for specific products by name, category, or brand. REQUIRED for queries like 'medias', 'zapatillas', 'puntas', 'grishko'. Input 'q' is the keyword."""
     cache_key = f"productsq:{q}"
     cached = await get_cached_tool(cache_key)
-    if cached: return cached
+    if cached:
+        return cached
 
     # Auto-detect: TN or internal catalog
     store_id = tenant_store_id.get()
@@ -2512,8 +3372,10 @@ async def search_specific_products(q: str):
             tid = 0
         result = await _search_internal_products(tid, q, 3)
 
-    if isinstance(result, (dict, list)): await set_cached_tool(cache_key, result, ttl=600)
+    if isinstance(result, (dict, list)):
+        await set_cached_tool(cache_key, result, ttl=600)
     return result
+
 
 @tool
 async def search_by_category(category: str, keyword: str):
@@ -2521,7 +3383,8 @@ async def search_by_category(category: str, keyword: str):
     q = f"{category} {keyword}"
     cache_key = f"search_by_category:{category}:{keyword}"
     cached = await get_cached_tool(cache_key)
-    if cached: return cached
+    if cached:
+        return cached
 
     store_id = tenant_store_id.get()
     token = tenant_access_token.get()
@@ -2532,15 +3395,18 @@ async def search_by_category(category: str, keyword: str):
         tid = current_tenant_id.get() or 0
         result = await _search_internal_products(tid, q, 3)
 
-    if isinstance(result, (dict, list)): await set_cached_tool(cache_key, result, ttl=600)
+    if isinstance(result, (dict, list)):
+        await set_cached_tool(cache_key, result, ttl=600)
     return result
+
 
 @tool
 async def browse_general_storefront():
     """Browse the generic storefront (latest items). Use ONLY for vague requests like 'what do you have?' or 'show me catalogue'. DO NOT USE for specific items."""
     cache_key = "productsall"
     cached = await get_cached_tool(cache_key)
-    if cached: return cached
+    if cached:
+        return cached
 
     store_id = tenant_store_id.get()
     token = tenant_access_token.get()
@@ -2549,17 +3415,24 @@ async def browse_general_storefront():
         result = await call_tiendanube_api("/products", {"per_page": 3})
     else:
         tid = 0
-        try: tid = int(store_id or 0)
-        except: pass
+        try:
+            tid = int(store_id or 0)
+        except Exception as e:
+            logger.warning(
+                "store_id_conversion_failed", error=str(e), store_id=store_id
+            )
         result = await _search_internal_products(tid, "", 3)
 
-    if isinstance(result, (dict, list)): await set_cached_tool(cache_key, result, ttl=600)
+    if isinstance(result, (dict, list)):
+        await set_cached_tool(cache_key, result, ttl=600)
     return result
+
 
 @tool
 async def cupones_list():
     """List active coupons and discounts from Tienda Nube via n8n MCP."""
     return await call_mcp_tool("cupones_list", {})
+
 
 @tool
 async def orders(q: str):
@@ -2569,29 +3442,33 @@ async def orders(q: str):
     # Using search parameter 'q' as seen in the successful n8n config
     return await call_tiendanube_api("/orders", {"q": clean_q})
 
+
 @tool
 async def sendemail(subject: str, text: str):
     """Send an email to support or customer via n8n MCP."""
     return await call_mcp_tool("sendemail", {"Subject": subject, "Text": text})
 
-from app.core.rag import RAGCore # Nexus v5.93
+
+from app.core.rag import RAGCore  # Nexus v5.93
+
 
 @tool
 async def report_assistance(type: str, score: float, reasoning: str):
     """
-    Registra el nivel de ayuda proporcionada al usuario. 
+    Registra el nivel de ayuda proporcionada al usuario.
     Usa 'sales' si ayudaste a decidir una compra o diste datos de pago/stock.
     Usa 'support' si resolviste una duda técnica o de envío sin pedir ayuda humana.
     Input reasoning: breve explicación del puntaje.
     """
     tid = current_tenant_id.get()
     cid = current_conversation_id.get()
-    
+
     if not tid or not cid:
         return "Error: Contexto no inicializado para reporte de asistencia."
 
     try:
-        await db.pool.execute("""
+        await db.pool.execute(
+            """
             UPDATE chat_conversations SET 
                 assist_sales_score = assist_sales_score + $1,
                 assist_support_score = assist_support_score + $2,
@@ -2599,95 +3476,124 @@ async def report_assistance(type: str, score: float, reasoning: str):
                 last_assist_analysis = $3,
                 updated_at = NOW()
             WHERE id = $4 AND tenant_id = $5
-        """, 
-        (score if type == 'sales' else 0.0),
-        (score if type == 'support' else 0.0),
-        json.dumps({'reasoning': reasoning, 'timestamp': datetime.now().isoformat()}),
-        cid, tid)
-        
-        logger.info("assistance_reported", tenant_id=tid, conversation_id=str(cid), type=type, score=score)
+        """,
+            (score if type == "sales" else 0.0),
+            (score if type == "support" else 0.0),
+            json.dumps(
+                {"reasoning": reasoning, "timestamp": datetime.now().isoformat()}
+            ),
+            cid,
+            tid,
+        )
+
+        logger.info(
+            "assistance_reported",
+            tenant_id=tid,
+            conversation_id=str(cid),
+            type=type,
+            score=score,
+        )
         return "Métrica de asistencia registrada con éxito."
     except Exception as e:
         logger.error("report_assistance_failed", error=str(e), tenant_id=tid)
         return f"Error al registrar asistencia: {str(e)}"
 
+
 @tool
 async def search_knowledge_base(query: str, collection_filter: Optional[str] = None):
     """
-    Search for information in the database. 
+    Search for information in the database.
     Use 'query' for the question.
-    Use 'collection_filter' ONLY if the user's question clearly pertains to one of the available topics listed in [VALID KNOWLEDGE COLLECTIONS]. 
+    Use 'collection_filter' ONLY if the user's question clearly pertains to one of the available topics listed in [VALID KNOWLEDGE COLLECTIONS].
     Otherwise, leave null to search all.
     """
     # Resolve Tenant
     tid = current_tenant_id.get()
-    if not tid: return "Error: No tenant context."
-    
+    if not tid:
+        return "Error: No tenant context."
+
     # Init RAG
     # Note: RAGCore expects str tenant_id
     rag = RAGCore(tenant_id=str(tid), provider="openai")
-    
+
     # Build Filter
     rag_filter = {}
     if collection_filter:
         rag_filter["collection"] = collection_filter
-        
+
     # Execute
     return rag.search(query, filter=rag_filter)
 
+
 @tool
-async def derivhumano(reason: str, contact_name: Optional[str] = None, contact_phone: Optional[str] = None, summary: Optional[str] = None, action_required: Optional[str] = None):
-    """EQUIPO/HUMANO: Use this tool to derive the conversation to a human operator via email and lock the AI. 
+async def derivhumano(
+    reason: str,
+    contact_name: Optional[str] = None,
+    contact_phone: Optional[str] = None,
+    summary: Optional[str] = None,
+    action_required: Optional[str] = None,
+):
+    """EQUIPO/HUMANO: Use this tool to derive the conversation to a human operator via email and lock the AI.
     Inputs:
     - reason: The main reason for handoff.
     - contact_name: Name of the customer.
     - contact_phone: Phone of the customer.
     - summary: 1-3 lines summary of the conversation.
     - action_required: What should the human do?"""
-    
+
     tid = current_tenant_id.get()
     cid = current_conversation_id.get()
     cphone = current_customer_phone.get()
-    
+
     if not tid or not cid:
         return "Error: Context not initialized for handoff."
 
     # 1. Fetch Tenant Handoff Settings
-    config = await db.pool.fetchrow("""
+    config = await db.pool.fetchrow(
+        """
         SELECT c.*, t.store_name 
         FROM tenant_human_handoff_config c
         JOIN tenants t ON c.tenant_id = t.id
         WHERE c.tenant_id = $1
-    """, tid)
-    
-    if not config or not config['enabled']:
+    """,
+        tid,
+    )
+
+    if not config or not config["enabled"]:
         return "Error: Handoff is currently disabled or not configured for this tenant."
-    
-    target_email = config['destination_email']
-    handoff_msg = config['handoff_message'] or "Te derivo con una persona del equipo para ayudarte mejor 😊"
+
+    target_email = config["destination_email"]
+    handoff_msg = (
+        config["handoff_message"]
+        or "Te derivo con una persona del equipo para ayudarte mejor 😊"
+    )
 
     # 2. Build Email Content based on email_context flags
-    ctx = config['email_context'] or {}
+    ctx = config["email_context"] or {}
     if isinstance(ctx, str):
         try:
             ctx = json.loads(ctx)
         except Exception:
             ctx = {}
-            
-    wa_id = (cphone or contact_phone) if ctx.get('ctx-phone') else "Oculto"
-    user_name = (contact_name or 'No especificado') if ctx.get('ctx-name') else "Oculto"
+
+    wa_id = (cphone or contact_phone) if ctx.get("ctx-phone") else "Oculto"
+    user_name = (contact_name or "No especificado") if ctx.get("ctx-name") else "Oculto"
     wa_link = f"https://wa.me/{wa_id}" if wa_id != "Oculto" else "No disponible"
-    
+
     history_section = ""
-    if ctx.get('ctx-history'):
-        history_section = f"\nRESUMEN RECIENTE:\n{summary or 'Sin resumen de historial'}\n"
+    if ctx.get("ctx-history"):
+        history_section = (
+            f"\nRESUMEN RECIENTE:\n{summary or 'Sin resumen de historial'}\n"
+        )
 
     metadata_section = ""
-    if ctx.get('ctx-id'):
-        metadata_section = f"Conversation ID: {cid}\nTimestamp: {formatdate(localtime=True)}\n"
+    if ctx.get("ctx-id"):
+        metadata_section = (
+            f"Conversation ID: {cid}\nTimestamp: {formatdate(localtime=True)}\n"
+        )
 
     subject = f"Derivación Humana: {reason} - {user_name}"
-    body = f"""DETALLE DE DERIVACIÓN (EQUIPO {config['store_name'].upper()})
+    body = f"""DETALLE DE DERIVACIÓN (EQUIPO {config["store_name"].upper()})
 
 Motivo: {reason}
 Cliente: {user_name}
@@ -2695,25 +3601,31 @@ Teléfono: {wa_id}
 Link WhatsApp: {wa_link}
 {history_section}
 ACCIÓN REQUERIDA:
-{action_required or 'Atención inmediata'}
+{action_required or "Atención inmediata"}
 
-{metadata_section}Tienda: {config['store_name']}
+{metadata_section}Tienda: {config["store_name"]}
 """
 
     # 3. Send Email using Platform Global SMTP (User-Friendly - No SMTP config required)
     try:
         from app.core.email import EmailService
         from fastapi_mail import MessageSchema, MessageType
-        
-        target_email = str(config['destination_email']).strip() if config['destination_email'] else ""
-        
+
+        target_email = (
+            str(config["destination_email"]).strip()
+            if config["destination_email"]
+            else ""
+        )
+
         if not target_email:
             logger.warning("handoff_no_destination_email", tenant_id=tid)
             return "Error: No se configuró un email de destino para derivaciones."
-        
+
         # Use Platform Global SMTP (same credentials as verification emails)
-        dynamic_conf = await EmailService.get_connection_config(tenant_id=tid, mode="system")
-        
+        dynamic_conf = await EmailService.get_connection_config(
+            tenant_id=tid, mode="system"
+        )
+
         # Create professional HTML email
         html_body = f"""
         <!DOCTYPE html>
@@ -2779,31 +3691,40 @@ ACCIÓN REQUERIDA:
         </body>
         </html>
         """
-        
+
         message = MessageSchema(
             subject=subject,
             recipients=[target_email],
             body=html_body,
-            subtype=MessageType.html
+            subtype=MessageType.html,
         )
-        
+
         from fastapi_mail import FastMail
+
         fm = FastMail(dynamic_conf)
         await fm.send_message(message)
-        
-        logger.info("handoff_email_sent_platform_smtp", 
-                   to=target_email, 
-                   server=dynamic_conf.MAIL_SERVER, 
-                   from_email=dynamic_conf.MAIL_FROM)
-            
+
+        logger.info(
+            "handoff_email_sent_platform_smtp",
+            to=target_email,
+            server=dynamic_conf.MAIL_SERVER,
+            from_email=dynamic_conf.MAIL_FROM,
+        )
+
     except Exception as e:
         logger.error("handoff_email_failed", error=str(e))
-        await log_db("error", "handoff_email_failed", str(e), {"tid": tid, "cid": str(cid)})
+        await log_db(
+            "error", "handoff_email_failed", str(e), {"tid": tid, "cid": str(cid)}
+        )
 
     # 4. Lock Conversation (24h)
-    await db.pool.execute("UPDATE chat_conversations SET human_override_until = NOW() + INTERVAL '24 hours' WHERE id = $1", cid)
-    
+    await db.pool.execute(
+        "UPDATE chat_conversations SET human_override_until = NOW() + INTERVAL '24 hours' WHERE id = $1",
+        cid,
+    )
+
     return handoff_msg
+
 
 # --- Tactical Prompt Injections (Pointe Coach Textual Instructions) ---
 tactical_injections = {
@@ -2816,9 +3737,7 @@ GATE: Usa `search_specific_products` SIEMPRE que pidan algo específico. VALIDAT
 RELEVANCIA ESTRICTA (CRÍTICO): Si el usuario pide una categoría específica (ej: "Medias"), está terminantemente PROHIBIDO mostrar productos de otra categoría. Solo mostrá lo que se pidió tras el mapeo.
 
 DICCIONARIO OBLIGATORIO: Mapeá CUALQUIER sinónimo a su categoría base antes de llamar a la tool. Nunca busques por el término informal del usuario si existe traducción.""",
-    
     "search_by_category": """Antes de ejecutar, verifica en el Diccionario de Sinónimos si la categoría solicitada tiene un mapeo (ej: 'mallas' → 'Leotardos').""",
-    
     "browse_general_storefront": """USAR SIEMPRE para consultas vagas ("¿Qué tienen?", "Mostrame algo") o como último recurso. No repreguntar, mostrar productos.
 
 REGLA DE FALLBACK (SMART RETRY): Si buscás algo específico con search_specific_products y la tool devuelve 0 resultados:
@@ -2826,14 +3745,12 @@ REGLA DE FALLBACK (SMART RETRY): Si buscás algo específico con search_specific
 - CASO B (Consulta Vaga): Solo si la consulta es vaga, podés usar `browse_general_storefront`.
 
 PARCHE CRÍTICO — ANTI "RESPUESTA SIN TOOL": Si el usuario pide "¿qué tienen disponible?": siempre responder con productos reales del catálogo.""",
-    
     "search_knowledge_base": """Consulta siempre la política de cambios de zapatillas usadas (está prohibido si están marcadas). Responde sobre políticas, envíos o talles generales. No uses esta tool para productos (usar search_specific_products).
 
 REGLAS ESPECÍFICAS:
 - Zapatillas usadas/marcadas: NO se cambian (política crítica).
 - Consultas sobre: políticas de devolución, tiempos de envío, guías de talles, cuidado de productos.
 - Si no hay info en RAG, admitir: "No tengo esa información, te derivo a un humano".""",
-    
     "derivhumano": """Usá `derivhumano` inmediatamente si:
 (A) El usuario pide hablar con alguien.
 (B) Tiene un PROBLEMA REAL con un pago o pedido que la tool no resuelve (ej: demora excesiva, queja).
@@ -2844,11 +3761,9 @@ FITTING (SOLO PUNTAS): Ofrecelo exclusivamente para zapatillas de punta. Si el u
 DERIVACIÓN OBLIGATORIA: Está TERMINANTEMENTE PROHIBIDO decir que derivás a un humano o usar el mensaje de cierre de derivación si NO ejecutaste exitosamente la tool `derivhumano` en ese mismo turno. Si la derivación es necesaria, llamá a la tool primero.
 
 PROHIBIDO derivar para un simple chequeo de estado de orden (para eso está la tool orders).""",
-    
     "orders": """ESTADO DE PEDIDO (SIN DERIVAR): Si el usuario solo quiere saber "dónde está mi pedido", usá SIEMPRE la tool `orders`. No derivés a humano para esto.
 
 Pide el ID numérico sin #. Si el usuario da el ID con #, quitar el # antes de buscar.""",
-    
     "cupones_list": """Si el cliente duda por el precio, consulta cupones activos para incentivar el cierre. No ofrecer cupones automáticamente, solo si detectas objeción de precio.
 
 Gatillos:
@@ -2856,14 +3771,12 @@ Gatillos:
 - Cliente pregunta por descuentos/promos.
 
 PROHIBIDO inventar cupones que no existen en la tool response.""",
-    
     "sendemail": """Usar junto a derivhumano cuando se necesita notificar al equipo por email. Esta tool complementa la derivación.""",
-    
     "report_assistance": """PROTOCOLO DE AUTO-AUDITORÍA (CRÍTICO): 
 1. Cada 3 mensajes del usuario, DEBES evaluar tu desempeño.
 2. Si ayudaste con stock, precios o métodos de pago: usa 'sales' con score 1.0.
 3. Si resolviste una duda técnica o de envío sin pedir ayuda humana: usa 'support' con score 1.0.
-4. Esta ejecución es SILENCIOSA (no la menciones al usuario)."""
+4. Esta ejecución es SILENCIOSA (no la menciones al usuario).""",
 }
 
 # --- Response Extraction Guides (Pointe Coach Textual Instructions) ---
@@ -2887,25 +3800,19 @@ REGLA DE CALL TO ACTION (CIERRE OBLIGATORIO):
 - CASO 1 (SOLO ZAPATILLAS DE PUNTA): Siempre ofrecer "Fitting". El mensaje DEBE ser: "Para las puntas es clave que te asesores para elegir la mejor punta que se adecue a tu pie 🩰 Te contactamos con una asesora (FITTER)?". (IMPORTANTE: Esto NO aplica para Media Punta ni otros productos).
 - CASO 2 (MUCHOS PRODUCTOS - 3 o +): Ofrecer link a la web.
 - CASO 3 (POCOS PRODUCTOS - 1 o 2 totales): NO digas "ver más opciones". Usá un cierre de servicio: "¿Te puedo ayudar con algo más?" """,
-    
     "search_by_category": """Usa el mismo formato que search_specific_products. Máximo 3 productos por respuesta para evitar saturación.""",
-    
     "browse_general_storefront": """Mismo formato que search_specific_products. Mostrar 3 opciones del catálogo general con imágenes, precios y variantes.
 
 CTA Final: "Si querés ver más opciones, entrá a nuestra web: {store_website}".""",
-    
     "search_knowledge_base": """Proporciona la respuesta técnica sobre el calce o la tabla de talles de forma concisa y profesional. NO inventes. Cita la fuente si es relevante (ej: "Según nuestra guía de tallas..."). Si es politica crítica, enfatizar con mayúsculas: "IMPORTANTE: Las zapatillas marcadas NO se cambian".""",
-    
     "orders": """Sé ULTRA BREVE: informá el estado y listo. 
 
 Formato: "Tu pedido [ID] está [ESTADO] y fue despachado por [CORREO]."
 
 No des detalles innecesarios. CTA: "¿Te puedo ayudar con algo más?" """,
-    
     "cupones_list": """Extrae el código del cupón y el porcentaje de descuento de forma muy visible.
 
 Formato: "🎟️ Tengo un cupón para vos: **[CÓDIGO]** - [%] OFF en [CONDICIÓN]. Aplicalo al momento de pagar para activar el descuento." """,
-    
     "derivhumano": """El mensaje de despedida tras derivar DEBE ser según el motivo:
 
 (1) Para FITTING/PUNTAS: '➡Te derivamos con una asesora (FITTER), que esta capacitada para que encuentres la mejor punta que se adecue a TU PIE 🩰 en breve se contacta con vos.'
@@ -2913,28 +3820,48 @@ Formato: "🎟️ Tengo un cupón para vos: **[CÓDIGO]** - [%] OFF en [CONDICI�
 (2) Para PEDIDOS: 'Fijate que ya te contacto con mis compañeras para que te ayuden con tu orden #... y sepas exactamente el estado.'
 
 (3) Para OTROS (ayuda general, quejas, pedido de humano): Usá un mensaje cálido y coherente con lo que pidió el usuario.""",
-    
     "sendemail": """Confirma que se envió la notificación al equipo. "Listo, ya notifiqué al equipo. Te van a contactar por email o WhatsApp en las próximas horas." """,
-    
-    "report_assistance": """SILENCIO: Nunca confirmes al usuario que registraste métricas. Solo ejecuta y continúa la charla."""
+    "report_assistance": """SILENCIO: Nunca confirmes al usuario que registraste métricas. Solo ejecuta y continúa la charla.""",
 }
 
-tools = [search_specific_products, search_by_category, browse_general_storefront, search_knowledge_base, cupones_list, orders, sendemail, derivhumano, report_assistance]
+tools = [
+    search_specific_products,
+    search_by_category,
+    browse_general_storefront,
+    search_knowledge_base,
+    cupones_list,
+    orders,
+    sendemail,
+    derivhumano,
+    report_assistance,
+]
 
 # Register tools for Code Reflection (Nexus v3)
-from admin_routes import register_tools, SYSTEM_TOOL_INJECTIONS, SYSTEM_TOOL_RESPONSE_GUIDES, unified_message_delivery
+from admin_routes import (
+    register_tools,
+    SYSTEM_TOOL_INJECTIONS,
+    SYSTEM_TOOL_RESPONSE_GUIDES,
+    unified_message_delivery,
+)
+
 register_tools(tools, tactical_injections, response_guides)
 
 from langchain.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
 
+
 # --- Output Schema for Agent ---
 class OrchestratorResponse(BaseModel):
     """The structured response from the orchestrator agent containing multiple messages."""
-    messages: List[OrchestratorMessage] = Field(description="List of messages (parts) to send to the user, in order.")
+
+    messages: List[OrchestratorMessage] = Field(
+        description="List of messages (parts) to send to the user, in order."
+    )
+
 
 # Initialize Parser
 parser = PydanticOutputParser(pydantic_object=OrchestratorResponse)
+
 
 # Agent Initialization
 # --- Agent Factory (Dynamic per Tenant) ---
@@ -2944,58 +3871,66 @@ async def get_agent_executable(ctx: TenantContext):
     STRICTLY uses the context for credentials and prompts.
     """
     logger.info("building_agent_for_tenant", tenant_id=ctx.id, store=ctx.store_name)
-    
+
     # 1. Inject Context into ContextVars (Bridge to Tools)
     if ctx.tiendanube_creds:
         tenant_store_id.set(ctx.tiendanube_creds.store_id)
         tenant_access_token.set(ctx.tiendanube_creds.access_token.get_secret_value())
     else:
-         logger.warning("agent_build_warning_no_creds", tenant_id=ctx.id)
-    
+        logger.warning("agent_build_warning_no_creds", tenant_id=ctx.id)
+
     current_tenant_id.set(ctx.id)
 
     # 2. Construct System Prompt
     sys_template = ctx.system_prompt_template or "Eres un asistente virtual amable."
-    
+
     # Inject variables
     sys_template = sys_template.replace("{STORE_NAME}", ctx.store_name)
-    sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", ctx.store_catalog_knowledge or "Sin catálogo.")
-    sys_template = sys_template.replace("{STORE_DESCRIPTION}", ctx.store_description or "")
+    sys_template = sys_template.replace(
+        "{STORE_CATALOG_KNOWLEDGE}", ctx.store_catalog_knowledge or "Sin catálogo."
+    )
+    sys_template = sys_template.replace(
+        "{STORE_DESCRIPTION}", ctx.store_description or ""
+    )
     # Default URL if not in context? We should add it to TenantContext logic later if missing
-    sys_template = sys_template.replace("{STORE_URL}", "#") 
+    sys_template = sys_template.replace("{STORE_URL}", "#")
 
     # Ensure format instructions are present
     if "messages" not in sys_template.lower() or "json" not in sys_template.lower():
-        sys_template += "\n\nCRITICAL: You must answer in JSON format following this schema: " + parser.get_format_instructions()
+        sys_template += (
+            "\n\nCRITICAL: You must answer in JSON format following this schema: "
+            + parser.get_format_instructions()
+        )
 
     # 3. Handoff Policy injection (Simplified for brevity, expands logic from ctx.handoff_policy)
     # ... logic would be similar to before but reading from ctx.handoff_policy dict ...
 
     # 4. Construct Prompt Object
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content=sys_template),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("user", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ]).partial(format_instructions=parser.get_format_instructions())
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            SystemMessage(content=sys_template),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("user", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ]
+    ).partial(format_instructions=parser.get_format_instructions())
 
     # 5. Create Agent with Tenant Key
     api_key = ctx.openai_key.get_secret_value() if ctx.openai_key else OPENAI_API_KEY
     if not api_key:
         raise ValueError("OPENAI_API_KEY missing for tenant and global fallback")
-        
+
     llm = ChatOpenAI(
-        model="gpt-4o-mini",
-        api_key=api_key, 
-        temperature=0, 
-        max_tokens=2000
+        model="gpt-4o-mini", api_key=api_key, temperature=0, max_tokens=2000
     )
-    
+
     agent_def = create_openai_functions_agent(llm, tools, prompt)
     return AgentExecutor(agent=agent_def, tools=tools, verbose=True)
 
+
 # Global fallback for health checks (optional)
 # agent = ... (Removed global instantiation to force per-request dynamic loading)
+
 
 # Helper for DB Logging
 async def log_db(level: str, event_type: str, message: str, meta: dict = None):
@@ -3006,71 +3941,120 @@ async def log_db(level: str, event_type: str, message: str, meta: dict = None):
             # We map 'level' -> 'severity' and 'meta' -> 'payload'
             await db.pool.execute(
                 "INSERT INTO system_events (severity, event_type, message, payload, occurred_at) VALUES ($1, $2, $3, $4, NOW())",
-                level, event_type, message, json.dumps(meta) if meta else "{}"
+                level,
+                event_type,
+                message,
+                json.dumps(meta) if meta else "{}",
             )
     except Exception as e:
-        # Fallback to stdout if DB fails
-        print(f"DB_LOG_FAIL: {e}")
+        logger.warning("db_audit_log_failed", error=str(e))
+
 
 # Middleware
 @app.middleware("http")
 async def add_metrics_and_logs(request: Request, call_next):
     start_time = time.time()
-    correlation_id = request.headers.get("X-Correlation-Id") or request.headers.get("traceparent")
-    
-    # Log Request Start (Verbose?) No, let's log completion only to reduce noise, 
+    correlation_id = request.headers.get("X-Correlation-Id") or request.headers.get(
+        "traceparent"
+    )
+
+    # Log Request Start (Verbose?) No, let's log completion only to reduce noise,
     # or errors.
-    
+
     response = await call_next(request)
     process_time = time.time() - start_time
     status_code = response.status_code
-    
-    REQUESTS.labels(service=SERVICE_NAME, endpoint=request.url.path, method=request.method, status=status_code).inc()
-    LATENCY.labels(service=SERVICE_NAME, endpoint=request.url.path).observe(process_time)
-    
+
+    REQUESTS.labels(
+        service=SERVICE_NAME,
+        endpoint=request.url.path,
+        method=request.method,
+        status=status_code,
+    ).inc()
+    LATENCY.labels(service=SERVICE_NAME, endpoint=request.url.path).observe(
+        process_time
+    )
+
     logger.bind(
-        service=SERVICE_NAME, correlation_id=correlation_id, status_code=status_code,
-        method=request.method, endpoint=request.url.path, latency_ms=round(process_time * 1000, 2)
+        service=SERVICE_NAME,
+        correlation_id=correlation_id,
+        status_code=status_code,
+        method=request.method,
+        endpoint=request.url.path,
+        latency_ms=round(process_time * 1000, 2),
     ).info("http_request_completed" if status_code < 400 else "http_request_failed")
-    
+
     # DB Logging for Console
     # We filter out health checks to avoid spamming the DB
     if "/health" not in request.url.path and "/metrics" not in request.url.path:
         level = "info" if status_code < 400 else "error"
         evt_type = "http_request"
-        # Background task for logging to not block response? 
+        # Background task for logging to not block response?
         # For simplicity in this MVP, we await. It's fast (Postgres).
         await log_db(
-            level, 
-            evt_type, 
-            f"{request.method} {request.url.path}", 
+            level,
+            evt_type,
+            f"{request.method} {request.url.path}",
             {
-                "status": status_code, 
+                "status": status_code,
                 "latency_ms": round(process_time * 1000, 2),
-                "correlation_id": correlation_id
-            }
+                "correlation_id": correlation_id,
+            },
         )
 
     return response
 
+
 # Endpoints
 @app.get("/metrics")
-def metrics(): return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+def metrics():
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 
 @app.get("/ready")
-async def ready():
+async def readiness_check():
+    """Kubernetes readiness probe — checks critical dependencies."""
     try:
-        if db.pool: await db.pool.fetchval("SELECT 1")
-        await redis_client.ping()
-    except Exception as e:
-        logger.error("readiness_check_failed", error=str(e))
-        raise HTTPException(status_code=503, detail="Dependencies unavailable")
-    return {"status": "ok"}
+        if db.pool:
+            await asyncio.wait_for(db.pool.fetchval("SELECT 1"), timeout=3.0)
+        await asyncio.wait_for(redis_client.ping(), timeout=3.0)
+        return {"ready": True}
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"ready": False, "detail": "Dependencies not ready"}
+        )
+
 
 @app.get("/health")
-def health(): return {"status": "ok"}
+async def health_check():
+    """Comprehensive health check - verifies dependencies."""
+    checks = {"status": "ok", "service": "orchestrator"}
+
+    # Check PostgreSQL
+    try:
+        if db.pool:
+            await asyncio.wait_for(db.pool.fetchval("SELECT 1"), timeout=3.0)
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {str(e)}"
+        checks["status"] = "degraded"
+
+    # Check Redis
+    try:
+        await asyncio.wait_for(redis_client.ping(), timeout=3.0)
+        checks["redis"] = "ok"
+    except Exception as e:
+        checks["redis"] = f"error: {str(e)}"
+        checks["status"] = "degraded"
+
+    # Return appropriate status code
+    status_code = 200 if checks["status"] == "ok" else 503
+    return JSONResponse(content=checks, status_code=status_code)
+
 
 # --- Meta Compliance Endpoints ---
+
 
 @app.get("/api/v1/auth/meta/deauthorize")
 async def meta_deauthorize(request: Request):
@@ -3080,6 +4064,7 @@ async def meta_deauthorize(request: Request):
     logger.info("meta_deauthorization_received", params=str(request.query_params))
     # Logic to handle deauthorization (e.g., mark tenant as inactive or log)
     return {"status": "success", "message": "Deauthorization acknowledged"}
+
 
 @app.post("/api/v1/auth/meta/delete-data")
 async def meta_delete_data(request: Request):
@@ -3095,24 +4080,26 @@ async def meta_delete_data(request: Request):
         confirmation_code = str(uuid.uuid4())
         return {
             "url": f"https://nexus-platform.com/compliance/deletion-status/{confirmation_code}",
-            "confirmation_code": confirmation_code
+            "confirmation_code": confirmation_code,
         }
     except Exception as e:
         logger.error("meta_delete_data_failed", error=str(e))
         return {"status": "error", "message": str(e)}
+
 
 # Startup and Shutdown are handled by lifespan context manager.
 
 from app.api.deps import get_current_tenant_webhook
 from app.schemas.tenant import TenantInternal
 
+
 @app.post("/chat")
 async def chat_endpoint(
-    request: Request, 
+    request: Request,
     background_tasks: BackgroundTasks,
     x_internal_token: str = Header(None),
     tenant: TenantInternal = Depends(get_current_tenant_webhook),
-    stream: bool = False # New stream parameter
+    stream: bool = False,  # New stream parameter
 ):
     """
     Main Webhook Endpoint.
@@ -3121,21 +4108,25 @@ async def chat_endpoint(
     """
     # 1. Verification (Internal Token) - Optional if using Webhook Secret
     if INTERNAL_SECRET_KEY:
-         if x_internal_token != INTERNAL_SECRET_KEY:
-             logger.warning("unauthorized_webhook_attempt", reason="invalid_internal_token")
-             raise HTTPException(status_code=401, detail="Unauthorized: Invalid Internal Token")
-         
+        if x_internal_token != INTERNAL_SECRET_KEY:
+            logger.warning(
+                "unauthorized_webhook_attempt", reason="invalid_internal_token"
+            )
+            raise HTTPException(
+                status_code=401, detail="Unauthorized: Invalid Internal Token"
+            )
+
     try:
         payload = await request.json()
     except Exception:
         raise HTTPException(400, "Invalid JSON")
-        
+
     # ... (Rest of deduplication logic) ...
     # Instead of "bot_phone_number = ...", we utilize 'tenant'.
-    
+
     # 2. Protocol Omega: Resolve context from tenant
     tenant_id = tenant.id
-    
+
     # Parse payload into a consistent event object
     # This handles the complexity of YCloud/Meta payloads and now Chatwoot universal signals
     try:
@@ -3153,15 +4144,17 @@ async def chat_endpoint(
             if attachments:
                 for att in attachments:
                     m_url = att.get("data_url")
-                    m_type = att.get("file_type") # image, audio, video
+                    m_type = att.get("file_type")  # image, audio, video
                     if m_url:
-                        media_list.append(MediaObject(
-                            url=m_url,
-                            provider_id=att.get("id"),
-                            m_type=m_type,
-                            mime=att.get("content_type"),
-                            filename=f"{m_type}_{att.get('id')}"
-                        ))
+                        media_list.append(
+                            MediaObject(
+                                url=m_url,
+                                provider_id=att.get("id"),
+                                m_type=m_type,
+                                mime=att.get("content_type"),
+                                filename=f"{m_type}_{att.get('id')}",
+                            )
+                        )
 
             event = SimpleEvent(
                 from_num=payload.get("from_number"),
@@ -3172,16 +4165,16 @@ async def chat_endpoint(
                 external_acc_id=payload.get("external_account_id"),
                 tenant_id=tid,
                 media=media_list,
-                event_type=payload.get("event_type", "message")
+                event_type=payload.get("event_type", "message"),
             )
-            
+
             # Map Chatwoot Message Type to Role
             # generic/incoming -> user
             # generic/outgoing -> assistant
             msg_type = payload.get("message_type") or "incoming"
             if msg_type == "outgoing":
-                event.role = 'assistant'
-            
+                event.role = "assistant"
+
             if payload.get("customer_name"):
                 event.customer_name = payload.get("customer_name")
         else:
@@ -3192,44 +4185,77 @@ async def chat_endpoint(
             from_number = msg_data.get("from")
             text_body = msg_data.get("text", {}).get("body", "")
             message_id = msg_data.get("id")
-            
+
             event = SimpleEvent(from_number, text_body, message_id)
     except Exception as e:
         logger.warning("payload_parse_failed", error=str(e))
-        return OrchestratorResult(status="ignore", send=False, text="Unsupported payload structure")
+        return OrchestratorResult(
+            status="ignore", send=False, text="Unsupported payload structure"
+        )
 
     # message deduplication logic...
     # message deduplication logic...
     event_id = event.event_id
     if await redis_client.get(f"processed:{event_id}"):
         return OrchestratorResult(status="duplicate", send=False)
-        
+
     await redis_client.set(f"processed:{event_id}", "1", ex=86400)
-    
+
     # --- 0. Protocol Omega: Identity Link (Find or Create Customer) ---
     source = event.channel_source
     customer_id = None
-    
-    if source == 'instagram':
-        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND instagram_psid = $2", tenant_id, event.from_number)
+
+    if source == "instagram":
+        customer_id = await db.pool.fetchval(
+            "SELECT id FROM customers WHERE tenant_id = $1 AND instagram_psid = $2",
+            tenant_id,
+            event.from_number,
+        )
         if not customer_id:
-            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, instagram_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.from_number, event.customer_name)
-    elif source == 'facebook':
-        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND facebook_psid = $2", tenant_id, event.from_number)
+            customer_id = await db.pool.fetchval(
+                "INSERT INTO customers (id, tenant_id, instagram_psid, name) VALUES ($1, $2, $3, $4) RETURNING id",
+                uuid.uuid4(),
+                tenant_id,
+                event.from_number,
+                event.customer_name,
+            )
+    elif source == "facebook":
+        customer_id = await db.pool.fetchval(
+            "SELECT id FROM customers WHERE tenant_id = $1 AND facebook_psid = $2",
+            tenant_id,
+            event.from_number,
+        )
         if not customer_id:
-            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, facebook_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.from_number, event.customer_name)
+            customer_id = await db.pool.fetchval(
+                "INSERT INTO customers (id, tenant_id, facebook_psid, name) VALUES ($1, $2, $3, $4) RETURNING id",
+                uuid.uuid4(),
+                tenant_id,
+                event.from_number,
+                event.customer_name,
+            )
     else:
         # Default WhatsApp (Phone)
-        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND phone_number = $2", tenant_id, event.from_number)
+        customer_id = await db.pool.fetchval(
+            "SELECT id FROM customers WHERE tenant_id = $1 AND phone_number = $2",
+            tenant_id,
+            event.from_number,
+        )
         if not customer_id:
-            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, phone_number, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.from_number, event.customer_name)
+            customer_id = await db.pool.fetchval(
+                "INSERT INTO customers (id, tenant_id, phone_number, name) VALUES ($1, $2, $3, $4) RETURNING id",
+                uuid.uuid4(),
+                tenant_id,
+                event.from_number,
+                event.customer_name,
+            )
 
     # --- 1. Conversation & Lockout Management ---
-    channel = event.channel_source # Use real channel source
-    
+    channel = event.channel_source  # Use real channel source
+
     # Try to find existing conversation using tenant_id from Protocol Omega
     # Enhanced lookup: by PSID/Phone OR by Chatwoot ID OR by shared customer_id (v6.1 Omni-Grouping)
-    conv = await db.pool.fetchrow("""
+    conv = await db.pool.fetchrow(
+        """
         SELECT id, tenant_id, status, human_override_until 
         FROM chat_conversations 
         WHERE tenant_id = $1 AND (
@@ -3238,15 +4264,22 @@ async def chat_endpoint(
             (customer_id = $5 AND $5 IS NOT NULL)
         )
         LIMIT 1
-    """, tenant_id, channel, event.from_number, event.external_chatwoot_id, customer_id)
-    
+    """,
+        tenant_id,
+        channel,
+        event.from_number,
+        event.external_chatwoot_id,
+        customer_id,
+    )
+
     conv_id = None
     is_locked = False
-    
+
     if conv:
-        conv_id = conv['id']
+        conv_id = conv["id"]
         # Update metadata (Omnichannel Sync - Protocol v4.2.2)
-        await db.pool.execute("""
+        await db.pool.execute(
+            """
             UPDATE chat_conversations 
             SET external_chatwoot_id = COALESCE($1, external_chatwoot_id), 
                 external_account_id = COALESCE($2, external_account_id), 
@@ -3254,70 +4287,112 @@ async def chat_endpoint(
                 customer_id = $4,
                 updated_at = NOW()
             WHERE id = $5
-        """, event.external_chatwoot_id, event.external_account_id, source, customer_id, conv_id)
+        """,
+            event.external_chatwoot_id,
+            event.external_account_id,
+            source,
+            customer_id,
+            conv_id,
+        )
 
         # Protocol Omega: Strict lockout check
-        if conv['human_override_until'] and conv['human_override_until'] > datetime.now().astimezone():
+        if (
+            conv["human_override_until"]
+            and conv["human_override_until"] > datetime.now().astimezone()
+        ):
             is_locked = True
     else:
         # Create new conversation using resolved tenant_id
         new_conv_id = str(uuid.uuid4())
-        conv_id = await db.pool.fetchval("""
+        conv_id = await db.pool.fetchval(
+            """
             INSERT INTO chat_conversations (
                 id, tenant_id, customer_id, channel, channel_source, external_user_id, 
                 external_chatwoot_id, external_account_id, display_name, status, created_at, updated_at
             ) VALUES (
                 $1, $2, $3, $4, $4, $5, $6, $7, $8, 'open', NOW(), NOW()
             ) RETURNING id
-        """, new_conv_id, tenant_id, customer_id, channel, event.from_number, event.external_chatwoot_id, 
-           event.external_account_id, event.customer_name or event.from_number)
+        """,
+            new_conv_id,
+            tenant_id,
+            customer_id,
+            channel,
+            event.from_number,
+            event.external_chatwoot_id,
+            event.external_account_id,
+            event.customer_name or event.from_number,
+        )
 
     # --- 2. Handle Echoes (Human Messages from App) ---
     is_echo = False
     # Standard WhatsApp echoes or Outgoing Chatwoot messages from real agents
-    if event.event_type in ["whatsapp.message.echo", "whatsapp.smb.message.echoes", "message_echo"]:
-         is_echo = True
-    elif event.event_type == "chatwoot.message_created" and event.role == 'assistant':
-         is_echo = True
-    
+    if event.event_type in [
+        "whatsapp.message.echo",
+        "whatsapp.smb.message.echoes",
+        "message_echo",
+    ]:
+        is_echo = True
+    elif event.event_type == "chatwoot.message_created" and event.role == "assistant":
+        is_echo = True
+
     if is_echo:
-         logger.info("human_echo_received", from_number=event.from_number, text_preview=event.text[:50] if event.text else "Media")
-         
-         # 1. Update Chat Conversation Lockout
-         if conv_id:
-             await db.pool.execute("""
+        logger.info(
+            "human_echo_received",
+            from_number=event.from_number,
+            text_preview=event.text[:50] if event.text else "Media",
+        )
+
+        # 1. Update Chat Conversation Lockout
+        if conv_id:
+            await db.pool.execute(
+                """
                  UPDATE chat_conversations 
                  SET human_override_until = NOW() + INTERVAL '24 hours',
                      status = 'human_handling'
                  WHERE id = $1
-             """, conv_id)
-             
-             # 2. Log message to history (marked as assistant/human_echo to show in UI but not trigger AI)
-             # We use 'assistant' role so it appears on the right side (or 'system'?)
-             # User wants to know "human handled". 
-             # Let's use 'assistant' but maybe add metadata? For now standard 'assistant'.
-             if event.text:
-                 await db.pool.execute("""
+             """,
+                conv_id,
+            )
+
+            # 2. Log message to history (marked as assistant/human_echo to show in UI but not trigger AI)
+            # We use 'assistant' role so it appears on the right side (or 'system'?)
+            # User wants to know "human handled".
+            # Let's use 'assistant' but maybe add metadata? For now standard 'assistant'.
+            if event.text:
+                await db.pool.execute(
+                    """
                      INSERT INTO chat_messages (id, conversation_id, role, content, created_at)
                      VALUES ($1, $2, 'assistant', $3, NOW())
-                 """, str(uuid.uuid4()), conv_id, event.text)
+                 """,
+                    str(uuid.uuid4()),
+                    conv_id,
+                    event.text,
+                )
 
-         return OrchestratorResult(status="ok", send=False, text="Echo processed, AI paused.")
+        return OrchestratorResult(
+            status="ok", send=False, text="Echo processed, AI paused."
+        )
     # We will assume if event_type is 'echo' or similar custom logic.
-    if event.event_type == "whatsapp.message.echo": 
+    if event.event_type == "whatsapp.message.echo":
         is_echo = True
-        
+
     if is_echo:
         # 2.1 Update Lockout
         lockout_time = datetime.now() + timedelta(hours=24)
-        await db.pool.execute("""
+        await db.pool.execute(
+            """
             UPDATE chat_conversations 
             SET human_override_until = $1, status = 'human_override', updated_at = NOW(), last_message_at = NOW(), last_message_preview = $2
             WHERE id = $3
-        """, lockout_time, event.text[:50], conv_id)
-        
+        """,
+            lockout_time,
+            event.text[:50],
+            conv_id,
+        )
+
         # 2.2 Insert Message
-        await db.pool.execute("""
+        await db.pool.execute(
+            """
             INSERT INTO chat_messages (
                 id, tenant_id, conversation_id, role, content, 
                 human_override, sent_from, sent_context, created_at, channel_source
@@ -3325,22 +4400,29 @@ async def chat_endpoint(
                 $1, $2, $3, 'assistant', $4,
                 TRUE, 'webhook', 'whatsapp_echo', NOW(), $5
             )
-        """, str(uuid.uuid4()), tenant_id, conv_id, event.text, event.channel_source)
-        
+        """,
+            str(uuid.uuid4()),
+            tenant_id,
+            conv_id,
+            event.text,
+            event.channel_source,
+        )
+
         return OrchestratorResult(status="ignored", send=False, text="Echo handled")
-        
+
     # --- 3. Handle User Message (Inbound) ---
-    
+
     # Handle Media if present
     media_id = None
     message_type = "text"
     if event.media and len(event.media) > 0:
-        m = event.media[0] # Assuming single media per message for now
+        m = event.media[0]  # Assuming single media per message for now
         message_type = m.type
         # Persist Media
         # Persist Media
         media_uuid = str(uuid.uuid4())
-        media_id = await db.pool.fetchval("""
+        media_id = await db.pool.fetchval(
+            """
             INSERT INTO chat_media (
                 id, tenant_id, channel, provider_media_id, media_type, 
                 mime_type, file_name, storage_url, created_at
@@ -3348,15 +4430,24 @@ async def chat_endpoint(
                 $1, $2, $3, $4, $5, 
                 $6, $7, $8, NOW()
             ) RETURNING id
-        """, media_uuid, tenant_id, channel, m.provider_id, m.type, m.mime_type or "application/octet-stream", m.file_name, m.url)
-    
+        """,
+            media_uuid,
+            tenant_id,
+            channel,
+            m.provider_id,
+            m.type,
+            m.mime_type or "application/octet-stream",
+            m.file_name,
+            m.url,
+        )
 
         # Store User Message
         correlation_id = event.correlation_id or str(uuid.uuid4())
-        content = event.text or "" # Can be empty if just image
+        content = event.text or ""  # Can be empty if just image
         user_msg_id = uuid.uuid4()
-        
-        await db.pool.execute("""
+
+        await db.pool.execute(
+            """
             INSERT INTO chat_messages (
                 id, tenant_id, conversation_id, role, content, 
                 correlation_id, created_at, message_type, media_id, from_number, channel_source
@@ -3364,32 +4455,49 @@ async def chat_endpoint(
                 $1, $2, $3, $4, $5,
                 $6, NOW(), $7, $8, $9, $10
             )
-        """, user_msg_id, tenant_id, conv_id, event.role, content, correlation_id, message_type, media_id, event.from_number, event.channel_source)
+        """,
+            user_msg_id,
+            tenant_id,
+            conv_id,
+            event.role,
+            content,
+            correlation_id,
+            message_type,
+            media_id,
+            event.from_number,
+            event.channel_source,
+        )
 
         # Nexus v5.32: Shadow RAG Ingestion (User Message)
-        background_tasks.add_task(ShadowIndexer.process_message, str(user_msg_id), tenant_id)
-        
+        background_tasks.add_task(
+            ShadowIndexer.process_message, str(user_msg_id), tenant_id
+        )
+
         # Update Conversation Metadata
         preview_text = content[:50] if content else f"[{message_type}]"
-        await db.pool.execute("""
+        await db.pool.execute(
+            """
             UPDATE chat_conversations 
             SET last_message_at = NOW(), last_message_preview = $1, updated_at = NOW()
             WHERE id = $2
-        """, preview_text, conv_id)
+        """,
+            preview_text,
+            conv_id,
+        )
 
     # CHECK LOCKOUT: If locked, Abort AI
     if is_locked:
         logger.info("ai_locked_by_human_override", conversation_id=str(conv_id))
-        return OrchestratorResult(status="ignored", send=False, text="Conversation locked by human override")
-
-
+        return OrchestratorResult(
+            status="ignored", send=False, text="Conversation locked by human override"
+        )
 
     # --- 4. Invoke Remote Agent (Nexus v3) with Smart Buffering ---
-    
+
     # 4.1. Debounce Logic
     buffer_key = f"buffer:{event.from_number}"
     pending_key = f"pending:{event.from_number}"
-    
+
     if event.text:
         await redis_client.rpush(buffer_key, event.text)
         await redis_client.expire(buffer_key, 60)
@@ -3398,35 +4506,66 @@ async def chat_endpoint(
         return OrchestratorResult(status="buffered", send=False, text="Aguarda...")
 
     await redis_client.setex(pending_key, 5, "active")
-    
+
     if stream:
         # 4.2. Streaming Mode (Real-time UX)
         async def stream_orchestrator():
-             # We skip buffering for direct streaming
-             async for event in execute_agent_v3_logic(
-                 event.from_number, tenant_id, conv_id, 
-                 correlation_id, event.text, event.customer_name, 
-                 event.channel_source
-             ):
-                 yield f"data: {json.dumps(event)}\n\n"
-        
+            # We skip buffering for direct streaming
+            async for event in execute_agent_v3_logic(
+                event.from_number,
+                tenant_id,
+                conv_id,
+                correlation_id,
+                event.text,
+                event.customer_name,
+                event.channel_source,
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+
         return StreamingResponse(stream_orchestrator(), media_type="text/event-stream")
 
     # 4.3. Standard Mode (Background Processing)
-    background_tasks.add_task(process_buffer_task, event.from_number, tenant_id, conv_id, correlation_id, event.customer_name, event.channel_source)
-    
-    return OrchestratorResult(status="ok", send=False, text="Message Received.", meta={"correlation_id": correlation_id})
+    background_tasks.add_task(
+        process_buffer_task,
+        event.from_number,
+        tenant_id,
+        conv_id,
+        correlation_id,
+        event.customer_name,
+        event.channel_source,
+    )
 
-async def classify_intent(message: str, history: List[Dict[str, str]], agents: List[Any], store_name: str, tenant_id: int) -> Optional[Any]:
+    return OrchestratorResult(
+        status="ok",
+        send=False,
+        text="Message Received.",
+        meta={"correlation_id": correlation_id},
+    )
+
+
+async def classify_intent(
+    message: str,
+    history: List[Dict[str, str]],
+    agents: List[Any],
+    store_name: str,
+    tenant_id: int,
+) -> Optional[Any]:
     """
     Uses a fast LLM call to classify user intent and select the best Agent Specialist.
     Part of the Nexus v5 'Armada' Coordination logic.
     """
-    if not agents: return None
-    if len(agents) == 1: return agents[0]
+    if not agents:
+        return None
+    if len(agents) == 1:
+        return agents[0]
 
-    agent_options = "\n".join([f"- {a['name']} (ID: {a['id']}, Role: {a['role']}): {a['system_prompt_template'][:100]}..." for a in agents])
-    
+    agent_options = "\n".join(
+        [
+            f"- {a['name']} (ID: {a['id']}, Role: {a['role']}): {a['system_prompt_template'][:100]}..."
+            for a in agents
+        ]
+    )
+
     prompt = f"""
 Eres el ENRUTADOR MAESTRO de la tienda '{store_name}'. 
 Tu tarea es decidir qué AGENTE ESPECIALISTA debe responder al siguiente mensaje del usuario.
@@ -3452,15 +4591,24 @@ ID DEL AGENTE ELEGIDO:"""
     try:
         # Sovereign Credentials: Fetch key from DB (Credential Architecture v2)
         openai_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
-        
-        llm = ChatOpenAI(model="gpt-4o-mini", api_key=openai_key or OPENAI_API_KEY, temperature=0, max_tokens=10)
+
+        llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            api_key=openai_key or OPENAI_API_KEY,
+            temperature=0,
+            max_tokens=10,
+        )
         resp = await llm.ainvoke(prompt)
         chosen_id = resp.content.strip()
-        
+
         for a in agents:
-            if str(a['id']) == chosen_id or a['name'].lower() in chosen_id.lower() or a['role'].lower() in chosen_id.lower():
+            if (
+                str(a["id"]) == chosen_id
+                or a["name"].lower() in chosen_id.lower()
+                or a["role"].lower() in chosen_id.lower()
+            ):
                 return a
-        return agents[0] # Fallback
+        return agents[0]  # Fallback
     except Exception as e:
         logger.error("intent_classification_failed", error=str(e))
         return agents[0]
@@ -3470,33 +4618,33 @@ def extract_response_from_agent_output(agent_output: str) -> str:
     """
     Extrae solo el campo 'response' del output del agente.
     Maneja múltiples formatos: JSON con thought/response/tool_use, o texto plano.
-    
+
     Args:
         agent_output: Output del agente (puede ser JSON string o texto plano)
-    
+
     Returns:
         Solo el texto de respuesta, sin metadata técnica
     """
     if not agent_output:
         return ""
-    
+
     # Intentar parsear como JSON
     try:
         parsed = json.loads(agent_output.strip())
         if isinstance(parsed, dict):
             # Si tiene campo 'response', extraerlo
-            if 'response' in parsed:
-                return parsed['response']
+            if "response" in parsed:
+                return parsed["response"]
             # Nexus Fix: Handle 'text' field (common in structured output)
-            if 'text' in parsed:
+            if "text" in parsed:
                 # We could potentially handle 'cta' here too, but for now we return the text info.
-                return parsed['text']
+                return parsed["text"]
             # Si no, devolver el JSON completo como string (fallback)
             return str(parsed)
     except (json.JSONDecodeError, ValueError):
         # No es JSON, devolver tal cual
         pass
-    
+
     # Fallback: devolver el texto original
     # Nexus v7.6.5: Advanced Multi-JSON Parser
     # The agent might output multiple concatenated JSON objects (e.g. {"text": "A"}{"text": "B"})
@@ -3505,7 +4653,7 @@ def extract_response_from_agent_output(agent_output: str) -> str:
     decoder = json.JSONDecoder()
     pos = 0
     ws_strip = agent_output.strip()
-    
+
     try:
         while pos < len(ws_strip):
             # Skip whitespace manually if raw_decode doesn't
@@ -3513,35 +4661,38 @@ def extract_response_from_agent_output(agent_output: str) -> str:
                 pos += 1
             if pos >= len(ws_strip):
                 break
-                
+
             obj, idx = decoder.raw_decode(ws_strip, pos)
-            pos += idx # Move past this object
-            
+            pos += idx  # Move past this object
+
             if isinstance(obj, dict):
                 content = None
-                if 'response' in obj: content = obj['response']
-                elif 'text' in obj: content = obj['text']
+                if "response" in obj:
+                    content = obj["response"]
+                elif "text" in obj:
+                    content = obj["text"]
                 # elif 'output' in obj: content = obj['output'] # Optional
-                
+
                 if content:
                     results.append(str(content))
-                    
+
         if results:
             return "\n\n".join(results)
-            
+
     except Exception:
         # If logical parsing fails, fallback to simple single-load attempt (already done above) or raw
         pass
 
     return agent_output
 
+
 async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_source):
     buffer_key = f"buffer:{from_num}"
     timer_key = f"timer:{from_num}"
     lock_key = f"active_task:{from_num}"
-    
+
     logger.info(f"⏳ BUFFER: Starting process_buffer_task loop | identifier={from_num}")
-    
+
     try:
         # Loop until buffer is empty
         while True:
@@ -3552,14 +4703,16 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
                 ttl = await redis_client.ttl(timer_key)
                 if ttl <= 0:
                     break
-                logger.info(f"⏸️ BUFFER: Waiting for silence... | ttl={ttl}s | identifier={from_num}")
-            
+                logger.info(
+                    f"⏸️ BUFFER: Waiting for silence... | ttl={ttl}s | identifier={from_num}"
+                )
+
             # Nexus v7.6.9: Atomic Pop to prevent race conditions or re-reads
-            # Instead of lrange + delete (which is racy), we pop all elements atomically if possible, 
+            # Instead of lrange + delete (which is racy), we pop all elements atomically if possible,
             # or pop one by one until empty. Redis LPOP with count is supported in recent versions.
             # But to be safe with standard py-redis async:
             # Nexus v7.7.0: Production-Grade Atomic Consumption via Lua Script
-            # This is the "Gold Standard" for queue consumption. 
+            # This is the "Gold Standard" for queue consumption.
             # It executes strictly on the Redis server: Get All Items -> Return Them -> Delete Key.
             # No network race conditions. No "read but failed to delete". No "delete but failed to read".
             LUA_POP_ALL = """
@@ -3569,7 +4722,7 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
                 end
                 return elements
             """
-            
+
             try:
                 # Execute Lua Script Atomically
                 messages_raw = await redis_client.eval(LUA_POP_ALL, 1, buffer_key)
@@ -3579,20 +4732,27 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
                 break
 
             if not messages_raw:
-                logger.info(f"📭 BUFFER: Empty (Atomic) | identifier={from_num} | stopping")
+                logger.info(
+                    f"📭 BUFFER: Empty (Atomic) | identifier={from_num} | stopping"
+                )
                 break
-            
+
             # Note: No need to delete anymore, the script did it.
-            
+
             # ... process messages ...
             # Fix: messages_raw already contains strings because of decode_responses=True in db.py
-            combined_text = "\n".join([m if isinstance(m, str) else m.decode('utf-8') for m in messages_raw])
-            logger.info(f"📥 BUFFER: Consuming batch | identifier={from_num} | count={len(messages_raw)} | text_length={len(combined_text)}")
-            
+            combined_text = "\n".join(
+                [m if isinstance(m, str) else m.decode("utf-8") for m in messages_raw]
+            )
+            logger.info(
+                f"📥 BUFFER: Consuming batch | identifier={from_num} | count={len(messages_raw)} | text_length={len(combined_text)}"
+            )
+
             # Nexus v7.6.8: History De-duplication Guard
             # Check if the agent already responded to this exact message (prevents re-processing)
             # We check if there's an assistant reply AFTER the last user message with same content
-            last_msg = await db.pool.fetchrow("""
+            last_msg = await db.pool.fetchrow(
+                """
                 SELECT m.content, m.created_at,
                     (SELECT COUNT(*) FROM chat_messages r
                      WHERE r.conversation_id = $1 AND r.role = 'assistant'
@@ -3600,11 +4760,17 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
                 FROM chat_messages m
                 WHERE m.conversation_id = $1 AND m.role = 'user'
                 ORDER BY m.created_at DESC LIMIT 1
-            """, c_id)
+            """,
+                c_id,
+            )
 
-            if last_msg and last_msg['content'] == combined_text and last_msg['reply_count'] > 0:
+            if (
+                last_msg
+                and last_msg["content"] == combined_text
+                and last_msg["reply_count"] > 0
+            ):
                 # Same content AND agent already replied — skip
-                last_time = last_msg['created_at']
+                last_time = last_msg["created_at"]
                 if last_time.tzinfo is None:
                     last_time = last_time.replace(tzinfo=timezone.utc)
 
@@ -3612,13 +4778,17 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
                 delta = (current_time - last_time).total_seconds()
 
                 if delta < 10:
-                    logger.warning(f"♻️ BUFFER: Duplicate detected (Loop Guard) | content='{combined_text[:20]}...' | delta={delta}s | already_replied | IGNORING")
+                    logger.warning(
+                        f"♻️ BUFFER: Duplicate detected (Loop Guard) | content='{combined_text[:20]}...' | delta={delta}s | already_replied | IGNORING"
+                    )
                     continue
-            
+
             # Execute agent (Synchronous sink to ensure one task at a time per user)
-            async for _ in execute_agent_v3_logic(from_num, t_id, c_id, corr_id, combined_text, customer_name, ch_source):
-                pass 
-                
+            async for _ in execute_agent_v3_logic(
+                from_num, t_id, c_id, corr_id, combined_text, customer_name, ch_source
+            ):
+                pass
+
     except Exception as e:
         logger.error("buffer_processing_failed", error=str(e), identifier=from_num)
     finally:
@@ -3627,90 +4797,124 @@ async def process_buffer_task(from_num, t_id, c_id, corr_id, customer_name, ch_s
         await redis_client.delete(timer_key)
         logger.info(f"🔓 LOCK: Released | identifier={from_num}")
 
-async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id, content, customer_name, channel_source='whatsapp'):
+
+async def execute_agent_v3_logic(
+    from_number,
+    tenant_id,
+    conv_id,
+    correlation_id,
+    content,
+    customer_name,
+    channel_source="whatsapp",
+):
     """
     Handles the actual long-running agent execution and response delivery.
     """
     try:
         # 1. Fetch Tenant Context
-        tenant_row = await db.pool.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
+        tenant_row = await db.pool.fetchrow(
+            "SELECT * FROM tenants WHERE id = $1", tenant_id
+        )
         if not tenant_row:
             logger.error("tenant_not_found_on_execution", tenant_id=tenant_id)
             return
 
         # 1.5 Enforce 24h Policy (Hybrid Brain v5.34)
         # Check if conversation is within 24h window
-        conv_status_row = await db.pool.fetchrow("""
+        conv_status_row = await db.pool.fetchrow(
+            """
              SELECT last_message_at, status FROM chat_conversations WHERE id = $1
-        """, conv_id)
-        
+        """,
+            conv_id,
+        )
+
         if conv_status_row:
-             last_msg_at = conv_status_row['last_message_at']
-             # If last_msg_at is None, assume open (newly created) or closed? Assume open for safety if new.
-             if last_msg_at:
-                 # Check delta (timezone-safe: both sides must be aware)
-                 now_utc = datetime.now(timezone.utc)
-                 if last_msg_at.tzinfo is None:
-                     last_msg_at = last_msg_at.replace(tzinfo=timezone.utc)
-                 if (now_utc - last_msg_at).total_seconds() > 24 * 3600:
-                     logger.warning("agent_execution_blocked_24h_policy", conv_id=str(conv_id))
-                     yield {"type": "error", "content": "SESSION_CLOSED_24H_POLICY"}
-                     
-                     # Trigger Re-engagement Suggestion (Optional Auto-Template)
-                     # For now, we just stop.
-                     return
+            last_msg_at = conv_status_row["last_message_at"]
+            # If last_msg_at is None, assume open (newly created) or closed? Assume open for safety if new.
+            if last_msg_at:
+                # Check delta (timezone-safe: both sides must be aware)
+                now_utc = datetime.now(timezone.utc)
+                if last_msg_at.tzinfo is None:
+                    last_msg_at = last_msg_at.replace(tzinfo=timezone.utc)
+                if (now_utc - last_msg_at).total_seconds() > 24 * 3600:
+                    logger.warning(
+                        "agent_execution_blocked_24h_policy", conv_id=str(conv_id)
+                    )
+                    yield {"type": "error", "content": "SESSION_CLOSED_24H_POLICY"}
+
+                    # Trigger Re-engagement Suggestion (Optional Auto-Template)
+                    # For now, we just stop.
+                    return
 
         # 2. Fetch History for Context (Unificado Omnicanal - Protocolo Nexus v4.2.2)
-        history_rows = await db.pool.fetch("""
+        history_rows = await db.pool.fetch(
+            """
             SELECT m.role, m.content, c.channel_source 
             FROM chat_messages m
             JOIN chat_conversations c ON m.conversation_id = c.id
             WHERE c.customer_id = (SELECT customer_id FROM chat_conversations WHERE id = $1)
             ORDER BY m.created_at ASC LIMIT 20
-        """, conv_id)
+        """,
+            conv_id,
+        )
 
         remote_history = []
         for h in history_rows:
-             role = h['role']
-             content_h = h['content'] or ""
-             ch_s = h['channel_source'] or "whatsapp"
-             
-             # Format history to tell the agent the source if it helps context
-             if role == 'user':
-                  # Prefix with [CHANNEL] so agent knows where the user said this
-                  remote_history.append({"role": "user", "content": f"[{ch_s.upper()}] {content_h}"})
-             else:
-                  remote_history.append({"role": role, "content": content_h})
+            role = h["role"]
+            content_h = h["content"] or ""
+            ch_s = h["channel_source"] or "whatsapp"
+
+            # Format history to tell the agent the source if it helps context
+            if role == "user":
+                # Prefix with [CHANNEL] so agent knows where the user said this
+                remote_history.append(
+                    {"role": "user", "content": f"[{ch_s.upper()}] {content_h}"}
+                )
+            else:
+                remote_history.append({"role": role, "content": content_h})
 
         # 2b. Fetch Active Agent (Nexus v3) with Intent Routing
-        agents = await db.pool.fetch("""
+        agents = await db.pool.fetch(
+            """
             SELECT * FROM agents 
             WHERE tenant_id = $1 AND is_active = TRUE 
             ORDER BY updated_at DESC
-        """, tenant_id)
-        
+        """,
+            tenant_id,
+        )
+
         agent_row = None
-        
+
         if agents:
             # Protocol Omega: Intent-Based Routing (The "Armada" Coordinator)
-            agent_row = await classify_intent(content, remote_history, agents, tenant_row['store_name'], tenant_id)
+            agent_row = await classify_intent(
+                content, remote_history, agents, tenant_row["store_name"], tenant_id
+            )
             if agent_row:
-                 logger.info("agent_routed_by_intent", chosen_agent=agent_row['name'], role=agent_row['role'])
+                logger.info(
+                    "agent_routed_by_intent",
+                    chosen_agent=agent_row["name"],
+                    role=agent_row["role"],
+                )
             else:
-                 agent_row = agents[0]
+                agent_row = agents[0]
 
         # 3. Construct System Prompt & Config
         if agent_row:
             # Prio 1: Agent Config
-            raw_prompt = agent_row['system_prompt_template']
-            enabled_tools = json.loads(agent_row['enabled_tools']) if agent_row['enabled_tools'] else []
-            ks_raw = agent_row.get('knowledge_sources')
+            raw_prompt = agent_row["system_prompt_template"]
+            enabled_tools = (
+                json.loads(agent_row["enabled_tools"])
+                if agent_row["enabled_tools"]
+                else []
+            )
+            ks_raw = agent_row.get("knowledge_sources")
             if ks_raw:
                 if isinstance(ks_raw, str):
                     try:
                         knowledge_sources = json.loads(ks_raw)
                         if not isinstance(knowledge_sources, list):
-                             knowledge_sources = [ks_raw]
+                            knowledge_sources = [ks_raw]
                     except Exception:
                         knowledge_sources = [ks_raw]
                 else:
@@ -3718,139 +4922,213 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
             else:
                 knowledge_sources = []
             model_config = {
-                "provider": agent_row['model_provider'],
-                "name": agent_row['model_version'], # Mapping Fix: Agent Service expects 'name'
-                "config": json.loads(agent_row['config']) if agent_row['config'] else {}
+                "provider": agent_row["model_provider"],
+                "name": agent_row[
+                    "model_version"
+                ],  # Mapping Fix: Agent Service expects 'name'
+                "config": json.loads(agent_row["config"])
+                if agent_row["config"]
+                else {},
             }
-            temp_value = agent_row['temperature'] # Extract to root level
+            temp_value = agent_row["temperature"]  # Extract to root level
 
             # Nexus v5.27: Extract wizard overrides for Polymorphism
             wizard_overrides = {}
-            if agent_row['config']:
+            if agent_row["config"]:
                 try:
-                    conf = json.loads(agent_row['config'])
+                    conf = json.loads(agent_row["config"])
                     # We map specific wizard keys that the templates expect
                     # agent_templates.py expects: tone, business_rules, synonym_dictionary
-                    wizard_overrides['tone'] = conf.get('agent_tone')
-                    wizard_overrides['business_rules'] = conf.get('business_rules')
-                    wizard_overrides['synonym_dictionary'] = conf.get('synonym_dictionary')
-                except Exception: pass
+                    wizard_overrides["tone"] = conf.get("agent_tone")
+                    wizard_overrides["business_rules"] = conf.get("business_rules")
+                    wizard_overrides["synonym_dictionary"] = conf.get(
+                        "synonym_dictionary"
+                    )
+                except Exception:
+                    pass
         else:
             # Prio 2: Tenant Config (Legacy / Fallback)
-            raw_prompt = tenant_row.get("system_prompt_template") or GLOBAL_SYSTEM_PROMPT or "Eres un asistente virtual amable."
-            enabled_tools = ["search_specific_products"] # Default set
+            raw_prompt = (
+                tenant_row.get("system_prompt_template")
+                or GLOBAL_SYSTEM_PROMPT
+                or "Eres un asistente virtual amable."
+            )
+            enabled_tools = ["search_specific_products"]  # Default set
             knowledge_sources = []
             model_config = {"provider": "openai", "name": "gpt-4o"}
-            temp_value = 0.3 # Safe fallback
-
+            temp_value = 0.3  # Safe fallback
 
         # 🔍 Nexus v7.2: Polymorphic Context Priority
         # We prioritize Wizard (agent_row.config) over Tenant (tenant_row) for business context
-        agent_conf_json = json.loads(agent_row['config']) if agent_row and agent_row['config'] else {}
-        
-        display_name = agent_conf_json.get('agent_name') or tenant_row['store_name']
-        display_description = agent_conf_json.get('store_description') or tenant_row['store_description'] or ""
-        display_catalog = agent_conf_json.get('catalog_knowledge') or tenant_row['store_catalog_knowledge'] or "Sin catálogo."
-        display_website = agent_conf_json.get('store_website') or tenant_row['store_website'] or ""
-        display_address = agent_conf_json.get('store_address') or tenant_row.get('store_location') or ""
-        display_shipping = agent_conf_json.get('shipping_partners') or "nuestros partners logísticos"
-        shadow_enabled = agent_conf_json.get('shadow_rag_enabled', False)
+        agent_conf_json = (
+            json.loads(agent_row["config"]) if agent_row and agent_row["config"] else {}
+        )
+
+        display_name = agent_conf_json.get("agent_name") or tenant_row["store_name"]
+        display_description = (
+            agent_conf_json.get("store_description")
+            or tenant_row["store_description"]
+            or ""
+        )
+        display_catalog = (
+            agent_conf_json.get("catalog_knowledge")
+            or tenant_row["store_catalog_knowledge"]
+            or "Sin catálogo."
+        )
+        display_website = (
+            agent_conf_json.get("store_website") or tenant_row["store_website"] or ""
+        )
+        display_address = (
+            agent_conf_json.get("store_address")
+            or tenant_row.get("store_location")
+            or ""
+        )
+        display_shipping = (
+            agent_conf_json.get("shipping_partners") or "nuestros partners logísticos"
+        )
+        shadow_enabled = agent_conf_json.get("shadow_rag_enabled", False)
 
         # Variable Injection (using prioritized context)
         sys_template = raw_prompt
         sys_template = sys_template.replace("{STORE_NAME}", display_name)
-        sys_template = sys_template.replace("{STORE_CATALOG_KNOWLEDGE}", display_catalog)
+        sys_template = sys_template.replace(
+            "{STORE_CATALOG_KNOWLEDGE}", display_catalog
+        )
         sys_template = sys_template.replace("{STORE_DESCRIPTION}", display_description)
         sys_template = sys_template.replace("{store_website}", display_website)
         sys_template = sys_template.replace("{store_address}", display_address)
         sys_template = sys_template.replace("{SHIPPING_PARTNERS}", display_shipping)
-        
+
         # Gather Tool Instructions
         tool_instructions_list = []
-        db_tools_rows = await db.pool.fetch("SELECT name, prompt_injection, response_guide FROM tools")
-        db_tool_map = {r['name']: r for r in db_tools_rows}
-        tenant_tool_config = json.loads(tenant_row['tool_config']) if tenant_row.get('tool_config') else {}
+        db_tools_rows = await db.pool.fetch(
+            "SELECT name, prompt_injection, response_guide FROM tools"
+        )
+        db_tool_map = {r["name"]: r for r in db_tools_rows}
+        tenant_tool_config = (
+            json.loads(tenant_row["tool_config"])
+            if tenant_row.get("tool_config")
+            else {}
+        )
 
         for t_name in enabled_tools:
-            tactical = tenant_tool_config.get(t_name, {}).get('tactical') or db_tool_map.get(t_name, {}).get('prompt_injection') or SYSTEM_TOOL_INJECTIONS.get(t_name)
-            response_g = tenant_tool_config.get(t_name, {}).get('response_guide') or db_tool_map.get(t_name, {}).get('response_guide') or SYSTEM_TOOL_RESPONSE_GUIDES.get(t_name)
+            tactical = (
+                tenant_tool_config.get(t_name, {}).get("tactical")
+                or db_tool_map.get(t_name, {}).get("prompt_injection")
+                or SYSTEM_TOOL_INJECTIONS.get(t_name)
+            )
+            response_g = (
+                tenant_tool_config.get(t_name, {}).get("response_guide")
+                or db_tool_map.get(t_name, {}).get("response_guide")
+                or SYSTEM_TOOL_RESPONSE_GUIDES.get(t_name)
+            )
             if tactical or response_g:
                 # Inject website into response guides if needed
-                if response_g: response_g = response_g.replace("{store_website}", display_website)
-                tool_instructions_list.append(f"[{t_name}]: TÁCTICA: {tactical or ''} RESPUESTA: {response_g or ''}")
+                if response_g:
+                    response_g = response_g.replace("{store_website}", display_website)
+                tool_instructions_list.append(
+                    f"[{t_name}]: TÁCTICA: {tactical or ''} RESPUESTA: {response_g or ''}"
+                )
 
         # Sovereign Credentials (Credential Architecture v2)
         openai_key = await get_tenant_credential_by_type(tenant_id, "OPENAI_API_KEY")
-        tn_token = await get_tenant_credential_by_type(tenant_id, "TIENDANUBE_ACCESS_TOKEN")
-        
+        tn_token = await get_tenant_credential_by_type(
+            tenant_id, "TIENDANUBE_ACCESS_TOKEN"
+        )
+
         # Nexus v7.6.3: Store ID might be encrypted if saved via 'Credentials' during the bugged turn
-        raw_store_id = str(tenant_row['tiendanube_store_id']) if tenant_row.get('tiendanube_store_id') else None
+        raw_store_id = (
+            str(tenant_row["tiendanube_store_id"])
+            if tenant_row.get("tiendanube_store_id")
+            else None
+        )
         if raw_store_id:
             from utils import decrypt_password
+
             tn_store_id = decrypt_password(raw_store_id)
         else:
             tn_store_id = None
-        
+
         # 🔍 Diagnostic Logging (v7.2.0)
         token_len = len(tn_token) if tn_token else 0
-        masked_token = f"{tn_token[:5]}...{tn_token[-5:]}" if token_len > 10 else "SHORT/NULL"
-        logger.info(f"🔑 TN Credentials | tid={tenant_id} | tlen={token_len} | mtoken={masked_token} | store_id={tn_store_id or 'NULL'}")
+        masked_token = (
+            f"{tn_token[:5]}...{tn_token[-5:]}" if token_len > 10 else "SHORT/NULL"
+        )
+        logger.info(
+            f"🔑 TN Credentials | tid={tenant_id} | tlen={token_len} | mtoken={masked_token} | store_id={tn_store_id or 'NULL'}"
+        )
 
         # 4. Agent Request
         agent_request = {
             "tenant_id": tenant_id,
-            "user_id": str(agent_row['user_id']) if agent_row and 'user_id' in agent_row else None,
+            "user_id": str(agent_row["user_id"])
+            if agent_row and "user_id" in agent_row
+            else None,
             "message": content,
             "history": remote_history,
-            "context": {"store_name": display_name, "system_prompt": sys_template, "current_channel": channel_source, "conversation_id": str(conv_id)},
+            "context": {
+                "store_name": display_name,
+                "system_prompt": sys_template,
+                "current_channel": channel_source,
+                "conversation_id": str(conv_id),
+            },
             "credentials": {
-                "openai_api_key": openai_key or OPENAI_API_KEY, 
-                "tiendanube_store_id": tn_store_id, 
+                "openai_api_key": openai_key or OPENAI_API_KEY,
+                "tiendanube_store_id": tn_store_id,
                 "tiendanube_access_token": tn_token,
-                "tiendanube_service_url": TIENDANUBE_SERVICE_URL
+                "tiendanube_service_url": TIENDANUBE_SERVICE_URL,
             },
             "agent_config": {
-                "tools": enabled_tools, 
-                "tool_instructions": tool_instructions_list, 
-                "knowledge_sources": knowledge_sources, 
+                "tools": enabled_tools,
+                "tool_instructions": tool_instructions_list,
+                "knowledge_sources": knowledge_sources,
                 "model": model_config,
                 "temperature": temp_value,
-                "template_type": agent_row['template_type'] if agent_row else "sales",
+                "template_type": agent_row["template_type"] if agent_row else "sales",
                 "wizard_overrides": wizard_overrides if agent_row else {},
-                "shadow_rag_enabled": shadow_enabled  # PROPACACIÓN EXITOSA (v7.2)
-            }
+                "shadow_rag_enabled": shadow_enabled,  # PROPACACIÓN EXITOSA (v7.2)
+            },
         }
 
         # 5. Call Agent Service (Streaming Session)
         full_text_accumulated = ""
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
-                "POST", f"{AGENT_SERVICE_URL}/v1/agent/execute", 
-                json=agent_request, headers={"X-Internal-Secret": INTERNAL_SECRET_KEY}
+                "POST",
+                f"{AGENT_SERVICE_URL}/v1/agent/execute",
+                json=agent_request,
+                headers={"X-Internal-Secret": INTERNAL_SECRET_KEY},
             ) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
-                    if not line: continue
+                    if not line:
+                        continue
                     chunk = json.loads(line)
                     if chunk.get("type") == "token":
                         full_text_accumulated += chunk.get("content", "")
                     elif chunk.get("type") in ["tool_start", "tool_end"]:
-                        logger.info(f"🛠️ AGENT TOOL: {chunk.get('type')} | tool={chunk.get('tool')} | input={chunk.get('input') if chunk.get('type') == 'tool_start' else '...'}")
+                        logger.info(
+                            f"🛠️ AGENT TOOL: {chunk.get('type')} | tool={chunk.get('tool')} | input={chunk.get('input') if chunk.get('type') == 'tool_start' else '...'}"
+                        )
                     yield chunk
 
         # 6. Post-Stream: Consolidation & Delivery
-        if not full_text_accumulated: 
-            logger.warning(f"⚠️ AGENT: No response generated | from={from_number} | tenant={tenant_id}")
+        if not full_text_accumulated:
+            logger.warning(
+                f"⚠️ AGENT: No response generated | from={from_number} | tenant={tenant_id}"
+            )
             return
-        
-        logger.info(f"🤖 AGENT: Raw response received | from={from_number} | length={len(full_text_accumulated)} | preview={full_text_accumulated[:100]}...")
+
+        logger.info(
+            f"🤖 AGENT: Raw response received | from={from_number} | length={len(full_text_accumulated)} | preview={full_text_accumulated[:100]}..."
+        )
 
         # FIRST: Extract response from (potentially JSON) output
         clean_response_full = extract_response_from_agent_output(full_text_accumulated)
-        
+
         # SECOND: Split by '|||' (Intentional AI breaks)
         initial_parts = clean_response_full.split("|||")
-        
+
         # THIRD: Emergency Auto-Splitter (v6.2.11)
         # Further split long parts by double newlines or char limits to improve UI/Relay stability
         final_parts = []
@@ -3859,15 +5137,18 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                 # Basic split by double newline
                 subparts = [sp.strip() for sp in p.split("\n\n") if sp.strip()]
                 for sp in subparts:
-                    if len(sp) > 500: # Hard limit for sub-splitting
+                    if len(sp) > 500:  # Hard limit for sub-splitting
                         # Split by sentence or space
                         while len(sp) > 500:
-                            cut = sp.rfind('. ', 0, 500)
-                            if cut == -1: cut = sp.rfind(' ', 0, 500)
-                            if cut == -1: cut = 500
-                            final_parts.append(sp[:cut+1].strip())
-                            sp = sp[cut+1:].strip()
-                        if sp: final_parts.append(sp)
+                            cut = sp.rfind(". ", 0, 500)
+                            if cut == -1:
+                                cut = sp.rfind(" ", 0, 500)
+                            if cut == -1:
+                                cut = 500
+                            final_parts.append(sp[: cut + 1].strip())
+                            sp = sp[cut + 1 :].strip()
+                        if sp:
+                            final_parts.append(sp)
                     else:
                         final_parts.append(sp)
             else:
@@ -3875,7 +5156,8 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
 
         # ROI Real v8.0: Inject UTM tracking on FB/IG links
         from app.services.link_tracker import inject_tracking_in_text
-        if channel_source in ('facebook', 'instagram'):
+
+        if channel_source in ("facebook", "instagram"):
             final_parts = [
                 inject_tracking_in_text(p, str(conv_id), channel_source, tenant_id)
                 for p in final_parts
@@ -3884,28 +5166,45 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
         for idx, text_content in enumerate(final_parts):
             if "HUMAN_HANDOFF_REQUESTED:" in text_content:
                 reason = text_content.split("HUMAN_HANDOFF_REQUESTED:")[1].strip()
-                await trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, customer_name)
+                await trigger_human_handoff_v3(
+                    from_number, tenant_id, conv_id, reason, customer_name
+                )
                 continue
 
-            clean_response = text_content # Already clean
-            logger.info(f"✅ AGENT: Bubble prepared | from={from_number} | length={len(clean_response)} | preview={clean_response[:100]}...")
+            clean_response = text_content  # Already clean
+            logger.info(
+                f"✅ AGENT: Bubble prepared | from={from_number} | length={len(clean_response)} | preview={clean_response[:100]}..."
+            )
 
             # Persist
             agent_msg_id = str(uuid.uuid4())
-            await db.pool.execute("""
+            await db.pool.execute(
+                """
                 INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, correlation_id, created_at, from_number, channel_source)
                 VALUES ($1, $2, $3, 'assistant', $4, $5, NOW(), $6, (SELECT channel_source FROM chat_conversations WHERE id = $3))
-            """, agent_msg_id, tenant_id, conv_id, clean_response, correlation_id, from_number)
-            
+            """,
+                agent_msg_id,
+                tenant_id,
+                conv_id,
+                clean_response,
+                correlation_id,
+                from_number,
+            )
+
             # Track usage: outgoing message + estimated tokens
             try:
                 from app.services.usage_tracker import get_usage_tracker
+
                 tracker = get_usage_tracker()
                 await tracker.track_message(tenant_id, "sent")
                 # Estimate tokens: ~4 chars per token (rough approximation)
                 estimated_tokens = len(clean_response) // 4 + len(content) // 4
-                estimated_cost = estimated_tokens * 0.000002  # ~$0.002/1K tokens for gpt-4o-mini
-                await tracker.track_tokens(tenant_id, estimated_tokens, "gpt-4o-mini", estimated_cost)
+                estimated_cost = (
+                    estimated_tokens * 0.000002
+                )  # ~$0.002/1K tokens for gpt-4o-mini
+                await tracker.track_tokens(
+                    tenant_id, estimated_tokens, "gpt-4o-mini", estimated_cost
+                )
             except Exception as track_err:
                 logger.warning("usage_track_agent_error", error=str(track_err))
 
@@ -3921,22 +5220,28 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                     "role": "assistant",
                     "content": clean_response,
                     "from_number": from_number,
-                    "created_at": datetime.now().isoformat()
-                }
+                    "created_at": datetime.now().isoformat(),
+                },
             }
             channel_redis = f"events:tenant:{tenant_id}:assets"
             try:
                 await redis_client.publish(channel_redis, json.dumps(redis_payload))
             except Exception as e:
-                logger.warning(f"⚠️ UI: Failed to publish agent message | error={str(e)}")
+                logger.warning(
+                    f"⚠️ UI: Failed to publish agent message | error={str(e)}"
+                )
 
             # Unified Delivery Logic (Nexus v6.1 - Triangular Routing)
-            logger.info(f"📤 CHATWOOT: Sending response | conv={conv_id} | channel={channel_source} | length={len(clean_response)}")
+            logger.info(
+                f"📤 CHATWOOT: Sending response | conv={conv_id} | channel={channel_source} | length={len(clean_response)}"
+            )
             try:
                 # Spacing Fix: Delay between bubbles
                 if idx > 0:
-                     logger.info(f"⏳ SPACING: Waiting 4s before next bubble | from={from_number}")
-                     await asyncio.sleep(4)
+                    logger.info(
+                        f"⏳ SPACING: Waiting 4s before next bubble | from={from_number}"
+                    )
+                    await asyncio.sleep(4)
 
                 await unified_message_delivery(
                     tenant_id=tenant_id,
@@ -3944,70 +5249,102 @@ async def execute_agent_v3_logic(from_number, tenant_id, conv_id, correlation_id
                     phone=from_number,
                     text=text_content,
                     channel=channel_source,
-                    correlation_id=correlation_id
+                    correlation_id=correlation_id,
                 )
                 logger.info(f"✅ CHATWOOT: Response sent successfully | conv={conv_id}")
             except Exception as e:
-                logger.error("agent_delivery_failed", error=str(e), conv_id=str(conv_id))
+                logger.error(
+                    "agent_delivery_failed", error=str(e), conv_id=str(conv_id)
+                )
                 # We don't raise here to allow other parts to be sent if splitting by |||
 
         # Track Usage
-        await db.pool.execute("UPDATE tenants SET total_tool_calls = total_tool_calls + 1 WHERE id = $1", tenant_id)
+        await db.pool.execute(
+            "UPDATE tenants SET total_tool_calls = total_tool_calls + 1 WHERE id = $1",
+            tenant_id,
+        )
 
     except Exception as e:
         logger.error("agent_execution_v3_logic_failed", error=str(e))
         yield {"type": "error", "content": str(e)}
 
-async def trigger_human_handoff_v3(from_number, tenant_id, conv_id, reason, customer_name):
+
+async def trigger_human_handoff_v3(
+    from_number, tenant_id, conv_id, reason, customer_name
+):
     """Refactored version of handoff trigger for background execution."""
     logger.info("triggering_human_handoff", from_number=from_number, reason=reason)
     lockout_date = datetime(2099, 12, 31)
-    await db.pool.execute("""
+    await db.pool.execute(
+        """
         UPDATE chat_conversations SET human_override_until = $1, status = 'human_override'
         WHERE id = $2
-    """, lockout_date, conv_id)
-    
-    await db.pool.execute("""
+    """,
+        lockout_date,
+        conv_id,
+    )
+
+    await db.pool.execute(
+        """
         INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, created_at)
         VALUES ($1, $2, $3, 'system', $4, NOW())
-    """, uuid.uuid4(), tenant_id, conv_id, f"Solicitud de derivación humana: {reason}")
-    
-    logger.info("notifying_admins_of_handoff", tenant_id=tenant_id, customer=customer_name)
-    
+    """,
+        uuid.uuid4(),
+        tenant_id,
+        conv_id,
+        f"Solicitud de derivación humana: {reason}",
+    )
+
+    logger.info(
+        "notifying_admins_of_handoff", tenant_id=tenant_id, customer=customer_name
+    )
+
     # Check for Gmail Handoff
     try:
-        tenant_settings = await db.pool.fetchrow("""
+        tenant_settings = await db.pool.fetchrow(
+            """
              SELECT handoff_enabled, handoff_target_email, store_name FROM tenants WHERE id = $1
-        """, tenant_id)
-        
-        if tenant_settings and tenant_settings['handoff_enabled'] and tenant_settings['handoff_target_email']:
-             # Protocol Omega: Human Handoffs ALWAYS use Global Platform SMTP
-             # This ensures internal notifications come from the official Nexus account.
-             
-             email_payload = {
-                 "to_email": tenant_settings['handoff_target_email'],
-                 "subject": f"🚨 Solicitud de Humano: {tenant_settings['store_name']}",
-                 "text": f"El cliente {customer_name} ({from_number}) solicita atención humana.\nMotivo: {reason}\n\nIngresa al panel para responder: https://app.nexus-ai.com",
-                 # Pass None to force the downstream service to use its global env vars
-                 "smtp_host": None,
-                 "smtp_port": None,
-                 "smtp_user": None,
-                 "smtp_password": None
-             }
-             
-             # Call TiendaNube Service (Tool Holder) to send email
-             tn_service_url = os.getenv("TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003")
-             internal_token = os.getenv("INTERNAL_API_TOKEN", "")
-             
-             async with httpx.AsyncClient(timeout=10.0) as client:
-                 await client.post(
-                     f"{tn_service_url}/tools/sendemail", 
-                     json=email_payload,
-                     headers={"X-Internal-Secret": internal_token}
-                 )
-             logger.info("handoff_email_sent", email=tenant_settings['handoff_target_email'])
+        """,
+            tenant_id,
+        )
+
+        if (
+            tenant_settings
+            and tenant_settings["handoff_enabled"]
+            and tenant_settings["handoff_target_email"]
+        ):
+            # Protocol Omega: Human Handoffs ALWAYS use Global Platform SMTP
+            # This ensures internal notifications come from the official Nexus account.
+
+            email_payload = {
+                "to_email": tenant_settings["handoff_target_email"],
+                "subject": f"🚨 Solicitud de Humano: {tenant_settings['store_name']}",
+                "text": f"El cliente {customer_name} ({from_number}) solicita atención humana.\nMotivo: {reason}\n\nIngresa al panel para responder: https://app.nexus-ai.com",
+                # Pass None to force the downstream service to use its global env vars
+                "smtp_host": None,
+                "smtp_port": None,
+                "smtp_user": None,
+                "smtp_password": None,
+            }
+
+            # Call TiendaNube Service (Tool Holder) to send email
+            tn_service_url = os.getenv(
+                "TIENDANUBE_SERVICE_URL", "http://tiendanube_service:8003"
+            )
+            internal_token = os.getenv("INTERNAL_API_TOKEN", "")
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post(
+                    f"{tn_service_url}/tools/sendemail",
+                    json=email_payload,
+                    headers={"X-Internal-Secret": internal_token},
+                )
+            logger.info(
+                "handoff_email_sent", email=tenant_settings["handoff_target_email"]
+            )
     except Exception as e:
         logger.error("handoff_email_failed", error=str(e))
+
 
 # --- Repair: Add System Prompt + Agent Columns per "Agente Soberano" Spec ---
 migration_steps.append("""
@@ -4097,5 +5434,16 @@ BEGIN
         ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS user_id UUID;
     END IF;
 
+END $$;
+""")
+
+# --- Password Reset Token Columns (Security Fix) ---
+migration_steps.append("""
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='users') THEN
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR(255) UNIQUE;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMPTZ;
+    END IF;
 END $$;
 """)

@@ -7,6 +7,7 @@ Full admin panel for managing the SaaS platform:
 - Usage & cost tracking
 - Audit logs
 """
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
@@ -17,17 +18,19 @@ from app.models.auth import User
 from db import redis_client
 import json
 import structlog
+from app.core.sanitization import sanitize_html, sanitize_sql_identifier
 
 logger = structlog.get_logger()
 
 router = APIRouter(
     prefix="/platform",
     tags=["Platform Control Tower"],
-    dependencies=[Depends(get_current_super_admin)]
+    dependencies=[Depends(get_current_super_admin)],
 )
 
 
 # ---------- Schemas ----------
+
 
 class TenantActionRequest(BaseModel):
     action: str  # suspend, activate, archive
@@ -56,10 +59,10 @@ class UpdatePlanRequest(BaseModel):
 
 # ---------- Overview ----------
 
+
 @router.get("/overview")
 async def platform_overview(
-    current_user: User = Depends(get_current_super_admin),
-    db = Depends(get_pool_db)
+    current_user: User = Depends(get_current_super_admin), db=Depends(get_pool_db)
 ):
     """
     God Mode: Aggregate metrics with REAL revenue data.
@@ -67,13 +70,18 @@ async def platform_overview(
     # 1. Counts
     total_users = await db.fetchval("SELECT count(*) FROM users") or 0
     total_tenants = await db.fetchval("SELECT count(*) FROM tenants") or 0
-    active_tenants = await db.fetchval("SELECT count(*) FROM tenants WHERE is_active = true") or 0
+    active_tenants = (
+        await db.fetchval("SELECT count(*) FROM tenants WHERE is_active = true") or 0
+    )
 
     # 2. Activity (Last 24h)
-    msgs_24h = await db.fetchval("""
+    msgs_24h = (
+        await db.fetchval("""
         SELECT count(*) FROM chat_messages
         WHERE created_at > NOW() - INTERVAL '24 HOURS'
-    """) or 0
+    """)
+        or 0
+    )
 
     # 3. Subscription breakdown
     sub_stats = await db.fetch("""
@@ -93,40 +101,66 @@ async def platform_overview(
         plan_breakdown[plan]["statuses"][row["status"]] = row["count"]
 
     # 4. REAL Revenue (from paid invoices)
-    revenue_30d = await db.fetchval("""
+    revenue_30d = (
+        await db.fetchval("""
         SELECT COALESCE(SUM(amount_usd), 0) FROM invoices
         WHERE status = 'paid' AND paid_at > NOW() - INTERVAL '30 DAYS'
-    """) or 0
+    """)
+        or 0
+    )
 
-    revenue_total = await db.fetchval("""
+    revenue_total = (
+        await db.fetchval("""
         SELECT COALESCE(SUM(amount_usd), 0) FROM invoices WHERE status = 'paid'
-    """) or 0
+    """)
+        or 0
+    )
 
     # 5. MRR (Monthly Recurring Revenue)
-    mrr = await db.fetchval("""
+    mrr = (
+        await db.fetchval("""
         SELECT COALESCE(SUM(p.price_usd), 0)
         FROM subscriptions s
         JOIN plans p ON p.id = s.plan_id
         WHERE s.status = 'active'
-    """) or 0
+    """)
+        or 0
+    )
 
     # 6. Costs (LLM usage this month)
-    period_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    total_cost = await db.fetchval("""
+    period_start = datetime.utcnow().replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    total_cost = (
+        await db.fetchval(
+            """
         SELECT COALESCE(SUM(llm_cost_usd), 0) FROM usage_records
         WHERE period_start = $1
-    """, period_start) or 0
+    """,
+            period_start,
+        )
+        or 0
+    )
 
-    total_tokens = await db.fetchval("""
+    total_tokens = (
+        await db.fetchval(
+            """
         SELECT COALESCE(SUM(tokens_used), 0) FROM usage_records
         WHERE period_start = $1
-    """, period_start) or 0
+    """,
+            period_start,
+        )
+        or 0
+    )
 
     # 7. Trials expiring soon
-    trials_expiring = await db.fetchval("""
+    trials_expiring = (
+        await db.fetchval("""
         SELECT COUNT(*) FROM subscriptions
         WHERE status = 'trialing' AND trial_ends_at < NOW() + INTERVAL '3 DAYS'
-    """) or 0
+    """)
+        or 0
+    )
 
     return {
         "total_users": total_users,
@@ -140,22 +174,23 @@ async def platform_overview(
             "revenue_total": revenue_total,
             "formatted_mrr": f"${mrr:,.0f}",
             "formatted_30d": f"${revenue_30d:,.0f}",
-            "formatted_total": f"${revenue_total:,.0f}"
+            "formatted_total": f"${revenue_total:,.0f}",
         },
         "costs": {
             "llm_cost_month": total_cost,
             "tokens_month": total_tokens,
             "formatted_cost": f"${total_cost:,.2f}",
-            "margin": mrr - total_cost if mrr > 0 else 0
+            "margin": mrr - total_cost if mrr > 0 else 0,
         },
-        "trials_expiring_soon": trials_expiring
+        "trials_expiring_soon": trials_expiring,
     }
 
 
 # ---------- Infrastructure ----------
 
+
 @router.get("/infrastructure")
-async def platform_infrastructure(db = Depends(get_pool_db)):
+async def platform_infrastructure(db=Depends(get_pool_db)):
     """Technical Health Check."""
     redis_info = {}
     try:
@@ -165,7 +200,9 @@ async def platform_infrastructure(db = Depends(get_pool_db)):
         redis_info = {"error": str(e)}
 
     try:
-        db_size_str = await db.fetchval("SELECT pg_size_pretty(pg_database_size(current_database()))")
+        db_size_str = await db.fetchval(
+            "SELECT pg_size_pretty(pg_database_size(current_database()))"
+        )
     except Exception:
         db_size_str = "Unknown"
 
@@ -188,11 +225,12 @@ async def platform_infrastructure(db = Depends(get_pool_db)):
         "redis_peak": redis_info.get("used_memory_peak_human", "N/A"),
         "db_size": db_size_str,
         "tables": tables,
-        "status": "Healthy"
+        "status": "Healthy",
     }
 
 
 # ---------- Tenant Management ----------
+
 
 @router.get("/tenants")
 async def list_all_tenants(
@@ -201,7 +239,7 @@ async def list_all_tenants(
     status_filter: str = None,
     plan_filter: str = None,
     search: str = None,
-    db = Depends(get_pool_db)
+    db=Depends(get_pool_db),
 ):
     """Paginated list of tenants with subscription info."""
     conditions = []
@@ -219,7 +257,9 @@ async def list_all_tenants(
         param_idx += 1
 
     if search:
-        conditions.append(f"(t.store_name ILIKE ${param_idx} OR u.email ILIKE ${param_idx})")
+        conditions.append(
+            f"(t.store_name ILIKE ${param_idx} OR u.email ILIKE ${param_idx})"
+        )
         params.append(f"%{search}%")
         param_idx += 1
 
@@ -227,7 +267,8 @@ async def list_all_tenants(
 
     params.extend([limit, offset])
 
-    rows = await db.fetch(f"""
+    rows = await db.fetch(
+        f"""
         SELECT t.id, t.store_name, t.bot_phone_number, t.is_active,
                COALESCE(t.status, 'active') as tenant_status,
                t.created_at,
@@ -248,29 +289,39 @@ async def list_all_tenants(
         {where_clause}
         ORDER BY t.created_at DESC
         LIMIT ${param_idx} OFFSET ${param_idx + 1}
-    """, *params)
+    """,
+        *params,
+    )
 
-    total = await db.fetchval(f"""
+    total = (
+        await db.fetchval(
+            f"""
         SELECT COUNT(*)
         FROM tenants t
         LEFT JOIN users u ON u.tenant_id = t.id AND u.role = 'owner'
         LEFT JOIN subscriptions s ON s.tenant_id = t.id
         LEFT JOIN plans p ON p.id = s.plan_id
         {where_clause}
-    """, *params[:-2]) if params[:-2] else await db.fetchval("SELECT COUNT(*) FROM tenants")
+    """,
+            *params[:-2],
+        )
+        if params[:-2]
+        else await db.fetchval("SELECT COUNT(*) FROM tenants")
+    )
 
     return {
         "tenants": [dict(r) for r in rows],
         "total": total,
         "limit": limit,
-        "offset": offset
+        "offset": offset,
     }
 
 
 @router.get("/tenants/{tenant_id}")
-async def get_tenant_detail(tenant_id: int, db = Depends(get_pool_db)):
+async def get_tenant_detail(tenant_id: int, db=Depends(get_pool_db)):
     """Get detailed info for a specific tenant."""
-    tenant = await db.fetchrow("""
+    tenant = await db.fetchrow(
+        """
         SELECT t.*, u.email as owner_email, u.full_name as owner_name,
                u.is_verified, u.id as owner_user_id,
                p.name as plan_name, p.display_name as plan_display_name,
@@ -281,47 +332,59 @@ async def get_tenant_detail(tenant_id: int, db = Depends(get_pool_db)):
         LEFT JOIN subscriptions s ON s.tenant_id = t.id
         LEFT JOIN plans p ON p.id = s.plan_id
         WHERE t.id = $1
-    """, tenant_id)
+    """,
+        tenant_id,
+    )
 
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
     # Usage history
-    usage = await db.fetch("""
+    usage = await db.fetch(
+        """
         SELECT period_start, messages_sent, messages_received, tokens_used,
                api_calls, llm_cost_usd
         FROM usage_records
         WHERE tenant_id = $1
         ORDER BY period_start DESC
         LIMIT 12
-    """, tenant_id)
+    """,
+        tenant_id,
+    )
 
     # Invoices
-    invoices = await db.fetch("""
+    invoices = await db.fetch(
+        """
         SELECT id, amount_usd, amount_local, currency, status, paid_at, created_at
         FROM invoices
         WHERE tenant_id = $1
         ORDER BY created_at DESC
         LIMIT 20
-    """, tenant_id)
+    """,
+        tenant_id,
+    )
 
     # Team members
-    users = await db.fetch("""
+    users = await db.fetch(
+        """
         SELECT id, email, role, full_name, is_verified, created_at
         FROM users WHERE tenant_id = $1
-    """, tenant_id)
+    """,
+        tenant_id,
+    )
 
     # Agent count
-    agent_count = await db.fetchval(
-        "SELECT COUNT(*) FROM agents WHERE tenant_id = $1", tenant_id
-    ) or 0
+    agent_count = (
+        await db.fetchval("SELECT COUNT(*) FROM agents WHERE tenant_id = $1", tenant_id)
+        or 0
+    )
 
     return {
         "tenant": dict(tenant),
         "usage_history": [dict(r) for r in usage],
         "invoices": [dict(r) for r in invoices],
         "team_members": [dict(r) for r in users],
-        "agent_count": agent_count
+        "agent_count": agent_count,
     }
 
 
@@ -331,7 +394,7 @@ async def tenant_action(
     req: TenantActionRequest,
     request: Request,
     current_user: User = Depends(get_current_super_admin),
-    db = Depends(get_pool_db)
+    db=Depends(get_pool_db),
 ):
     """Suspend, activate, or archive a tenant."""
     tenant = await db.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
@@ -341,43 +404,54 @@ async def tenant_action(
     if req.action == "suspend":
         await db.execute(
             "UPDATE tenants SET is_active = false, status = 'suspended' WHERE id = $1",
-            tenant_id
+            tenant_id,
         )
         await db.execute(
             "UPDATE subscriptions SET status = 'suspended' WHERE tenant_id = $1",
-            tenant_id
+            tenant_id,
         )
     elif req.action == "activate":
         await db.execute(
             "UPDATE tenants SET is_active = true, status = 'active' WHERE id = $1",
-            tenant_id
+            tenant_id,
         )
         # Reactivate subscription if it was suspended
-        await db.execute("""
+        await db.execute(
+            """
             UPDATE subscriptions SET status = 'active', updated_at = NOW()
             WHERE tenant_id = $1 AND status = 'suspended'
-        """, tenant_id)
+        """,
+            tenant_id,
+        )
     elif req.action == "archive":
         await db.execute(
             "UPDATE tenants SET is_active = false, status = 'archived' WHERE id = $1",
-            tenant_id
+            tenant_id,
         )
         await db.execute(
             "UPDATE subscriptions SET status = 'canceled', canceled_at = NOW() WHERE tenant_id = $1",
-            tenant_id
+            tenant_id,
         )
     else:
         raise HTTPException(status_code=400, detail=f"Unknown action: {req.action}")
 
     # Audit log
-    await db.execute("""
+    await db.execute(
+        """
         INSERT INTO audit_logs (user_id, tenant_id, action, resource_type, resource_id, details, ip_address)
         VALUES ($1, $2, $3, 'tenant', $4, $5::jsonb, $6)
-    """, current_user.id, tenant_id, f"tenant.{req.action}", str(tenant_id),
-         json.dumps({"reason": req.reason or "admin_action"}),
-         request.client.host if request.client else None)
+    """,
+        current_user.id,
+        tenant_id,
+        f"tenant.{req.action}",
+        str(tenant_id),
+        json.dumps({"reason": sanitize_html(req.reason) if req.reason else "admin_action"}),
+        request.client.host if request.client else None,
+    )
 
-    logger.info("tenant_action", action=req.action, tenant_id=tenant_id, by=str(current_user.id))
+    logger.info(
+        "tenant_action", action=req.action, tenant_id=tenant_id, by=str(current_user.id)
+    )
 
     return {"message": f"Tenant {req.action}d successfully", "tenant_id": tenant_id}
 
@@ -388,41 +462,62 @@ async def admin_change_plan(
     req: ChangeTenantPlanRequest,
     request: Request,
     current_user: User = Depends(get_current_super_admin),
-    db = Depends(get_pool_db)
+    db=Depends(get_pool_db),
 ):
     """Admin: Force change a tenant's plan."""
-    plan = await db.fetchrow("SELECT * FROM plans WHERE name = $1", req.plan_name)
+    plan_name_safe = sanitize_html(req.plan_name)
+    plan = await db.fetchrow("SELECT * FROM plans WHERE name = $1", plan_name_safe)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
     # Get current plan
-    current = await db.fetchrow("""
+    current = await db.fetchrow(
+        """
         SELECT p.name FROM subscriptions s JOIN plans p ON p.id = s.plan_id
         WHERE s.tenant_id = $1
-    """, tenant_id)
+    """,
+        tenant_id,
+    )
 
-    await db.execute("""
+    await db.execute(
+        """
         INSERT INTO subscriptions (tenant_id, plan_id, status, current_period_start, trial_ends_at)
         VALUES ($1, $2, 'active', NOW(), NULL)
         ON CONFLICT (tenant_id) DO UPDATE SET
             plan_id = $2, status = 'active', trial_ends_at = NULL, updated_at = NOW()
-    """, tenant_id, plan["id"])
+    """,
+        tenant_id,
+        plan["id"],
+    )
 
     # Ensure tenant is active
-    await db.execute("UPDATE tenants SET is_active = true, status = 'active' WHERE id = $1", tenant_id)
+    await db.execute(
+        "UPDATE tenants SET is_active = true, status = 'active' WHERE id = $1",
+        tenant_id,
+    )
 
     # Audit
-    await db.execute("""
+    await db.execute(
+        """
         INSERT INTO audit_logs (user_id, tenant_id, action, resource_type, details, ip_address)
         VALUES ($1, $2, 'plan.admin_change', 'subscription', $3::jsonb, $4)
-    """, current_user.id, tenant_id,
-         json.dumps({"from": current["name"] if current else "none", "to": req.plan_name}),
-         request.client.host if request.client else None)
+    """,
+        current_user.id,
+        tenant_id,
+        json.dumps(
+            {"from": current["name"] if current else "none", "to": plan_name_safe}
+        ),
+        request.client.host if request.client else None,
+    )
 
-    return {"message": f"Plan changed to {plan['display_name']}", "tenant_id": tenant_id}
+    return {
+        "message": f"Plan changed to {plan['display_name']}",
+        "tenant_id": tenant_id,
+    }
 
 
 # ---------- Edit Tenant ----------
+
 
 class EditTenantRequest(BaseModel):
     store_name: Optional[str] = None
@@ -439,21 +534,31 @@ async def edit_tenant(
     req: EditTenantRequest,
     request: Request,
     current_user: User = Depends(get_current_super_admin),
-    db = Depends(get_pool_db)
+    db=Depends(get_pool_db),
 ):
     """Admin: Edit tenant details."""
     tenant = await db.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
-    ALLOWED_FIELDS = {"store_name", "owner_email", "bot_phone_number", "store_website", "store_description", "is_active"}
+    ALLOWED_FIELDS = {
+        "store_name",
+        "owner_email",
+        "bot_phone_number",
+        "store_website",
+        "store_description",
+        "is_active",
+    }
     updates = []
     params = []
     idx = 1
 
+    STRING_FIELDS = {"store_name", "owner_email", "bot_phone_number", "store_website", "store_description"}
     for field, value in req.model_dump(exclude_none=True).items():
         if field not in ALLOWED_FIELDS:
             continue
+        if isinstance(value, str) and field in STRING_FIELDS:
+            value = sanitize_html(value)
         updates.append(f"{field} = ${idx}")
         params.append(value)
         idx += 1
@@ -464,23 +569,28 @@ async def edit_tenant(
     params.append(tenant_id)
     await db.execute(
         f"UPDATE tenants SET {', '.join(updates)}, updated_at = NOW() WHERE id = ${idx}",
-        *params
+        *params,
     )
 
     # If owner_email changed, update users table too
     if req.owner_email:
         await db.execute(
             "UPDATE users SET email = $1 WHERE tenant_id = $2 AND role = 'owner'",
-            req.owner_email, tenant_id
+            req.owner_email,
+            tenant_id,
         )
 
     # Audit
-    await db.execute("""
+    await db.execute(
+        """
         INSERT INTO audit_logs (user_id, tenant_id, action, resource_type, details, ip_address)
         VALUES ($1, $2, 'tenant.edit', 'tenant', $3::jsonb, $4)
-    """, current_user.id, tenant_id,
-         json.dumps(req.model_dump(exclude_none=True)),
-         request.client.host if request.client else None)
+    """,
+        current_user.id,
+        tenant_id,
+        json.dumps(req.model_dump(exclude_none=True)),
+        request.client.host if request.client else None,
+    )
 
     logger.info("tenant_edited", tenant_id=tenant_id, by=str(current_user.id))
     return {"message": "Tenant updated", "tenant_id": tenant_id}
@@ -488,12 +598,13 @@ async def edit_tenant(
 
 # ---------- Delete Tenant ----------
 
+
 @router.delete("/tenants/{tenant_id}")
 async def delete_tenant(
     tenant_id: int,
     request: Request,
     current_user: User = Depends(get_current_super_admin),
-    db = Depends(get_pool_db)
+    db=Depends(get_pool_db),
 ):
     """Admin: Permanently delete a tenant and all associated data."""
     tenant = await db.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
@@ -505,36 +616,56 @@ async def delete_tenant(
         raise HTTPException(status_code=400, detail="Cannot delete your own tenant")
 
     store_name = tenant["store_name"]
+    safe_store_name = sanitize_html(store_name)
 
     # Delete in order (respecting FK constraints)
     await db.execute("DELETE FROM audit_logs WHERE tenant_id = $1", tenant_id)
     await db.execute("DELETE FROM invoices WHERE tenant_id = $1", tenant_id)
     await db.execute("DELETE FROM usage_records WHERE tenant_id = $1", tenant_id)
     await db.execute("DELETE FROM subscriptions WHERE tenant_id = $1", tenant_id)
-    await db.execute("DELETE FROM business_assets WHERE tenant_id = $1::text", str(tenant_id))
-    await db.execute("DELETE FROM chat_messages WHERE from_number IN (SELECT bot_phone_number FROM tenants WHERE id = $1)", tenant_id)
+    await db.execute(
+        "DELETE FROM business_assets WHERE tenant_id = $1::text", str(tenant_id)
+    )
+    await db.execute(
+        "DELETE FROM chat_messages WHERE from_number IN (SELECT bot_phone_number FROM tenants WHERE id = $1)",
+        tenant_id,
+    )
     await db.execute("DELETE FROM agents WHERE tenant_id = $1", tenant_id)
     await db.execute("DELETE FROM credentials WHERE tenant_id = $1", tenant_id)
-    await db.execute("DELETE FROM tenant_human_handoff_config WHERE tenant_id = $1", tenant_id)
+    await db.execute(
+        "DELETE FROM tenant_human_handoff_config WHERE tenant_id = $1", tenant_id
+    )
     await db.execute("DELETE FROM users WHERE tenant_id = $1", tenant_id)
     await db.execute("DELETE FROM tenants WHERE id = $1", tenant_id)
 
     # Audit (log with null tenant since it's deleted)
-    await db.execute("""
+    await db.execute(
+        """
         INSERT INTO audit_logs (user_id, tenant_id, action, resource_type, details, ip_address)
         VALUES ($1, NULL, 'tenant.delete', 'tenant', $2::jsonb, $3)
-    """, current_user.id,
-         json.dumps({"deleted_tenant_id": tenant_id, "store_name": store_name}),
-         request.client.host if request.client else None)
+    """,
+        current_user.id,
+        json.dumps({"deleted_tenant_id": tenant_id, "store_name": safe_store_name}),
+        request.client.host if request.client else None,
+    )
 
-    logger.info("tenant_deleted", tenant_id=tenant_id, store_name=store_name, by=str(current_user.id))
-    return {"message": f"Tenant '{store_name}' deleted permanently", "tenant_id": tenant_id}
+    logger.info(
+        "tenant_deleted",
+        tenant_id=tenant_id,
+        store_name=store_name,
+        by=str(current_user.id),
+    )
+    return {
+        "message": f"Tenant '{safe_store_name}' deleted permanently",
+        "tenant_id": tenant_id,
+    }
 
 
 # ---------- Plans Management ----------
 
+
 @router.get("/plans")
-async def list_plans(db = Depends(get_pool_db)):
+async def list_plans(db=Depends(get_pool_db)):
     """List all plans with subscriber counts."""
     rows = await db.fetch("""
         SELECT p.*,
@@ -553,7 +684,7 @@ async def update_plan(
     plan_name: str,
     req: UpdatePlanRequest,
     current_user: User = Depends(get_current_super_admin),
-    db = Depends(get_pool_db)
+    db=Depends(get_pool_db),
 ):
     """Update a plan's configuration."""
     plan = await db.fetchrow("SELECT * FROM plans WHERE name = $1", plan_name)
@@ -579,7 +710,7 @@ async def update_plan(
     params.append(plan_name)
     await db.execute(
         f"UPDATE plans SET {', '.join(updates)}, updated_at = NOW() WHERE name = ${idx}",
-        *params
+        *params,
     )
 
     return {"message": f"Plan {plan_name} updated"}
@@ -587,13 +718,12 @@ async def update_plan(
 
 # ---------- Revenue & Costs ----------
 
+
 @router.get("/revenue")
-async def platform_revenue(
-    days: int = 30,
-    db = Depends(get_pool_db)
-):
+async def platform_revenue(days: int = 30, db=Depends(get_pool_db)):
     """Revenue analytics - daily breakdown."""
-    rows = await db.fetch("""
+    rows = await db.fetch(
+        """
         SELECT DATE(paid_at) as date,
                SUM(amount_usd) as revenue_usd,
                COUNT(*) as invoice_count,
@@ -602,21 +732,18 @@ async def platform_revenue(
         WHERE status = 'paid' AND paid_at > NOW() - make_interval(days => $1)
         GROUP BY DATE(paid_at), payment_provider
         ORDER BY date DESC
-    """, days)
+    """,
+        days,
+    )
 
-    return {
-        "daily_revenue": [dict(r) for r in rows],
-        "days": days
-    }
+    return {"daily_revenue": [dict(r) for r in rows], "days": days}
 
 
 @router.get("/costs")
-async def platform_costs(
-    months: int = 6,
-    db = Depends(get_pool_db)
-):
+async def platform_costs(months: int = 6, db=Depends(get_pool_db)):
     """Cost analytics - per tenant LLM costs."""
-    rows = await db.fetch("""
+    rows = await db.fetch(
+        """
         SELECT ur.tenant_id, t.store_name,
                ur.period_start,
                ur.tokens_used, ur.llm_cost_usd,
@@ -625,7 +752,9 @@ async def platform_costs(
         JOIN tenants t ON t.id = ur.tenant_id
         WHERE ur.period_start > NOW() - make_interval(months => $1)
         ORDER BY ur.llm_cost_usd DESC
-    """, months)
+    """,
+        months,
+    )
 
     # Summary
     total_cost = sum(r["llm_cost_usd"] or 0 for r in rows)
@@ -636,12 +765,13 @@ async def platform_costs(
         "summary": {
             "total_cost_usd": total_cost,
             "total_tokens": total_tokens,
-            "formatted_cost": f"${total_cost:,.2f}"
-        }
+            "formatted_cost": f"${total_cost:,.2f}",
+        },
     }
 
 
 # ---------- Audit Logs ----------
+
 
 @router.get("/audit-logs")
 async def get_audit_logs(
@@ -649,7 +779,7 @@ async def get_audit_logs(
     offset: int = 0,
     tenant_id: int = None,
     action: str = None,
-    db = Depends(get_pool_db)
+    db=Depends(get_pool_db),
 ):
     """View audit logs."""
     conditions = []
@@ -670,28 +800,32 @@ async def get_audit_logs(
 
     params.extend([limit, offset])
 
-    rows = await db.fetch(f"""
+    rows = await db.fetch(
+        f"""
         SELECT a.*, u.email as user_email
         FROM audit_logs a
         LEFT JOIN users u ON u.id = a.user_id
         {where}
         ORDER BY a.created_at DESC
         LIMIT ${idx} OFFSET ${idx + 1}
-    """, *params)
+    """,
+        *params,
+    )
 
     return [dict(r) for r in rows]
 
 
 # ---------- Trial Management ----------
 
+
 @router.post("/check-trials")
 async def force_check_trials(
-    current_user: User = Depends(get_current_super_admin),
-    db = Depends(get_pool_db)
+    current_user: User = Depends(get_current_super_admin), db=Depends(get_pool_db)
 ):
     """Manually trigger trial expiration check."""
     from app.services.trial_manager import check_trial_expirations
     from db import db as db_pool
+
     result = await check_trial_expirations(db_pool.pool)
     return result
 
@@ -701,22 +835,34 @@ async def extend_trial(
     tenant_id: int,
     days: int = 10,
     current_user: User = Depends(get_current_super_admin),
-    db = Depends(get_pool_db)
+    db=Depends(get_pool_db),
 ):
     """Extend a tenant's trial period."""
     new_end = datetime.utcnow() + timedelta(days=days)
-    await db.execute("""
+    await db.execute(
+        """
         UPDATE subscriptions SET trial_ends_at = $1, status = 'trialing', updated_at = NOW()
         WHERE tenant_id = $2
-    """, new_end, tenant_id)
+    """,
+        new_end,
+        tenant_id,
+    )
 
     # Reactivate tenant
-    await db.execute("UPDATE tenants SET is_active = true, status = 'active' WHERE id = $1", tenant_id)
+    await db.execute(
+        "UPDATE tenants SET is_active = true, status = 'active' WHERE id = $1",
+        tenant_id,
+    )
 
     # Audit
-    await db.execute("""
+    await db.execute(
+        """
         INSERT INTO audit_logs (user_id, tenant_id, action, details)
         VALUES ($1, $2, 'trial.extend', $3::jsonb)
-    """, current_user.id, tenant_id, json.dumps({"days": days}))
+    """,
+        current_user.id,
+        tenant_id,
+        json.dumps({"days": days}),
+    )
 
     return {"message": f"Trial extended by {days} days", "new_end": new_end.isoformat()}

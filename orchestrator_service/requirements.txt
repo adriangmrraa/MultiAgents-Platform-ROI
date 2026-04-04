@@ -7,9 +7,9 @@ tenacity
 structlog
 asyncpg
 redis>=4.5.0
-langchain==0.1.0
-langchain-openai==0.0.5
-langchain-community==0.0.13
+langchain>=0.3.0
+langchain-openai>=0.2.0
+langchain-community>=0.3.0
 python-dotenv
 google-genai
 langchain-google-genai
@@ -20,8 +20,9 @@ requests
 beautifulsoup4
 sse-starlette
 passlib[bcrypt]
-bcrypt==3.2.2
+bcrypt>=4.0.0
 python-jose[cryptography]
+cryptography>=41.0.0
 python-multipart
 email-validator
 fastapi-mail
@@ -32,3 +33,4 @@ psycopg2-binary
 vecs
 stripe>=8.0.0
 alembic
+slowapi>=0.1.9

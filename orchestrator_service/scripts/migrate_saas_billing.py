@@ -4,12 +4,15 @@ Creates: plans, subscriptions, usage_records, invoices, audit_logs tables
 Seeds: Free, Pro, Enterprise plans
 Adds: status column to tenants, trial subscription for existing tenants
 """
+
 import asyncio
 import os
 import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import asyncpg
@@ -147,6 +150,14 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Add user_agent column if missing
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='audit_logs' AND column_name='user_agent') THEN
+        ALTER TABLE audit_logs ADD COLUMN user_agent VARCHAR(500);
+    END IF;
+END $$;
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_subscriptions_tenant ON subscriptions(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
@@ -240,6 +251,7 @@ BEGIN
 END $$;
 """
 
+
 async def run_startup_billing_migration(db_pool):
     """
     Called from main.py lifespan. Runs all billing migrations idempotently.
@@ -247,7 +259,7 @@ async def run_startup_billing_migration(db_pool):
     """
     try:
         # Use pool directly for multi-statement SQL
-        pool = db_pool.pool if hasattr(db_pool, 'pool') else db_pool
+        pool = db_pool.pool if hasattr(db_pool, "pool") else db_pool
         async with pool.acquire() as conn:
             await conn.execute(MIGRATION_SQL)
             logger.info("billing_schema_created")
@@ -264,13 +276,17 @@ async def run_startup_billing_migration(db_pool):
         if super_admin_email:
             await db_pool.execute(
                 "UPDATE users SET role = 'super_admin' WHERE email = $1 AND role != 'super_admin'",
-                super_admin_email
+                super_admin_email,
             )
             logger.info("super_admin_check", email=super_admin_email)
 
         logger.info("billing_startup_migration_complete")
     except Exception as e:
-        logger.error("billing_startup_migration_failed", error=str(e), error_type=type(e).__name__)
+        logger.error(
+            "billing_startup_migration_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
 
 
 async def run_migration():
@@ -299,7 +315,7 @@ async def run_migration():
         if super_admin_email:
             await conn.execute(
                 "UPDATE users SET role = 'super_admin' WHERE email = $1 AND role != 'super_admin'",
-                super_admin_email
+                super_admin_email,
             )
             print(f">> Super admin check: {super_admin_email}")
 

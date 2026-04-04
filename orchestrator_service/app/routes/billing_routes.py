@@ -9,9 +9,14 @@ Billing & Subscription Routes
 - GET /billing/invoices - List invoices for tenant
 - GET /billing/usage - Current usage stats
 """
+
+import asyncio
 import os
 import uuid
 import structlog
+import hmac
+import hashlib
+import json
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -32,7 +37,22 @@ MP_WEBHOOK_SECRET = os.getenv("MP_WEBHOOK_SECRET")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 
+def verify_mercadopago_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """Verify HMAC-SHA256 signature from MercadoPago webhook."""
+    if not signature or not secret:
+        return False
+    # Strip algorithm prefix if present (e.g., "sha256=abc123")
+    # Use split with maxsplit=1 to avoid mangling hash values that contain "="
+    if "=" in signature and not signature.startswith("sha"):
+        parts = signature.split("=", 1)
+        if len(parts) == 2:
+            signature = parts[1]
+    expected = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
 # ---------- Schemas ----------
+
 
 class CheckoutRequest(BaseModel):
     plan_name: str  # pro, enterprise
@@ -107,7 +127,7 @@ PLANS_CREATE_AND_SEED = """
 
 
 @router.get("/plans")
-async def list_plans(db = Depends(get_pool_db)):
+async def list_plans(db=Depends(get_pool_db)):
     """List all available subscription plans."""
     try:
         rows = await db.fetch(PLANS_SELECT)
@@ -119,7 +139,7 @@ async def list_plans(db = Depends(get_pool_db)):
     if not rows:
         logger.warning("plans_table_empty_or_missing_seeding_now")
         try:
-            pool = db.pool if hasattr(db, 'pool') else db
+            pool = db.pool if hasattr(db, "pool") else db
             async with pool.acquire() as conn:
                 # Ensure table exists
                 await conn.execute("""
@@ -152,24 +172,91 @@ async def list_plans(db = Depends(get_pool_db)):
                     )
                 """)
                 # Fix schema: ensure defaults and nullable columns
-                await conn.execute("ALTER TABLE plans ALTER COLUMN id SET DEFAULT gen_random_uuid()")
-                await conn.execute("ALTER TABLE plans ALTER COLUMN billing_period SET DEFAULT 'monthly'")
-                await conn.execute("ALTER TABLE plans ALTER COLUMN billing_period DROP NOT NULL")
-                await conn.execute("ALTER TABLE plans ALTER COLUMN is_active SET DEFAULT true")
-                await conn.execute("ALTER TABLE plans ALTER COLUMN is_active DROP NOT NULL")
+                await conn.execute(
+                    "ALTER TABLE plans ALTER COLUMN id SET DEFAULT gen_random_uuid()"
+                )
+                await conn.execute(
+                    "ALTER TABLE plans ALTER COLUMN billing_period SET DEFAULT 'monthly'"
+                )
+                await conn.execute(
+                    "ALTER TABLE plans ALTER COLUMN billing_period DROP NOT NULL"
+                )
+                await conn.execute(
+                    "ALTER TABLE plans ALTER COLUMN is_active SET DEFAULT true"
+                )
+                await conn.execute(
+                    "ALTER TABLE plans ALTER COLUMN is_active DROP NOT NULL"
+                )
                 # Seed each plan individually
                 for plan in [
-                    ('free', 'Free Trial', '10 dias gratis con acceso moderado a la plataforma.', 0, 0, 0, 0, 'monthly', 1, 50, 5, 1, 1, 25000, '{"analytics": false, "custom_branding": false, "api_access": false, "priority_support": false, "whatsapp_templates": false, "multi_channel": false}', True, 0),
-                    ('pro', 'Pro', 'Para negocios en crecimiento. Todo lo que necesitas para escalar.', 49, 45000, 470, 432000, 'monthly', 5, 5000, 50, 3, 5, 500000, '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": false, "whatsapp_templates": true, "multi_channel": true}', True, 1),
-                    ('enterprise', 'Enterprise', 'Para grandes equipos. Soporte prioritario y features exclusivas.', 199, 180000, 1910, 1728000, 'monthly', -1, -1, -1, -1, -1, -1, '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": true, "whatsapp_templates": true, "multi_channel": true, "dedicated_support": true, "sla": true}', True, 2),
+                    (
+                        "free",
+                        "Free Trial",
+                        "10 dias gratis con acceso moderado a la plataforma.",
+                        0,
+                        0,
+                        0,
+                        0,
+                        "monthly",
+                        1,
+                        50,
+                        5,
+                        1,
+                        1,
+                        25000,
+                        '{"analytics": false, "custom_branding": false, "api_access": false, "priority_support": false, "whatsapp_templates": false, "multi_channel": false}',
+                        True,
+                        0,
+                    ),
+                    (
+                        "pro",
+                        "Pro",
+                        "Para negocios en crecimiento. Todo lo que necesitas para escalar.",
+                        49,
+                        45000,
+                        470,
+                        432000,
+                        "monthly",
+                        5,
+                        5000,
+                        50,
+                        3,
+                        5,
+                        500000,
+                        '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": false, "whatsapp_templates": true, "multi_channel": true}',
+                        True,
+                        1,
+                    ),
+                    (
+                        "enterprise",
+                        "Enterprise",
+                        "Para grandes equipos. Soporte prioritario y features exclusivas.",
+                        199,
+                        180000,
+                        1910,
+                        1728000,
+                        "monthly",
+                        -1,
+                        -1,
+                        -1,
+                        -1,
+                        -1,
+                        -1,
+                        '{"analytics": true, "custom_branding": true, "api_access": true, "priority_support": true, "whatsapp_templates": true, "multi_channel": true, "dedicated_support": true, "sla": true}',
+                        True,
+                        2,
+                    ),
                 ]:
-                    await conn.execute("""
+                    await conn.execute(
+                        """
                         INSERT INTO plans (id, name, display_name, description, price_usd, price_ars, price_usd_yearly, price_ars_yearly,
                             billing_period, max_agents, max_messages_per_month, max_knowledge_docs, max_channels, max_team_members, max_tokens_per_month,
                             features, is_active, sort_order)
                         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17)
                         ON CONFLICT (name) DO NOTHING
-                    """, *plan)
+                    """,
+                        *plan,
+                    )
             rows = await db.fetch(PLANS_SELECT)
             logger.info("plans_auto_seeded", count=len(rows))
         except Exception as e:
@@ -180,11 +267,11 @@ async def list_plans(db = Depends(get_pool_db)):
 
 @router.get("/my-subscription")
 async def my_subscription(
-    current_user: User = Depends(get_current_user),
-    db = Depends(get_pool_db)
+    current_user: User = Depends(get_current_user), db=Depends(get_pool_db)
 ):
     """Get current tenant's subscription details."""
-    row = await db.fetchrow("""
+    row = await db.fetchrow(
+        """
         SELECT s.id, s.status, s.trial_ends_at, s.current_period_start,
                s.current_period_end, s.payment_provider, s.canceled_at,
                p.name as plan_name, p.display_name as plan_display_name,
@@ -194,13 +281,15 @@ async def my_subscription(
         FROM subscriptions s
         JOIN plans p ON p.id = s.plan_id
         WHERE s.tenant_id = $1
-    """, current_user.tenant_id)
+    """,
+        current_user.tenant_id,
+    )
 
     if not row:
         return {
             "has_subscription": False,
             "status": "none",
-            "message": "No active subscription"
+            "message": "No active subscription",
         }
 
     sub = dict(row)
@@ -214,7 +303,7 @@ async def my_subscription(
             # Update DB status
             await db.execute(
                 "UPDATE subscriptions SET status = 'expired' WHERE tenant_id = $1",
-                current_user.tenant_id
+                current_user.tenant_id,
             )
 
     # Calculate days remaining in trial
@@ -227,44 +316,59 @@ async def my_subscription(
 
 @router.get("/usage")
 async def my_usage(
-    current_user: User = Depends(get_current_user),
-    db = Depends(get_pool_db)
+    current_user: User = Depends(get_current_user), db=Depends(get_pool_db)
 ):
     """Get current month usage for tenant."""
     now = datetime.utcnow()
     period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    row = await db.fetchrow("""
+    row = await db.fetchrow(
+        """
         SELECT messages_sent, messages_received, tokens_used, api_calls,
                llm_cost_usd, breakdown
         FROM usage_records
         WHERE tenant_id = $1 AND period_start = $2
-    """, current_user.tenant_id, period_start)
+    """,
+        current_user.tenant_id,
+        period_start,
+    )
 
     # Get plan limits
-    limits = await db.fetchrow("""
+    limits = await db.fetchrow(
+        """
         SELECT p.max_messages_per_month, p.max_tokens_per_month
         FROM subscriptions s
         JOIN plans p ON p.id = s.plan_id
         WHERE s.tenant_id = $1
-    """, current_user.tenant_id)
+    """,
+        current_user.tenant_id,
+    )
 
-    usage = dict(row) if row else {
-        "messages_sent": 0, "messages_received": 0,
-        "tokens_used": 0, "api_calls": 0,
-        "llm_cost_usd": 0.0, "breakdown": {}
-    }
+    usage = (
+        dict(row)
+        if row
+        else {
+            "messages_sent": 0,
+            "messages_received": 0,
+            "tokens_used": 0,
+            "api_calls": 0,
+            "llm_cost_usd": 0.0,
+            "breakdown": {},
+        }
+    )
 
     if limits:
         usage["limits"] = {
             "max_messages": limits["max_messages_per_month"],
             "max_tokens": limits["max_tokens_per_month"],
             "messages_pct": round(
-                (usage["messages_sent"] / max(limits["max_messages_per_month"], 1)) * 100, 1
+                (usage["messages_sent"] / max(limits["max_messages_per_month"], 1))
+                * 100,
+                1,
             ),
             "tokens_pct": round(
                 (usage["tokens_used"] / max(limits["max_tokens_per_month"], 1)) * 100, 1
-            )
+            ),
         }
 
     return usage
@@ -272,11 +376,11 @@ async def my_usage(
 
 @router.get("/invoices")
 async def my_invoices(
-    current_user: User = Depends(get_current_user),
-    db = Depends(get_pool_db)
+    current_user: User = Depends(get_current_user), db=Depends(get_pool_db)
 ):
     """List invoices for current tenant."""
-    rows = await db.fetch("""
+    rows = await db.fetch(
+        """
         SELECT id, amount_usd, amount_local, currency, status,
                payment_provider, period_start, period_end, paid_at,
                line_items, created_at
@@ -284,23 +388,25 @@ async def my_invoices(
         WHERE tenant_id = $1
         ORDER BY created_at DESC
         LIMIT 50
-    """, current_user.tenant_id)
+    """,
+        current_user.tenant_id,
+    )
     return [dict(r) for r in rows]
 
 
 # ---------- Checkout ----------
 
+
 @router.post("/checkout")
 async def create_checkout(
     req: CheckoutRequest,
     current_user: User = Depends(get_current_user),
-    db = Depends(get_pool_db)
+    db=Depends(get_pool_db),
 ):
     """Create a checkout session for upgrading plan."""
     # Get target plan
     plan = await db.fetchrow(
-        "SELECT * FROM plans WHERE name = $1 AND is_active = true",
-        req.plan_name
+        "SELECT * FROM plans WHERE name = $1 AND is_active = true", req.plan_name
     )
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -322,183 +428,49 @@ async def _create_stripe_checkout(plan, req, current_user, db):
         raise HTTPException(status_code=503, detail="Stripe not configured")
 
     import stripe
+
     stripe.api_key = STRIPE_SECRET_KEY
 
-    # Determine price
-    if req.billing_period == "yearly" and plan["stripe_price_id_yearly"]:
-        price_id = plan["stripe_price_id_yearly"]
-    elif plan["stripe_price_id"]:
-        price_id = plan["stripe_price_id"]
-    else:
-        # Create a dynamic price if no pre-configured price
-        price_amount = plan["price_usd"] if req.currency == "USD" else plan["price_ars"]
-        currency_code = req.currency.lower()
-
-        product = stripe.Product.create(
-            name=f"{plan['display_name']} - Platform AI",
-            metadata={"plan_name": plan["name"]}
-        ) if not plan["stripe_product_id"] else None
-
-        product_id = product.id if product else plan["stripe_product_id"]
-
-        price = stripe.Price.create(
-            product=product_id,
-            unit_amount=int(price_amount * 100),
-            currency=currency_code,
-            recurring={"interval": "month" if req.billing_period == "monthly" else "year"}
-        )
-        price_id = price.id
-
-        # Save price ID back to plan
-        col = "stripe_price_id_yearly" if req.billing_period == "yearly" else "stripe_price_id"
-        await db.execute(f"UPDATE plans SET {col} = $1 WHERE id = $2", price_id, plan["id"])
-        if product:
-            await db.execute("UPDATE plans SET stripe_product_id = $1 WHERE id = $2", product.id, plan["id"])
-
-    # Get or create Stripe customer
-    sub = await db.fetchrow(
-        "SELECT external_customer_id FROM subscriptions WHERE tenant_id = $1",
-        current_user.tenant_id
-    )
-    customer_id = sub["external_customer_id"] if sub and sub["external_customer_id"] else None
-
-    if not customer_id:
-        customer = stripe.Customer.create(
-            email=current_user.email,
-            metadata={"tenant_id": str(current_user.tenant_id)}
-        )
-        customer_id = customer.id
-
-    session = stripe.checkout.Session.create(
-        customer=customer_id,
-        payment_method_types=["card"],
-        line_items=[{"price": price_id, "quantity": 1}],
-        mode="subscription",
-        success_url=f"{FRONTEND_URL}/billing?status=success&session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{FRONTEND_URL}/billing?status=canceled",
-        metadata={
-            "tenant_id": str(current_user.tenant_id),
-            "plan_name": plan["name"],
-            "billing_period": req.billing_period
-        }
-    )
-
-    logger.info("stripe_checkout_created", tenant_id=current_user.tenant_id, plan=plan["name"])
-
-    return {
-        "checkout_url": session.url,
-        "session_id": session.id,
-        "provider": "stripe"
-    }
-
-
-async def _create_mp_checkout(plan, req, current_user, db):
-    """Create MercadoPago recurring subscription (preapproval) via Checkout API."""
-    if not MP_ACCESS_TOKEN:
-        raise HTTPException(status_code=503, detail="MercadoPago not configured")
-
-    import httpx
-
-    # MercadoPago Argentina only accepts ARS — always use ARS prices
-    price = plan["price_ars"]
-    if req.billing_period == "yearly":
-        price = plan["price_ars_yearly"] or (price * 10)
-    if not price or price <= 0:
-        raise HTTPException(status_code=400, detail="Precio no disponible en ARS para este plan")
-
-    period_label = "Anual" if req.billing_period == "yearly" else "Mensual"
-    external_ref = f"tenant_{current_user.tenant_id}_{plan['name']}_{req.billing_period}"
-    frequency_type = "years" if req.billing_period == "yearly" else "months"
-
-    # Preapproval = recurring subscription (Checkout API)
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            "https://api.mercadopago.com/preapproval",
-            headers={
-                "Authorization": f"Bearer {MP_ACCESS_TOKEN}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "reason": f"Future {plan['display_name']} - {period_label}",
-                "auto_recurring": {
-                    "frequency": 1,
-                    "frequency_type": frequency_type,
-                    "transaction_amount": float(price),
-                    "currency_id": "ARS"
-                },
-                "payer_email": current_user.email,
-                "back_url": f"{FRONTEND_URL}/billing?status=success&provider=mercadopago",
-                "external_reference": external_ref,
-                "status": "pending"
-            }
-        )
-
-        if resp.status_code not in (200, 201):
-            logger.error("mp_checkout_error", status=resp.status_code, body=resp.text)
-            error_detail = resp.text
-            try:
-                error_detail = resp.json()
-            except Exception:
-                pass
-            raise HTTPException(status_code=400, detail=f"MercadoPago error: {error_detail}")
-
-        data = resp.json()
-
-    checkout_url = data.get("init_point") or data.get("sandbox_init_point")
-    logger.info("mp_checkout_created",
-        tenant_id=current_user.tenant_id,
-        plan=plan["name"],
-        preapproval_id=data.get("id"),
-        init_point=checkout_url,
-        price=price,
-        frequency=frequency_type)
-
-    return {
-        "checkout_url": checkout_url,
-        "preapproval_id": data.get("id"),
-        "provider": "mercadopago"
-    }
-
-
-# ---------- Webhooks ----------
-
-@router.post("/webhook/stripe")
-async def stripe_webhook(request: Request, db = Depends(get_pool_db)):
-    """Handle Stripe webhook events."""
-    if not STRIPE_SECRET_KEY:
-        raise HTTPException(status_code=503, detail="Stripe not configured")
-
-    import stripe
-    stripe.api_key = STRIPE_SECRET_KEY
-
-    payload = await request.body()
-    sig_header = request.headers.get("stripe-signature")
+    # Determine the price to use: prefer stored stripe_price_id, fall back to
+    # creating an ad-hoc price from price_monthly (price_usd on the plan row).
+    price_id = plan.get("stripe_price_id")
 
     try:
-        if STRIPE_WEBHOOK_SECRET:
-            event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-        else:
-            import json
-            event = json.loads(payload)
+        if not price_id:
+            # No pre-configured price — create one on the fly
+            price_monthly_cents = int((plan.get("price_usd") or plan.get("price_monthly") or 0) * 100)
+            price_obj = await asyncio.to_thread(
+                stripe.Price.create,
+                unit_amount=price_monthly_cents,
+                currency="usd",
+                recurring={"interval": "month"},
+                product_data={"name": plan.get("display_name") or plan.get("name")},
+            )
+            price_id = price_obj["id"]
+
+        session = await asyncio.to_thread(
+            stripe.checkout.Session.create,
+            mode="subscription",
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=f"{FRONTEND_URL}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{FRONTEND_URL}/billing/cancel",
+            customer_email=current_user.email,
+            metadata={
+                "tenant_id": str(current_user.tenant_id),
+                "plan_name": plan["name"],
+            },
+        )
     except Exception as e:
-        logger.error("stripe_webhook_invalid", error=str(e))
-        raise HTTPException(status_code=400, detail="Invalid webhook")
+        logger.error("stripe_checkout_creation_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Stripe checkout error: {str(e)}")
 
-    event_type = event.get("type", "")
-    data_obj = event.get("data", {}).get("object", {})
-
-    logger.info("stripe_webhook_received", type=event_type)
-
-    if event_type == "checkout.session.completed":
-        await _handle_stripe_checkout_completed(data_obj, db)
-    elif event_type == "invoice.paid":
-        await _handle_stripe_invoice_paid(data_obj, db)
-    elif event_type == "invoice.payment_failed":
-        await _handle_stripe_payment_failed(data_obj, db)
-    elif event_type == "customer.subscription.deleted":
-        await _handle_stripe_sub_canceled(data_obj, db)
-
-    return {"received": True}
+    logger.info(
+        "stripe_checkout_created",
+        tenant_id=current_user.tenant_id,
+        plan=plan["name"],
+        session_id=session["id"],
+    )
+    return {"checkout_url": session["url"], "session_id": session["id"]}
 
 
 async def _handle_stripe_checkout_completed(session, db):
@@ -519,7 +491,8 @@ async def _handle_stripe_checkout_completed(session, db):
 
     now = datetime.utcnow()
     # Upsert subscription
-    await db.execute("""
+    await db.execute(
+        """
         INSERT INTO subscriptions (tenant_id, plan_id, status, payment_provider,
                                    external_subscription_id, external_customer_id,
                                    current_period_start, trial_ends_at)
@@ -528,10 +501,19 @@ async def _handle_stripe_checkout_completed(session, db):
             plan_id = $2, status = 'active', payment_provider = 'stripe',
             external_subscription_id = $3, external_customer_id = $4,
             current_period_start = $5, trial_ends_at = NULL, updated_at = NOW()
-    """, tenant_id, plan["id"], subscription_id, customer_id, now)
+    """,
+        tenant_id,
+        plan["id"],
+        subscription_id,
+        customer_id,
+        now,
+    )
 
     # Ensure tenant is active
-    await db.execute("UPDATE tenants SET status = 'active', is_active = true WHERE id = $1", tenant_id)
+    await db.execute(
+        "UPDATE tenants SET status = 'active', is_active = true WHERE id = $1",
+        tenant_id,
+    )
 
     logger.info("stripe_subscription_activated", tenant_id=tenant_id, plan=plan_name)
 
@@ -541,7 +523,7 @@ async def _handle_stripe_invoice_paid(invoice, db):
     customer_id = invoice.get("customer")
     sub = await db.fetchrow(
         "SELECT tenant_id FROM subscriptions WHERE external_customer_id = $1",
-        customer_id
+        customer_id,
     )
     if not sub:
         return
@@ -549,13 +531,19 @@ async def _handle_stripe_invoice_paid(invoice, db):
     amount = invoice.get("amount_paid", 0) / 100.0
     currency = invoice.get("currency", "usd").upper()
 
-    await db.execute("""
+    await db.execute(
+        """
         INSERT INTO invoices (tenant_id, amount_usd, currency, status, payment_provider,
                               external_invoice_id, external_payment_id, paid_at, line_items)
         VALUES ($1, $2, $3, 'paid', 'stripe', $4, $5, NOW(), $6)
-    """, sub["tenant_id"], amount, currency,
-         invoice.get("id"), invoice.get("payment_intent"),
-         '[]')
+    """,
+        sub["tenant_id"],
+        amount,
+        currency,
+        invoice.get("id"),
+        invoice.get("payment_intent"),
+        "[]",
+    )
 
     logger.info("stripe_invoice_recorded", tenant_id=sub["tenant_id"], amount=amount)
 
@@ -565,14 +553,14 @@ async def _handle_stripe_payment_failed(invoice, db):
     customer_id = invoice.get("customer")
     sub = await db.fetchrow(
         "SELECT tenant_id FROM subscriptions WHERE external_customer_id = $1",
-        customer_id
+        customer_id,
     )
     if not sub:
         return
 
     await db.execute(
         "UPDATE subscriptions SET status = 'past_due', updated_at = NOW() WHERE tenant_id = $1",
-        sub["tenant_id"]
+        sub["tenant_id"],
     )
     logger.warning("stripe_payment_failed", tenant_id=sub["tenant_id"])
 
@@ -582,25 +570,101 @@ async def _handle_stripe_sub_canceled(sub_data, db):
     ext_sub_id = sub_data.get("id")
     sub = await db.fetchrow(
         "SELECT tenant_id FROM subscriptions WHERE external_subscription_id = $1",
-        ext_sub_id
+        ext_sub_id,
     )
     if not sub:
         return
 
-    await db.execute("""
+    await db.execute(
+        """
         UPDATE subscriptions SET status = 'canceled', canceled_at = NOW(), updated_at = NOW()
         WHERE tenant_id = $1
-    """, sub["tenant_id"])
+    """,
+        sub["tenant_id"],
+    )
     logger.info("stripe_subscription_canceled", tenant_id=sub["tenant_id"])
 
 
+@router.post("/webhook/stripe")
+async def stripe_webhook(request: Request, db=Depends(get_pool_db)):
+    """Handle Stripe webhook events. Not authenticated — Stripe calls this directly."""
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Stripe not configured")
+
+    if not STRIPE_WEBHOOK_SECRET:
+        logger.error("stripe_webhook_secret_missing")
+        raise HTTPException(status_code=503, detail="Stripe webhook secret not configured")
+
+    import stripe
+    try:
+        from stripe.error import SignatureVerificationError
+    except ImportError:
+        from stripe import SignatureVerificationError
+
+    stripe.api_key = STRIPE_SECRET_KEY
+
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+
+    if not sig_header:
+        logger.error("stripe_webhook_missing_signature_header")
+        raise HTTPException(status_code=400, detail="Missing stripe-signature header")
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except ValueError as e:
+        logger.error("stripe_webhook_invalid_payload", error=str(e))
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except SignatureVerificationError as e:
+        logger.error("stripe_webhook_invalid_signature", error=str(e))
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    event_type = event.get("type", "")
+    data_obj = event.get("data", {}).get("object", {})
+
+    logger.info("stripe_webhook_received", type=event_type)
+
+    if event_type == "checkout.session.completed":
+        await _handle_stripe_checkout_completed(data_obj, db)
+    elif event_type == "invoice.paid":
+        await _handle_stripe_invoice_paid(data_obj, db)
+    elif event_type == "invoice.payment_failed":
+        await _handle_stripe_payment_failed(data_obj, db)
+    elif event_type == "customer.subscription.deleted":
+        await _handle_stripe_sub_canceled(data_obj, db)
+
+    return {"received": True}
+
+
 @router.post("/webhook/mercadopago")
-async def mercadopago_webhook(request: Request, db = Depends(get_pool_db)):
+async def mercadopago_webhook(request: Request, db=Depends(get_pool_db)):
     """Handle MercadoPago webhook events."""
     if not MP_ACCESS_TOKEN:
         raise HTTPException(status_code=503, detail="MercadoPago not configured")
 
-    body = await request.json()
+    # HMAC-SHA256 signature verification
+    if not MP_WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=503, detail="MercadoPago webhook secret not configured"
+        )
+
+    body_bytes = await request.body()
+    signature = request.headers.get("X-MP-Signature")
+    if not signature:
+        # Try alternative header names
+        signature = request.headers.get("X-Signature")
+    if signature:
+        signature = signature.strip()
+    else:
+        logger.warning("mp_webhook_signature_missing")
+
+    if not verify_mercadopago_signature(body_bytes, signature, MP_WEBHOOK_SECRET):
+        logger.error("mp_webhook_signature_mismatch", signature=signature)
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    logger.info("mp_webhook_signature_verified")
+    # Parse JSON after verification
+    body = json.loads(body_bytes.decode())
     event_type = body.get("type")
     data_id = body.get("data", {}).get("id")
 
@@ -608,10 +672,11 @@ async def mercadopago_webhook(request: Request, db = Depends(get_pool_db)):
 
     if event_type == "subscription_preapproval" and data_id:
         import httpx
+
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 f"https://api.mercadopago.com/preapproval/{data_id}",
-                headers={"Authorization": f"Bearer {MP_ACCESS_TOKEN}"}
+                headers={"Authorization": f"Bearer {MP_ACCESS_TOKEN}"},
             )
             if resp.status_code != 200:
                 return {"received": True}
@@ -634,7 +699,8 @@ async def mercadopago_webhook(request: Request, db = Depends(get_pool_db)):
             return {"received": True}
 
         if mp_status == "authorized":
-            await db.execute("""
+            await db.execute(
+                """
                 INSERT INTO subscriptions (tenant_id, plan_id, status, payment_provider,
                                            external_subscription_id, current_period_start, trial_ends_at)
                 VALUES ($1, $2, 'active', 'mercadopago', $3, NOW(), NULL)
@@ -642,24 +708,37 @@ async def mercadopago_webhook(request: Request, db = Depends(get_pool_db)):
                     plan_id = $2, status = 'active', payment_provider = 'mercadopago',
                     external_subscription_id = $3, current_period_start = NOW(),
                     trial_ends_at = NULL, updated_at = NOW()
-            """, tenant_id, plan["id"], data_id)
+            """,
+                tenant_id,
+                plan["id"],
+                data_id,
+            )
 
-            await db.execute("UPDATE tenants SET status = 'active', is_active = true WHERE id = $1", tenant_id)
-            logger.info("mp_subscription_activated", tenant_id=tenant_id, plan=plan_name)
+            await db.execute(
+                "UPDATE tenants SET status = 'active', is_active = true WHERE id = $1",
+                tenant_id,
+            )
+            logger.info(
+                "mp_subscription_activated", tenant_id=tenant_id, plan=plan_name
+            )
 
         elif mp_status in ("paused", "cancelled"):
-            await db.execute("""
+            await db.execute(
+                """
                 UPDATE subscriptions SET status = 'canceled', canceled_at = NOW(), updated_at = NOW()
                 WHERE tenant_id = $1
-            """, tenant_id)
+            """,
+                tenant_id,
+            )
             logger.info("mp_subscription_canceled", tenant_id=tenant_id)
 
     elif event_type == "payment" and data_id:
         import httpx
+
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 f"https://api.mercadopago.com/v1/payments/{data_id}",
-                headers={"Authorization": f"Bearer {MP_ACCESS_TOKEN}"}
+                headers={"Authorization": f"Bearer {MP_ACCESS_TOKEN}"},
             )
             if resp.status_code == 200:
                 payment = resp.json()
@@ -670,35 +749,43 @@ async def mercadopago_webhook(request: Request, db = Depends(get_pool_db)):
                     if payment.get("status") == "approved":
                         amount = payment.get("transaction_amount", 0)
                         currency = payment.get("currency_id", "ARS")
-                        await db.execute("""
+                        await db.execute(
+                            """
                             INSERT INTO invoices (tenant_id, amount_local, currency, status,
                                                   payment_provider, external_payment_id, paid_at)
                             VALUES ($1, $2, $3, 'paid', 'mercadopago', $4, NOW())
-                        """, tenant_id, amount, currency, str(data_id))
-                        logger.info("mp_payment_recorded", tenant_id=tenant_id, amount=amount)
+                        """,
+                            tenant_id,
+                            amount,
+                            currency,
+                            str(data_id),
+                        )
+                        logger.info(
+                            "mp_payment_recorded", tenant_id=tenant_id, amount=amount
+                        )
 
     return {"received": True}
 
 
 # ---------- Plan Change ----------
 
+
 @router.post("/change-plan")
 async def change_plan(
     req: ChangePlanRequest,
     current_user: User = Depends(get_current_user),
-    db = Depends(get_pool_db)
+    db=Depends(get_pool_db),
 ):
     """Change subscription plan. For downgrades, applies at period end."""
     new_plan = await db.fetchrow(
-        "SELECT * FROM plans WHERE name = $1 AND is_active = true",
-        req.new_plan_name
+        "SELECT * FROM plans WHERE name = $1 AND is_active = true", req.new_plan_name
     )
     if not new_plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
     current_sub = await db.fetchrow(
-        "SELECT s.*, p.name as plan_name FROM subscriptions s JOIN plans p ON p.id = s.plan_id WHERE s.tenant_id = $1",
-        current_user.tenant_id
+        "SELECT s.*, p.name as plan_name, p.sort_order as plan_sort_order FROM subscriptions s JOIN plans p ON p.id = s.plan_id WHERE s.tenant_id = $1",
+        current_user.tenant_id,
     )
 
     if not current_sub:
@@ -707,39 +794,66 @@ async def change_plan(
     if current_sub["plan_name"] == req.new_plan_name:
         raise HTTPException(status_code=400, detail="Already on this plan")
 
+    # Validate sort_order for upgrades
+    if new_plan["sort_order"] > current_sub["plan_sort_order"]:
+        # Upgrade attempt - only allowed for super_admin
+        if current_user.role != "super_admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Upgrade requires admin privileges or payment webhook",
+            )
+
     # Update locally
-    await db.execute("""
+    await db.execute(
+        """
         UPDATE subscriptions SET plan_id = $1, status = 'active', updated_at = NOW()
         WHERE tenant_id = $2
-    """, new_plan["id"], current_user.tenant_id)
+    """,
+        new_plan["id"],
+        current_user.tenant_id,
+    )
 
     # Audit
-    await db.execute("""
+    await db.execute(
+        """
         INSERT INTO audit_logs (user_id, tenant_id, action, resource_type, details)
         VALUES ($1, $2, 'plan.change', 'subscription',
                 $3::jsonb)
-    """, current_user.id, current_user.tenant_id,
-         f'{{"from": "{current_sub["plan_name"]}", "to": "{req.new_plan_name}"}}')
+    """,
+        current_user.id,
+        current_user.tenant_id,
+        f'{{"from": "{current_sub["plan_name"]}", "to": "{req.new_plan_name}"}}',
+    )
 
-    logger.info("plan_changed", tenant_id=current_user.tenant_id,
-                from_plan=current_sub["plan_name"], to_plan=req.new_plan_name)
+    logger.info(
+        "plan_changed",
+        tenant_id=current_user.tenant_id,
+        from_plan=current_sub["plan_name"],
+        to_plan=req.new_plan_name,
+    )
 
-    return {"message": f"Plan changed to {new_plan['display_name']}", "new_plan": req.new_plan_name}
+    return {
+        "message": f"Plan changed to {new_plan['display_name']}",
+        "new_plan": req.new_plan_name,
+    }
 
 
 # ---------- Cancel Subscription ----------
 
+
 @router.post("/cancel-subscription")
 async def cancel_subscription(
-    current_user: User = Depends(get_current_user),
-    db = Depends(get_pool_db)
+    current_user: User = Depends(get_current_user), db=Depends(get_pool_db)
 ):
     """Cancel the current subscription (Stripe or MercadoPago)."""
-    sub = await db.fetchrow("""
+    sub = await db.fetchrow(
+        """
         SELECT s.*, p.name as plan_name FROM subscriptions s
         JOIN plans p ON p.id = s.plan_id
         WHERE s.tenant_id = $1
-    """, current_user.tenant_id)
+    """,
+        current_user.tenant_id,
+    )
 
     if not sub:
         raise HTTPException(status_code=404, detail="No active subscription found")
@@ -755,44 +869,59 @@ async def cancel_subscription(
         if not STRIPE_SECRET_KEY:
             raise HTTPException(status_code=503, detail="Stripe not configured")
         import stripe
+
         stripe.api_key = STRIPE_SECRET_KEY
         try:
-            stripe.Subscription.cancel(ext_sub_id)
+            await asyncio.to_thread(stripe.Subscription.cancel, ext_sub_id)
         except Exception as e:
             logger.error("stripe_cancel_error", error=str(e))
-            raise HTTPException(status_code=500, detail=f"Error canceling Stripe subscription: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Error canceling Stripe subscription: {str(e)}"
+            )
 
     elif provider == "mercadopago" and ext_sub_id:
         if not MP_ACCESS_TOKEN:
             raise HTTPException(status_code=503, detail="MercadoPago not configured")
         import httpx
+
         async with httpx.AsyncClient() as client:
             resp = await client.put(
                 f"https://api.mercadopago.com/preapproval/{ext_sub_id}",
                 headers={
                     "Authorization": f"Bearer {MP_ACCESS_TOKEN}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
-                json={"status": "cancelled"}
+                json={"status": "cancelled"},
             )
             if resp.status_code not in (200, 201):
                 logger.error("mp_cancel_error", status=resp.status_code, body=resp.text)
-                raise HTTPException(status_code=500, detail="Error canceling MercadoPago subscription")
+                raise HTTPException(
+                    status_code=500, detail="Error canceling MercadoPago subscription"
+                )
 
     # Update DB
-    await db.execute("""
+    await db.execute(
+        """
         UPDATE subscriptions SET status = 'canceled', canceled_at = NOW(), updated_at = NOW()
         WHERE tenant_id = $1
-    """, current_user.tenant_id)
+    """,
+        current_user.tenant_id,
+    )
 
     # Audit log
-    await db.execute("""
+    await db.execute(
+        """
         INSERT INTO audit_logs (user_id, tenant_id, action, resource_type, details)
         VALUES ($1, $2, 'subscription.cancel', 'subscription',
                 $3::jsonb)
-    """, current_user.id, current_user.tenant_id,
-         f'{{"plan": "{sub["plan_name"]}", "provider": "{provider or "none"}"}}')
+    """,
+        current_user.id,
+        current_user.tenant_id,
+        f'{{"plan": "{sub["plan_name"]}", "provider": "{provider or "none"}"}}',
+    )
 
-    logger.info("subscription_canceled", tenant_id=current_user.tenant_id, plan=sub["plan_name"])
+    logger.info(
+        "subscription_canceled", tenant_id=current_user.tenant_id, plan=sub["plan_name"]
+    )
 
     return {"status": "canceled", "message": "Suscripcion cancelada exitosamente."}
