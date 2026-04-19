@@ -18,6 +18,7 @@ from app.api.deps import get_current_user
 from pydantic import BaseModel
 from db import redis_client
 from app.services.account_security import AccountSecurity
+from app.services.token_service import token_service
 from app.middleware.rate_limit_enhanced import limiter
 
 account_security = AccountSecurity(redis_client)
@@ -90,7 +91,10 @@ async def read_users_me(
 @router.post("/register", response_model=Token)
 @limiter.limit("5/minute")
 async def register(
-    request: Request, user_in: UserRegister, response: Response, db: AsyncSession = Depends(get_db)
+    request: Request,
+    user_in: UserRegister,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Register a new user and create a new Tenant (Sovereign Identity).
@@ -110,7 +114,9 @@ async def register(
             # Ensure token exists (genera nuevo con expiración de 48h)
             if not existing_user.verification_token:
                 existing_user.verification_token = uuid.uuid4().hex
-                existing_user.verification_token_expires_at = datetime.utcnow() + timedelta(hours=48)
+                existing_user.verification_token_expires_at = (
+                    datetime.utcnow() + timedelta(hours=48)
+                )
                 await db.commit()
 
             # Resend Email (catch exceptions safely in Service)
@@ -260,7 +266,10 @@ async def register(
 @router.post("/login", response_model=Token)
 @limiter.limit("10/minute")
 async def login(
-    request: Request, user_in: UserLogin, response: Response, db: AsyncSession = Depends(get_db)
+    request: Request,
+    user_in: UserLogin,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
 ):
     # 0. Check lockout
     try:
@@ -283,7 +292,9 @@ async def login(
         raise
     except Exception as e:
         logger.critical("redis_unavailable_login_blocked", error=str(e))
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.")
+        raise HTTPException(
+            status_code=503, detail="Service temporarily unavailable. Please try again."
+        )
 
     # 1. Find User
     result = await db.execute(select(User).where(User.email == user_in.email))
@@ -308,13 +319,12 @@ async def login(
     # if not user.is_verified:
     #     raise HTTPException(status_code=403, detail="Email not verified. Please check your inbox.")
 
-    # 4. Generate Token
-    access_token_expires = timedelta(minutes=security.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = security.create_access_token(
-        subject=user.id, expires_delta=access_token_expires
+    # 4. Generate Token Pair (Access + Refresh)
+    access_token, refresh_token, family_id = await token_service.create_token_pair(
+        str(user.id)
     )
 
-    # 5. Set Cookie
+    # 5. Set Cookie para Access Token
     response.set_cookie(
         key="access_token",
         value=access_token,
@@ -324,7 +334,21 @@ async def login(
         secure=True,  # Required for samesite="none"
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    # Guardar refresh token en cookie (httponly para seguridad)
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        max_age=security.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        samesite="none",
+        secure=True,
+    )
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
 
 
 class TokenSchema(BaseModel):
@@ -345,7 +369,10 @@ async def verify_email(data: TokenSchema, db: AsyncSession = Depends(get_db)):
         )
 
     # Verificar que el token no haya expirado
-    if user.verification_token_expires_at and datetime.utcnow() > user.verification_token_expires_at:
+    if (
+        user.verification_token_expires_at
+        and datetime.utcnow() > user.verification_token_expires_at
+    ):
         raise HTTPException(
             status_code=400,
             detail="Verification link expired. Please request a new one.",
@@ -429,7 +456,10 @@ async def resend_verification(
         await db.commit()
     except Exception as e:
         logger.error("smtp_error", error=str(e), error_type=type(e).__name__)
-        raise HTTPException(status_code=500, detail="Error sending verification email. Please try again later.")
+        raise HTTPException(
+            status_code=500,
+            detail="Error sending verification email. Please try again later.",
+        )
 
     return {"message": "Verification email sent successfully."}
 
@@ -441,7 +471,10 @@ class GoogleAuthRequest(BaseModel):
 @router.post("/google")
 @limiter.limit("10/minute")
 async def google_auth(
-    request: Request, data: GoogleAuthRequest, response: Response, db: AsyncSession = Depends(get_db)
+    request: Request,
+    data: GoogleAuthRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Google OAuth: verify ID token, create or login user.
@@ -553,10 +586,9 @@ async def google_auth(
         except Exception as e:
             logger.warning("google_welcome_email_failed", error=str(e))
 
-    # 3. Issue JWT cookie (same as regular login)
-    access_token_expires = timedelta(minutes=security.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = security.create_access_token(
-        subject=user.id, expires_delta=access_token_expires
+    # 3. Issue JWT cookie (same as regular login) - now with refresh token
+    access_token, refresh_token, family_id = await token_service.create_token_pair(
+        str(user.id)
     )
 
     response.set_cookie(
@@ -568,11 +600,23 @@ async def google_auth(
         secure=True,
     )
 
+    # Guardar refresh token
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        max_age=security.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        samesite="none",
+        secure=True,
+    )
+
     return {
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "is_new_user": user.created_at is not None
-        and (datetime.utcnow() - user.created_at.replace(tzinfo=None)).total_seconds() < 10,
+        and (datetime.utcnow() - user.created_at.replace(tzinfo=None)).total_seconds()
+        < 10,
     }
 
 
@@ -619,11 +663,15 @@ class ResetPasswordSchema(BaseModel):
 
 @router.post("/reset-password")
 @limiter.limit("5/minute")
-async def reset_password(request: Request, data: ResetPasswordSchema, db: AsyncSession = Depends(get_db)):
+async def reset_password(
+    request: Request, data: ResetPasswordSchema, db: AsyncSession = Depends(get_db)
+):
     """
     Reset password using the token from forgot-password email.
     """
-    result = await db.execute(select(User).where(User.password_reset_token == data.token))
+    result = await db.execute(
+        select(User).where(User.password_reset_token == data.token)
+    )
     user = result.scalar_one_or_none()
 
     if not user:
@@ -647,9 +695,80 @@ async def reset_password(request: Request, data: ResetPasswordSchema, db: AsyncS
 
 
 @router.post("/logout")
-async def logout(response: Response):
+async def logout(response: Response, current_user: User = Depends(get_current_user)):
+    """
+    Logout: invalida el refresh token del usuario.
+    """
+    # Revocar todos los tokens del usuario (incluye el refresh token actual)
+    await token_service.revoke_all_user_tokens(str(current_user.id))
+
     response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
+
     return {"message": "Logged out"}
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+@router.post("/refresh")
+async def refresh_tokens(data: RefreshRequest, response: Response):
+    """
+    Refresh: intercambia un refresh token válido por un nuevo par de tokens.
+    Implementa rotación automática de refresh tokens.
+    """
+    try:
+        access_token, new_refresh_token, family_id = await token_service.refresh_tokens(
+            data.refresh_token
+        )
+
+        # Actualizar cookies
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            max_age=security.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            samesite="none",
+            secure=True,
+        )
+
+        response.set_cookie(
+            key="refresh_token",
+            value=new_refresh_token,
+            httponly=True,
+            max_age=security.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+            samesite="none",
+            secure=True,
+        )
+
+        return {
+            "access_token": access_token,
+            "refresh_token": new_refresh_token,
+            "token_type": "bearer",
+        }
+
+    except ValueError as e:
+        logger.warning("refresh_failed", error=str(e))
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired refresh token. Please login again.",
+        )
+
+
+@router.post("/logout-all")
+async def logout_all_devices(
+    response: Response, current_user: User = Depends(get_current_user)
+):
+    """
+    Logout from all devices: revoca todos los refresh tokens del usuario.
+    """
+    await token_service.revoke_all_user_tokens(str(current_user.id))
+
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
+
+    return {"message": "Logged out from all devices"}
 
 
 class UserUpdate(BaseModel):

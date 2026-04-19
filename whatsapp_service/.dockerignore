@@ -11,3 +11,11 @@ tests/
 .git/
 .gitignore
 .venv/
+.claude/
+.agent/
+.atl/
+*.log
+*.backup*
+*.bak
+.ruff_cache/
+.mypy_cache/

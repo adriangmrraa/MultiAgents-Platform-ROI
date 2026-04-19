@@ -15,38 +15,44 @@ from app.core.config import settings
 logger = structlog.get_logger()
 
 
-async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform: str, tenant_id: int) -> dict:
+async def fetch_meta_sender_profile(
+    sender_id: str, recipient_id: str, platform: str, tenant_id: int
+) -> dict:
     """
     Fetches sender profile (name, avatar) from Meta Graph API.
     Uses the stored page token for the recipient (page/IG account).
     """
     from utils import decrypt_password
+
     try:
         # Try specific page token first, then general
         token_row = await db.pool.fetchrow(
             "SELECT value FROM credentials WHERE tenant_id = $1 AND name = $2",
-            tenant_id, f"META_PAGE_TOKEN_{recipient_id}"
+            tenant_id,
+            f"META_PAGE_TOKEN_{recipient_id}",
         )
         if not token_row:
             # Try linked page for Instagram
             asset = await db.pool.fetchrow(
                 "SELECT content->>'linked_page_id' as linked_page_id FROM business_assets WHERE content->>'id' = $1 AND tenant_id = $2",
-                recipient_id, str(tenant_id)
+                recipient_id,
+                str(tenant_id),
             )
-            if asset and asset['linked_page_id']:
+            if asset and asset["linked_page_id"]:
                 token_row = await db.pool.fetchrow(
                     "SELECT value FROM credentials WHERE tenant_id = $1 AND name = $2",
-                    tenant_id, f"META_PAGE_TOKEN_{asset['linked_page_id']}"
+                    tenant_id,
+                    f"META_PAGE_TOKEN_{asset['linked_page_id']}",
                 )
         if not token_row:
             token_row = await db.pool.fetchrow(
                 "SELECT value FROM credentials WHERE tenant_id = $1 AND name = 'meta_page_token'",
-                tenant_id
+                tenant_id,
             )
         if not token_row:
             return {}
 
-        token = decrypt_password(token_row['value'])
+        token = decrypt_password(token_row["value"])
 
         # Fetch profile from Graph API
         api_version = os.getenv("META_GRAPH_API_VERSION", "v22.0")
@@ -56,13 +62,19 @@ async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform:
                 url = f"https://graph.facebook.com/{api_version}/{sender_id}?fields=name,username,profile_pic&access_token={token}"
                 resp = await client.get(url)
                 data = resp.json()
-                logger.info("meta_profile_raw_response", status=resp.status_code, platform=platform, sender=sender_id, body=json.dumps(data)[:500])
+                logger.info(
+                    "meta_profile_raw_response",
+                    status=resp.status_code,
+                    platform=platform,
+                    sender=sender_id,
+                    body=json.dumps(data)[:500],
+                )
 
                 if resp.status_code == 200 and "error" not in data:
                     return {
                         "name": data.get("name") or data.get("username") or "",
                         "username": data.get("username") or "",
-                        "avatar": data.get("profile_pic") or ""
+                        "avatar": data.get("profile_pic") or "",
                     }
 
             elif platform == "facebook":
@@ -70,7 +82,13 @@ async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform:
                 url = f"https://graph.facebook.com/{api_version}/{recipient_id}/conversations?fields=participants&user_id={sender_id}&access_token={token}"
                 resp = await client.get(url)
                 data = resp.json()
-                logger.info("meta_profile_raw_response", status=resp.status_code, platform=platform, sender=sender_id, body=json.dumps(data)[:500])
+                logger.info(
+                    "meta_profile_raw_response",
+                    status=resp.status_code,
+                    platform=platform,
+                    sender=sender_id,
+                    body=json.dumps(data)[:500],
+                )
 
                 if resp.status_code == 200 and "error" not in data:
                     # Extract participant name from conversations response
@@ -92,16 +110,15 @@ async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform:
                             pic_url = f"https://graph.facebook.com/{api_version}/{sender_id}/picture?type=large&redirect=false&access_token={token}"
                             pic_resp = await client.get(pic_url)
                             pic_data = pic_resp.json()
-                            if pic_resp.status_code == 200 and pic_data.get("data", {}).get("url"):
+                            if pic_resp.status_code == 200 and pic_data.get(
+                                "data", {}
+                            ).get("url"):
                                 avatar_url = pic_data["data"]["url"]
                         except Exception:
                             pass
 
                         if sender_name_fb:
-                            return {
-                                "name": sender_name_fb,
-                                "avatar": avatar_url
-                            }
+                            return {"name": sender_name_fb, "avatar": avatar_url}
 
                 # Fallback: try direct GET /{psid} (works if app has pages_read_user_content)
                 url2 = f"https://graph.facebook.com/{api_version}/{sender_id}?fields=first_name,last_name,profile_pic&access_token={token}"
@@ -112,27 +129,32 @@ async def fetch_meta_sender_profile(sender_id: str, recipient_id: str, platform:
                     last = data2.get("last_name", "")
                     return {
                         "name": f"{first} {last}".strip() or "",
-                        "avatar": data2.get("profile_pic") or ""
+                        "avatar": data2.get("profile_pic") or "",
                     }
 
-            logger.warning("meta_profile_fetch_failed", platform=platform, sender=sender_id)
+            logger.warning(
+                "meta_profile_fetch_failed", platform=platform, sender=sender_id
+            )
     except Exception as e:
         logger.warning("meta_profile_fetch_error", error=str(e), sender=sender_id)
     return {}
 
+
 router = APIRouter(prefix="/ingest", tags=["ingetion"])
 
+
 class SimpleEvent(BaseModel):
-    provider: str # 'meta'
-    platform: str # 'facebook', 'instagram', 'whatsapp'
+    provider: str  # 'meta'
+    platform: str  # 'facebook', 'instagram', 'whatsapp'
     tenant_id: Optional[str] = None
-    tenant_identifier: Optional[str] = None # Page ID / Phone ID (from meta_service)
-    recipient_id: str # Page ID, IG ID, WABA Phone ID
-    sender_id: str # User PSID
+    tenant_identifier: Optional[str] = None  # Page ID / Phone ID (from meta_service)
+    recipient_id: str  # Page ID, IG ID, WABA Phone ID
+    sender_id: str  # User PSID
     event_type: str = "message"
     timestamp: Optional[int] = None
-    payload: Dict[str, Any] # {text, image, mid}
-    sender_name: Optional[str] = None # Optional name from profile
+    payload: Dict[str, Any]  # {text, image, mid}
+    sender_name: Optional[str] = None  # Optional name from profile
+
 
 async def verify_internal_secret(x_internal_secret: str = Header(None)):
     """
@@ -143,8 +165,12 @@ async def verify_internal_secret(x_internal_secret: str = Header(None)):
     alt_secret = os.getenv("INTERNAL_SECRET_KEY", "")
 
     if x_internal_secret not in (trusted_secret, alt_secret):
-         logger.warning("ingest_unauthorized", provided=x_internal_secret[:4] if x_internal_secret else "None")
-         raise HTTPException(status_code=403, detail="Unauthorized Internal Access")
+        logger.warning(
+            "ingest_unauthorized",
+            provided=x_internal_secret[:4] if x_internal_secret else "None",
+        )
+        raise HTTPException(status_code=403, detail="Unauthorized Internal Access")
+
 
 @router.post("/message", dependencies=[Depends(verify_internal_secret)])
 async def ingest_message(event: SimpleEvent):
@@ -155,7 +181,12 @@ async def ingest_message(event: SimpleEvent):
     3. Publishes to Redis for UI.
     4. Triggers AI Agent via buffer.
     """
-    logger.info("ingest_received", provider=event.provider, platform=event.platform, recipient=event.recipient_id)
+    logger.info(
+        "ingest_received",
+        provider=event.provider,
+        platform=event.platform,
+        recipient=event.recipient_id,
+    )
 
     # 1. Resolve Tenant
     tenant_id = None
@@ -168,37 +199,46 @@ async def ingest_message(event: SimpleEvent):
     if not tenant_id:
         # Let's search by Bot Phone Number first (WhatsApp)
         if event.platform == "whatsapp":
-             formatted_id = event.recipient_id.replace("+", "")
-             row = await db.pool.fetchrow("SELECT id FROM tenants WHERE bot_phone_number = $1", formatted_id)
-             if row: tenant_id = row['id']
+            formatted_id = event.recipient_id.replace("+", "")
+            row = await db.pool.fetchrow(
+                "SELECT id FROM tenants WHERE bot_phone_number = $1", formatted_id
+            )
+            if row:
+                tenant_id = row["id"]
 
         # For Facebook/Instagram, look up in business_assets via content JSONB
         if not tenant_id:
-             asset_row = await db.pool.fetchrow(
-                 "SELECT tenant_id FROM business_assets WHERE content->>'id' = $1 LIMIT 1",
-                 event.recipient_id
-             )
-             if asset_row:
-                 t_val = asset_row['tenant_id']
-                 tenant_id = int(t_val) if str(t_val).isdigit() else None
+            asset_row = await db.pool.fetchrow(
+                "SELECT tenant_id FROM business_assets WHERE content->>'id' = $1 LIMIT 1",
+                event.recipient_id,
+            )
+            if asset_row:
+                t_val = asset_row["tenant_id"]
+                tenant_id = int(t_val) if str(t_val).isdigit() else None
 
     if not tenant_id:
         logger.error("ingest_tenant_unresolved", recipient=event.recipient_id)
-        raise HTTPException(status_code=404, detail=f"Could not resolve tenant for {event.recipient_id}")
+        raise HTTPException(
+            status_code=404, detail=f"Could not resolve tenant for {event.recipient_id}"
+        )
 
     # 2. Resolve Source Identifier (Asset Name from content JSONB)
     source_identifier = event.recipient_id
     asset_info = await db.pool.fetchrow(
         "SELECT content->>'name' as name FROM business_assets WHERE content->>'id' = $1 AND tenant_id = $2",
-        event.recipient_id, str(tenant_id)
+        event.recipient_id,
+        str(tenant_id),
     )
-    if asset_info and asset_info['name']:
-        source_identifier = asset_info['name']
+    if asset_info and asset_info["name"]:
+        source_identifier = asset_info["name"]
 
     # 2b. Fetch sender profile from Meta Graph API (name + avatar)
     sender_name = event.sender_name
     sender_avatar = None
-    if sender_name in (None, "", "User") and event.platform in ("instagram", "facebook"):
+    if sender_name in (None, "", "User") and event.platform in (
+        "instagram",
+        "facebook",
+    ):
         profile = await fetch_meta_sender_profile(
             event.sender_id, event.recipient_id, event.platform, tenant_id
         )
@@ -208,26 +248,58 @@ async def ingest_message(event: SimpleEvent):
             sender_avatar = profile["avatar"]
         if profile.get("username"):
             sender_name = sender_name or profile["username"]
-        logger.info("sender_profile_resolved", name=sender_name, platform=event.platform)
+        logger.info(
+            "sender_profile_resolved", name=sender_name, platform=event.platform
+        )
 
     if not sender_name or sender_name == "User":
         sender_name = event.sender_id  # Fallback to PSID
 
     # 3. Protocol Omega: Identity Link (Find or Create Customer)
     customer_id = None
-    if event.platform == 'instagram':
-        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND instagram_psid = $2", tenant_id, event.sender_id)
+    if event.platform == "instagram":
+        customer_id = await db.pool.fetchval(
+            "SELECT id FROM customers WHERE tenant_id = $1 AND instagram_psid = $2",
+            tenant_id,
+            event.sender_id,
+        )
         if not customer_id:
-            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, instagram_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, sender_name)
-    elif event.platform == 'facebook':
-        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND facebook_psid = $2", tenant_id, event.sender_id)
+            customer_id = await db.pool.fetchval(
+                "INSERT INTO customers (id, tenant_id, instagram_psid, name) VALUES ($1, $2, $3, $4) RETURNING id",
+                uuid.uuid4(),
+                tenant_id,
+                event.sender_id,
+                sender_name,
+            )
+    elif event.platform == "facebook":
+        customer_id = await db.pool.fetchval(
+            "SELECT id FROM customers WHERE tenant_id = $1 AND facebook_psid = $2",
+            tenant_id,
+            event.sender_id,
+        )
         if not customer_id:
-            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, facebook_psid, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, sender_name)
+            customer_id = await db.pool.fetchval(
+                "INSERT INTO customers (id, tenant_id, facebook_psid, name) VALUES ($1, $2, $3, $4) RETURNING id",
+                uuid.uuid4(),
+                tenant_id,
+                event.sender_id,
+                sender_name,
+            )
     else:
         # Default WhatsApp (Phone)
-        customer_id = await db.pool.fetchval("SELECT id FROM customers WHERE tenant_id = $1 AND phone_number = $2", tenant_id, event.sender_id)
+        customer_id = await db.pool.fetchval(
+            "SELECT id FROM customers WHERE tenant_id = $1 AND phone_number = $2",
+            tenant_id,
+            event.sender_id,
+        )
         if not customer_id:
-            customer_id = await db.pool.fetchval("INSERT INTO customers (id, tenant_id, phone_number, name) VALUES ($1, $2, $3, $4) RETURNING id", uuid.uuid4(), tenant_id, event.sender_id, sender_name)
+            customer_id = await db.pool.fetchval(
+                "INSERT INTO customers (id, tenant_id, phone_number, name) VALUES ($1, $2, $3, $4) RETURNING id",
+                uuid.uuid4(),
+                tenant_id,
+                event.sender_id,
+                sender_name,
+            )
 
     # 4. Sync Conversation
     conv_query = """
@@ -238,35 +310,51 @@ async def ingest_message(event: SimpleEvent):
         )
         LIMIT 1
     """
-    conv_row = await db.pool.fetchrow(conv_query, tenant_id, event.platform, event.sender_id, customer_id)
+    conv_row = await db.pool.fetchrow(
+        conv_query, tenant_id, event.platform, event.sender_id, customer_id
+    )
 
     is_locked = False
     if conv_row:
-        conversation_id = str(conv_row['id'])
-        lockout = conv_row['human_override_until']
+        conversation_id = str(conv_row["id"])
+        lockout = conv_row["human_override_until"]
         if lockout:
             now = datetime.now(lockout.tzinfo) if lockout.tzinfo else datetime.now()
             if lockout > now:
                 is_locked = True
         # Build meta JSONB for sender info
-        meta_json = json.dumps({"sender_name": sender_name, "sender_avatar": sender_avatar or ""})
+        meta_json = json.dumps(
+            {"sender_name": sender_name, "sender_avatar": sender_avatar or ""}
+        )
 
         # Update metadata
-        await db.pool.execute("""
+        await db.pool.execute(
+            """
             UPDATE chat_conversations
             SET platform_origin = $1, source_identifier = $2, source_entity_id = $3,
                 customer_id = $4, updated_at = NOW(), last_message_at = NOW(),
                 last_message_preview = $6, provider = 'meta_direct',
                 display_name = $7, avatar_url = $8, meta = $9::jsonb
             WHERE id = $5
-        """, event.platform, source_identifier, event.recipient_id, customer_id, conversation_id,
-             (event.payload.get("text") or "[Media]")[:50],
-             sender_name, sender_avatar, meta_json)
+        """,
+            event.platform,
+            source_identifier,
+            event.recipient_id,
+            customer_id,
+            conversation_id,
+            (event.payload.get("text") or "[Media]")[:50],
+            sender_name,
+            sender_avatar,
+            meta_json,
+        )
     else:
         conversation_id = str(uuid.uuid4())
-        meta_json = json.dumps({"sender_name": sender_name, "sender_avatar": sender_avatar or ""})
+        meta_json = json.dumps(
+            {"sender_name": sender_name, "sender_avatar": sender_avatar or ""}
+        )
 
-        await db.pool.execute("""
+        await db.pool.execute(
+            """
             INSERT INTO chat_conversations (
                 id, tenant_id, channel, external_user_id, customer_id, status, provider,
                 platform_origin, source_identifier, source_entity_id,
@@ -274,10 +362,21 @@ async def ingest_message(event: SimpleEvent):
                 channel_source, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, 'open', 'meta_direct', $6, $7, $8, $9, $10, $11::jsonb, NOW(), $12, $13, NOW(), NOW())
-        """, conversation_id, tenant_id, event.platform, event.sender_id, customer_id,
-             event.platform, source_identifier, event.recipient_id,
-             sender_name, sender_avatar, meta_json,
-             (event.payload.get("text") or "[Media]")[:50], event.platform)
+        """,
+            conversation_id,
+            tenant_id,
+            event.platform,
+            event.sender_id,
+            customer_id,
+            event.platform,
+            source_identifier,
+            event.recipient_id,
+            sender_name,
+            sender_avatar,
+            meta_json,
+            (event.payload.get("text") or "[Media]")[:50],
+            event.platform,
+        )
 
     # 5. Persist Message
     msg_id = str(uuid.uuid4())
@@ -287,24 +386,37 @@ async def ingest_message(event: SimpleEvent):
     if media_url:
         content += f" {media_url}"
 
-    await db.pool.execute("""
+    await db.pool.execute(
+        """
         INSERT INTO chat_messages (id, tenant_id, conversation_id, role, content, created_at, from_number, channel_source)
         VALUES ($1, $2, $3, 'user', $4, NOW(), $5, $6)
-    """, msg_id, tenant_id, conversation_id, content, event.sender_id, event.platform)
+    """,
+        msg_id,
+        tenant_id,
+        conversation_id,
+        content,
+        event.sender_id,
+        event.platform,
+    )
 
     # 5b. Track usage (incoming message)
     try:
         from app.services.usage_tracker import get_usage_tracker
+
         tracker = get_usage_tracker()
         await tracker.track_message(tenant_id, "received")
     except Exception as track_err:
         logger.warning("usage_track_error", error=str(track_err))
 
     # 6. Update conversation last message
-    await db.pool.execute("""
+    await db.pool.execute(
+        """
         UPDATE chat_conversations SET last_message_at = NOW(), last_message_preview = $1, updated_at = NOW()
         WHERE id = $2
-    """, content[:50], conversation_id)
+    """,
+        content[:50],
+        conversation_id,
+    )
 
     # 7. Redis Publish (UI Realtime)
     redis_payload = {
@@ -316,8 +428,8 @@ async def ingest_message(event: SimpleEvent):
             "content": content,
             "from_number": event.sender_id,
             "platform": event.platform,
-            "created_at": datetime.now().isoformat()
-        }
+            "created_at": datetime.now().isoformat(),
+        },
     }
 
     redis_channel = f"events:tenant:{tenant_id}:assets"
@@ -338,14 +450,24 @@ async def ingest_message(event: SimpleEvent):
                 await redis_client.setex(pending_key, 5, "active")
                 # Import and trigger the buffer processor from main module
                 from main import process_buffer_task
+
                 correlation_id = str(uuid.uuid4())
                 asyncio.create_task(
                     process_buffer_task(
-                        event.sender_id, tenant_id, conversation_id,
-                        correlation_id, event.sender_name or "User", event.platform
-                    )
+                        event.sender_id,
+                        tenant_id,
+                        conversation_id,
+                        correlation_id,
+                        event.sender_name or "User",
+                        event.platform,
+                    ),
+                    name=f"buffer-task-{event.sender_id}",
                 )
-                logger.info("agent_triggered", conversation_id=str(conversation_id), platform=event.platform)
+                logger.info(
+                    "agent_triggered",
+                    conversation_id=str(conversation_id),
+                    platform=event.platform,
+                )
             else:
                 logger.info("agent_buffered", sender=event.sender_id)
         except Exception as e:

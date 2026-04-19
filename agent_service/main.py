@@ -33,7 +33,14 @@ structlog.configure(
 )
 logger = structlog.get_logger()
 
-app = FastAPI(title="Agent Core Service", version="1.0.0")
+_is_debug = os.getenv("DEBUG", "").lower() in ("true", "1")
+app = FastAPI(
+    title="Agent Core Service",
+    version="1.0.0",
+    docs_url="/docs" if _is_debug else None,
+    redoc_url="/redoc" if _is_debug else None,
+    openapi_url="/openapi.json" if _is_debug else None,
+)
 
 
 @app.exception_handler(RequestValidationError)

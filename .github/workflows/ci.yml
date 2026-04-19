@@ -42,6 +42,8 @@ jobs:
         run: cd frontend_react && npm ci --legacy-peer-deps
       - name: Type check
         run: cd frontend_react && npx tsc --noEmit
+      - name: Build
+        run: cd frontend_react && npm run build
 
   lint-bff:
     name: BFF Type Check
@@ -58,10 +60,53 @@ jobs:
       - name: Type check
         run: cd bff_service && npx tsc --noEmit
 
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    needs: [lint-python]
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install -r orchestrator_service/requirements.txt
+          pip install pytest pytest-asyncio httpx
+      - name: Run Alembic migrations
+        run: |
+          cd orchestrator_service
+          alembic upgrade head
+      - name: Run backend tests
+        run: pytest tests/ -v
+
   docker-smoke:
     name: Docker Build Smoke Test
     runs-on: ubuntu-latest
-    needs: [lint-python, lint-frontend, lint-bff]
+    needs: [lint-python, lint-frontend, lint-bff, test-backend]
     strategy:
       matrix:
         service:

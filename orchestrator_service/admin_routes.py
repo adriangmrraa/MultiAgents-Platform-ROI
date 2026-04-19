@@ -370,7 +370,9 @@ async def list_tenants(
             try:
                 r["handoff_policy"] = json.loads(r["handoff_policy"])
             except Exception as e:
-                logger.warning("handoff_policy_json_parse_failed", extra={"error": str(e)})
+                logger.warning(
+                    "handoff_policy_json_parse_failed", extra={"error": str(e)}
+                )
                 r["handoff_policy"] = {}
 
         # 2. Secret Sanitization
@@ -2039,7 +2041,9 @@ async def get_business_assets(
                 try:
                     data["content"] = json.loads(data["content"])
                 except Exception as e:
-                    logger.warning("asset_content_json_parse_failed", extra={"error": str(e)})
+                    logger.warning(
+                        "asset_content_json_parse_failed", extra={"error": str(e)}
+                    )
             results.append(data)
 
         return results
@@ -2183,7 +2187,9 @@ async def get_store_products(current_user: User = Depends(get_current_user)):
                 try:
                     token = decrypt_password(row["tiendanube_access_token"])
                 except Exception as e:
-                    logger.warning("tiendanube_token_decrypt_failed", extra={"error": str(e)})
+                    logger.warning(
+                        "tiendanube_token_decrypt_failed", extra={"error": str(e)}
+                    )
                     token = row["tiendanube_access_token"]
 
         if not token or not store_id:
@@ -2942,7 +2948,10 @@ async def get_events(limit: int = 50):
                 try:
                     payload = json.loads(payload)
                 except Exception as e:
-                    logger.warning("system_event_payload_json_parse_failed", extra={"error": str(e)})
+                    logger.warning(
+                        "system_event_payload_json_parse_failed",
+                        extra={"error": str(e)},
+                    )
             elif not payload:
                 payload = {}
 
@@ -3240,7 +3249,9 @@ async def list_chats(
             try:
                 meta_json = json.loads(r["meta"]) if r["meta"] else {}
             except Exception as e:
-                logger.warning("conversation_meta_json_parse_failed", extra={"error": str(e)})
+                logger.warning(
+                    "conversation_meta_json_parse_failed", extra={"error": str(e)}
+                )
                 meta_json = {}
 
             results.append(
@@ -3459,7 +3470,9 @@ async def get_chat_history(
                 try:
                     atts = json.loads(r["attachments"])
                 except Exception as e:
-                    logger.warning("message_attachments_json_parse_failed", extra={"error": str(e)})
+                    logger.warning(
+                        "message_attachments_json_parse_failed", extra={"error": str(e)}
+                    )
             else:
                 atts = r["attachments"]
 
@@ -5345,7 +5358,9 @@ async def list_agents():
                 json.loads(r["enabled_tools"]) if r["enabled_tools"] else []
             )
         except Exception as e:
-            logger.warning("agent_enabled_tools_json_parse_failed", extra={"error": str(e)})
+            logger.warning(
+                "agent_enabled_tools_json_parse_failed", extra={"error": str(e)}
+            )
             r["enabled_tools"] = []
         try:
             r["channels"] = json.loads(r["channels"]) if r["channels"] else []
@@ -5525,7 +5540,9 @@ async def get_telemetry_events(
                                 payload_js[key] = "***"
                     evt["payload"] = payload_js
                 except Exception as e:
-                    logger.warning("telemetry_payload_sanitize_failed", extra={"error": str(e)})
+                    logger.warning(
+                        "telemetry_payload_sanitize_failed", extra={"error": str(e)}
+                    )
 
             # Serialize dates
             evt["occurred_at"] = evt["occurred_at"].isoformat()
@@ -5551,7 +5568,9 @@ async def ignite_engine(request: Request):
     try:
         payload = await request.json()
     except Exception as e:
-        logger.warning("engine_ignite_request_json_parse_failed", extra={"error": str(e)})
+        logger.warning(
+            "engine_ignite_request_json_parse_failed", extra={"error": str(e)}
+        )
         payload = {}
 
     # 1. Parsing & Validation
@@ -6072,7 +6091,9 @@ async def search_rag(
                         ]
                     }
             except Exception as e:
-                logger.warning("rag_search_filter_build_failed", extra={"error": str(e)})
+                logger.warning(
+                    "rag_search_filter_build_failed", extra={"error": str(e)}
+                )
 
         context = rag.search(q, k=k, filter=filter_dict)
         return {"ok": True, "context": context}
@@ -6540,19 +6561,25 @@ async def list_agents(current_user: User = Depends(get_current_user)):
             try:
                 r["enabled_tools"] = json.loads(r["enabled_tools"])
             except Exception as e:
-                logger.warning("agent_enabled_tools_json_parse_failed", extra={"error": str(e)})
+                logger.warning(
+                    "agent_enabled_tools_json_parse_failed", extra={"error": str(e)}
+                )
                 r["enabled_tools"] = []
         if isinstance(r.get("knowledge_sources"), str):
             try:
                 r["knowledge_sources"] = json.loads(r["knowledge_sources"])
             except Exception as e:
-                logger.warning("agent_knowledge_sources_json_parse_failed", extra={"error": str(e)})
+                logger.warning(
+                    "agent_knowledge_sources_json_parse_failed", extra={"error": str(e)}
+                )
                 r["knowledge_sources"] = []
         if isinstance(r.get("channels"), str):
             try:
                 r["channels"] = json.loads(r["channels"])
             except Exception as e:
-                logger.warning("agent_channels_json_parse_failed", extra={"error": str(e)})
+                logger.warning(
+                    "agent_channels_json_parse_failed", extra={"error": str(e)}
+                )
                 r["channels"] = []
 
         results.append(r)
@@ -6709,7 +6736,10 @@ async def create_agent(
                 agent_id,
             )
         except Exception as e:
-            logger.warning("agent_kb_linking_failed_on_create", extra={"id": agent_id, "error": str(e)})
+            logger.warning(
+                "agent_kb_linking_failed_on_create",
+                extra={"id": agent_id, "error": str(e)},
+            )
 
         return {"status": "ok", "id": agent_id}
     except Exception as e:
@@ -6960,10 +6990,15 @@ async def get_agent_config(agent_id: int):
                     try:
                         parsed = json.loads(parsed)
                     except Exception as e:
-                        logger.warning("agent_field_double_json_parse_failed", extra={"key": key, "error": str(e)})
+                        logger.warning(
+                            "agent_field_double_json_parse_failed",
+                            extra={"key": key, "error": str(e)},
+                        )
                 data[key] = parsed
             except Exception as e:
-                logger.warning("agent_field_json_parse_failed", extra={"key": key, "error": str(e)})
+                logger.warning(
+                    "agent_field_json_parse_failed", extra={"key": key, "error": str(e)}
+                )
                 if key == "config":
                     data[key] = {}
                 else:
@@ -7587,14 +7622,16 @@ async def receive_chatwoot_webhook(
             logger.info(
                 f"🚀 TASK: Starting process_buffer_task | identifier={identifier} | lock_acquired=True"
             )
-            background_tasks.add_task(
-                process_buffer_task,
-                identifier,
-                tenant_id,
-                conversation_id,
-                str(uuid.uuid4()),
-                customer_map.get("name"),
-                nexus_channel,
+            asyncio.create_task(
+                process_buffer_task(
+                    identifier,
+                    tenant_id,
+                    conversation_id,
+                    str(uuid.uuid4()),
+                    customer_map.get("name"),
+                    nexus_channel,
+                ),
+                name=f"buffer-task-{identifier}",
             )
         else:
             logger.info(f"⏸️ TASK: Skipped (already running) | identifier={identifier}")
@@ -7718,7 +7755,9 @@ async def get_web_widget_config(current_user: User = Depends(get_current_user)):
         try:
             return json.loads(row["value"])
         except Exception as e:
-            logger.warning("web_widget_config_json_parse_failed", extra={"error": str(e)})
+            logger.warning(
+                "web_widget_config_json_parse_failed", extra={"error": str(e)}
+            )
 
     return {}  # Return empty to let frontend use defaults
 

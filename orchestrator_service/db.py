@@ -1,7 +1,8 @@
 import asyncpg
 import os
 import json
-import redis.asyncio as aioredis 
+import structlog
+import redis.asyncio as aioredis
 from typing import List, Tuple, Optional
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -17,7 +18,9 @@ if POSTGRES_DSN:
     elif POSTGRES_DSN.startswith("postgres://"):
         POSTGRES_DSN = POSTGRES_DSN.replace("postgres://", "postgresql://", 1)
 
-DATABASE_URL = os.getenv("POSTGRES_DSN") or "postgresql+asyncpg://user:pass@localhost/db"
+DATABASE_URL = (
+    os.getenv("POSTGRES_DSN") or "postgresql+asyncpg://user:pass@localhost/db"
+)
 # Ensure DATABASE_URL has +asyncpg for SQLAlchemy if missing and using postgres
 if DATABASE_URL.startswith("postgresql://") and "+asyncpg" not in DATABASE_URL:
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
@@ -26,13 +29,11 @@ if DATABASE_URL.startswith("postgresql://") and "+asyncpg" not in DATABASE_URL:
 engine = create_async_engine(DATABASE_URL, echo=False)
 
 AsyncSessionLocal = sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autoflush=False
+    bind=engine, class_=AsyncSession, expire_on_commit=False, autoflush=False
 )
 
 Base = declarative_base()
+
 
 async def get_db():
     async with AsyncSessionLocal() as session:
@@ -40,6 +41,7 @@ async def get_db():
             yield session
         finally:
             await session.close()
+
 
 # --- 2. Legacy Database Class (AsyncPG Pool - Protocol Omega) ---
 class Database:
@@ -49,8 +51,24 @@ class Database:
     async def connect(self):
         if not self.pool:
             # use the sanitized DSN (no +asyncpg) for asyncpg
-            dsn = POSTGRES_DSN 
-            self.pool = await asyncpg.create_pool(dsn)
+            dsn = POSTGRES_DSN
+            pool_min = int(os.getenv("DB_POOL_MIN", "10"))
+            pool_max = int(os.getenv("DB_POOL_MAX", "40"))
+            cmd_timeout = float(os.getenv("DB_COMMAND_TIMEOUT", "60"))
+            self.pool = await asyncpg.create_pool(
+                dsn,
+                min_size=pool_min,
+                max_size=pool_max,
+                command_timeout=cmd_timeout,
+                max_inactive_connection_lifetime=300.0,
+            )
+            _logger = structlog.get_logger()
+            _logger.info(
+                "db_pool_initialized",
+                min_size=pool_min,
+                max_size=pool_max,
+                command_timeout=cmd_timeout,
+            )
 
     async def disconnect(self):
         if self.pool:
@@ -76,20 +94,34 @@ class Database:
         async with self.pool.acquire() as conn:
             return await conn.fetchval(query, *args)
 
-    async def try_insert_inbound(self, provider: str, provider_message_id: str, event_id: str, from_number: str, payload: dict, correlation_id: str) -> bool:
+    async def try_insert_inbound(
+        self,
+        provider: str,
+        provider_message_id: str,
+        event_id: str,
+        from_number: str,
+        payload: dict,
+        correlation_id: str,
+    ) -> bool:
         """
         Legacy wrapper. Now we use chat_messages as source of truth.
         Returns True if not a duplicate (using Redis for fast dedup).
         """
         return True
 
-    async def log_system_event(self, level: str, event_type: str, message: str, metadata: dict = None):
+    async def log_system_event(
+        self, level: str, event_type: str, message: str, metadata: dict = None
+    ):
         """Standardized system event logging (Protocol Omega: UUID)."""
         query = "INSERT INTO system_events (severity, event_type, message, payload) VALUES ($1, $2, $3, $4)"
         async with self.pool.acquire() as conn:
-            await conn.execute(query, level, event_type, message, json.dumps(metadata or {}))
+            await conn.execute(
+                query, level, event_type, message, json.dumps(metadata or {})
+            )
 
-    async def append_chat_message(self, from_number: str, role: str, content: str, correlation_id: str):
+    async def append_chat_message(
+        self, from_number: str, role: str, content: str, correlation_id: str
+    ):
         query = "INSERT INTO chat_messages (from_number, role, content, correlation_id) VALUES ($1, $2, $3, $4)"
         async with self.pool.acquire() as conn:
             await conn.execute(query, from_number, role, content, correlation_id)
@@ -100,6 +132,7 @@ class Database:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, from_number, limit)
             return [dict(row) for row in reversed(rows)]
+
 
 # --- Global Instances ---
 db = Database()

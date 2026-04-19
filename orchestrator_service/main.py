@@ -1597,10 +1597,34 @@ async def lifespan(app: FastAPI):
         )
         # Optimization: We let it start, but health checks will fail.
         if "Name or service not known" in str(e):
-            logger.critical("db_dns_error", dsn_preview=POSTGRES_DSN[:15] if POSTGRES_DSN else "None")
+            logger.critical(
+                "db_dns_error",
+                dsn_preview=POSTGRES_DSN[:15] if POSTGRES_DSN else "None",
+            )
             raise e
 
     yield
+
+    # --- Graceful Shutdown: Task Draining ---
+    drain_timeout = int(os.getenv("SHUTDOWN_DRAIN_TIMEOUT", "15"))
+    pending = [
+        t for t in asyncio.all_tasks() if t.get_name().startswith("buffer-task-")
+    ]
+    if pending:
+        logger.info(
+            "shutdown_draining_tasks", count=len(pending), timeout=drain_timeout
+        )
+        done, still_pending = await asyncio.wait(pending, timeout=drain_timeout)
+        if still_pending:
+            logger.warning(
+                "shutdown_tasks_not_completed",
+                count=len(still_pending),
+                tasks=[t.get_name() for t in still_pending],
+            )
+        else:
+            logger.info("shutdown_all_tasks_drained", count=len(done))
+    else:
+        logger.info("shutdown_no_pending_tasks")
 
     # Migration: Ensure Users table has profile fields
     try:
@@ -1626,11 +1650,15 @@ async def lifespan(app: FastAPI):
 
 
 # FastAPI App Initialization
+_is_debug = os.getenv("DEBUG", "").lower() in ("true", "1")
 app = FastAPI(
     title="Orchestrator Service",
     description="Central intelligence for Kilocode microservices.",
     version="1.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if _is_debug else None,
+    redoc_url="/redoc" if _is_debug else None,
+    openapi_url="/openapi.json" if _is_debug else None,
 )
 
 # --- CORS Policy Restoration (Nexus v5.5) ---
@@ -1722,7 +1750,11 @@ async def global_exception_handler(request: Request, exc: Exception):
     # Manually add CORS headers to exception response to avoid "CORS Error" masking the real 500
     origin = request.headers.get("origin")
     if origin:
-        allowed_origins = settings.CORS_ALLOWED_ORIGINS if isinstance(settings.CORS_ALLOWED_ORIGINS, list) else []
+        allowed_origins = (
+            settings.CORS_ALLOWED_ORIGINS
+            if isinstance(settings.CORS_ALLOWED_ORIGINS, list)
+            else []
+        )
         if origin in allowed_origins:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -4024,7 +4056,7 @@ async def readiness_check():
     except Exception:
         return JSONResponse(
             status_code=503,
-            content={"ready": False, "detail": "Dependencies not ready"}
+            content={"ready": False, "detail": "Dependencies not ready"},
         )
 
 
@@ -4526,15 +4558,17 @@ async def chat_endpoint(
 
         return StreamingResponse(stream_orchestrator(), media_type="text/event-stream")
 
-    # 4.3. Standard Mode (Background Processing)
-    background_tasks.add_task(
-        process_buffer_task,
-        event.from_number,
-        tenant_id,
-        conv_id,
-        correlation_id,
-        event.customer_name,
-        event.channel_source,
+    # 4.3. Standard Mode (Named Async Task for Drain)
+    asyncio.create_task(
+        process_buffer_task(
+            event.from_number,
+            tenant_id,
+            conv_id,
+            correlation_id,
+            event.customer_name,
+            event.channel_source,
+        ),
+        name=f"buffer-task-{event.from_number}",
     )
 
     return OrchestratorResult(

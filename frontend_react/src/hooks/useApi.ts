@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || detectApiBase();
 
@@ -29,11 +29,68 @@ interface FetchOptions {
     body?: any;
     headers?: Record<string, string>;
     skipRedirect?: boolean;
+    skipRefresh?: boolean; // Skip auto-refresh para evitar loops infinitos
+}
+
+// Mutex para evitar múltiples refreshes simultáneos
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
+let failedRequestsQueue: Array<() => void> = [];
+
+const processQueue = (error: Error | null = null) => {
+    failedRequestsQueue.forEach(resolve => {
+        if (error) {
+            resolve();
+        } else {
+            resolve();
+        }
+    });
+    failedRequestsQueue = [];
+};
+
+async function attemptRefresh(): Promise<boolean> {
+    if (isRefreshing) {
+        return refreshPromise || Promise.resolve(false);
+    }
+
+    isRefreshing = true;
+    refreshPromise = (async () => {
+        try {
+            // Intentar refresh usando la cookie httponly
+            const response = await fetch(`${API_BASE}/auth/refresh`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include', // Enviar cookies
+            });
+
+            if (response.ok) {
+                console.log('Token refresh successful');
+                processQueue(null);
+                return true;
+            } else {
+                console.warn('Token refresh failed', response.status);
+                processQueue(new Error('Refresh failed'));
+                return false;
+            }
+        } catch (err) {
+            console.error('Token refresh error:', err);
+            processQueue(new Error('Refresh error'));
+            return false;
+        } finally {
+            isRefreshing = false;
+            refreshPromise = null;
+        }
+    })();
+
+    return refreshPromise;
 }
 
 export function useApi() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const refreshCountRef = useRef(0); // Contador para evitar loops infinitos
 
     const fetchApi = useCallback(async (endpoint: string, options: FetchOptions = {}) => {
         setLoading(true);
@@ -67,12 +124,36 @@ export function useApi() {
                 });
 
                 if (response.status === 401) {
-                    if (options.skipRedirect) {
+                    // Skip redirect if skipRedirect is true or skipRefresh is set
+                    if (options.skipRedirect || options.skipRefresh) {
                         throw new Error("Unauthorized");
                     }
-                    console.warn("Unauthorized (401). Redirecting to Login...");
+
+                    console.warn("Unauthorized (401). Attempting refresh...");
+
+                    // Auto-refresh con guard contra loops infinitos
+                    if (refreshCountRef.current < 2) {
+                        refreshCountRef.current += 1;
+                        
+                        const refreshSuccess = await attemptRefresh();
+                        
+                        if (refreshSuccess) {
+                            // Reintentar el request original
+                            console.log("Token refreshed, retrying original request...");
+                            return executeFetch(attempt);
+                        }
+                    }
+
+                    // Si el refresh falló o ya excedimos el límite, redirigir
+                    console.warn("Refresh failed or limit exceeded. Redirecting to Login...");
+                    refreshCountRef.current = 0; // Reset counter
                     window.location.href = '/login';
                     throw new Error("Unauthorized");
+                }
+
+                // Reset refresh counter on successful response
+                if (response.ok) {
+                    refreshCountRef.current = 0;
                 }
 
                 // SaaS Subscription Guard: Redirect to billing when blocked

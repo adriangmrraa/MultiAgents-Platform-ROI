@@ -5,6 +5,7 @@ services:
     build: ./bff_service
     ports:
       - "3000:3000"
+    restart: unless-stopped
     environment:
       - PORT=3000
       - ORCHESTRATOR_URL=http://orchestrator_service:8000
@@ -15,11 +16,19 @@ services:
       retries: 3
     depends_on:
       - orchestrator_service
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
 
   platform_ui:
     build: ./frontend_react
     ports:
       - "80:8080"
+    restart: unless-stopped
     environment:
       - API_BASE_URL=http://localhost:8000 # Default fallback
       - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN is required} # Protocol Omega Auth
@@ -28,6 +37,13 @@ services:
       - VITE_META_CONFIG_ID=${VITE_META_CONFIG_ID}
     depends_on:
       - orchestrator_service
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
 
   # --- Existing Backend Services ---
 
@@ -35,6 +51,7 @@ services:
     build: ./orchestrator_service
     ports:
       - "8000:8000"
+    restart: unless-stopped
     volumes:
       - ./orchestrator_service:/app
       - ./orchestrator_data:/app/data # PERSISTENT VECTOR STORAGE (v3.2)
@@ -54,10 +71,17 @@ services:
     depends_on:
       - redis
       - postgres
-      - postgres
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 512M
 
   agent_service:
     build: ./agent_service
+    restart: unless-stopped
     # No ports exposed to host = Protocol Omega (Pressurized Tunnel)
     environment:
       - PORT=8001
@@ -68,9 +92,17 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 512M
 
   tiendanube_service:
     build: ./tiendanube_service
+    restart: unless-stopped
     # No ports exposed to host = Protocol Omega (Store Integrations stay internal)
     environment:
       - PORT=8003
@@ -81,11 +113,19 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
 
   whatsapp_service:
     build: ./whatsapp_service
     ports:
       - "8002:8002"
+    restart: unless-stopped
     volumes:
       - ./whatsapp_service:/app
     environment:
@@ -104,11 +144,19 @@ services:
     depends_on:
       - redis
       - orchestrator_service
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
 
   meta_service:
     build: ./meta_service
     ports:
       - "8004:8000"
+    restart: unless-stopped
     environment:
       - PORT=8000
       - ORCHESTRATOR_URL=http://orchestrator_service:8000
@@ -122,33 +170,57 @@ services:
       retries: 3
     depends_on:
       - orchestrator_service
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
 
   # --- Infrastructure ---
 
   redis:
     image: "redis:alpine"
+    restart: unless-stopped
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --tcp-backlog 511
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
 
   postgres:
     image: "postgres:13"
+    restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d
+    shm_size: '512m'
+    command: postgres -c shared_buffers=256MB -c effective_cache_size=512MB -c work_mem=16MB -c max_connections=100
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
 
 volumes:
   postgres_data:

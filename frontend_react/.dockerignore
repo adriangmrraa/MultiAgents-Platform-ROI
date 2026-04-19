@@ -6,3 +6,9 @@ dist/
 .git/
 .gitignore
 coverage/
+.claude/
+.agent/
+.atl/
+*.log
+*.map
+.npm/

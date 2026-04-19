@@ -191,6 +191,34 @@ async def get_current_user(
             settings.SECRET_KEY.get_secret_value(),
             algorithms=[security.ALGORITHM],
         )
+
+        # Deps B2.5: Token Version Compatibility
+        # tv:2 = nuevo formato con refresh token rotation
+        # tv:1 = formato legacy
+        token_version = payload.get("tv")
+
+        if token_version is None:
+            # Token sin versión (legacy) - permitir solo si LEGACY_TOKEN_SUPPORT=True
+            if not settings.LEGACY_TOKEN_SUPPORT:
+                logger.warning("auth_failed_legacy_token_disabled")
+                raise HTTPException(
+                    status_code=401,
+                    detail="Legacy tokens no soportados. Por favor, inicia sesión nuevamente.",
+                )
+            logger.info("auth_legacy_token_accepted", sub=payload.get("sub"))
+
+        elif token_version == 1:
+            # Token versión 1 - permitir solo si LEGACY_TOKEN_SUPPORT=True
+            if not settings.LEGACY_TOKEN_SUPPORT:
+                logger.warning("auth_failed_token_v1_disabled")
+                raise HTTPException(
+                    status_code=401,
+                    detail="Tokens v1 no soportados. Por favor, inicia sesión nuevamente.",
+                )
+            logger.info("auth_token_v1_accepted", sub=payload.get("sub"))
+
+        # tv:2 siempre es válido
+
         user_uuid = payload.get("sub")
         if user_uuid is None:
             logger.error("auth_failed_invalid_payload", sub=bool(user_uuid))

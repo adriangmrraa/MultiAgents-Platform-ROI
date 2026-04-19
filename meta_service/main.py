@@ -21,11 +21,7 @@ if not META_APP_SECRET:
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator-service:8000")
 
 # Logging
-structlog.configure(
-    processors=[
-        structlog.processors.JSONRenderer()
-    ]
-)
+structlog.configure(processors=[structlog.processors.JSONRenderer()])
 logger = structlog.get_logger()
 
 # Services
@@ -33,32 +29,46 @@ auth_service = MetaAuthService()
 webhook_service = MetaWebhookService(META_VERIFY_TOKEN, META_APP_SECRET)
 orchestrator_client = OrchestratorClient()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("startup", service="meta_diplomat")
     yield
-    logger.info("shutdown")
 
-app = FastAPI(title="The Meta Diplomat", lifespan=lifespan)
+
+logger.info("shutdown")
+
+_is_debug = os.getenv("DEBUG", "").lower() in ("true", "1")
+app = FastAPI(
+    title="The Meta Diplomat",
+    lifespan=lifespan,
+    docs_url="/docs" if _is_debug else None,
+    redoc_url="/redoc" if _is_debug else None,
+    openapi_url="/openapi.json" if _is_debug else None,
+)
 
 # --- Routes ---
+
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "meta_service"}
 
+
 @app.post("/connect")
-async def connect_meta_account(
-    data: dict
-):
+async def connect_meta_account(data: dict):
     """
     Frontend calls this with an Authorization Code obtained from FB Login SDK.
     We: Exchange Code -> Get Assets -> Subscribe -> Sync with Orchestrator.
     """
     code = data.get("code")
-    access_token = data.get("access_token")  # Direct token from some embedded signup flows
+    access_token = data.get(
+        "access_token"
+    )  # Direct token from some embedded signup flows
     tenant_id = data.get("tenant_id")
-    frontend_url = os.getenv("FRONTEND_URL", "https://multiagents-frontend.yn8wow.easypanel.host")
+    frontend_url = os.getenv(
+        "FRONTEND_URL", "https://multiagents-frontend.yn8wow.easypanel.host"
+    )
     redirect_uri = data.get("redirect_uri") or frontend_url
 
     if not tenant_id:
@@ -69,7 +79,10 @@ async def connect_meta_account(
     result = await handle_connection_flow(code, access_token, tenant_id, redirect_uri)
     return result
 
-async def handle_connection_flow(code: str, access_token: str, tenant_id: str, redirect_uri: str):
+
+async def handle_connection_flow(
+    code: str, access_token: str, tenant_id: str, redirect_uri: str
+):
     try:
         # 1. Get token (either exchange code or use direct token)
         if access_token:
@@ -78,28 +91,30 @@ async def handle_connection_flow(code: str, access_token: str, tenant_id: str, r
         else:
             long_token = await auth_service.exchange_code(code, redirect_uri)
             logger.info("code_exchanged", tenant_id=tenant_id)
-        
+
         # 2. Get Assets (Pages, IG, WABA)
         assets = await auth_service.get_accounts(long_token)
         logger.info("assets_fetched", tenant_id=tenant_id, count=len(assets["pages"]))
-        
+
         # 3. Sync to Orchestrator
         payload = {
             "tenant_id": tenant_id,
             "provider": "meta",
-            "credentials": {
-                "user_access_token": long_token,
-                "assets": assets
-            }
+            "credentials": {"user_access_token": long_token, "assets": assets},
         }
         await orchestrator_client.sync_credentials(payload)
-        
+
         # 4. Return Discovery Summary (SANITIZED for Frontend)
         # Security Audit: Do NOT return actual access tokens to the browser.
         sanitized_assets = {
-            "pages": [{k: v for k, v in p.items() if k != "access_token"} for p in assets.get("pages", [])],
-            "instagram": assets.get("instagram", []), # IG usually doesn't have token at this level
-            "whatsapp": assets.get("whatsapp", [])
+            "pages": [
+                {k: v for k, v in p.items() if k != "access_token"}
+                for p in assets.get("pages", [])
+            ],
+            "instagram": assets.get(
+                "instagram", []
+            ),  # IG usually doesn't have token at this level
+            "whatsapp": assets.get("whatsapp", []),
         }
 
         return {
@@ -107,11 +122,11 @@ async def handle_connection_flow(code: str, access_token: str, tenant_id: str, r
             "connected": {
                 "facebook": len(assets.get("pages", [])) > 0,
                 "instagram": len(assets.get("instagram", [])) > 0,
-                "whatsapp": len(assets.get("whatsapp", [])) > 0
+                "whatsapp": len(assets.get("whatsapp", [])) > 0,
             },
-            "assets": sanitized_assets
+            "assets": sanitized_assets,
         }
-        
+
     except Exception as e:
         logger.error("connection_flow_failed", tenant_id=tenant_id, error=str(e))
         raise HTTPException(500, f"Connection Failed: {str(e)}")
@@ -119,16 +134,18 @@ async def handle_connection_flow(code: str, access_token: str, tenant_id: str, r
 
 # --- Webhooks ---
 
+
 @app.get("/webhook")
 async def verify_webhook(
     mode: str = Query(..., alias="hub.mode"),
     token: str = Query(..., alias="hub.verify_token"),
-    challenge: str = Query(..., alias="hub.challenge")
+    challenge: str = Query(..., alias="hub.challenge"),
 ):
     """
     Meta Verification Challenge.
     """
     return webhook_service.verify_challenge(mode, token, challenge)
+
 
 @app.post("/webhook")
 async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
@@ -137,24 +154,28 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     # 1. Verificar firma (seguridad obligatoria)
     await webhook_service.verify_signature(request)
-    
+
     # 2. Parse & Normalize
     try:
         body = await request.json()
         simple_event = webhook_service.normalize_payload(body)
-        
+
         if simple_event:
             # 3. Forward to Orchestrator
             # We assume tenant resolution happens here OR in the Orchestrator.
             # For efficiency, if 'tenant_identifier' is PageID, Orchestrator can map it.
-            background_tasks.add_task(orchestrator_client.ingest_webhook_event, simple_event)
+            background_tasks.add_task(
+                orchestrator_client.ingest_webhook_event, simple_event
+            )
             return {"status": "processed"}
         else:
             return {"status": "ignored", "reason": "no_relevant_change"}
-            
+
     except Exception as e:
         logger.error("webhook_error", error=str(e))
         raise HTTPException(500, "Processing failed")
+
+
 @app.post("/subscribe")
 async def subscribe_asset(data: dict):
     """
@@ -175,7 +196,10 @@ async def subscribe_asset(data: dict):
             # Both FB Messenger and IG Direct use page-level subscription
             page_id = data.get("linked_page_id") or asset_id
             await auth_service.subscribe_page(client, page_id, access_token)
-            return {"status": "ok", "message": f"Subscribed page {page_id} for {asset_type}"}
+            return {
+                "status": "ok",
+                "message": f"Subscribed page {page_id} for {asset_type}",
+            }
 
         elif asset_type == "whatsapp_waba":
             # WhatsApp Cloud API: register the phone number for webhooks
@@ -183,14 +207,23 @@ async def subscribe_asset(data: dict):
             if phone_number_id:
                 api_version = os.getenv("META_GRAPH_API_VERSION", "v22.0")
                 url = f"https://graph.facebook.com/{api_version}/{phone_number_id}/register"
-                resp = await client.post(url, json={
-                    "messaging_product": "whatsapp",
-                    "pin": "123456"  # Required but not used for Cloud API
-                }, headers={"Authorization": f"Bearer {access_token}"})
-                logger.info("whatsapp_phone_register", phone_number_id=phone_number_id, status=resp.status_code)
+                resp = await client.post(
+                    url,
+                    json={
+                        "messaging_product": "whatsapp",
+                        "pin": "123456",  # Required but not used for Cloud API
+                    },
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+                logger.info(
+                    "whatsapp_phone_register",
+                    phone_number_id=phone_number_id,
+                    status=resp.status_code,
+                )
             return {"status": "ok", "message": f"WhatsApp WABA {asset_id} configured"}
 
     return {"status": "ignored", "message": f"No subscription action for {asset_type}"}
+
 
 @app.post("/messages/send")
 async def send_message_proxy(data: dict):
@@ -200,7 +233,7 @@ async def send_message_proxy(data: dict):
         "recipient_id": "...",
         "text": "...",
         "access_token": "...",
-        "messaging_type": "RESPONSE" 
+        "messaging_type": "RESPONSE"
     }
     """
     recipient_id = data.get("recipient_id")
@@ -217,21 +250,28 @@ async def send_message_proxy(data: dict):
     payload = {
         "recipient": {"id": recipient_id},
         "message": {"text": text},
-        "messaging_type": messaging_type
+        "messaging_type": messaging_type,
     }
 
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.post(url, params=params, json=payload)
-            
+
             if resp.status_code != 200:
-                logger.error("meta_send_failed", status=resp.status_code, body=resp.text)
+                logger.error(
+                    "meta_send_failed", status=resp.status_code, body=resp.text
+                )
                 raise HTTPException(resp.status_code, f"Meta API Error: {resp.text}")
-                
+
             return resp.json()
         except httpx.ConnectError as e:
             logger.error("meta_connection_error_send", url=url, error=str(e))
-            raise HTTPException(status_code=503, detail=f"Could not connect to {url} to send message. Check network.")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Could not connect to {url} to send message. Check network.",
+            )
+
+
 @app.post("/whatsapp/send")
 async def send_whatsapp_message_proxy(data: dict):
     """
@@ -249,34 +289,45 @@ async def send_whatsapp_message_proxy(data: dict):
     phone_number_id = data.get("phone_number_id")
 
     if not all([recipient_id, text, access_token, phone_number_id]):
-        raise HTTPException(400, "Missing required fields (recipient_id, text, access_token, phone_number_id)")
+        raise HTTPException(
+            400,
+            "Missing required fields (recipient_id, text, access_token, phone_number_id)",
+        )
 
     # WhatsApp Cloud API URL
     url = f"https://graph.facebook.com/v22.0/{phone_number_id}/messages"
     headers = {
         "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
     payload = {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
         "to": recipient_id,
         "type": "text",
-        "text": {"body": text}
+        "text": {"body": text},
     }
 
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.post(url, headers=headers, json=payload)
-            
+
             if resp.status_code not in [200, 201]:
-                logger.error("whatsapp_send_failed", status=resp.status_code, body=resp.text)
-                raise HTTPException(resp.status_code, f"WhatsApp Cloud API Error: {resp.text}")
-                
+                logger.error(
+                    "whatsapp_send_failed", status=resp.status_code, body=resp.text
+                )
+                raise HTTPException(
+                    resp.status_code, f"WhatsApp Cloud API Error: {resp.text}"
+                )
+
             return resp.json()
         except httpx.ConnectError as e:
             logger.error("whatsapp_connection_error_send", url=url, error=str(e))
-            raise HTTPException(status_code=503, detail=f"Could not connect to {url} to send message. Check network.")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Could not connect to {url} to send message. Check network.",
+            )
+
 
 @app.post("/privacy/data-deletion")
 async def data_deletion_callback(request: Request):
@@ -286,21 +337,19 @@ async def data_deletion_callback(request: Request):
     # 1. Parse Signed Request (Simplified for MVP, ideally verify signature)
     try:
         data = await request.form()
-        signed_request = data.get('signed_request')
-        
+        signed_request = data.get("signed_request")
+
         # In production, we MUST verify signature using META_APP_SECRET
         # For now, we generate a confirmation code and URL
-        
+
         confirmation_code = str(uuid.uuid4())
         status_url = f"https://{request.headers.get('host')}/privacy/deletion-status/{confirmation_code}"
-        
-        return {
-            "url": status_url,
-            "confirmation_code": confirmation_code
-        }
+
+        return {"url": status_url, "confirmation_code": confirmation_code}
     except Exception as e:
         logger.error("data_deletion_error", error=str(e))
         raise HTTPException(400, "Invalid Request")
+
 
 @app.get("/privacy/deletion-status/{code}")
 async def deletion_status(code: str):
@@ -310,5 +359,5 @@ async def deletion_status(code: str):
     return {
         "status": "completed",
         "message": "Your data deletion request has been processed.",
-        "code": code
+        "code": code,
     }

@@ -201,6 +201,7 @@ class Settings(BaseSettings):
     SECRET_KEY: SecretStr = SecretStr("")
     INTERNAL_API_TOKEN: SecretStr = SecretStr("")
     ENCRYPTION_KEY: str = ""
+    LEGACY_TOKEN_SUPPORT: bool = True  # Permitir tokens tv:1 durante migración
 
     # Stripe
     STRIPE_SECRET_KEY: Optional[str] = None

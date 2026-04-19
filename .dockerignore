@@ -8,3 +8,12 @@ node_modules/
 *.pyc
 *.pyo
 .DS_Store
+.claude/
+.agent/
+.atl/
+*.backup*
+*.bak
+.ruff_cache/
+.mypy_cache/
+.npm/
+*.map

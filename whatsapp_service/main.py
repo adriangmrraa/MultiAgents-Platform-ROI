@@ -190,9 +190,13 @@ class SendMessage(BaseModel):
 
 
 # FastAPI App
+_is_debug = os.getenv("DEBUG", "").lower() in ("true", "1")
 app = FastAPI(
     title="WhatsApp Service",
     description="A service to handle WhatsApp interactions and forward them to the orchestrator.",
+    docs_url="/docs" if _is_debug else None,
+    redoc_url="/redoc" if _is_debug else None,
+    openapi_url="/openapi.json" if _is_debug else None,
 )
 
 # Metrics
